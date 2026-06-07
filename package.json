@@ -1,0 +1,171 @@
+{
+  "name": "taager-missed-orders",
+  "version": "1.0.6",
+  "description": "Taager Orders Automation Bot",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abdelrahman252/taager-missed-orders.git"
+  },
+  "homepage": "https://github.com/abdelrahman252/taager-missed-orders#readme",
+  "author": "Abdelrahman Ahmed",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "admin": "node admin-panel/server.js",
+    "check:syntax": "node scripts/check-js-syntax.js",
+    "audit:dashboard-text": "node scripts/audit-dashboard-text.js",
+    "qa:static": "node scripts/qa-i18n-theme-static.js && node scripts/validate-dashboard.js",
+    "verify:dashboard": "node scripts/verify-dashboard-april.js",
+    "verify:dashboard:countries": "node scripts/verify-dashboard-countries.js",
+    "verify:country-flow": "node scripts/verify-country-order-flow.js",
+    "verify:taager-dates": "node scripts/verify-taager-date-range.js",
+    "verify:dashboard-year": "node scripts/verify-dashboard-current-year.js",
+    "verify:license-warning": "node scripts/verify-license-expiry-warning.js",
+    "verify:static-update": "node scripts/verify-static-dashboard-update.js",
+    "verify:explicit-dashboard-refresh": "node scripts/verify-explicit-dashboard-refresh.js",
+    "verify:campaign-decisions": "node scripts/verify-campaign-decisions.js",
+    "verify:dashboard:easyorders": "node scripts/verify-dashboard-easyorders-enrichment.js",
+    "verify:performance": "node scripts/verify-performance-architecture.js",
+    "verify:marketing-optimization": "node scripts/verify-marketing-optimization.js",
+    "verify:dashboard-query": "node scripts/verify-dashboard-query-service.js",
+    "verify:dashboard:confirmation": "node scripts/verify-dashboard-confirmation-logic.js",
+    "verify:dashboard-rollout": "node scripts/verify-dashboard-rollout.js",
+    "qa:dashboard": "node scripts/qa-dashboard-responsive.js",
+    "qa:dashboard:only": "node scripts/qa-dashboard-only.js",
+    "portal:lint": "npm --prefix web-portal run lint -- src",
+    "dist:mac": "electron-builder --mac --x64 && electron-builder --mac --arm64",
+    "dist:win": "electron-builder --win",
+    "dist:all": "electron-builder --mac --win",
+    "build": "electron-builder",
+    "sentry:sourcemaps": "node scripts/sentry-upload-sourcemaps.js",
+    "release:win": "electron-builder --win --publish always",
+    "release:mac": "electron-builder --mac --publish always",
+    "release:all": "electron-builder --mac --win --publish always"
+  },
+  "dependencies": {
+    "@google/genai": "^2.6.0",
+    "@sentry/electron": "^7.13.0",
+    "country-flag-icons": "^1.6.17",
+    "dotenv": "^16.4.5",
+    "electron-log": "^5.2.0",
+    "electron-store": "^7.0.2",
+    "electron-updater": "^6.3.9",
+    "playwright-core": "^1.52.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@sentry/cli": "^3.4.3",
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.taagerbot.app",
+    "productName": "Taager Orders",
+    "copyright": "Copyright © 2025",
+    "icon": "assets/icon",
+    "asar": true,
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json",
+      "!**/*.md",
+      "!.env"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.icns",
+      "target": [
+        {
+          "target": "dmg"
+        },
+        {
+          "target": "zip"
+        }
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist",
+      "artifactName": "Taager.Orders-${version}-${arch}-mac.${ext}",
+      "identity": null
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "requestedExecutionLevel": "asInvoker",
+      "artifactName": "Taager.Orders.Setup.${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Taager Orders"
+    },
+    "dmg": {
+      "title": "Taager Orders",
+      "background": null,
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 130,
+          "y": 220,
+          "type": "file"
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets"
+      },
+      {
+        "from": ".env",
+        "to": ".env"
+      },
+      {
+        "from": ".env.local",
+        "to": ".env.local"
+      }
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "abdelrahman252",
+      "repo": "taager-missed-orders",
+      "releaseType": "release"
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "portable": {
+      "artifactName": "Taager.Orders.Portable.${version}.${ext}"
+    }
+  }
+}

@@ -1,0 +1,901 @@
+﻿<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co https://generativelanguage.googleapis.com https://open.er-api.com https://*.ingest.sentry.io https://sentry.io;">
+    <title>Taager Bot</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Load fonts async so a slow/offline network never blocks first paint -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Syne:wght@400..800&family=Tajawal:wght@200;300;400;500;700;800;900&display=swap" onload="this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Syne:wght@400..800&family=Tajawal:wght@200;300;400;500;700;800;900&display=swap"></noscript>
+    <link rel="stylesheet" href="../../node_modules/country-flag-icons/3x2/flags.css" />
+    <link rel="stylesheet" href="styles/main.css" />
+    <style>
+      /* â”€â”€ Preloader Reset â”€â”€ */
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0b0f1a;
+      }
+      /* â”€â”€ Preloader â”€â”€ */
+      #preloader {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: #0b0f1a;
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .preloader-center {
+        width: min(360px, calc(100vw - 48px));
+        min-height: 190px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        text-align: center;
+        padding: 12px;
+      }
+      .preloader-mark {
+        position: relative;
+        width: 120px;
+        height: 120px;
+      }
+      .ring {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        border: 2px solid transparent;
+        border-top: 2px solid #ff2d7a;
+        border-right: 2px solid #7b5cf0;
+        border-bottom: 2px solid #00d4ff;
+        animation: preloader-spin 1.2s linear infinite;
+      }
+      .glow {
+        position: absolute;
+        inset: 20%;
+        border-radius: 50%;
+        background: radial-gradient(circle, #7b5cf0, transparent);
+        filter: blur(16px);
+        opacity: 0.7;
+        animation: preloader-pulse 2s ease-in-out infinite;
+      }
+      .logo {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        color: white;
+        font-size: 16px;
+        letter-spacing: 2px;
+      }
+      .preloader-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        max-width: 320px;
+        font-family: 'Tajawal', 'Segoe UI', sans-serif;
+      }
+      .preloader-title {
+        color: #ffffff;
+        font-size: 15px;
+        font-weight: 800;
+        line-height: 1.35;
+      }
+      .preloader-body {
+        color: rgba(226, 232, 240, 0.72);
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.55;
+      }
+      @keyframes preloader-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes preloader-pulse {
+        0%,
+        100% {
+          transform: scale(0.9);
+          opacity: 0.5;
+        }
+        50% {
+          transform: scale(1.2);
+          opacity: 1;
+        }
+      }
+
+      [data-theme="light"] #preloader {
+        background: #f6f7f9;
+      }
+      [data-theme="light"] .logo {
+        color: #1e2535;
+      }
+      [data-theme="light"] .preloader-title {
+        color: #111827;
+      }
+      [data-theme="light"] .preloader-body {
+        color: #64748b;
+      }
+
+      /* â”€â”€ Titlebar overrides â”€â”€ */
+      .titlebar {
+        height: 48px !important;
+        padding: 0 12px 0 16px !important;
+        gap: 6px !important;
+        justify-content: flex-start !important;
+      }
+
+      /* Left: app icon + name */
+      .titlebar-left {
+        flex-shrink: 0;
+        margin-right: 10px;
+      }
+
+      /* Center: user info â€” sits inline, not centered */
+      #top-bar-center {
+        flex: 0 0 auto;
+        display: none;
+        align-items: center;
+        gap: 8px;
+        -webkit-app-region: no-drag;
+        pointer-events: auto;
+        margin-right: 6px;
+      }
+      #top-bar-center.visible {
+        display: flex;
+      }
+
+      #top-bar-avatar {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #4f8ef7, #7c6af7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        font-weight: 800;
+        color: #fff;
+        flex-shrink: 0;
+        pointer-events: auto;
+      }
+      #top-bar-info {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        pointer-events: auto;
+      }
+      #top-bar-name {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1.15;
+      }
+      #top-bar-days {
+        font-size: 10px;
+        color: var(--text2);
+        line-height: 1.15;
+      }
+      #top-bar-days.warn {
+        color: #ffc94d;
+      }
+
+      /* Spacer pushes window controls to the right */
+      .titlebar-spacer {
+        flex: 1;
+        -webkit-app-region: drag;
+      }
+
+      /* Right: toggles + window controls â€” now just trailing items */
+      .titlebar-right {
+        display: contents;
+      }
+
+      .titlebar-divider {
+        width: 1px;
+        height: 18px;
+        background: var(--border);
+        margin: 0 6px;
+        flex-shrink: 0;
+      }
+
+      /* â”€â”€ Lang toggle (pill) â”€â”€ */
+      .tb-lang-switch {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        margin: 0 4px;
+        -webkit-app-region: no-drag;
+      }
+      .tb-lang-switch > span {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        font-family: "Segoe UI", Arial, sans-serif;
+        font-weight: 700;
+        font-size: 11px;
+        text-transform: uppercase;
+        width: 50%;
+        text-align: center;
+        line-height: 1;
+      }
+      .check-toggle {
+        position: absolute;
+        margin-left: -9999px;
+        visibility: hidden;
+      }
+      .check-toggle + label {
+        display: block;
+        position: relative;
+        cursor: pointer;
+        outline: none;
+        user-select: none;
+      }
+      .check-toggle-round-flat + label {
+        padding: 2px;
+        width: 74px;
+        height: 28px;
+        background-color: var(--accent);
+        border-radius: 60px;
+        transition: background 0.2s;
+      }
+      .check-toggle-round-flat + label:before,
+      .check-toggle-round-flat + label:after {
+        display: block;
+        position: absolute;
+        content: "";
+      }
+      .check-toggle-round-flat + label:before {
+        top: 2px;
+        left: 2px;
+        bottom: 2px;
+        right: 2px;
+        background-color: var(--accent);
+        border-radius: 60px;
+        transition: background 0.2s;
+      }
+      .check-toggle-round-flat + label:after {
+        top: 3px;
+        left: 3px;
+        bottom: 3px;
+        width: 36px;
+        background-color: #fff;
+        border-radius: 52px;
+        transition: margin 0.2s;
+      }
+      .check-toggle-round-flat:checked + label {
+        background-color: var(--accent2);
+      }
+      .check-toggle-round-flat:checked + label:before {
+        background-color: var(--accent2);
+      }
+      .check-toggle-round-flat:checked + label:after {
+        margin-left: 32px;
+      }
+      .lang-on {
+        left: 0;
+        padding-left: 4px;
+        color: #fff;
+      }
+      .lang-off {
+        right: 0;
+        padding-right: 4px;
+        color: #fff;
+      }
+      .check-toggle-round-flat:checked ~ .lang-off {
+        opacity: 0.5;
+      }
+      .check-toggle-round-flat:not(:checked) ~ .lang-on {
+        opacity: 0.5;
+      }
+
+      /* â”€â”€ Admin Refresh button â”€â”€ */
+      #btn-admin-refresh {
+        display: none; /* shown only after license is valid */
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        height: 26px;
+        padding: 0 10px;
+        border: 1px solid rgba(124, 106, 247, 0.35);
+        border-radius: 6px;
+        background: rgba(124, 106, 247, 0.10);
+        color: #a89cf7;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+        -webkit-app-region: no-drag;
+        flex-shrink: 0;
+        margin: 0 4px;
+      }
+      #btn-admin-refresh:hover {
+        background: rgba(124, 106, 247, 0.22);
+        border-color: rgba(124, 106, 247, 0.6);
+        color: #c4b8ff;
+      }
+      #btn-admin-refresh:active {
+        background: rgba(124, 106, 247, 0.32);
+      }
+      #btn-admin-refresh.refreshing {
+        opacity: 0.6;
+        pointer-events: none;
+      }
+      #btn-admin-refresh .refresh-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.6s ease;
+      }
+      #btn-admin-refresh .refresh-icon svg {
+        width: 13px;
+        height: 13px;
+        display: block;
+      }
+      #btn-admin-refresh.refreshing .refresh-icon {
+        animation: spin-once 0.7s linear forwards;
+      }
+      @keyframes spin-once {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+      }
+
+      /* â”€â”€ Copy License button â”€â”€ */
+      .titlebar-btn-copy {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--text2);
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+        -webkit-app-region: no-drag;
+        flex-shrink: 0;
+        margin: 0 4px;
+        padding: 0;
+      }
+      .titlebar-btn-copy:hover {
+        background: rgba(124, 106, 247, 0.15);
+        border-color: rgba(124, 106, 247, 0.5);
+        color: #a89cf7;
+      }
+      .titlebar-btn-copy:active {
+        background: rgba(124, 106, 247, 0.25);
+      }
+      .titlebar-btn-copy svg {
+        transition: transform 0.15s ease;
+      }
+      .titlebar-btn-copy:hover svg {
+        transform: scale(1.08);
+      }
+
+      /* â”€â”€ Theme toggle (sun/moon switch) â”€â”€ */
+      .tb-theme-switch {
+        font-size: 14px;
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        width: 52px;
+        height: 28px;
+        cursor: pointer;
+        margin: 0 4px;
+        -webkit-app-region: no-drag;
+        flex-shrink: 0;
+      }
+      .tb-theme-input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+        position: absolute;
+      }
+      .tb-theme-slider {
+        position: absolute;
+        inset: 0;
+        background-color: #73c0fc;
+        border-radius: 30px;
+        transition: background 0.4s;
+      }
+      .tb-theme-slider:before {
+        position: absolute;
+        content: "";
+        height: 22px;
+        width: 22px;
+        border-radius: 50%;
+        left: 3px;
+        top: 3px;
+        z-index: 2;
+        background-color: #e8e8e8;
+        transition: transform 0.4s;
+      }
+      .tb-sun svg {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        z-index: 1;
+        width: 18px;
+        height: 18px;
+        pointer-events: none;
+        animation: tb-rotate 15s linear infinite;
+      }
+      .tb-moon svg {
+        fill: #73c0fc;
+        position: absolute;
+        top: 4px;
+        left: 4px;
+        z-index: 1;
+        width: 16px;
+        height: 16px;
+        pointer-events: none;
+        animation: tb-tilt 5s linear infinite;
+      }
+      @keyframes tb-rotate {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes tb-tilt {
+        0% {
+          transform: rotate(0deg);
+        }
+        25% {
+          transform: rotate(-30deg);
+        }
+        75% {
+          transform: rotate(15deg);
+        }
+        100% {
+          transform: rotate(0deg);
+        }
+      }
+      .tb-theme-input:checked + .tb-theme-slider {
+        background-color: #183153;
+      }
+      .tb-theme-input:checked + .tb-theme-slider:before {
+        transform: translateX(24px);
+      }
+
+      /* App sits below 48px titlebar */
+      #app {
+        top: 48px !important;
+      }
+    </style>
+    <!-- Analytics + Operations styles are included in main.css -->
+</head>
+  <body>
+    <div id="preloader">
+      <div class="preloader-center">
+        <div class="preloader-mark">
+          <div class="ring"></div>
+          <div class="glow"></div>
+          <div class="logo">MO</div>
+        </div>
+        <div class="preloader-copy" role="status" aria-live="polite">
+          <div class="preloader-title" id="preloader-title">Preparing workspace...</div>
+          <div class="preloader-body" id="preloader-body">Loading your saved account, permissions, and app settings.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Titlebar: [âš¡ App Name] Â·Â·Â·Â· [avatar + name + days] Â·Â·Â·Â· [EN ðŸŒ] [Dark ðŸŒ™] [â€” â–¡ âœ•] -->
+    <div class="titlebar" id="main-titlebar">
+      <!-- App branding -->
+      <div class="titlebar-left">
+        <span class="app-icon">âš¡</span>
+        <span class="app-name">Taager Bot</span>
+      </div>
+      <div class="titlebar-divider"></div>
+
+      <!-- User info (hidden until licensed) -->
+      <div id="top-bar-center">
+        <div id="top-bar-avatar">?</div>
+        <div id="top-bar-info">
+          <div id="top-bar-name">â€”</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div id="top-bar-days"></div>
+            <div id="top-bar-accounts" style="display:none;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:rgba(124,106,247,.15);border:1px solid rgba(124,106,247,.35);color:#a89cf7;border-radius:99px;padding:2px 8px"></div>
+          </div>
+        </div>
+        <div class="titlebar-divider"></div>
+        <button
+          id="btn-copy-license"
+          class="titlebar-btn-copy"
+          aria-label="Copy License Key"
+          data-tooltip="Copy License Key"
+          style="display:none;"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
+      <!-- Toggles -->
+      <div class="titlebar-divider"></div>
+
+      <!-- Admin Refresh button â€” syncs license + account state from Supabase -->
+      <button
+        id="btn-admin-refresh"
+        title="Sync with admin panel"
+        aria-label="Sync account and license status"
+        data-tooltip="Sync license and account permissions from the admin panel."
+      >
+        <span class="refresh-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5"></path>
+            <path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"></path>
+          </svg>
+        </span>
+        <span class="refresh-label">Sync</span>
+      </button>
+      <div class="titlebar-divider"></div>
+
+      <!-- Lang toggle: EN â†” AR -->
+      <div class="tb-lang-switch">
+        <input
+          id="toggle-lang"
+          class="check-toggle check-toggle-round-flat"
+          type="checkbox"
+          aria-label="Switch language"
+          data-tooltip="Switch between English and Arabic."
+        />
+        <label for="toggle-lang"></label>
+        <span class="lang-on">AR</span>
+        <span class="lang-off">EN</span>
+      </div>
+      <div class="titlebar-divider"></div>
+
+      <!-- Theme toggle: light â†” dark -->
+      <label class="tb-theme-switch" title="Switch theme" data-tooltip="Switch between light and dark theme.">
+        <span class="tb-sun"
+          ><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <g fill="#ffd43b">
+              <circle r="5" cy="12" cx="12"></circle>
+              <path
+                d="m21 13h-1a1 1 0 0 1 0-2h1a1 1 0 0 1 0 2zm-17 0h-1a1 1 0 0 1 0-2h1a1 1 0 0 1 0 2zm13.66-5.66a1 1 0 0 1 -.66-.29 1 1 0 0 1 0-1.41l.71-.71a1 1 0 1 1 1.41 1.41l-.71.71a1 1 0 0 1 -.75.29zm-12.02 12.02a1 1 0 0 1 -.71-.29 1 1 0 0 1 0-1.41l.71-.66a1 1 0 0 1 1.41 1.41l-.71.71a1 1 0 0 1 -.7.24zm6.36-14.36a1 1 0 0 1 -1-1v-1a1 1 0 0 1 2 0v1a1 1 0 0 1 -1 1zm0 17a1 1 0 0 1 -1-1v-1a1 1 0 0 1 2 0v1a1 1 0 0 1 -1 1zm-5.66-14.66a1 1 0 0 1 -.7-.29l-.71-.71a1 1 0 0 1 1.41-1.41l.71.71a1 1 0 0 1 0 1.41 1 1 0 0 1 -.71.29zm12.02 12.02a1 1 0 0 1 -.7-.29l-.66-.71a1 1 0 0 1 1.36-1.36l.71.71a1 1 0 0 1 0 1.41 1 1 0 0 1 -.71.24z"
+              ></path>
+            </g></svg
+        ></span>
+        <span class="tb-moon"
+          ><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512">
+            <path
+              d="m223.5 32c-123.5 0-223.5 100.3-223.5 224s100 224 223.5 224c60.6 0 115.5-24.2 155.8-63.4 5-4.9 6.3-12.5 3.1-18.7s-10.1-9.7-17-8.5c-9.8 1.7-19.8 2.6-30.1 2.6-96.9 0-175.5-78.8-175.5-176 0-65.8 36-123.1 89.3-153.3 6.1-3.5 9.2-10.5 7.7-17.3s-7.3-11.9-14.3-12.5c-6.3-.5-12.6-.8-19-.8z"
+            ></path></svg
+        ></span>
+        <input type="checkbox" id="toggle-theme" class="tb-theme-input" aria-label="Switch theme" />
+        <span class="tb-theme-slider"></span>
+      </label>
+
+      <!-- Spacer: drags the window, pushes controls right -->
+      <div class="titlebar-spacer"></div>
+
+      <div class="titlebar-right">
+        <div class="titlebar-controls">
+          <button class="tb-btn" id="btn-minimize" aria-label="Minimize window" title="Minimize" data-tooltip="Minimize window">&#8212;</button>
+          <button class="tb-btn" id="btn-maximize" aria-label="Maximize window" title="Maximize" data-tooltip="Maximize or restore window">&#9633;</button>
+          <button class="tb-btn tb-close" id="btn-close" aria-label="Close window" title="Close" data-tooltip="Close Taager Bot">&#10005;</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pages -->
+    <div id="app">
+      <div id="page-license" class="page"></div>
+      <div id="page-setup" class="page"></div>
+      <div id="page-run" class="page"></div>
+      <div id="page-results"    class="page"></div>
+      <div id="page-analytics"  class="page"></div>
+      <div id="page-operations" class="page"></div>
+      <div id="page-dashboard"  class="page"></div>
+      <div id="page-ai-intelligence" class="page"></div>
+    </div>
+
+    <script src="../monitoring/sentry.renderer.js"></script>
+    <script src="pages/license.js"></script>
+    <script src="pages/expired-overlay.js"></script>
+    <script src="pages/license-expiry-warning.js"></script>
+    <script src="pages/analytics/analytics-utils.js"></script>
+    <script src="pages/setup.js"></script>
+    <script src="pages/run.js?v=sidebar-fix-20260523"></script>
+    <script src="pages/results.js"></script>
+    <script src="tooltip.js"></script>
+    <script src="app.js"></script>
+    <script>
+      // Preloader is dismissed by showPage() in app.js â€” only once the first
+      // real page has been rendered and activated. No timer-based removal here.
+    </script>
+    <!-- â”€â”€ AUTO-UPDATE TOAST â”€â”€ -->
+    <style>
+      #updateToast {
+        display: none;
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 9999;
+        background: var(--bg2);
+        border: 1px solid rgba(123,92,240,.45);
+        border-radius: 14px;
+        padding: 14px 18px;
+        min-width: 260px;
+        max-width: 320px;
+        box-shadow: 0 8px 32px rgba(0,0,0,.4);
+        font-family: 'Tajawal', 'Segoe UI', sans-serif;
+      }
+      #updateTitle { font-weight: 700; font-size: 13px; color: var(--text); }
+      #updateSub   { font-size: 11px; color: var(--text2); margin-top: 1px; }
+      [data-theme="light"] #updateToast { box-shadow: 0 8px 32px rgba(0,0,0,.12); }
+    </style>
+    <div id="updateToast">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <div style="width:32px;height:32px;border-radius:8px;background:rgba(123,92,240,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        </div>
+        <div>
+          <div id="updateTitle">Update Available</div>
+          <div id="updateSub"></div>
+        </div>
+        <button onclick="document.getElementById('updateToast').style.display='none'" style="margin-inline-start:auto;background:none;border:none;color:var(--text2);cursor:pointer;padding:2px;font-size:16px;line-height:1;">âœ•</button>
+      </div>
+      <!-- progress bar (hidden until download starts) -->
+      <div id="updateProgressWrap" style="display:none;margin-bottom:10px;">
+        <div style="background:var(--border);border-radius:99px;height:5px;overflow:hidden;">
+          <div id="updateProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,#7b5cf0,#a78bfa);border-radius:99px;transition:width .3s;"></div>
+        </div>
+        <div id="updateProgressLabel" style="font-size:11px;color:var(--text2);margin-top:4px;text-align:end;">0%</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button id="updateActionBtn" onclick="handleUpdateAction()" style="
+          flex:1;padding:8px 12px;border-radius:8px;border:none;cursor:pointer;
+          background:linear-gradient(135deg,#7b5cf0,#a78bfa);color:#fff;
+          font-weight:700;font-size:12px;font-family:'DM Sans',sans-serif;
+        ">Download Update</button>
+      </div>
+    </div>
+
+    <script>
+    "use strict";
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    //  AUTO-UPDATER UI
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    let _updateState = 'idle'; // idle | checking | available | downloading | downloaded | error
+
+    function _updLog(level, ...args) {
+      const ts = new Date().toISOString();
+      const prefix = `[AutoUpdate][${ts}]`;
+      if (level === 'error') console.error(prefix, ...args);
+      else if (level === 'warn')  console.warn(prefix, ...args);
+      else                        console.log(prefix, ...args);
+    }
+
+    function showUpdateToast(title, sub, btnLabel, showProgress) {
+      _updLog('info', `showUpdateToast â†’ title="${title}" btn="${btnLabel}" progress=${showProgress}`);
+      const toast = document.getElementById('updateToast');
+      const dot   = document.getElementById('updateDot');
+      document.getElementById('updateTitle').textContent = title;
+      document.getElementById('updateSub').textContent   = sub;
+      document.getElementById('updateActionBtn').textContent = btnLabel;
+      document.getElementById('updateProgressWrap').style.display = showProgress ? 'block' : 'none';
+      if (toast) toast.style.display = 'block';
+      if (dot)   dot.style.display   = 'block';
+    }
+
+    function hideUpdateToast() {
+      _updLog('info', 'hideUpdateToast called');
+      const t = document.getElementById('updateToast');
+      if (t) t.style.display = 'none';
+    }
+
+    function updText(key, fallback) {
+      if (window._t) {
+        const value = window._t(key);
+        if (typeof value === 'string') return value;
+      }
+      return fallback;
+    }
+
+    function updTextFn(key, fallback, value) {
+      if (window._t) {
+        const fn = window._t(key);
+        if (typeof fn === 'function') return fn(value);
+        if (typeof fn === 'string') return fn;
+      }
+      return fallback;
+    }
+
+    function _setUpdBtn(loading) {
+      const btn = document.getElementById('sv3-update-btn');
+      const lbl = document.getElementById('sv3-update-btn-label');
+      if (!btn) return;
+      btn.style.opacity  = loading ? '0.6' : '1';
+      btn.style.cursor   = loading ? 'wait' : 'pointer';
+      btn.disabled       = loading;
+      btn.title          = loading ? updText('update.btn_title_checking', 'Checking for updates...') : updText('update.btn_title_check', 'Check for updates');
+      if (lbl) lbl.textContent = loading ? updText('setup.checking_updates', 'Checking...') : updText('setup.check_updates_btn', 'Check for Updates');
+    }
+
+    function handleUpdateAction() {
+      _updLog('info', `handleUpdateAction called, state=${_updateState}`);
+      if (_updateState === 'available') {
+        _updLog('info', 'Starting update downloadâ€¦');
+        _updateState = 'downloading';
+        document.getElementById('updateActionBtn').textContent = updText('update.downloading_action', 'Downloading...');
+        document.getElementById('updateActionBtn').disabled = true;
+        document.getElementById('updateProgressWrap').style.display = 'block';
+        window.api.downloadUpdate();
+      } else if (_updateState === 'downloaded') {
+        _updLog('info', 'Requesting install & restartâ€¦');
+        window.api.installUpdate();
+      } else {
+        _updLog('warn', `handleUpdateAction called in unexpected state: ${_updateState}`);
+      }
+    }
+
+    function checkForUpdatesManual() {
+      _updLog('info', `checkForUpdatesManual called, state=${_updateState}`);
+      if (_updateState === 'available' || _updateState === 'downloaded') {
+        _updLog('info', 'Update already found â€” re-showing toast');
+        document.getElementById('updateToast').style.display = 'block';
+        return;
+      }
+      if (_updateState === 'checking' || _updateState === 'downloading') {
+        _updLog('info', `Already in progress (state=${_updateState}), ignoring click`);
+        return;
+      }
+
+      _updateState = 'checking';
+      _setUpdBtn(true);
+      _updLog('info', 'Calling api.checkForUpdatesâ€¦');
+
+      window.api.checkForUpdates()
+        .then(res => {
+          _updLog('info', 'checkForUpdates resolved:', JSON.stringify(res));
+          _setUpdBtn(false);
+          if (res && res.dev) {
+            _updLog('warn', 'Running in dev/unpackaged mode â€” auto-update skipped');
+            _updateState = 'idle';
+            document.getElementById('updateTitle').textContent = updText('update.dev_title', 'Dev Mode');
+            document.getElementById('updateSub').textContent = updText('update.dev_sub', 'Auto-update only works in packaged app.');
+            document.getElementById('updateActionBtn').textContent = updText('update.ok', 'OK');
+            document.getElementById('updateActionBtn').onclick = hideUpdateToast;
+            document.getElementById('updateProgressWrap').style.display = 'none';
+            document.getElementById('updateToast').style.display = 'block';
+            return;
+          }
+          if (res && res.ok === false) {
+            _updLog('error', 'checkForUpdates returned error from main:', res.error);
+            _updateState = 'error';
+            document.getElementById('updateTitle').textContent = updText('update.check_failed_title', 'Update Check Failed');
+            document.getElementById('updateSub').textContent = res.error || updText('update.unknown_error', 'Unknown error');
+            document.getElementById('updateActionBtn').textContent = updText('update.dismiss', 'Dismiss');
+            document.getElementById('updateActionBtn').disabled = false;
+            document.getElementById('updateActionBtn').onclick = () => { _updateState = 'idle'; hideUpdateToast(); };
+            document.getElementById('updateProgressWrap').style.display = 'none';
+            document.getElementById('updateToast').style.display = 'block';
+          }
+          // If ok===true, the autoUpdater events (onUpdateAvailable / onUpdateNotAvailable) fire next
+        })
+        .catch(err => {
+          _updLog('error', 'checkForUpdates IPC threw:', err);
+          _setUpdBtn(false);
+          _updateState = 'error';
+          document.getElementById('updateTitle').textContent = updText('update.check_failed_title', 'Update Check Failed');
+          document.getElementById('updateSub').textContent = err.message || String(err);
+          document.getElementById('updateActionBtn').textContent = updText('update.dismiss', 'Dismiss');
+          document.getElementById('updateActionBtn').disabled = false;
+          document.getElementById('updateActionBtn').onclick = () => { _updateState = 'idle'; hideUpdateToast(); };
+          document.getElementById('updateProgressWrap').style.display = 'none';
+          document.getElementById('updateToast').style.display = 'block';
+        });
+    }
+
+    function initAutoUpdater() {
+      _updLog('info', 'initAutoUpdater â€” wiring up IPC events');
+      if (!window.api || !window.api.onUpdateAvailable) {
+        _updLog('warn', 'window.api.onUpdateAvailable not found â€” preload may not have loaded correctly');
+        return;
+      }
+
+      window.api.onUpdateAvailable(({ version }) => {
+        _updLog('info', `onUpdateAvailable fired â€” version=${version}`);
+        _updateState = 'available';
+        _setUpdBtn(false);
+        document.getElementById('updateTitle').textContent = updTextFn('update.available_title', 'Update v' + version + ' Available', version);
+        document.getElementById('updateSub').textContent   = updText('update.available_sub', 'A new version is ready to download.');
+        document.getElementById('updateActionBtn').textContent = updText('update.download_update', 'Download Update');
+        document.getElementById('updateActionBtn').disabled = false;
+        document.getElementById('updateActionBtn').onclick = handleUpdateAction;
+        document.getElementById('updateProgressWrap').style.display = 'none';
+        document.getElementById('updateToast').style.display = 'block';
+        const dot = document.getElementById('updateDot');
+        if (dot) dot.style.display = 'block';
+      });
+
+      window.api.onUpdateNotAvailable(() => {
+        _updLog('info', `onUpdateNotAvailable fired â€” state was ${_updateState}`);
+        _setUpdBtn(false);
+        if (_updateState === 'checking') {
+          _updateState = 'idle';
+          document.getElementById('updateTitle').textContent = updText('update.up_to_date_title', "You're up to date");
+          document.getElementById('updateSub').textContent = updText('update.up_to_date_sub', 'No new version found.');
+          document.getElementById('updateActionBtn').textContent = updText('update.ok', 'OK');
+          document.getElementById('updateActionBtn').onclick = hideUpdateToast;
+          document.getElementById('updateProgressWrap').style.display = 'none';
+          document.getElementById('updateToast').style.display = 'block';
+        } else {
+          _updateState = 'idle';
+        }
+      });
+
+      window.api.onUpdateProgress(({ percent }) => {
+        _updLog('info', `onUpdateProgress â€” ${percent}%`);
+        const bar = document.getElementById('updateProgressBar');
+        const lbl = document.getElementById('updateProgressLabel');
+        if (bar) bar.style.width = percent + '%';
+        if (lbl) lbl.textContent = percent + '%';
+        document.getElementById('updateTitle').textContent = updText('update.downloading_title', 'Downloading Update...');
+        document.getElementById('updateSub').textContent   = updTextFn('update.download_progress', percent + '% complete', percent);
+        document.getElementById('updateProgressWrap').style.display = 'block';
+      });
+
+      window.api.onUpdateDownloaded(() => {
+        _updLog('info', 'onUpdateDownloaded fired â€” update ready to install');
+        _updateState = 'downloaded';
+        document.getElementById('updateProgressWrap').style.display = 'none';
+        document.getElementById('updateTitle').textContent = updText('update.ready_title', 'Update Ready to Install');
+        document.getElementById('updateSub').textContent   = updText('update.ready_sub', 'Restart the app to apply the update.');
+        document.getElementById('updateActionBtn').textContent = updText('update.restart_install', 'Restart & Install');
+        document.getElementById('updateActionBtn').disabled = false;
+        document.getElementById('updateActionBtn').onclick = handleUpdateAction;
+        document.getElementById('updateToast').style.display = 'block';
+      });
+
+      window.api.onUpdateError(({ message }) => {
+        _updLog('error', `onUpdateError fired â€” message: ${message}`);
+        _updateState = 'error';
+        _setUpdBtn(false);
+        document.getElementById('updateTitle').textContent = updText('update.error_title', 'Update Error');
+        document.getElementById('updateSub').textContent = message || updText('update.error_sub', 'An unknown error occurred during update.');
+        document.getElementById('updateActionBtn').textContent = updText('update.dismiss', 'Dismiss');
+        document.getElementById('updateActionBtn').disabled = false;
+        document.getElementById('updateActionBtn').onclick = () => { _updateState = 'idle'; hideUpdateToast(); };
+        document.getElementById('updateProgressWrap').style.display = 'none';
+        document.getElementById('updateToast').style.display = 'block';
+        const dot = document.getElementById('updateDot');
+        if (dot) dot.style.display = 'none';
+      });
+
+      _updLog('info', 'initAutoUpdater â€” all events wired successfully');
+    }
+
+    // Call initAutoUpdater after DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initAutoUpdater);
+    } else {
+      initAutoUpdater();
+    }
+    </script>
+  </body>
+</html>
+

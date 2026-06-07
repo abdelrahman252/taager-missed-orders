@@ -1,0 +1,38 @@
+# Folders we don't want on GitHub
+admin-panel/
+countries/
+supabase/
+scripts/
+old taager src/
+
+# Dependency directories
+node_modules/
+
+# Local env files (MUST NOT BE COMMITTED TO GITHUB)
+.env
+.env.local
+.env.development
+.env.production
+admin-panel/admin.env
+
+# Build output directories
+dist/
+release/
+
+# Temporary and local IDE configurations
+.codex-tmp/
+tmp/
+.vscode/
+.idea/
+
+# Large test/data files and backups
+*.xlsx
+*.zip
+data.txt
+data - Copy.txt
+
+# OS-specific files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store

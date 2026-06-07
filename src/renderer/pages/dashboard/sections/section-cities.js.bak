@@ -1,0 +1,712 @@
+// section-cities.js — المدن والمناطق
+// Vanilla-JS section. Depends on: dashboard-shared.js (icon, formatSAR, animateNumber)
+
+window.renderSectionCities = function (mountEl, data, ctx) {
+  'use strict';
+
+  var realCities = data && data.cod && Array.isArray(data.cod.cities) ? data.cod.cities : [];
+  if (false && realCities.length > 0) {
+    var fmtSAR = (ctx && ctx.formatSAR) ? ctx.formatSAR : function (n) { return Number(n || 0).toLocaleString('en-US') + ' SAR'; };
+    var maxOrders = Math.max.apply(null, realCities.map(function (c) { return c.count || 0; })) || 1;
+    mountEl.innerHTML = '<div dir="rtl" style="flex:1;overflow-y:auto;background:#080b12;color:#fff;font-family:Cairo,sans-serif;padding:24px 28px 38px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;gap:16px;">' +
+        '<div style="font-size:12px;color:rgba(255,255,255,0.45);">مرتبة حسب فجوة التحصيل وعدد الطلبات من لقطة Dashboard الحالية</div>' +
+        '<div><h1 style="margin:0;font-size:28px;font-weight:900;">المدن والمناطق</h1><p style="margin:6px 0 0;color:rgba(255,255,255,0.42);font-size:12px;">بيانات حقيقية حسب الحساب المحدد</p></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;">' +
+        realCities.map(function (city, idx) {
+          var pct = Math.max(4, ((city.count || 0) / maxOrders) * 100);
+          return '<div class="fade-up" style="animation-delay:' + (idx * 45) + 'ms;background:#0b1120;border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;">' +
+              '<div style="font-size:12px;color:#a855f7;font-weight:800;">#' + (idx + 1) + '</div>' +
+              '<div style="font-size:16px;font-weight:900;text-align:right;">' + city.name + '</div>' +
+            '</div>' +
+            '<div style="height:6px;background:rgba(255,255,255,0.06);border-radius:999px;overflow:hidden;margin-bottom:14px;"><div style="width:' + pct + '%;height:100%;background:linear-gradient(90deg,#7c3aed,#14b8a6);"></div></div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;">' +
+              '<div style="background:rgba(255,255,255,0.035);border-radius:10px;padding:10px;"><div style="color:rgba(255,255,255,0.42);margin-bottom:4px;">الطلبات</div><strong>' + (city.count || 0).toLocaleString('en-US') + '</strong></div>' +
+              '<div style="background:rgba(255,255,255,0.035);border-radius:10px;padding:10px;"><div style="color:rgba(255,255,255,0.42);margin-bottom:4px;">التحصيل</div><strong>' + (city.pct || 0).toLocaleString('en-US') + '%</strong></div>' +
+              '<div style="background:rgba(255,255,255,0.035);border-radius:10px;padding:10px;"><div style="color:rgba(255,255,255,0.42);margin-bottom:4px;">المتبقي</div><strong>' + fmtSAR(city.gap || 0) + '</strong></div>' +
+              '<div style="background:rgba(255,255,255,0.035);border-radius:10px;padding:10px;"><div style="color:rgba(255,255,255,0.42);margin-bottom:4px;">المستحق</div><strong>' + fmtSAR(city.due || 0) + '</strong></div>' +
+            '</div>' +
+          '</div>';
+        }).join('') +
+      '</div>' +
+    '</div>';
+    return;
+  }
+
+  // ── Province + city data ────────────────────────────────────────────────────
+  var PROVINCES = [
+    {
+      id: 'riyadh', name: 'منطقة الرياض', color: '#a855f7',
+      orders: 3420, deliveryRate: 72.5, codRate: 70.8, returnRate: 8.2, avgDays: 2.8,
+      trend: 5.2, trendUp: true,
+      mapCx: 228, mapCy: 162, mapRx: 95, mapRy: 80,
+      cities: [
+        { name: 'الرياض',   orders: 2650, deliveryRate: 72.5, codRate: 70.8, returnRate: 7.9,  x: 230.6, y: 164.1 },
+        { name: 'الخرج',    orders: 420,  deliveryRate: 71.0, codRate: 68.5, returnRate: 9.1,  x: 248,   y: 192   },
+        { name: 'المجمعة',  orders: 180,  deliveryRate: 68.9, codRate: 65.2, returnRate: 10.2, x: 212,   y: 138   },
+        { name: 'الدوادمي', orders: 170,  deliveryRate: 81.2, codRate: 74.1, returnRate: 6.5,  x: 188,   y: 172   },
+      ],
+    },
+    {
+      id: 'mecca', name: 'منطقة مكة المكرمة', color: '#3b82f6',
+      orders: 2840, deliveryRate: 66.5, codRate: 69.2, returnRate: 10.1, avgDays: 3.2,
+      trend: 1.8, trendUp: false,
+      mapCx: 95, mapCy: 238, mapRx: 50, mapRy: 38,
+      cities: [
+        { name: 'جدة',          orders: 1820, deliveryRate: 66.8, codRate: 70.5, returnRate: 9.8,  x: 87.1, y: 232.2 },
+        { name: 'مكة المكرمة',  orders: 650,  deliveryRate: 64.6, codRate: 68.6, returnRate: 11.2, x: 99.1, y: 244   },
+        { name: 'الطائف',       orders: 370,  deliveryRate: 68.9, codRate: 67.3, returnRate: 9.5,  x: 122,  y: 240   },
+      ],
+    },
+    {
+      id: 'eastern', name: 'المنطقة الشرقية', color: '#14b8a6',
+      orders: 1890, deliveryRate: 69.3, codRate: 71.2, returnRate: 8.8, avgDays: 2.5,
+      trend: 3.1, trendUp: true,
+      mapCx: 298, mapCy: 140, mapRx: 55, mapRy: 45,
+      cities: [
+        { name: 'الدمام',  orders: 820, deliveryRate: 69.8, codRate: 70.2, returnRate: 8.5, x: 294.7, y: 129.4 },
+        { name: 'الخبر',   orders: 580, deliveryRate: 69.8, codRate: 72.1, returnRate: 8.2, x: 308,   y: 136   },
+        { name: 'الأحساء', orders: 490, deliveryRate: 67.9, codRate: 69.8, returnRate: 9.8, x: 285,   y: 158   },
+      ],
+    },
+    {
+      id: 'madinah', name: 'منطقة المدينة المنورة', color: '#f59e0b',
+      orders: 980, deliveryRate: 68.6, codRate: 68.9, returnRate: 9.2, avgDays: 3.5,
+      trend: 1.5, trendUp: true,
+      mapCx: 92, mapCy: 175, mapRx: 38, mapRy: 30,
+      cities: [
+        { name: 'المدينة المنورة', orders: 780, deliveryRate: 69.0, codRate: 68.9, returnRate: 9.0, x: 95.1, y: 170.5 },
+        { name: 'ينبع',            orders: 200, deliveryRate: 67.0, codRate: 69.1, returnRate: 9.8, x: 68,   y: 190   },
+      ],
+    },
+    {
+      id: 'aseer', name: 'منطقة عسير', color: '#ef4444',
+      orders: 620, deliveryRate: 62.9, codRate: 65.1, returnRate: 14.2, avgDays: 4.1,
+      trend: 3.5, trendUp: false,
+      mapCx: 152, mapCy: 272, mapRx: 35, mapRy: 24,
+      cities: [
+        { name: 'أبها',        orders: 380, deliveryRate: 62.6, codRate: 64.8, returnRate: 14.5, x: 148, y: 268 },
+        { name: 'خميس مشيط',  orders: 240, deliveryRate: 63.3, codRate: 65.5, returnRate: 13.8, x: 160, y: 276 },
+      ],
+    },
+  ];
+
+  if (realCities.length > 0) {
+    var coordMap = [
+      { id: 'riyadh', name: 'منطقة الرياض', color: '#a855f7', keys: ['الرياض', 'الخرج', 'المجمعة', 'الدوادمي', 'riyadh'], x: 230.6, y: 164.1 },
+      { id: 'eastern', name: 'المنطقة الشرقية', color: '#14b8a6', keys: ['الشرقية', 'الدمام', 'الخبر', 'الأحساء', 'eastern'], x: 298, y: 140 },
+      { id: 'mecca', name: 'منطقة مكة المكرمة', color: '#3b82f6', keys: ['مكة', 'جدة', 'الطائف', 'الغربية', 'mecca'], x: 95, y: 238 },
+      { id: 'jazan', name: 'منطقة جازان', color: '#ec4899', keys: ['جيزان', 'جازان', 'jazan', 'gizan'], x: 158, y: 304 },
+      { id: 'baha', name: 'منطقة الباحة', color: '#f97316', keys: ['الباحة', 'baha'], x: 132, y: 258 },
+      { id: 'madinah', name: 'منطقة المدينة المنورة', color: '#f59e0b', keys: ['المدينة', 'ينبع', 'madinah'], x: 92, y: 175 },
+      { id: 'aseer', name: 'منطقة عسير', color: '#ef4444', keys: ['عسير', 'أبها', 'خميس', 'aseer'], x: 152, y: 272 },
+      { id: 'qassim', name: 'منطقة القصيم', color: '#8b5cf6', keys: ['القصيم', 'بريدة', 'عنيزة', 'qassim'], x: 194, y: 132 },
+      { id: 'tabuk', name: 'منطقة تبوك', color: '#0ea5e9', keys: ['تبوك', 'tabuk'], x: 80, y: 110 },
+      { id: 'hail', name: 'منطقة حائل', color: '#84cc16', keys: ['حائل', 'hail'], x: 160, y: 125 },
+      { id: 'other', name: 'مناطق أخرى', color: '#64748b', keys: [], x: 205, y: 190 }
+    ];
+
+    var provGroups = {};
+    coordMap.forEach(function(cm) {
+      provGroups[cm.id] = {
+        id: cm.id, name: cm.name, color: cm.color, x: cm.x, y: cm.y,
+        cities: [], totalOrders: 0, totalDelivered: 0, totalDue: 0, totalGap: 0
+      };
+    });
+
+    realCities.forEach(function(city, idx) {
+      var lower = String(city.name || '').toLowerCase();
+      var provId = 'other';
+      for (var i = 0; i < coordMap.length; i++) {
+        if (coordMap[i].keys.some(function (key) { return lower.indexOf(key) !== -1; })) {
+          provId = coordMap[i].id;
+          break;
+        }
+      }
+      
+      var count = Number(city.count || 0);
+      var pct = Number(city.pct || 0);
+      var due = Number(city.due || 0);
+      var gap = Number(city.gap || 0);
+      
+      var pDef = provGroups[provId];
+      var angle = (pDef.cities.length * 0.8) + (idx * 0.1);
+      var r = 5 + (idx % 3) * 5;
+      
+      pDef.cities.push({
+        name: city.name || 'غير معروف',
+        orders: count,
+        deliveryRate: pct,
+        codRate: pct,
+        returnRate: due > 0 ? Math.round((gap / due) * 1000) / 10 : 0,
+        x: pDef.x + Math.cos(angle) * r,
+        y: pDef.y + Math.sin(angle) * r
+      });
+      
+      pDef.totalOrders += count;
+      pDef.totalDelivered += (count * (pct / 100));
+      pDef.totalDue += due;
+      pDef.totalGap += gap;
+    });
+
+    PROVINCES = [];
+    Object.keys(provGroups).forEach(function(k) {
+      var p = provGroups[k];
+      if (p.cities.length > 0) {
+        var dRate = p.totalOrders > 0 ? (p.totalDelivered / p.totalOrders) * 100 : 0;
+        var rRate = p.totalDue > 0 ? (p.totalGap / p.totalDue) * 100 : 0;
+        PROVINCES.push({
+          id: p.id,
+          name: p.name,
+          color: p.color,
+          orders: p.totalOrders,
+          deliveryRate: Math.round(dRate * 10) / 10,
+          codRate: Math.round(dRate * 10) / 10,
+          returnRate: Math.round(rRate * 10) / 10,
+          avgDays: 0,
+          trend: 0,
+          trendUp: true,
+          mapCx: p.x,
+          mapCy: p.y,
+          mapRx: 45,
+          mapRy: 35,
+          cities: p.cities
+        });
+      }
+    });
+    PROVINCES.sort(function(a, b) { return b.orders - a.orders; });
+  }
+
+  // Flat sorted city list
+  var ALL_CITIES = [];
+  PROVINCES.forEach(function (p) {
+    p.cities.forEach(function (c) {
+      ALL_CITIES.push({
+        name: c.name, orders: c.orders, deliveryRate: c.deliveryRate,
+        codRate: c.codRate, returnRate: c.returnRate,
+        x: c.x, y: c.y,
+        provinceId: p.id, provinceName: p.name, color: p.color,
+        trend: p.trend, trendUp: p.trendUp,
+      });
+    });
+  });
+  ALL_CITIES.sort(function (a, b) { return b.orders - a.orders; });
+
+  var MAX_ORDERS = (ALL_CITIES[0] && ALL_CITIES[0].orders) || 1;
+  var TOTAL_ORDERS = ALL_CITIES.reduce(function (sum, city) { return sum + city.orders; }, 0);
+  var DELIVERY_RATE = TOTAL_ORDERS > 0
+    ? Math.round((ALL_CITIES.reduce(function (sum, city) { return sum + city.deliveryRate * city.orders; }, 0) / TOTAL_ORDERS) * 10) / 10
+    : 0;
+  var BEST_CITY = ALL_CITIES.slice().sort(function (a, b) { return b.deliveryRate - a.deliveryRate; })[0] || { name: '—', deliveryRate: 0 };
+  var WATCH_CITY = ALL_CITIES.slice().sort(function (a, b) { return a.deliveryRate - b.deliveryRate; })[0] || { name: '—', deliveryRate: 0 };
+
+  var SAUDI_PATH = 'M43.493,151.359L43.014,151.359L41.644,149.933L40.89,148.872L40.068,148.177L36.438,146.749L35.89,145.833L36.507,144.917L36.849,145.833L37.534,146.346L40.548,147.664L43.904,150.445L44.521,150.701ZM140.274,328.281L141.712,328.384L141.096,327.729L140.959,327.418L141.644,326.521L143.699,328.419L143.63,330.625L143.493,331.142L142.945,330.659L142.534,330.211L142.397,329.694L141.849,329.143L139.795,329.487L138.562,328.901L136.712,327.004L136.233,325.659L136.986,325.383L137.808,324.727L138.288,323.657L137.808,322.552L138.904,322.724L139.521,323.864L139.589,326.452L139.795,327.004L139.452,327.591ZM330.342,282.681L325.822,283.31L321.507,283.938L316.644,284.637L310.753,285.474L306.164,286.103L299.452,287.08L293.425,287.917L287.808,288.719L282.123,289.521L277.329,290.218L274.452,291.019L271.096,292.726L265.89,295.407L260.616,298.12L257.945,299.511L255.068,303.124L253.63,304.929L250.959,308.225L248.973,310.721L246.644,313.665L245.616,316.33L244.041,320.375L242.671,321.412L240.411,322.724L238.356,323.657L235.137,323.553L233.356,321.032L231.37,318.405L230.411,317.333L229.589,317.264L226.37,317.609L222.466,318.024L217.945,317.575L212.671,317.056L207.74,316.606L205.274,316.26L202.055,314.53L201.233,314.184L200.342,314.115L196.575,314.045L192.74,314.011L188.904,314.565L185.274,314.357L181.507,314.669L180.137,315.326L178.699,315.291L177.74,315.88L176.986,316.157L175.959,315.638L174.795,315.776L173.082,315.326L171.918,314.219L170.89,313.215L169.795,312.66L168.562,312.349L167.466,312.314L166.096,312.938L165.274,313.526L163.151,315.465L163.082,316.157L164.041,317.298L163.699,317.851L162.466,318.543L162.123,320.375L161.918,321.377L161.712,323.76L162.26,325.659L163.014,326.349L163.082,327.177L162.671,328.798L161.507,329.281L160.685,330.832L160.137,331.555L159.247,332.382L155.685,335.103L155.479,333.519L154.384,331.176L154.315,329.487L153.767,327.832L152.808,326.556L151.027,325.245L150.822,323.415L149.521,321.619L147.808,320.168L146.781,317.506L146.096,313.942L141.507,309.265L135.753,304.964L133.973,302.499L131.096,297.529L129.658,293.597L125.822,289.067L125.685,287.324L125.068,285.195L124.178,282.821L123.699,280.934L119.795,272.711L118.562,271.414L117.466,269.556L117.192,268.153L116.849,267.381L114.178,266.012L111.575,262.534L103.973,257.011L100.205,256.483L97.26,254.511L95.068,251.902L92.74,247.455L88.63,242.649L85.205,235.779L86.301,233.26L86.233,231.521L85.137,228.537L83.973,226.262L83.151,224.092L83.836,220.958L84.041,217.464L84.726,215.608L85.205,213.573L84.589,209.462L83.425,207.279L83.562,205.81L82.26,205.094L81.164,203.481L82.26,203.517L80.274,201.293L79.521,200.073L78.767,197.057L77.808,194.756L74.726,189.5L73.219,186.292L69.863,182.176L66.233,179.103L63.973,177.729L62.877,176.462L60.959,176.389L58.904,174.578L57.466,174.542L55.685,174.252L53.562,170.735L51.781,167.467L48.767,163.177L49.521,162.048L50.411,160.227L50,157.858L49.521,156.253L48.219,153.296L43.836,145.906L42.671,144.844L40.822,143.597L39.726,140.368L39.178,137.502L36.164,136.105L31.096,125.711L28.082,122.052L26.918,119.609L23.493,115.569L21.849,111.523L18.356,107.804L15.342,101.358L10.753,94.856L8.767,93.733L4.041,93.284L1.986,92.797L0.137,94.219L0,92.422L1.301,89.911L3.082,84.655L3.493,80.027L6.37,66.276L10.411,66.958L13.767,67.564L18.63,68.435L23.699,69.306L26.644,69.836L27.603,69.609L31.712,66.239L35.411,63.167L37.603,59.445L39.726,55.793L40.685,55.031L43.973,54.384L49.178,53.279L54.315,52.211L54.658,51.868L55.89,48.929L57.397,45.221L57.74,44.838L58.082,44.456L61.781,42.35L63.973,41.085L60.822,37.363L57.808,33.828L54.452,29.862L51.644,26.777L47.329,22.141L44.589,19.083L49.452,17.65L54.726,16.099L60.068,14.508L66.507,12.605L71.507,11.128L79.041,8.91L82.671,7.82L83.356,7.548L86.164,4.897L90.411,5.638L96.781,6.768L102.945,7.82L109.452,9.066L111.575,10.117L117.808,13.848L121.918,16.293L126.644,19.161L132.603,22.683L136.644,25.117L141.918,28.243L145.959,31.788L151.164,36.288L156.781,41.2L161.438,45.03L167.877,50.265L174.247,55.412L180.411,60.471L185.411,64.495L191.644,69.571L192.192,69.76L198.493,70.327L207.055,71.122L215.616,71.878L223.356,72.596L226.712,71.878L230.342,72.331L235.274,72.974L238.219,73.389L243.836,74.182L245.548,77.503L246.164,79.801L246.712,82.06L248.356,84.091L252.192,84.054L255.548,84.016L259.726,83.941L263.082,83.903L264.11,85.933L264.589,87.96L266.575,92.759L269.384,96.502L270,97.847L270.479,99.902L270,100.686L269.795,101.544L271.849,103.595L275.342,105.31L276.644,105.757L278.151,106.539L276.986,107.693L279.041,110.445L281.37,113.194L283.904,113.825L287.329,118.016L292.397,120.719L295.548,124.27L295.274,124.344L294.315,123.974L293.219,123.494L292.877,123.937L292.877,125.416L293.219,127.151L294.795,128.664L296.233,129.734L296.781,131.798L295.616,136.215L295.274,136.179L294.521,135.811L293.699,135.737L293.288,135.995L294.247,139.156L295.137,141.579L296.301,143.487L297.26,146.309L298.014,147.481L301.37,150.482L302.329,152.967L303.288,157.603L305.342,160.154L306.507,162.157L308.014,163.832L308.973,166.123L310.342,167.903L311.096,168.339L312.123,168.52L313.493,168.52L315.068,168.085L316.781,167.649L318.151,168.52L319.521,168.411L319.658,169.247L318.767,170.372L317.603,173.201L319.247,173.672L320.753,173.89L321.918,174.361L322.534,174.361L322.534,174.94L322.603,177.656L323.014,178.669L323.699,179.574L324.726,180.947L325.753,182.321L326.849,183.693L327.877,185.029L328.904,186.4L330,187.77L331.027,189.104L332.055,190.473L333.082,191.841L334.178,193.209L335.205,194.54L336.233,195.907L337.329,197.272L338.356,198.637L339.384,199.966L340.411,201.329L341.301,202.441L342.877,202.657L343.425,202.728L344.863,202.908L347.055,203.23L350,203.589L353.425,204.055L357.26,204.556L361.37,205.094L365.616,205.667L369.863,206.24L373.904,206.777L377.74,207.279L381.233,207.744L384.11,208.138L386.37,208.424L387.808,208.603L388.288,208.675L389.795,208.889L390.068,208.818L391.37,207.171L392.74,209.498L393.904,211.429L395.479,214.109L397.192,216.929L398.836,219.604L400,221.635L399.384,223.7L398.699,225.978L398.014,228.218L397.26,230.491L396.575,232.764L395.89,235.034L395.205,237.303L394.521,239.534L393.767,241.8L393.082,244.063L392.397,246.325L391.712,248.55L391.027,250.809L390.342,253.066L389.589,255.321L388.904,257.54L388.219,259.792L387.397,262.499L385.342,263.202L382.123,264.361L378.836,265.52L375.548,266.679L372.26,267.872L368.973,269.03L365.753,270.187L362.466,271.344L359.178,272.501L355.89,273.657L352.603,274.812L349.384,275.968L346.096,277.123L342.808,278.277L339.521,279.431L336.301,280.585L333.014,281.738ZM37.671,144.404L37.466,144.697L36.644,143.927L36.712,142.313L37.397,141.396L37.329,142.643L37.671,143.927Z';
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+  function svgIcon(name, size, color) {
+    var c = color || 'currentColor';
+    var s = size || 16;
+    var paths = {
+      package:       '<path d="M12.89 1.45l8 4A2 2 0 0 1 22 7.24v9.53a2 2 0 0 1-1.11 1.79l-8 4a2 2 0 0 1-1.79 0l-8-4a2 2 0 0 1-1.1-1.8V7.24a2 2 0 0 1 1.11-1.79l8-4a2 2 0 0 1 1.78 0z"/><polyline points="2.32 6.16 12 11 21.68 6.16"/><line x1="12" y1="22.76" x2="12" y2="11"/>',
+      trendingUp:    '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
+      award:         '<circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>',
+      alertTriangle: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+      mapPin:        '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+      barChart:      '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+      clock:         '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+      trendingDown:  '<polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/>',
+    };
+    return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="' + c +
+      '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;flex-shrink:0">' +
+      (paths[name] || '') + '</svg>';
+  }
+
+  function rateColor(rate) {
+    if (rate >= 70) return '#00e676';
+    if (rate >= 65) return '#f59e0b';
+    return '#ef4444';
+  }
+
+  function shortProvName(name) {
+    return name.replace('منطقة ', '').replace(' المكرمة', '').replace(' المنورة', '');
+  }
+
+  // ── KPI cards HTML ──────────────────────────────────────────────────────────
+  function kpiRowHTML() {
+    var cards = [
+      {
+        icon: 'package', color: '#a855f7', label: 'إجمالي الطلبات',
+        value: TOTAL_ORDERS.toLocaleString('en-US'), trend: '+4.2%', trendUp: true,
+      },
+      {
+        icon: 'trendingUp', color: '#14b8a6', label: 'معدل التسليم الكلي',
+        value: DELIVERY_RATE + '%', trend: '+2.1%', trendUp: true,
+      },
+      {
+        icon: 'award', color: '#00e676', label: 'أفضل مدينة تسليماً',
+        value: BEST_CITY.name, sub: BEST_CITY.deliveryRate + '% معدل تسليم', trend: null,
+      },
+      {
+        icon: 'alertTriangle', color: '#ef4444', label: 'تحتاج متابعة',
+        value: WATCH_CITY.name, sub: WATCH_CITY.deliveryRate + '% معدل تسليم', trend: null,
+      },
+    ];
+
+    return cards.map(function (c, i) {
+      var trendHTML = c.trend
+        ? '<div style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:700;' +
+          'padding:3px 8px;border-radius:8px;' +
+          'color:' + (c.trendUp ? '#00e676' : '#ef4444') + ';' +
+          'background:' + (c.trendUp ? 'rgba(0,230,118,0.1)' : 'rgba(239,68,68,0.1)') + '">' +
+          (c.trendUp ? '▲' : '▼') + ' ' + c.trend +
+          '</div>'
+        : '';
+      var subHTML = c.sub
+        ? '<div style="font-size:11px;font-weight:600;margin-top:6px;color:' + c.color + '">' + c.sub + '</div>'
+        : '';
+      return '<div class="fade-up" style="animation-delay:' + (i * 60) + 'ms;' +
+        'background:#0b1120;border:1px solid rgba(255,255,255,0.06);border-radius:18px;' +
+        'padding:20px;flex:1;display:flex;flex-direction:column;gap:12px;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+          '<div style="width:36px;height:36px;border-radius:12px;flex-shrink:0;' +
+            'display:flex;align-items:center;justify-content:center;background:' + c.color + '1e">' +
+            svgIcon(c.icon, 17, c.color) +
+          '</div>' +
+          trendHTML +
+        '</div>' +
+        '<div style="text-align:right">' +
+          '<div style="font-size:22px;font-weight:900;color:#fff;line-height:1">' + c.value + '</div>' +
+          '<div style="font-size:11px;color:rgba(255,255,255,0.38);margin-top:4px">' + c.label + '</div>' +
+          subHTML +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // ── Map HTML (SVG) ──────────────────────────────────────────────────────────
+  function mapHTML() {
+    var defs = '<defs>' +
+      '<linearGradient id="scMapBg" x1="0%" y1="0%" x2="100%" y2="100%">' +
+        '<stop offset="0%" stop-color="#111827"/>' +
+        '<stop offset="100%" stop-color="#060c1a"/>' +
+      '</linearGradient>' +
+      PROVINCES.map(function (p) {
+        return '<radialGradient id="sc-prov-' + p.id + '" cx="50%" cy="50%" r="50%">' +
+          '<stop offset="0%" stop-color="' + p.color + '" stop-opacity="0.38"/>' +
+          '<stop offset="100%" stop-color="' + p.color + '" stop-opacity="0"/>' +
+          '</radialGradient>';
+      }).join('') +
+    '</defs>';
+
+    var provBlobs = PROVINCES.map(function (p) {
+      return '<ellipse class="sc-prov-blob" data-province="' + p.id + '"' +
+        ' cx="' + p.mapCx + '" cy="' + p.mapCy + '"' +
+        ' rx="' + p.mapRx + '" ry="' + p.mapRy + '"' +
+        ' fill="url(#sc-prov-' + p.id + ')"' +
+        ' style="cursor:pointer;transition:opacity 0.3s"/>';
+    }).join('');
+
+    var cityDots = ALL_CITIES.map(function (c) {
+      var r = 4 + (c.orders / MAX_ORDERS) * 10;
+      return '<g class="sc-city-dot" data-province="' + c.provinceId + '"' +
+        ' style="cursor:pointer;transition:opacity 0.3s">' +
+        '<circle cx="' + c.x + '" cy="' + c.y + '" r="' + (r * 2.8) + '"' +
+          ' fill="' + c.color + '" opacity="0.1" style="filter:blur(5px)"/>' +
+        '<circle cx="' + c.x + '" cy="' + c.y + '" r="' + r + '"' +
+          ' fill="' + c.color + '" stroke="rgba(255,255,255,0.65)" stroke-width="1"' +
+          ' style="filter:drop-shadow(0 0 6px ' + c.color + '99)" class="sc-dot-inner"' +
+          ' data-name="' + c.name + '" data-orders="' + c.orders + '" data-rate="' + c.deliveryRate + '"' +
+          ' data-cx="' + c.x + '" data-cy="' + c.y + '"/>' +
+      '</g>';
+    }).join('');
+
+    var legendChips = PROVINCES.map(function (p) {
+      return '<button class="sc-legend-chip" data-province="' + p.id + '" style="' +
+        'display:flex;align-items:center;gap:6px;' +
+        'padding:4px 10px;border-radius:8px;border:1px solid ' + p.color + '44;' +
+        'background:' + p.color + '18;color:' + p.color + ';' +
+        'font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;' +
+        'transition:all 0.2s;">' +
+        '<span style="width:6px;height:6px;border-radius:50%;background:' + p.color + ';flex-shrink:0"></span>' +
+        shortProvName(p.name) +
+      '</button>';
+    }).join('');
+
+    return '<div class="fade-up" style="animation-delay:80ms;' +
+      'background:#0b1120;border:1px solid rgba(255,255,255,0.06);' +
+      'border-radius:18px;padding:20px;display:flex;flex-direction:column;">' +
+
+      '<div style="display:flex;align-items:center;justify-content:space-between;' +
+        'margin-bottom:12px;">' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+          svgIcon('mapPin', 16, '#a855f7') +
+          '<span style="font-size:15px;font-weight:800;color:#fff">خريطة التوزيع الجغرافي</span>' +
+        '</div>' +
+        '<button id="sc-clear-btn" style="display:none;font-size:11px;font-weight:700;' +
+          'color:#a855f7;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);' +
+          'border-radius:8px;padding:4px 10px;cursor:pointer;font-family:inherit;">' +
+          'عرض الكل ✕' +
+        '</button>' +
+      '</div>' +
+
+      '<div style="position:relative;width:100%;padding-bottom:82%;flex-shrink:0;">' +
+        '<svg id="sc-map-svg" width="100%" height="100%" viewBox="0 0 400 340"' +
+          ' style="position:absolute;inset:0;overflow:visible">' +
+          defs +
+          '<path d="' + SAUDI_PATH + '" fill="url(#scMapBg)"' +
+            ' stroke="rgba(168,85,247,0.22)" stroke-width="1.5"' +
+            ' style="filter:drop-shadow(0 0 8px rgba(168,85,247,0.08))"/>' +
+          provBlobs +
+          cityDots +
+          '<g id="sc-tooltip" style="pointer-events:none;display:none">' +
+            '<rect id="sc-tt-bg" x="0" y="0" width="96" height="44" rx="7"' +
+              ' fill="#0f172a" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>' +
+            '<text id="sc-tt-name" x="48" y="16" text-anchor="middle"' +
+              ' fill="white" font-size="10" font-weight="bold" font-family="Cairo,sans-serif"></text>' +
+            '<text id="sc-tt-info" x="48" y="32" text-anchor="middle"' +
+              ' font-size="9" font-family="Cairo,sans-serif"></text>' +
+          '</g>' +
+        '</svg>' +
+      '</div>' +
+
+      '<div id="sc-legend" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;justify-content:flex-end">' +
+        legendChips +
+      '</div>' +
+    '</div>';
+  }
+
+  // ── Leaderboard HTML ────────────────────────────────────────────────────────
+  function leaderboardHTML() {
+    var rows = ALL_CITIES.map(function (c, i) {
+      var color = rateColor(c.deliveryRate);
+      var trendIcon = c.trendUp
+        ? svgIcon('trendingUp', 10, '#00e676')
+        : svgIcon('trendingDown', 10, '#ef4444');
+      return '<div class="sc-lb-row fade-up" data-province="' + c.provinceId + '"' +
+        ' style="animation-delay:' + (120 + i * 40) + 'ms;' +
+        'display:grid;grid-template-columns:1.9fr 0.85fr 1.2fr 0.65fr;' +
+        'align-items:center;padding:10px 12px;gap:8px;' +
+        (i < ALL_CITIES.length - 1 ? 'border-bottom:1px solid rgba(255,255,255,0.04)' : '') + '">' +
+
+        '<div style="display:flex;align-items:center;gap:7px;">' +
+          '<span style="color:#fff;font-weight:700;font-size:13px;white-space:nowrap">' + c.name + '</span>' +
+          '<span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:' + c.color + '"></span>' +
+          '<span style="font-size:10px;color:rgba(255,255,255,0.2);font-weight:700;width:16px;text-align:center">' + (i + 1) + '</span>' +
+        '</div>' +
+
+        '<div style="color:rgba(255,255,255,0.72);font-size:12px;font-weight:600;text-align:right">' +
+          c.orders.toLocaleString('en-US') +
+        '</div>' +
+
+        '<div style="display:flex;flex-direction:column;gap:3px">' +
+          '<span style="font-size:12px;font-weight:700;text-align:right;color:' + color + '">' +
+            c.deliveryRate.toFixed(1) + '%' +
+          '</span>' +
+          '<div style="height:3px;border-radius:9999px;background:rgba(255,255,255,0.06);overflow:hidden">' +
+            '<div class="sc-rate-bar" data-pct="' + c.deliveryRate + '"' +
+              ' style="height:100%;width:0%;border-radius:9999px;background:' + color + ';' +
+              'box-shadow:0 0 6px ' + color + '88;transition:width 1s ease-out"></div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div style="display:flex;align-items:center;gap:3px;justify-content:center;' +
+          'font-size:10px;font-weight:700;color:' + (c.trendUp ? '#00e676' : '#ef4444') + '">' +
+          trendIcon + ' ' + c.trend + '%' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    return '<div class="fade-up" style="animation-delay:100ms;' +
+      'background:#0b1120;border:1px solid rgba(255,255,255,0.06);' +
+      'border-radius:18px;padding:20px;display:flex;flex-direction:column;">' +
+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">' +
+        svgIcon('barChart', 16, '#a855f7') +
+        '<span id="sc-lb-title" style="font-size:15px;font-weight:800;color:#fff">' +
+          'ترتيب المدن <span style="color:rgba(255,255,255,0.3);font-weight:600;font-size:13px">(' + ALL_CITIES.length + ')</span>' +
+        '</span>' +
+      '</div>' +
+
+      '<div style="display:grid;grid-template-columns:1.9fr 0.85fr 1.2fr 0.65fr;' +
+        'padding:8px 12px;font-size:10px;font-weight:700;color:rgba(255,255,255,0.3);' +
+        'border-bottom:1px solid rgba(255,255,255,0.05);gap:8px;text-align:right">' +
+        '<div>المدينة</div><div>الطلبات</div><div>التسليم</div><div>اتجاه</div>' +
+      '</div>' +
+
+      '<div id="sc-lb-body" class="dash-scroll" style="overflow-y:auto;flex:1;max-height:380px">' +
+        rows +
+      '</div>' +
+
+      '<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.05);' +
+        'display:flex;gap:12px;justify-content:flex-end">' +
+        ['#00e676,ممتاز ≥70%', '#f59e0b,متوسط 65–70%', '#ef4444,يحتاج تحسين <65%'].map(function (s) {
+          var parts = s.split(',');
+          return '<div style="display:flex;align-items:center;gap:5px;">' +
+            '<span style="width:7px;height:7px;border-radius:50%;background:' + parts[0] + '"></span>' +
+            '<span style="font-size:10px;color:rgba(255,255,255,0.3)">' + parts[1] + '</span>' +
+          '</div>';
+        }).join('') +
+      '</div>' +
+    '</div>';
+  }
+
+  // ── Province cards HTML ─────────────────────────────────────────────────────
+  function provinceCardsHTML() {
+    var cards = PROVINCES.map(function (p, i) {
+      var trendIcon = p.trendUp ? svgIcon('trendingUp', 12, '#00e676') : svgIcon('trendingDown', 12, '#ef4444');
+      return '<button class="sc-prov-card" data-province="' + p.id + '"' +
+        ' style="animation-delay:' + (i * 70) + 'ms;' +
+        'background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);' +
+        'border-radius:18px;padding:20px;flex:1;text-align:right;' +
+        'display:flex;flex-direction:column;align-items:stretch;width:100%;gap:14px;cursor:pointer;' +
+        'font-family:inherit;transition:all 0.2s;">' +
+
+        '<div style="display:flex;align-items:center;justify-content:space-between;width:100%">' +
+          '<span style="font-size:14px;font-weight:900;color:' + p.color + '">' + shortProvName(p.name) + '</span>' +
+          '<span style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:800;' +
+            'color:' + (p.trendUp ? '#00e676' : '#ef4444') + ';background:' + (p.trendUp ? 'rgba(0,230,118,0.1)' : 'rgba(239,68,68,0.1)') + ';padding:3px 8px;border-radius:8px;">' +
+            trendIcon + ' ' + p.trend + '%' +
+          '</span>' +
+        '</div>' +
+
+        '<div style="width:100%">' +
+          '<div style="font-size:28px;font-weight:900;color:#fff;line-height:1">' +
+            p.orders.toLocaleString('en-US') +
+          '</div>' +
+          '<div style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.4);margin-top:6px">' +
+            'إجمالي الطلبات · ' + p.cities.length + ' مدن' +
+          '</div>' +
+        '</div>' +
+
+        '<div style="width:100%">' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;' +
+            'margin-bottom:8px">' +
+            '<span style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.45)">معدل التسليم</span>' +
+            '<span style="font-size:14px;font-weight:800;color:' + p.color + '">' + p.deliveryRate + '%</span>' +
+          '</div>' +
+          '<div style="height:6px;border-radius:9999px;background:rgba(255,255,255,0.06);overflow:hidden">' +
+            '<div class="sc-prov-bar" data-pct="' + p.deliveryRate + '"' +
+              ' style="height:100%;width:0%;border-radius:9999px;background:' + p.color + ';' +
+              'box-shadow:0 0 10px ' + p.color + '88;transition:width 0.4s ease-out"></div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div style="display:flex;justify-content:space-between;width:100%;' +
+          'padding-top:14px;border-top:1px solid rgba(255,255,255,0.08)">' +
+          '<div style="text-align:right">' +
+            '<div style="font-size:11px;color:rgba(255,255,255,0.35);font-weight:600;margin-bottom:4px">COD</div>' +
+            '<div style="font-size:14px;font-weight:800;color:#06b6d4">' + p.codRate + '%</div>' +
+          '</div>' +
+          '<div style="text-align:right">' +
+            '<div style="font-size:11px;color:rgba(255,255,255,0.35);font-weight:600;margin-bottom:4px">مرتجعات</div>' +
+            '<div style="font-size:14px;font-weight:800;color:#ef4444">' + p.returnRate + '%</div>' +
+          '</div>' +
+          '<div style="text-align:right">' +
+            '<div style="font-size:11px;color:rgba(255,255,255,0.35);font-weight:600;display:flex;align-items:center;gap:4px;margin-bottom:4px">' +
+              svgIcon('clock', 12, 'rgba(255,255,255,0.35)') + ' أيام' +
+            '</div>' +
+            '<div style="font-size:14px;font-weight:800;color:rgba(255,255,255,0.75)">' + p.avgDays + '</div>' +
+          '</div>' +
+        '</div>' +
+      '</button>';
+    }).join('');
+
+    return '<div style="margin-top:0">' +
+      '<div style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.28);' +
+        'letter-spacing:3px;text-align:right;margin-bottom:10px">المناطق الإدارية</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:12px;">' + cards + '</div>' +
+    '</div>';
+  }
+
+  // ── Time-filter tabs HTML ───────────────────────────────────────────────────
+  var TIME_TABS = ['هذا الشهر', 'آخر 7 أيام', 'هذا الربع'];
+  function tabsHTML(active) {
+    return '<div style="display:flex;gap:4px;background:rgba(255,255,255,0.05);border-radius:12px;padding:4px">' +
+      TIME_TABS.map(function (t, i) {
+        var isActive = i === active;
+        return '<button class="sc-tab" data-tab="' + i + '" style="' +
+          'padding:7px 14px;border-radius:9px;border:none;font-size:11px;font-weight:700;' +
+          'cursor:pointer;font-family:inherit;transition:all 0.15s;' +
+          'background:' + (isActive ? '#7c3aed' : 'transparent') + ';' +
+          'color:' + (isActive ? '#fff' : 'rgba(255,255,255,0.38)') + ';' +
+          'box-shadow:' + (isActive ? '0 2px 10px rgba(124,58,237,0.4)' : 'none') + ';">' +
+          t + '</button>';
+      }).join('') +
+    '</div>';
+  }
+
+  // ── Assemble full section ───────────────────────────────────────────────────
+  mountEl.innerHTML =
+    '<div dir="rtl" style="flex:1;overflow-y:auto;background:#080b12;' +
+      'display:flex;flex-direction:column;color:#fff;font-family:\'Cairo\',sans-serif;">' +
+
+      /* Header */
+      '<div style="padding:28px 32px 20px;display:flex;align-items:flex-start;' +
+        'justify-content:space-between;">' +
+        '<div>' +
+          '<h1 class="fade-up" style="font-size:30px;font-weight:900;color:#fff;margin:0;text-align:right">المدن والمناطق</h1>' +
+          '<p class="fade-up" style="font-size:11px;color:rgba(255,255,255,0.32);margin:6px 0 0;text-align:right;animation-delay:80ms">' +
+            '14 مدينة في 5 مناطق إدارية' +
+          '</p>' +
+        '</div>' +
+        '<div id="sc-tabs-wrap">' + tabsHTML(0) + '</div>' +
+      '</div>' +
+
+      /* KPI row */
+      '<div style="padding:0 32px 20px;display:flex;gap:14px;">' +
+        kpiRowHTML() +
+      '</div>' +
+
+      /* Map + Leaderboard */
+      '<div style="padding:0 32px 20px;display:grid;grid-template-columns:1.15fr 1fr;gap:16px;">' +
+        mapHTML() +
+        leaderboardHTML() +
+      '</div>' +
+
+      /* Province cards */
+      '<div style="padding:0 32px 32px">' +
+        provinceCardsHTML() +
+      '</div>' +
+
+    '</div>';
+
+  // ── Post-mount: animate bars ────────────────────────────────────────────────
+  setTimeout(function () {
+    mountEl.querySelectorAll('.sc-rate-bar').forEach(function (bar) {
+      bar.style.width = bar.dataset.pct + '%';
+    });
+    mountEl.querySelectorAll('.sc-prov-bar').forEach(function (bar) {
+      bar.style.width = bar.dataset.pct + '%';
+    });
+  }, 10);
+
+  // ── Province selection logic ────────────────────────────────────────────────
+  var selectedProvince = null;
+
+  function updateSelection() {
+    var sel = selectedProvince;
+
+    /* province blobs on map */
+    mountEl.querySelectorAll('.sc-prov-blob').forEach(function (el) {
+      el.style.opacity = (!sel || el.dataset.province === sel) ? '1' : '0.12';
+    });
+
+    /* city dots on map */
+    mountEl.querySelectorAll('.sc-city-dot').forEach(function (el) {
+      el.style.opacity = (!sel || el.dataset.province === sel) ? '1' : '0.1';
+    });
+
+    /* leaderboard rows */
+    var visibleCount = 0;
+    mountEl.querySelectorAll('.sc-lb-row').forEach(function (el) {
+      var show = !sel || el.dataset.province === sel;
+      el.style.display = show ? 'grid' : 'none';
+      if (show) visibleCount++;
+    });
+
+    /* leaderboard title */
+    var titleEl = mountEl.querySelector('#sc-lb-title');
+    if (titleEl) {
+      var provLabel = sel ? (PROVINCES.find(function (p) { return p.id === sel; }) || {}).name || 'مدن المنطقة' : 'ترتيب المدن';
+      titleEl.innerHTML = provLabel + ' <span style="color:rgba(255,255,255,0.3);font-weight:600;font-size:13px">(' + visibleCount + ')</span>';
+    }
+
+    /* province cards active state */
+    mountEl.querySelectorAll('.sc-prov-card').forEach(function (el) {
+      var isActive = el.dataset.province === sel;
+      var prov = PROVINCES.find(function (p) { return p.id === el.dataset.province; });
+      if (!prov) return;
+      el.style.background = isActive ? prov.color + '14' : 'rgba(255,255,255,0.025)';
+      el.style.border = isActive ? '1px solid ' + prov.color : '1px solid rgba(255,255,255,0.06)';
+      el.style.boxShadow = isActive ? '0 0 22px ' + prov.color + '22' : 'none';
+    });
+
+    /* legend chips active state */
+    mountEl.querySelectorAll('.sc-legend-chip').forEach(function (el) {
+      var isActive = el.dataset.province === sel;
+      var prov = PROVINCES.find(function (p) { return p.id === el.dataset.province; });
+      if (!prov) return;
+      el.style.border = '1px solid ' + (isActive ? prov.color : prov.color + '44');
+      el.style.opacity = (!sel || isActive) ? '1' : '0.45';
+    });
+
+    /* clear button */
+    var clearBtn = mountEl.querySelector('#sc-clear-btn');
+    if (clearBtn) clearBtn.style.display = sel ? 'inline-block' : 'none';
+  }
+
+  function toggleProvince(id) {
+    selectedProvince = (selectedProvince === id) ? null : id;
+    updateSelection();
+  }
+
+  /* wire province cards */
+  mountEl.querySelectorAll('.sc-prov-card').forEach(function (el) {
+    el.addEventListener('click', function () { toggleProvince(el.dataset.province); });
+  });
+
+  /* wire legend chips */
+  mountEl.querySelectorAll('.sc-legend-chip').forEach(function (el) {
+    el.addEventListener('click', function () { toggleProvince(el.dataset.province); });
+  });
+
+  /* wire map province blobs */
+  mountEl.querySelectorAll('.sc-prov-blob').forEach(function (el) {
+    el.addEventListener('click', function () { toggleProvince(el.dataset.province); });
+  });
+
+  /* wire city dots + tooltip */
+  var tooltip   = mountEl.querySelector('#sc-tooltip');
+  var ttBg      = mountEl.querySelector('#sc-tt-bg');
+  var ttName    = mountEl.querySelector('#sc-tt-name');
+  var ttInfo    = mountEl.querySelector('#sc-tt-info');
+
+  mountEl.querySelectorAll('.sc-dot-inner').forEach(function (el) {
+    el.addEventListener('mouseenter', function () {
+      if (!tooltip) return;
+      var cx = parseFloat(el.dataset.cx), cy = parseFloat(el.dataset.cy);
+      var tx = Math.min(cx - 44, 305), ty = cy - 56;
+      if (ttBg)   { ttBg.setAttribute('x', tx);    ttBg.setAttribute('y', ty); }
+      if (ttName) { ttName.setAttribute('x', tx + 48); ttName.setAttribute('y', ty + 16); ttName.textContent = el.dataset.name; }
+      if (ttInfo) {
+        ttInfo.setAttribute('x', tx + 48);
+        ttInfo.setAttribute('y', ty + 32);
+        ttInfo.textContent = Number(el.dataset.orders).toLocaleString('en-US') + ' طلب · ' + el.dataset.rate + '%';
+        /* color by province */
+        var prov = PROVINCES.find(function (p) { return p.cities.some(function (c) { return c.name === el.dataset.name; }); });
+        ttInfo.setAttribute('fill', prov ? prov.color : '#fff');
+      }
+      tooltip.style.display = 'block';
+    });
+    el.addEventListener('mouseleave', function () {
+      if (tooltip) tooltip.style.display = 'none';
+    });
+    el.addEventListener('click', function () {
+      var prov = PROVINCES.find(function (p) { return p.cities.some(function (c) { return c.name === el.dataset.name; }); });
+      if (prov) toggleProvince(prov.id);
+    });
+  });
+
+  /* clear button */
+  var clearBtn = mountEl.querySelector('#sc-clear-btn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', function () {
+      selectedProvince = null;
+      updateSelection();
+    });
+  }
+
+  /* time tabs */
+  mountEl.querySelectorAll('.sc-tab').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      mountEl.querySelectorAll('.sc-tab').forEach(function (b) {
+        var isNowActive = b === btn;
+        b.style.background = isNowActive ? '#7c3aed' : 'transparent';
+        b.style.color = isNowActive ? '#fff' : 'rgba(255,255,255,0.38)';
+        b.style.boxShadow = isNowActive ? '0 2px 10px rgba(124,58,237,0.4)' : 'none';
+      });
+    });
+  });
+};
