@@ -1525,6 +1525,7 @@ ipcMain.handle("download-update", () => {
 
 ipcMain.handle("install-update", () => {
   log.info("[AutoUpdate] IPC install-update received - calling quitAndInstall");
+  app.isQuitting = true;
   autoUpdater.quitAndInstall(false, true);
 });
 
