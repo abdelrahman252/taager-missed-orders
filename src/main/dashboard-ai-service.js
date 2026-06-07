@@ -87,8 +87,8 @@ const BUSINESS_TERMS = [
   "forecast", "growth", "inventory", "kpi", "loss", "margin", "media", "buying", "campaign", "creative",
   "objective", "budget", "ndr", "order", "pipeline", "product", "profit", "profitable", "losing",
   "recommend", "refund", "roi", "roas", "scale", "shipping", "strategy",
-  "Ø­Ø³Ø§Ø¨", "Ø·Ù„Ø¨Ø§Øª", "Ø·Ù„Ø¨", "Ù…Ù†ØªØ¬", "Ù…Ø¯ÙŠÙ†Ø©", "Ù…Ø¯Ù†", "Ø±Ø¨Ø­", "Ø®Ø³Ø§Ø±Ø©", "Ø¹Ù…ÙˆÙ„Ø©", "ØªÙˆØµÙŠÙ„",
-  "Ø´Ø­Ù†", "ØªÙˆÙ‚Ø¹", "ØªÙˆØµÙŠØ©", "Ø§Ø³ØªØ±Ø§ØªÙŠØ¬ÙŠØ©", "Ù…Ø¤Ø´Ø±", "ØªØ­ØµÙŠÙ„", "Ù…Ø¨ÙŠØ¹Ø§Øª",
+  "حساب", "طلبات", "طلب", "منتج", "مدينة", "مدن", "ربح", "خسارة", "عمولة", "توصيل",
+  "شحن", "توقع", "توصية", "استراتيجية", "مؤشر", "تحصيل", "مبيعات",
 ];
 
 const INJECTION_PATTERNS = [

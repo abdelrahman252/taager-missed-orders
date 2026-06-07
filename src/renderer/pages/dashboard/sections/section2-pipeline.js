@@ -69,9 +69,9 @@ window.renderSection2 = function (mountEl, data, ctx) {
         pct: 0,
         color: meta.color || window.TaagerStatus.color(meta.bucket),
         businessGroup: meta.businessGroup,
-        convLabel: meta.businessGroup === 'excluded' ? s2Txt('Excluded from NDR', 'Ù…Ø³ØªØ¨Ø¹Ø¯ Ù…Ù† NDR') : s2Txt('% of Total', 'Ù†Ø³Ø¨Ø© Ù…Ù† Ø§Ù„Ø¥Ø¬Ù…Ø§Ù„ÙŠ'),
+        convLabel: meta.businessGroup === 'excluded' ? s2Txt('Excluded from NDR', 'مستبعد من NDR') : s2Txt('% of Total', 'نسبة من الإجمالي'),
         conv: 0,
-        convFrom: meta.businessGroup === 'excluded' ? s2Txt('visible only', 'Ø¸Ø§Ù‡Ø± ÙÙ‚Ø·') : s2Txt('of total orders', 'Ù…Ù† Ø¥Ø¬Ù…Ø§Ù„ÙŠ Ø§Ù„Ø·Ù„Ø¨Ø§Øª')
+        convFrom: meta.businessGroup === 'excluded' ? s2Txt('visible only', 'ظاهر فقط') : s2Txt('of total orders', 'من إجمالي الطلبات')
       };
     });
   }

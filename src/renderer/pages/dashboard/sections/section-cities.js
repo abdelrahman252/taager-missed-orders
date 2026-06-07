@@ -779,7 +779,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
   function mixedCountryMapsHTML(countryGroups) {
     return '<div class="fade-up" style="animation-delay:80ms;background:#0b1120;border:1px solid rgba(255,255,255,0.06);border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:12px;">' +
-      '<div style="font-size:15px;font-weight:800;color:#fff;">' + s6Txt("Geographical Distribution by Country", "Ø§Ù„ØªÙˆØ²ÙŠØ¹ Ø§Ù„Ø¬ØºØ±Ø§ÙÙŠ Ø­Ø³Ø¨ Ø§Ù„Ø¯ÙˆÙ„Ø©") + '</div>' +
+      '<div style="font-size:15px;font-weight:800;color:#fff;">' + s6Txt("Geographical Distribution by Country", "التوزيع الجغرافي حسب الدولة") + '</div>' +
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;">' +
       countryGroups.map(function (group, groupIdx) {
         var code = String(group.country || "sa").toLowerCase();

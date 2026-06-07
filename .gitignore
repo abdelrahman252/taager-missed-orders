@@ -28,8 +28,13 @@ tmp/
 # Large test/data files and backups
 *.xlsx
 *.zip
+*.exe
 data.txt
 data - Copy.txt
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
 
 # OS-specific files
 Thumbs.db

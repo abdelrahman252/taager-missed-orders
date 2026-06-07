@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en" dir="ltr">
   <head>
     <meta charset="UTF-8" />
@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="../../node_modules/country-flag-icons/3x2/flags.css" />
     <link rel="stylesheet" href="styles/main.css" />
     <style>
-      /* â”€â”€ Preloader Reset â”€â”€ */
+      /* ── Preloader Reset ── */
       html, body {
         margin: 0;
         padding: 0;
@@ -22,7 +22,7 @@
         overflow: hidden;
         background: #0b0f1a;
       }
-      /* â”€â”€ Preloader â”€â”€ */
+      /* ── Preloader ── */
       #preloader {
         position: fixed;
         top: 0;
@@ -130,7 +130,7 @@
         color: #64748b;
       }
 
-      /* â”€â”€ Titlebar overrides â”€â”€ */
+      /* ── Titlebar overrides ── */
       .titlebar {
         height: 48px !important;
         padding: 0 12px 0 16px !important;
@@ -144,7 +144,7 @@
         margin-right: 10px;
       }
 
-      /* Center: user info â€” sits inline, not centered */
+      /* Center: user info — sits inline, not centered */
       #top-bar-center {
         flex: 0 0 auto;
         display: none;
@@ -199,7 +199,7 @@
         -webkit-app-region: drag;
       }
 
-      /* Right: toggles + window controls â€” now just trailing items */
+      /* Right: toggles + window controls — now just trailing items */
       .titlebar-right {
         display: contents;
       }
@@ -212,7 +212,7 @@
         flex-shrink: 0;
       }
 
-      /* â”€â”€ Lang toggle (pill) â”€â”€ */
+      /* ── Lang toggle (pill) ── */
       .tb-lang-switch {
         position: relative;
         display: inline-flex;
@@ -303,7 +303,7 @@
         opacity: 0.5;
       }
 
-      /* â”€â”€ Admin Refresh button â”€â”€ */
+      /* ── Admin Refresh button ── */
       #btn-admin-refresh {
         display: none; /* shown only after license is valid */
         align-items: center;
@@ -356,7 +356,7 @@
         to   { transform: rotate(360deg); }
       }
 
-      /* â”€â”€ Copy License button â”€â”€ */
+      /* ── Copy License button ── */
       .titlebar-btn-copy {
         display: none;
         align-items: center;
@@ -389,7 +389,7 @@
         transform: scale(1.08);
       }
 
-      /* â”€â”€ Theme toggle (sun/moon switch) â”€â”€ */
+      /* ── Theme toggle (sun/moon switch) ── */
       .tb-theme-switch {
         font-size: 14px;
         position: relative;
@@ -499,11 +499,11 @@
       </div>
     </div>
 
-    <!-- Titlebar: [âš¡ App Name] Â·Â·Â·Â· [avatar + name + days] Â·Â·Â·Â· [EN ðŸŒ] [Dark ðŸŒ™] [â€” â–¡ âœ•] -->
+    <!-- Titlebar: [⚡ App Name] ···· [avatar + name + days] ···· [EN 🌐] [Dark 🌙] [— □ ✖] -->
     <div class="titlebar" id="main-titlebar">
       <!-- App branding -->
       <div class="titlebar-left">
-        <span class="app-icon">âš¡</span>
+        <span class="app-icon">⚡</span>
         <span class="app-name">Taager Bot</span>
       </div>
       <div class="titlebar-divider"></div>
@@ -512,7 +512,7 @@
       <div id="top-bar-center">
         <div id="top-bar-avatar">?</div>
         <div id="top-bar-info">
-          <div id="top-bar-name">â€”</div>
+          <div id="top-bar-name">—</div>
           <div style="display:flex;align-items:center;gap:8px">
             <div id="top-bar-days"></div>
             <div id="top-bar-accounts" style="display:none;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:rgba(124,106,247,.15);border:1px solid rgba(124,106,247,.35);color:#a89cf7;border-radius:99px;padding:2px 8px"></div>
@@ -535,7 +535,7 @@
       <!-- Toggles -->
       <div class="titlebar-divider"></div>
 
-      <!-- Admin Refresh button â€” syncs license + account state from Supabase -->
+      <!-- Admin Refresh button — syncs license + account state from Supabase -->
       <button
         id="btn-admin-refresh"
         title="Sync with admin panel"
@@ -552,7 +552,7 @@
       </button>
       <div class="titlebar-divider"></div>
 
-      <!-- Lang toggle: EN â†” AR -->
+      <!-- Lang toggle: EN ↔ AR -->
       <div class="tb-lang-switch">
         <input
           id="toggle-lang"
@@ -567,7 +567,7 @@
       </div>
       <div class="titlebar-divider"></div>
 
-      <!-- Theme toggle: light â†” dark -->
+      <!-- Theme toggle: light ↔ dark -->
       <label class="tb-theme-switch" title="Switch theme" data-tooltip="Switch between light and dark theme.">
         <span class="tb-sun"
           ><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
@@ -623,10 +623,10 @@
     <script src="tooltip.js"></script>
     <script src="app.js"></script>
     <script>
-      // Preloader is dismissed by showPage() in app.js â€” only once the first
+      // Preloader is dismissed by showPage() in app.js — only once the first
       // real page has been rendered and activated. No timer-based removal here.
     </script>
-    <!-- â”€â”€ AUTO-UPDATE TOAST â”€â”€ -->
+    <!-- ── AUTO-UPDATE TOAST ── -->
     <style>
       #updateToast {
         display: none;
@@ -656,7 +656,7 @@
           <div id="updateTitle">Update Available</div>
           <div id="updateSub"></div>
         </div>
-        <button onclick="document.getElementById('updateToast').style.display='none'" style="margin-inline-start:auto;background:none;border:none;color:var(--text2);cursor:pointer;padding:2px;font-size:16px;line-height:1;">âœ•</button>
+        <button onclick="document.getElementById('updateToast').style.display='none'" style="margin-inline-start:auto;background:none;border:none;color:var(--text2);cursor:pointer;padding:2px;font-size:16px;line-height:1;">✖</button>
       </div>
       <!-- progress bar (hidden until download starts) -->
       <div id="updateProgressWrap" style="display:none;margin-bottom:10px;">
@@ -676,9 +676,9 @@
 
     <script>
     "use strict";
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ══════════════════════════════════════════════════════════════════════════════════════════════════
     //  AUTO-UPDATER UI
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ══════════════════════════════════════════════════════════════════════════════════════════════════
     let _updateState = 'idle'; // idle | checking | available | downloading | downloaded | error
 
     function _updLog(level, ...args) {
@@ -690,7 +690,7 @@
     }
 
     function showUpdateToast(title, sub, btnLabel, showProgress) {
-      _updLog('info', `showUpdateToast â†’ title="${title}" btn="${btnLabel}" progress=${showProgress}`);
+      _updLog('info', `showUpdateToast → title="${title}" btn="${btnLabel}" progress=${showProgress}`);
       const toast = document.getElementById('updateToast');
       const dot   = document.getElementById('updateDot');
       document.getElementById('updateTitle').textContent = title;
@@ -738,14 +738,14 @@
     function handleUpdateAction() {
       _updLog('info', `handleUpdateAction called, state=${_updateState}`);
       if (_updateState === 'available') {
-        _updLog('info', 'Starting update downloadâ€¦');
+        _updLog('info', 'Starting update download…');
         _updateState = 'downloading';
         document.getElementById('updateActionBtn').textContent = updText('update.downloading_action', 'Downloading...');
         document.getElementById('updateActionBtn').disabled = true;
         document.getElementById('updateProgressWrap').style.display = 'block';
         window.api.downloadUpdate();
       } else if (_updateState === 'downloaded') {
-        _updLog('info', 'Requesting install & restartâ€¦');
+        _updLog('info', 'Requesting install & restart…');
         window.api.installUpdate();
       } else {
         _updLog('warn', `handleUpdateAction called in unexpected state: ${_updateState}`);
@@ -755,7 +755,7 @@
     function checkForUpdatesManual() {
       _updLog('info', `checkForUpdatesManual called, state=${_updateState}`);
       if (_updateState === 'available' || _updateState === 'downloaded') {
-        _updLog('info', 'Update already found â€” re-showing toast');
+        _updLog('info', 'Update already found — re-showing toast');
         document.getElementById('updateToast').style.display = 'block';
         return;
       }
@@ -766,14 +766,14 @@
 
       _updateState = 'checking';
       _setUpdBtn(true);
-      _updLog('info', 'Calling api.checkForUpdatesâ€¦');
+      _updLog('info', 'Calling api.checkForUpdates…');
 
       window.api.checkForUpdates()
         .then(res => {
           _updLog('info', 'checkForUpdates resolved:', JSON.stringify(res));
           _setUpdBtn(false);
           if (res && res.dev) {
-            _updLog('warn', 'Running in dev/unpackaged mode â€” auto-update skipped');
+            _updLog('warn', 'Running in dev/unpackaged mode — auto-update skipped');
             _updateState = 'idle';
             document.getElementById('updateTitle').textContent = updText('update.dev_title', 'Dev Mode');
             document.getElementById('updateSub').textContent = updText('update.dev_sub', 'Auto-update only works in packaged app.');
@@ -811,14 +811,14 @@
     }
 
     function initAutoUpdater() {
-      _updLog('info', 'initAutoUpdater â€” wiring up IPC events');
+      _updLog('info', 'initAutoUpdater — wiring up IPC events');
       if (!window.api || !window.api.onUpdateAvailable) {
-        _updLog('warn', 'window.api.onUpdateAvailable not found â€” preload may not have loaded correctly');
+        _updLog('warn', 'window.api.onUpdateAvailable not found — preload may not have loaded correctly');
         return;
       }
 
       window.api.onUpdateAvailable(({ version }) => {
-        _updLog('info', `onUpdateAvailable fired â€” version=${version}`);
+        _updLog('info', `onUpdateAvailable fired — version=${version}`);
         _updateState = 'available';
         _setUpdBtn(false);
         document.getElementById('updateTitle').textContent = updTextFn('update.available_title', 'Update v' + version + ' Available', version);
@@ -833,7 +833,7 @@
       });
 
       window.api.onUpdateNotAvailable(() => {
-        _updLog('info', `onUpdateNotAvailable fired â€” state was ${_updateState}`);
+        _updLog('info', `onUpdateNotAvailable fired — state was ${_updateState}`);
         _setUpdBtn(false);
         if (_updateState === 'checking') {
           _updateState = 'idle';
@@ -849,7 +849,7 @@
       });
 
       window.api.onUpdateProgress(({ percent }) => {
-        _updLog('info', `onUpdateProgress â€” ${percent}%`);
+        _updLog('info', `onUpdateProgress — ${percent}%`);
         const bar = document.getElementById('updateProgressBar');
         const lbl = document.getElementById('updateProgressLabel');
         if (bar) bar.style.width = percent + '%';
@@ -860,7 +860,7 @@
       });
 
       window.api.onUpdateDownloaded(() => {
-        _updLog('info', 'onUpdateDownloaded fired â€” update ready to install');
+        _updLog('info', 'onUpdateDownloaded fired — update ready to install');
         _updateState = 'downloaded';
         document.getElementById('updateProgressWrap').style.display = 'none';
         document.getElementById('updateTitle').textContent = updText('update.ready_title', 'Update Ready to Install');
@@ -872,7 +872,7 @@
       });
 
       window.api.onUpdateError(({ message }) => {
-        _updLog('error', `onUpdateError fired â€” message: ${message}`);
+        _updLog('error', `onUpdateError fired — message: ${message}`);
         _updateState = 'error';
         _setUpdBtn(false);
         document.getElementById('updateTitle').textContent = updText('update.error_title', 'Update Error');
@@ -886,7 +886,7 @@
         if (dot) dot.style.display = 'none';
       });
 
-      _updLog('info', 'initAutoUpdater â€” all events wired successfully');
+      _updLog('info', 'initAutoUpdater — all events wired successfully');
     }
 
     // Call initAutoUpdater after DOM is ready
