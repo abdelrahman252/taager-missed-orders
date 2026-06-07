@@ -1347,6 +1347,11 @@ function createWindow() {
   });
   mainWindow.on("close", (e) => {
     if (app.isQuitting) return;
+    if (!mainWindow.isVisible()) {
+      app.isQuitting = true;
+      app.quit();
+      return;
+    }
     e.preventDefault();
     const autoRunOn = store.get("autoRun", false);
     const { response } = dialog.showMessageBoxSync(mainWindow, {
