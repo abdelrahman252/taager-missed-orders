@@ -817,6 +817,17 @@
         return;
       }
 
+      window.api.getAppVersion().then(v => {
+        window._appVersion = v;
+        const versionEl = document.getElementById("sv3-app-version-label");
+        if (versionEl) {
+          const textFn = window._t ? window._t("setup.app_version") : null;
+          versionEl.textContent = typeof textFn === 'function' ? textFn(v) : `App version is v${v}`;
+        }
+      }).catch(err => {
+        _updLog('error', 'failed to get app version:', err);
+      });
+
       window.api.onUpdateAvailable(({ version }) => {
         _updLog('info', `onUpdateAvailable fired — version=${version}`);
         _updateState = 'available';
