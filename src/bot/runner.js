@@ -2481,8 +2481,52 @@ async function taagerLogin(page) {
   log(`Taager: logging in via ${method}`);
 
   if (method === "google") {
+    // Google blocks OAuth inside any Playwright/automated browser (CDP port detection).
+    // Solution: navigate Playwright to a neutral waiting page, then tell main process
+    // to open the Taager login page in the user's REAL system browser via shell.openExternal.
+    // The user logs in there → session cookies are written to the shared persistent profile
+    // folder → we poll until those cookies appear, then reload the page in Playwright.
+    log("Google login required — opening Taager login in your system browser...");
+    await page.goto("about:blank", { waitUntil: "domcontentloaded" }).catch(() => {});
     process.send && process.send({ type: "google-login-needed" });
-    log("Google login required - please complete it in Chrome.");
+
+    const GOOGLE_LOGIN_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+    const started_google = Date.now();
+    log("Waiting for Google login to complete in your browser...");
+    while (Date.now() - started_google < GOOGLE_LOGIN_TIMEOUT_MS) {
+      await page.waitForTimeout(3000);
+      // Check if session cookies for Taager have appeared in the profile
+      const cookies = await page.context().cookies("https://taager.com");
+      const hasSession = cookies.some(
+        (c) => c.name === "access_token" || c.name === "refresh_token" || c.name === "token" || c.name === "session"
+      );
+      if (hasSession) {
+        log("✅ Google login detected via session cookies — continuing...");
+        process.send && process.send({ type: "google-login-complete" });
+        break;
+      }
+      // Also check by navigating to dashboard — if already there, session is live
+      try {
+        await page.goto(taagerUrl("/home"), { waitUntil: "domcontentloaded", timeout: 8000 });
+        const url = page.url();
+        if (!url.includes("/login") && !url.includes("/auth")) {
+          log("✅ Google login detected via dashboard navigation — continuing...");
+          process.send && process.send({ type: "google-login-complete" });
+          await ensureTaagerArabic(page);
+          await verifyTaagerIdentity(page, "login-confirmed");
+          return;
+        }
+        // Still on login — go back to blank while waiting
+        await page.goto("about:blank", { waitUntil: "domcontentloaded" }).catch(() => {});
+      } catch (_) {}
+      log(`${Math.round((Date.now() - started_google) / 1000)}s — waiting for Google login in system browser...`);
+    }
+    if (Date.now() - started_google >= GOOGLE_LOGIN_TIMEOUT_MS) {
+      throw new Error("Google login timeout — no session detected after 10 minutes");
+    }
+    // Session cookies are now in the profile — navigate to dashboard
+    await page.goto(taagerUrl("/home"), { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(1500);
   } else if (method === "phone") {
     if (!phone || !password) throw new Error("Taager phone/password credentials are missing");
     await page.waitForSelector('input[name="phoneNumber"]', { timeout: 15000 });

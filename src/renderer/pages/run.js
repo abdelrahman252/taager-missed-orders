@@ -169,6 +169,15 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
               </div>
             </div>
 
+            <!-- Google Login Notice -->
+            <div class="notice-box warn" id="notice-google-login" style="display:none;border-color:#4285f4;background:rgba(66,133,244,0.1)">
+              <span class="notice-icon">🌐</span>
+              <div class="notice-text">
+                <strong>Google Login Required</strong>
+                <span>A browser window has opened — please log in with Google, then return here. The bot will continue automatically.</span>
+              </div>
+            </div>
+
             <!-- Manual Confirm Notice -->
             <div class="notice-box warn" id="notice-confirm" style="display:none;border-color:var(--warning);background:rgba(255,201,77,0.12)">
               <span class="notice-icon">👀</span>
@@ -474,6 +483,8 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       window.api.removeAllListeners("bot-order-progress");
       window.api.removeAllListeners("bot-taager-restart");
       window.api.removeAllListeners("bot-session-event");
+      window.api.removeAllListeners("bot-google-login-needed");
+      window.api.removeAllListeners("bot-google-login-complete");
       window._opsLiveGlobalBound = false;
     }
 
@@ -567,6 +578,19 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     window.api.on2faNeeded(() => {
       document.getElementById("notice-2fa").style.display = "flex";
       playSound("confirm");
+    });
+
+    window.api.onGoogleLoginNeeded(() => {
+      document.getElementById("notice-google-login").style.display = "flex";
+      playSound("confirm");
+      if (Notification.permission === "granted") {
+        new Notification("Google Login Required", { body: "Please log in with Google in the browser window that just opened." });
+      }
+    });
+
+    window.api.onGoogleLoginComplete(() => {
+      const box = document.getElementById("notice-google-login");
+      if (box) box.style.display = "none";
     });
 
     window.api.onNeedsConfirm(() => {

@@ -3584,6 +3584,22 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
           });
         }
         if (msg.type === "taager-restart")   mainWindow.webContents.send("bot-taager-restart", msg);
+        if (msg.type === "google-login-needed") {
+          // Open Taager login in the user's real system browser (not the Playwright window).
+          // The user logs in with Google there → session cookies are saved to the shared
+          // persistent profile folder → runner.js detects them and continues automatically.
+          shell.openExternal(`https://taager.com/${(acc.taagerCountry || "sa").toLowerCase()}/auth/login`).catch(() => {});
+          mainWindow.webContents.send("bot-google-login-needed", {
+            accountId: acc.id || "__single__",
+            accountLabel: accountDisplayName(acc, "Account 1"),
+          });
+        }
+        if (msg.type === "google-login-complete") {
+          mainWindow.webContents.send("bot-google-login-complete", {
+            accountId: acc.id || "__single__",
+            accountLabel: accountDisplayName(acc, "Account 1"),
+          });
+        }
         if (msg.type === "session-event") {
           if (msg.site === "taager" && msg.event === "identity-verified") {
             bindTaagerAffiliateCode(acc.id || "__single__", msg.affiliateCode);
@@ -3702,6 +3718,13 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
         if (msg.type === "preview")        mainWindow.webContents.send("bot-preview",        tagged);
         if (msg.type === "order-progress") mainWindow.webContents.send("bot-order-progress", tagged);
         if (msg.type === "taager-restart")   mainWindow.webContents.send("bot-taager-restart",   tagged);
+        if (msg.type === "google-login-needed") {
+          shell.openExternal(`https://taager.com/${(acc.taagerCountry || "sa").toLowerCase()}/auth/login`).catch(() => {});
+          mainWindow.webContents.send("bot-google-login-needed", tagged);
+        }
+        if (msg.type === "google-login-complete") {
+          mainWindow.webContents.send("bot-google-login-complete", tagged);
+        }
         if (msg.type === "session-event") {
           if (msg.site === "taager" && msg.event === "identity-verified") {
             bindTaagerAffiliateCode(accountId, msg.affiliateCode);

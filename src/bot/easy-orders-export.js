@@ -180,20 +180,50 @@ function createEasyOrdersExportFlow(options = {}) {
           const normalize = (value) => String(value || "")
             .replace(/[\u{1F300}-\u{1FAFF}]/gu, "")
             .replace(/[\u200E\u200F\u061C]/g, "")
+            .replace(/[\u2600-\u26FF\u2700-\u27BF]/gu, "") // strip status dots like 🟢
             .replace(/\s+/g, " ").trim().toLowerCase();
+
           const menuRoot = document.querySelector(
             '[class*="MuiPopover-paper"], [role="menu"], [role="dialog"], [role="presentation"] [class*="MuiPaper-root"]'
           );
-          const texts = Array.from((menuRoot || document).querySelectorAll("p, span, h1, h2, h3, h4, h5, h6"))
+
+          const texts = Array.from((menuRoot || document).querySelectorAll("p, span, h1, h2, h3, h4, h5, h6, button"))
             .map((el) => (el.innerText || el.textContent || "").trim())
             .filter(Boolean);
-          const emailIndex = texts.findIndex((text) => normalize(text) === normalize(email));
+
+          const normEmail = normalize(email);
+
+          // Strategy 1: email in list, store name is immediately before it
+          const emailIndex = texts.findIndex((text) => normalize(text) === normEmail);
           if (emailIndex > 0) return normalize(texts[emailIndex - 1]);
+
+          // Strategy 2: email in list, store name is immediately after it (some UI versions)
+          if (emailIndex >= 0 && emailIndex < texts.length - 1) {
+            const after = normalize(texts[emailIndex + 1]);
+            if (after && !after.includes("@") && after !== "add store" && after !== "stores") {
+              return after;
+            }
+          }
+
+          // Strategy 3: look for "Stores:" label then take first non-email, non-"add store" text
           const storesIndex = texts.findIndex((text) => normalize(text).replace(/:$/, "") === "stores");
           if (storesIndex >= 0) {
-            const candidate = texts.slice(storesIndex + 1).find((text) => !/@/.test(text) && normalize(text) !== "add store");
+            const candidate = texts.slice(storesIndex + 1).find(
+              (text) => !/@/.test(text) && normalize(text) !== "add store" && normalize(text) !== "stores"
+            );
             if (candidate) return normalize(candidate);
           }
+
+          // Strategy 4: caption text inside the avatar button (new EasyOrders UI)
+          const avatarBtn = document.querySelector("button:has(.MuiAvatar-root)");
+          if (avatarBtn) {
+            const caption = avatarBtn.querySelector('[class*="caption"], [class*="Caption"]');
+            if (caption) {
+              const txt = normalize(caption.innerText || caption.textContent || "");
+              if (txt && txt !== "add store") return txt;
+            }
+          }
+
           return "";
         }, expectedEmail);
         if (currentStore) return currentStore;
@@ -216,7 +246,10 @@ function createEasyOrdersExportFlow(options = {}) {
     await cards.first().waitFor({ state: "visible", timeout: 12000 }).catch(() => {});
     for (let i = 0; i < await cards.count(); i++) {
       const card = cards.nth(i);
-      if (normalizeIdentityText(await card.locator("h6").innerText().catch(() => "")) !== expectedStore) continue;
+      // Try multiple selectors — EasyOrders has used h6, p, and span across UI versions
+      const nameEl = card.locator("h6, p, span").first();
+      const rawName = await nameEl.innerText().catch(() => "");
+      if (normalizeIdentityText(rawName) !== expectedStore) continue;
       await card.click();
       await page.waitForFunction(() => !window.location.href.includes("store-selection"), { timeout: 15000 });
       await ensureEnglish(page);

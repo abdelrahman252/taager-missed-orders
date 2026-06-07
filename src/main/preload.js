@@ -142,6 +142,8 @@ contextBridge.exposeInMainWorld("api", {
   onOrderProgress: (cb) => ipcRenderer.on("bot-order-progress",(_, data) => cb(data)),
   onAutoRunTick:   (cb) => ipcRenderer.on("auto-run-tick",     (_, data) => cb(data)),
   onLicenseExpired:(cb) => ipcRenderer.on("license-expired",   ()        => cb()),
+  onGoogleLoginNeeded:   (cb) => ipcRenderer.on("bot-google-login-needed",   (_, data) => cb(data)),
+  onGoogleLoginComplete: (cb) => ipcRenderer.on("bot-google-login-complete", (_, data) => cb(data)),
   on:              (ch, cb) => ipcRenderer.on(ch, (_, data) => cb(data)),
   removeAllListeners: (ch) => ipcRenderer.removeAllListeners(ch),
 
