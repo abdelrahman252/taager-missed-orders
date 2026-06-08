@@ -1530,7 +1530,31 @@ ipcMain.handle("download-update", () => {
 
 ipcMain.handle("install-update", () => {
   log.info("[AutoUpdate] IPC install-update received - calling quitAndInstall");
+
+  // ── Teardown before handing off to the NSIS installer ──────────────────
+  // The app runs in the tray when the window is hidden, so the process stays
+  // alive even after the user "closes" it.  quitAndInstall() calls app.quit()
+  // internally, but if the process doesn't actually exit the NSIS installer
+  // shows "Taager Orders cannot be closed – please close it manually".
+  //
+  // Fix: set the quitting flag, destroy the tray icon (releases the Windows
+  // tray handle so the process is no longer "running in tray"), stop the
+  // auto-run timer, destroy the main window, and bypass the Sentry will-quit
+  // delay so the process exits cleanly before the installer takes over.
   app.isQuitting = true;
+  app.__sentryFlushed = true; // skip the will-quit Sentry flush delay
+
+  clearAutoRun();
+
+  try { if (tray && !tray.isDestroyed()) tray.destroy(); } catch (_) {}
+
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.removeAllListeners("close"); // prevent the "minimize to tray?" dialog
+      mainWindow.destroy();
+    }
+  } catch (_) {}
+
   autoUpdater.quitAndInstall(false, true);
 });
 
