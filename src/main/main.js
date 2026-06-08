@@ -1529,33 +1529,97 @@ ipcMain.handle("download-update", () => {
 });
 
 ipcMain.handle("install-update", () => {
-  log.info("[AutoUpdate] IPC install-update received - calling quitAndInstall");
+  log.info("[AutoUpdate] IPC install-update received - launching installer independently");
 
-  // ── Teardown before handing off to the NSIS installer ──────────────────
-  // The app runs in the tray when the window is hidden, so the process stays
-  // alive even after the user "closes" it.  quitAndInstall() calls app.quit()
-  // internally, but if the process doesn't actually exit the NSIS installer
-  // shows "Taager Orders cannot be closed – please close it manually".
+  // ── Why quitAndInstall() alone doesn't work with a tray app ────────────
+  // quitAndInstall() relies on Electron's app.quit() flow, which fires
+  // will-quit, before-quit, window-all-closed, etc.  When the app lives in
+  // the tray (window hidden, process still running) those events don't
+  // cleanly terminate all native handles fast enough.  NSIS checks for the
+  // running process right after spawning and shows "cannot be closed" if it
+  // finds it still alive.
   //
-  // Fix: set the quitting flag, destroy the tray icon (releases the Windows
-  // tray handle so the process is no longer "running in tray"), stop the
-  // auto-run timer, destroy the main window, and bypass the Sentry will-quit
-  // delay so the process exits cleanly before the installer takes over.
-  app.isQuitting = true;
-  app.__sentryFlushed = true; // skip the will-quit Sentry flush delay
+  // Solution: find the already-downloaded installer in electron-updater's
+  // temp cache, spawn it as a fully detached independent process, then
+  // hard-exit THIS process immediately.  The installer runs on its own —
+  // it no longer needs this process to be alive.
+  // ─────────────────────────────────────────────────────────────────────────
 
+  const { spawn } = require("child_process");
+  const os = require("os");
+
+  // electron-updater stores the downloaded installer in the OS temp dir.
+  // The file name matches the artifactName pattern from package.json.
+  // We search for it rather than hardcode the version.
+  function findDownloadedInstaller() {
+    const tmpDir = os.tmpdir();
+    try {
+      const files = fs.readdirSync(tmpDir);
+      // Match e.g. "Taager.Orders.Setup.1.0.15.exe"
+      const match = files
+        .filter(f => /^Taager\.Orders\.Setup\.\d+\.\d+\.\d+\.exe$/i.test(f))
+        .sort() // take the highest version if multiple
+        .pop();
+      if (match) return path.join(tmpDir, match);
+    } catch (_) {}
+
+    // Fallback: ask electron-updater for the cached path via its internal
+    // _downloadedUpdateHelper (works for electron-updater v6.x)
+    try {
+      const helper = autoUpdater._downloadedUpdateHelper;
+      if (helper && helper.downloadedFileInfo && helper.downloadedFileInfo.path) {
+        return helper.downloadedFileInfo.path;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  // 1. Tear everything down
+  app.isQuitting = true;
+  app.__sentryFlushed = true;
   clearAutoRun();
 
-  try { if (tray && !tray.isDestroyed()) tray.destroy(); } catch (_) {}
+  const toKill = botChildren.length ? botChildren : (currentBotChild ? [currentBotChild] : []);
+  for (const child of toKill) { try { child.kill("SIGKILL"); } catch (_) {} }
 
+  try { if (tray && !tray.isDestroyed()) tray.destroy(); } catch (_) {}
   try {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.removeAllListeners("close"); // prevent the "minimize to tray?" dialog
+      mainWindow.removeAllListeners("close");
       mainWindow.destroy();
     }
   } catch (_) {}
 
-  autoUpdater.quitAndInstall(false, true);
+  // 2. Try to find and launch the installer ourselves (detached, independent)
+  const installerPath = findDownloadedInstaller();
+  log.info("[AutoUpdate] Installer path found:", installerPath || "NOT FOUND — falling back to quitAndInstall");
+
+  if (installerPath && fs.existsSync(installerPath)) {
+    try {
+      // Spawn the NSIS installer fully detached so it survives this process exiting.
+      // "--updated" is the silent flag electron-builder's NSIS script looks for
+      // to know it was launched by the app (triggers the "updated" finish screen).
+      const child = spawn(installerPath, ["--updated"], {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: false,
+      });
+      child.unref(); // do NOT wait for it
+      log.info("[AutoUpdate] Installer spawned detached, exiting now");
+    } catch (spawnErr) {
+      log.error("[AutoUpdate] Failed to spawn installer:", spawnErr.message);
+      // Fall through to quitAndInstall below
+    }
+    // Hard-exit immediately — installer is running on its own
+    setTimeout(() => process.exit(0), 200);
+    return;
+  }
+
+  // 3. Fallback: couldn't find installer file, use quitAndInstall + hard exit
+  log.warn("[AutoUpdate] Installer file not found, falling back to quitAndInstall");
+  try { autoUpdater.quitAndInstall(false, true); } catch (_) {}
+  setTimeout(() => process.exit(0), 500);
 });
 
 ipcMain.handle("get-app-version", () => app.getVersion());
