@@ -2873,6 +2873,7 @@ window.renderSetup = function (onComplete, initialStep) {
         if (result && result.success === false) return;
         accounts = nextAccounts;
         selectedIds = selectedIds.filter(x => x !== b.dataset.id);
+        if (accounts.length === 0) step = "accounts";
         renderStep();
       });
     });
@@ -3706,13 +3707,16 @@ window.renderSetup = function (onComplete, initialStep) {
           ${t("setup.easy_section")}
         </div>
         <div class="form-group">
-          <label>${setupText("setup.dashboard_enrichment_label", "Dashboard enrichment source")}</label>
+          <label>${setupText("setup.dashboard_enrichment_label", "Dashboard Data Source")}</label>
           <input type="hidden" id="sv3-dashboard-enrichment-provider" value="${esc(selectedDashboardProvider)}" />
           <div class="sv3-tab-control">
-            <button type="button" class="sv3-tab-btn ${selectedDashboardProvider === "none" ? "is-active" : ""}" data-dashboard-enrichment-provider="none" ${isLockedEdit ? "disabled" : ""}>${setupText("setup.dashboard_enrichment_taager", "Taager only")}</button>
-            <button type="button" class="sv3-tab-btn ${selectedDashboardProvider === "easyorders" ? "is-active" : ""}" data-dashboard-enrichment-provider="easyorders" ${isLockedEdit ? "disabled" : ""}>${setupText("setup.dashboard_enrichment_easyorders", "EasyOrders")}</button>
+            <button type="button" class="sv3-tab-btn ${selectedDashboardProvider === "none" ? "is-active" : ""}" data-dashboard-enrichment-provider="none" ${isLockedEdit ? "disabled" : ""}>${setupText("setup.dashboard_enrichment_taager", "Taager Only")}</button>
+            <button type="button" class="sv3-tab-btn ${selectedDashboardProvider === "easyorders" ? "is-active" : ""}" data-dashboard-enrichment-provider="easyorders" ${isLockedEdit ? "disabled" : ""}>${setupText("setup.dashboard_enrichment_easyorders", "Taager + EasyOrders")}</button>
           </div>
-          <div class="sv3-field-hint">${setupText("setup.dashboard_enrichment_hint", "EasyOrders is used only for dashboard product names and prepaid/payment data. Taager remains the source for dashboard orders and profit.")}</div>
+          <div class="sv3-field-hint" id="sv3-enrichment-hint">${selectedDashboardProvider === "easyorders"
+            ? setupText("setup.dashboard_enrichment_hint_easyorders", "Your dashboard will pull orders and profits from Taager, and also connect to EasyOrders to enrich product names and payment data. Best choice if you use both platforms.")
+            : setupText("setup.dashboard_enrichment_hint_taager", "Your dashboard will use Taager as the only data source for orders, profits, and product info. Simple and fast — recommended if you don't use EasyOrders.")
+          }</div>
         </div>
         <div class="form-group">
           <label>${t("setup.store_label")}</label>
@@ -3847,6 +3851,12 @@ window.renderSetup = function (onComplete, initialStep) {
         overlay.querySelectorAll("[data-dashboard-enrichment-provider]").forEach(tab => {
           tab.classList.toggle("is-active", tab === btn);
         });
+        const hint = document.getElementById("sv3-enrichment-hint");
+        if (hint) {
+          hint.textContent = btn.dataset.dashboardEnrichmentProvider === "easyorders"
+            ? setupText("setup.dashboard_enrichment_hint_easyorders", "Your dashboard will pull orders and profits from Taager, and also connect to EasyOrders to enrich product names and payment data. Best choice if you use both platforms.")
+            : setupText("setup.dashboard_enrichment_hint_taager", "Your dashboard will use Taager as the only data source for orders, profits, and product info. Simple and fast — recommended if you don't use EasyOrders.");
+        }
       });
     });
     syncTaagerLoginFields();

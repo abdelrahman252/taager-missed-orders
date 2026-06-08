@@ -1,4 +1,4 @@
-﻿/* ══════════════════════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════════════════════════
    section-prepaid.js  (T-24 Part B)
    Full Prepaid Intelligence section UI.
 
@@ -769,7 +769,7 @@
         'onmouseover="this.style.background=\'rgba(255,255,255,0.04)\'" ' +
         'onmouseout="this.style.background=\'transparent\'">' +
         '<div style="overflow:hidden;padding-left:10px;">' +
-          '<div style="font-size:13px;font-weight:700;color:' + C.text + ';line-height:1.4;">' + name + '</div>' +
+          '<div data-i18n-preserve style="font-size:13px;font-weight:700;color:' + C.text + ';line-height:1.4;">' + name + '</div>' +
           '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:5px;font-weight:600;">' +
             // Taager dashboard/status/NDR migration: totalCommission is Taager Profit After Tax.
             'COD ' + sTx(fmtSAR(p.totalCommission) + ' Taager Profit After Tax', fmtSAR(p.totalCommission) + ' ربح تاجر بعد الضريبة') +
@@ -1080,7 +1080,7 @@
         }
 
         var productTag = card.product
-          ? '<span style="padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;' +
+          ? '<span data-i18n-preserve style="padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;' +
               'background:rgba(255,255,255,0.03);color:rgba(255,255,255,0.7);border:1px solid rgba(255,255,255,0.06);">' +
               'BOX ' + (displayProduct && displayProduct.length > 30 ? displayProduct.slice(0, 28) + '...' : (displayProduct || '')) + '</span>'
           : '';

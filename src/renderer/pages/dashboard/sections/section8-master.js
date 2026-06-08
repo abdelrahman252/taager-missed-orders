@@ -1,4 +1,4 @@
-﻿/* ------------------------------------------------------------------------------
+/* ------------------------------------------------------------------------------
    section8-master.js
    Renders Section 8 — ???? ?????? (Master Dashboard)
 
@@ -168,7 +168,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
     { label: s8Txt('Incoming Profit After Tax', '??? ???? ?????? ??? ???????'),    value: incomingCommission, unit: nativeCurrency, delta: overview.incomingCommission ? overview.incomingCommission.delta : 0, color: 'orange', spark: (overview.sparklines && overview.sparklines.incoming) || [0], iconType: 'orange', tooltip: s8Txt('Incoming Profit After Tax = sum(order profit - tax profit) for active non-delivered orders.', '??? ???? ?????? ??? ??????? = ????? (??? ????? - ??? ???????) ??????? ?????? ??? ???????.') },
     { label: s8Txt('Lost Profit After Tax', '??? ???? ?????? ??? ???????'),   value: lostCommission, unit: nativeCurrency, delta: overview.lostCommission ? overview.lostCommission.delta : 0, color: 'red',    spark: (overview.sparklines && overview.sparklines.lost) || [0], iconType: 'red', tooltip: s8Txt('Lost Profit After Tax = sum(order profit - tax profit) for failed and canceled orders, excluding Canceled by you.', '??? ???? ?????? ??? ??????? = ????? (??? ????? - ??? ???????) ??????? ??????? ????????.') },
     { label: s8Txt('Total / Net Orders', '?????? / ???? ???????'), value: netTotalOrders, displayValue: totalOrdersDisplay, staticDisplay: true, unit: s8Txt('orders', '???'), delta: overview.totalOrders ? overview.totalOrders.delta : 0, color: 'blue', spark: (overview.sparklines && overview.sparklines.orders) || [0], iconType: 'blue', tooltip: tx('kpi.orders.tooltip', 'Total / Net Orders = raw orders / orders after excluding Canceled by you. Business metrics use net orders.') },
-    { label: s8Txt('Confirmation Rate', 'نسبة التأكيد'), value: overview.confirmationRate ? overview.confirmationRate.value : 0, unit: '%', delta: overview.confirmationRate ? overview.confirmationRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.confirmationRate.tooltip', 'Confirmation Rate = confirmed orders / net placed orders.') },
+    { label: s8Txt('Confirmation Rate', 'نسبة التأكيد'), value: overview.confirmationRate ? overview.confirmationRate.value : 0, unit: '%', delta: overview.confirmationRate ? overview.confirmationRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.confirmationRate.tooltip', 'Confirmation Rate = progressed statuses / all orders. Confirmation + cancel + pending = 100%.') },
     { label: s8Txt('DR Rate', 'نسبة DR'), value: overview.drRate ? overview.drRate.value : 0, unit: '%', delta: overview.drRate ? overview.drRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.drRate.tooltip', 'DR = delivered orders / confirmed orders.') },
   ];
 
@@ -709,7 +709,8 @@ window.renderSection8 = function (mountEl, data, ctx) {
     function combine(id, label, ids, color, businessGroup) {
       var rows = ids.map(function (id) { return byId[id]; }).filter(Boolean);
       var count = rows.reduce(function (sum, row) { return sum + Number(row.count || 0); }, 0);
-      var total = STAGES.reduce(function (sum, row) { return sum + Number(row.count || 0); }, 0) || 1;
+      var total = STAGES.filter(function (row) { return row && row.id !== 'canceled_by_you' && row.exactBucket !== 'canceled_by_you'; })
+        .reduce(function (sum, row) { return sum + Number(row.count || 0); }, 0) || 1;
       var share = parseFloat(((count / total) * 100).toFixed(1));
       var sar = rows.reduce(function (sum, row) {
         return sum + valueOf(row, 'profitAfterTax') + (row.profitAfterTax == null ? valueOf(row, 'sar') : 0);
@@ -727,14 +728,46 @@ window.renderSection8 = function (mountEl, data, ctx) {
       };
     }
     return [
-      pick('received', { id: 'received', label: s8Txt('Order received', 'تم استلام الطلب'), count: 0, pct: '0%', color: '#3b82f6' }),
-      pick('confirmed', { id: 'confirmed', label: s8Txt('Confirmed', 'مؤكد'), count: 0, pct: '0%', color: '#3b82f6' }),
-      pick('waiting', { id: 'waiting', label: s8Txt('Awaiting shipment', 'في انتظار الشحن'), count: 0, pct: '0%', color: '#64748b' }),
+      pick('received',        { id: 'received',        label: s8Txt('Order received',        'تم استلام الطلب'),   count: 0, pct: '0%', color: '#3b82f6' }),
+      pick('confirmed',       { id: 'confirmed',       label: s8Txt('Confirmed',              'مؤكد'),              count: 0, pct: '0%', color: '#3b82f6' }),
+      pick('waiting',         { id: 'waiting',         label: s8Txt('Awaiting shipment',      'في انتظار الشحن'),   count: 0, pct: '0%', color: '#64748b' }),
+      pick('on_hold',         { id: 'on_hold',         label: s8Txt('Temporarily Suspended',  'معلق مؤقتًا'),       count: 0, pct: '0%', color: '#64748b' }),
       combine('shipping', s8Txt('Out for delivery', 'قيد التوصيل'), ['shipping', 'delivery_suspended', 'after_sales_progress'], '#f59e0b', 'incoming'),
-      pick('delivered', { id: 'delivered', label: s8Txt('Delivered', 'تم التوصيل'), count: 0, pct: '0%', color: '#00e676' }),
-      combine('lost', s8Txt('Failed / Lost', 'فشل / ضائع'), ['customer_refused_confirmation', 'failed', 'return_verified', 'out_of_stock', 'on_hold', 'after_sales_done'], '#ef4444', 'lost'),
-      pick('canceled_by_you', { id: 'canceled_by_you', label: s8Txt('Canceled by you', 'ملغي بواسطتك'), count: 0, pct: '0%', color: '#94a3b8' })
+      pick('delivered',       { id: 'delivered',       label: s8Txt('Delivered',              'تم التوصيل'),        count: 0, pct: '0%', color: '#00e676' }),
+      combine('lost', s8Txt('Failed / Lost', 'فشل / ضائع'), ['customer_refused_confirmation', 'failed', 'return_verified', 'out_of_stock', 'after_sales_done'], '#ef4444', 'lost'),
+      pick('canceled_by_you', { id: 'canceled_by_you', label: s8Txt('Canceled by you',        'ملغي بواسطتك'),      count: 0, pct: '0%', color: '#94a3b8' })
     ];
+  }
+
+  function compactStatusGroupStages(inputStages) {
+    var confirmationIds = ['confirmed', 'waiting', 'shipping', 'delivery_suspended', 'delivered', 'failed', 'return_verified', 'after_sales_progress', 'after_sales_done'];
+    var cancelIds = ['customer_refused_confirmation', 'canceled_by_you', 'on_hold', 'out_of_stock'];
+    var groups = {
+      confirmation: { id: 'confirmation', label: s8Txt('Confirmation / Progressed', 'التأكيد / تم التقدم'), count: 0, sar: 0, color: '#3b82f6', businessGroup: 'confirmation' },
+      cancel: { id: 'cancel', label: s8Txt('Cancel / Rejected', 'إلغاء / مرفوض'), count: 0, sar: 0, color: '#ef4444', businessGroup: 'cancel' },
+      pending: { id: 'pending', label: s8Txt('Pending / Untouched', 'معلق / لم تتم معالجته'), count: 0, sar: 0, color: '#f59e0b', businessGroup: 'pending' }
+    };
+    (Array.isArray(inputStages) ? inputStages : []).forEach(function (stage) {
+      if (!stage) return;
+      var group = confirmationIds.indexOf(stage.id) !== -1
+        ? groups.confirmation
+        : cancelIds.indexOf(stage.id) !== -1
+          ? groups.cancel
+          : stage.id === 'received'
+            ? groups.pending
+            : null;
+      if (!group) return;
+      group.count += Number(stage.count || 0);
+      group.sar += Number(stage.sar || 0);
+    });
+    var total = groups.confirmation.count + groups.cancel.count + groups.pending.count;
+    var confirmationPct = total ? Math.round(groups.confirmation.count / total * 1000) / 10 : 0;
+    var cancelPct = total ? Math.round(groups.cancel.count / total * 1000) / 10 : 0;
+    var pendingPct = total ? Math.max(0, Math.round((100 - confirmationPct - cancelPct) * 10) / 10) : 0;
+    groups.confirmation.pct = confirmationPct.toFixed(1) + '%';
+    groups.cancel.pct = cancelPct.toFixed(1) + '%';
+    groups.pending.pct = pendingPct.toFixed(1) + '%';
+    return [groups.confirmation, groups.cancel, groups.pending];
   }
 
   var VISIBLE_STAGES = compactMasterStages(STAGES);
@@ -845,7 +878,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
           'display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">' +
           p.emoji +
         '</div>' +
-        '<div style="flex:1;min-width:0;font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;">' +
+        '<div data-i18n-preserve style="flex:1;min-width:0;font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;">' +
           p.name +
         '</div>' +
         '<div style="font-size:14px;font-weight:900;color:#fff;width:26px;text-align:center;flex-shrink:0;">' + p.units + '</div>' +
@@ -1011,11 +1044,11 @@ window.renderSection8 = function (mountEl, data, ctx) {
       /* Page heading row */
       '<div class="fade-up" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;">' +
         '<div>' +
-          '<h1 style="font-size:30px;font-weight:900;color:#fff;margin:0;line-height:1.2;font-family:Cairo;">' + s8Txt('Master Dashboard', '???? ??????') + '</h1>' +
-          '<p style="font-size:12px;color:rgba(255,255,255,0.38);margin:5px 0 0;">' + s8Txt('Comprehensive overview of your real bot business performance', '???? ????? ??? ???? ?????? ???????? ?????') + '</p>' +
+          '<h1 style="font-size:30px;font-weight:900;color:#fff;margin:0;line-height:1.2;font-family:Cairo;">' + s8Txt('Quick Insights', 'رؤى سريعة') + '</h1>' +
+          '<p style="font-size:12px;color:rgba(255,255,255,0.38);margin:5px 0 0;">' + s8Txt('Comprehensive overview of your real bot performance', 'نظرة شمولية على أداء عمل البوت الخاص بك') + '</p>' +
         '</div>' +
         '<div style="display:flex;gap:8px;">' +
-          '<div style="padding:6px 14px;border-radius:9px;background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.3);font-size:11px;color:#a855f7;font-weight:700;">' + ((d.meta && d.meta.monthLabel) || s8Txt('Current Period', '?????? ???????')) + '</div>' +
+          '<div style="padding:6px 14px;border-radius:9px;background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.3);font-size:11px;color:#a855f7;font-weight:700;">' + ((d.meta && d.meta.monthLabel) || s8Txt('Current Period', 'الفترة الحالية')) + '</div>' +
         '</div>' +
       '</div>' +
 

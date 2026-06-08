@@ -159,7 +159,7 @@
 
       var nameStr = p.name || p.sku || '؟';
       // Removed truncation to show full name
-      var nameHtml = '<div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.85);word-break:break-word" title="' + nameStr + '">' + nameStr + '</div>';
+      var nameHtml = '<div data-i18n-preserve style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.85);word-break:break-word" title="' + nameStr + '">' + nameStr + '</div>';
       var skuHtml = (p.sku && p.sku !== p.name) ? '<div style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.4);word-break:break-all;margin-top:2px" title="' + p.sku + '">' + p.sku + '</div>' : '';
       
       var overallDr = p.deliveryPct || 0;

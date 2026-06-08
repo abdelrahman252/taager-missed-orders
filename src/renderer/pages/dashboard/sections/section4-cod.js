@@ -993,7 +993,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
       </radialGradient>`
     ).join("");
     const regionGlows = provinceGlows.map((p) =>
-      `<ellipse cx="${p.x}" cy="${p.y}" rx="${p.rx || 38}" ry="${p.ry || 28}" fill="url(#s4-prov-${_s4MapUid}-${p.id})" clip-path="url(#s4MapClip_${_s4MapUid})" opacity=".95" style="mix-blend-mode:screen"/>`
+      `<ellipse class="s4-region-shape" cx="${p.x}" cy="${p.y}" rx="${p.rx || 38}" ry="${p.ry || 28}" fill="url(#s4-prov-${_s4MapUid}-${p.id})" clip-path="url(#s4MapClip_${_s4MapUid})" opacity=".95" style="mix-blend-mode:screen"/>`
     ).join("");
 
     return `

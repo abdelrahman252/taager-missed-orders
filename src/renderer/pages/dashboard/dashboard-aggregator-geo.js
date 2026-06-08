@@ -142,6 +142,15 @@
 
         // Active orders = placed - delivered - canceled
         var active = Math.max(0, (cp.orders || 0) - (cp.delivered || 0) - (cp.canceled || 0));
+        var statusTotal = cp.statusTotalCount || cp.orders || 0;
+        var confirmationStatusCount = cp.confirmationStatusCount != null
+          ? cp.confirmationStatusCount
+          : (cp.confirmed || cp.activeOrders || 0);
+        var cancelStatusCount = cp.cancelStatusCount || 0;
+        var pendingStatusCount = cp.pendingStatusCount || 0;
+        var confirmationRate = statusTotal > 0 ? confirmationStatusCount / statusTotal : 0;
+        var cancelRate = statusTotal > 0 ? cancelStatusCount / statusTotal : 0;
+        var pendingRate = statusTotal > 0 ? Math.max(0, 1 - confirmationRate - cancelRate) : 0;
 
         // Scoring stats object shaped for scoring functions
         var scoringStats = {
@@ -174,8 +183,13 @@
           cityName: cityName,
           country: cs.country || '',
           // Volume
-          orders:    cp.orders    || 0,
-          confirmed: cp.confirmed || cp.activeOrders || 0,
+          orders:    statusTotal,
+          netOrderCount: cp.orders || 0,
+          confirmed: confirmationStatusCount,
+          confirmationStatusCount: confirmationStatusCount,
+          cancelStatusCount: cancelStatusCount,
+          pendingStatusCount: pendingStatusCount,
+          statusTotalCount: statusTotal,
           delivered: cp.delivered || 0,
           canceled:  cp.canceled  || 0,
           active:    active,
@@ -183,9 +197,10 @@
           // Rate metrics
           ndr:             parseFloat(ndr.toFixed(4)),
           dr:              parseFloat(dr.toFixed(4)),
-          confirmationRate: (cp.ndrBaseOrders || cp.orders || 0) > 0
-            ? parseFloat(((cp.confirmed || cp.activeOrders || 0) / (cp.ndrBaseOrders || cp.orders || 0)).toFixed(4))
-            : 0,
+          confirmationRate: parseFloat(confirmationRate.toFixed(4)),
+          confirmationPct: parseFloat((confirmationRate * 100).toFixed(1)),
+          cancelPct: parseFloat((cancelRate * 100).toFixed(1)),
+          pendingPct: parseFloat((pendingRate * 100).toFixed(1)),
 
           // Financial
           commission:            cp.commission || 0,

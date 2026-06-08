@@ -142,7 +142,7 @@
     waiting: "waiting",
     on_hold: "waiting",
     out_of_stock: "waiting",
-    received: "processing",
+    received: "pending",
     after_sales_done: "processing",
     after_sales_progress: "processing"
   };
@@ -276,8 +276,32 @@
     processing: true
   };
 
+  var STATUS_GROUPS = {
+    confirmed: "confirmation",
+    waiting: "confirmation",
+    shipping: "confirmation",
+    delivery_suspended: "confirmation",
+    delivered: "confirmation",
+    failed: "confirmation",
+    return_verified: "confirmation",
+    after_sales_progress: "confirmation",
+    after_sales_done: "confirmation",
+    customer_refused_confirmation: "cancel",
+    // canceled_by_you is "excluded" from the rate denominator (net orders basis):
+    // Confirmation = confirmed / net_orders, Cancel = refused / net_orders, Pending = received / net_orders
+    // where net_orders = all orders MINUS canceled_by_you.
+    canceled_by_you: "excluded",
+    on_hold: "cancel",
+    out_of_stock: "cancel",
+    received: "pending"
+  };
+
   function isConfirmed(status) {
     return CONFIRMED_BUCKETS[statusBucket(status)] === true;
+  }
+
+  function statusGroup(status) {
+    return STATUS_GROUPS[statusBucket(status)] || "pending";
   }
 
   function isIncoming(status) {
@@ -410,6 +434,7 @@
     isCanceledByYou: isCanceledByYou,
     isEligibleForNdr: isEligibleForNdr,
     isConfirmed: isConfirmed,
+    statusGroup: statusGroup,
     isIncoming: isIncoming,
     isLost: isLost,
     isConfirmedBaseExcluded: isConfirmedBaseExcluded,

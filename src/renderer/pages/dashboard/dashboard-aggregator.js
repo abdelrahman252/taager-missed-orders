@@ -701,17 +701,50 @@
     return_verified: true,
     after_sales_done: true
   };
+  // canceled_by_you is NOT in PRODUCT_CANCEL_BUCKETS — it is excluded from the
+  // net-orders denominator entirely. Rates (confirmation/cancel/pending) are
+  // computed over net orders = all orders minus canceled_by_you.
   var PRODUCT_CANCEL_BUCKETS = {
-    canceled_by_you: true,
     customer_refused_confirmation: true,
     on_hold: true,
     out_of_stock: true
   };
 
   function productStatusGroup(bucket) {
+    if (window.TaagerStatus && typeof window.TaagerStatus.statusGroup === 'function') {
+      return window.TaagerStatus.statusGroup(bucket);
+    }
+    if (bucket === 'canceled_by_you') return 'excluded';
     if (PRODUCT_CONFIRMATION_BUCKETS[bucket]) return 'confirmation';
     if (PRODUCT_CANCEL_BUCKETS[bucket]) return 'cancel';
     return 'pending';
+  }
+
+  // productStatusPercentages: computes confirmation/cancel/pending rates.
+  // totalCount should be NET orders (all orders minus canceled_by_you).
+  // confirmationCount + cancelCount + pendingCount should sum to totalCount.
+  function productStatusPercentages(confirmationCount, cancelCount, pendingCount, totalCount) {
+    var total = Number(totalCount || 0);
+    var confirmation = Number(confirmationCount || 0);
+    var cancel = Number(cancelCount || 0);
+    var pending = Number(pendingCount || 0);
+    if (total <= 0) {
+      total = confirmation + cancel + pending;
+    }
+    if (total <= 0) {
+      return { confirmationPct: 0, cancelPct: 0, pendingPct: 0 };
+    }
+    var confirmationPct = parseFloat((confirmation / total * 100).toFixed(1));
+    var cancelPct = parseFloat((cancel / total * 100).toFixed(1));
+    var countsCoverTotal = Math.abs((confirmation + cancel + pending) - total) < 0.0001;
+    var pendingPct = countsCoverTotal
+      ? parseFloat((100 - confirmationPct - cancelPct).toFixed(1))
+      : parseFloat((pending / total * 100).toFixed(1));
+    return {
+      confirmationPct: confirmationPct,
+      cancelPct: cancelPct,
+      pendingPct: Math.max(0, pendingPct)
+    };
   }
 
   function normalizedQty(row) {
@@ -1018,14 +1051,15 @@
   function stage(id, label, count, total, color, convLabel, conv, convFrom, sar) {
     var share = percentOf(count, total);
     var stageLabels = {
-      received: { en: 'Order received', ar: 'تم استلام الطلب' },
-      confirmed: { en: 'Confirmed', ar: 'مؤكد' },
-      processing: { en: 'Order received', ar: 'تم استلام الطلب' },
-      waiting: { en: 'Temporarily suspended', ar: 'معلق مؤقتا' },
-      shipping: { en: 'Out for delivery', ar: 'قيد التوصيل' },
-      delivered: { en: 'Delivered', ar: 'تم التوصيل' },
-      failed: { en: 'Failed / Lost', ar: 'فشل / ضائع' },
-      canceled_by_you: { en: 'Canceled by you', ar: 'طلب ملغي بواسطتك' }
+      received:        { en: 'Order received',        ar: 'تم استلام الطلب' },
+      confirmed:       { en: 'Confirmed',              ar: 'مؤكد' },
+      processing:      { en: 'Order received',         ar: 'تم استلام الطلب' },
+      waiting:         { en: 'Awaiting Shipment',      ar: 'في انتظار الشحن' },
+      on_hold:         { en: 'Temporarily Suspended',  ar: 'معلق مؤقتًا' },
+      shipping:        { en: 'Out for delivery',       ar: 'قيد التوصيل' },
+      delivered:       { en: 'Delivered',              ar: 'تم التوصيل' },
+      failed:          { en: 'Failed / Lost',          ar: 'فشل / ضائع' },
+      canceled_by_you: { en: 'Canceled by you',       ar: 'طلب ملغي بواسطتك' }
     };
     var localizedLabel = stageLabels[id]
       ? (window.dashboardI18n && window.dashboardI18n.pick
@@ -1657,6 +1691,7 @@
             due: 0, collected: 0, gap: 0, count: 0, ndrBaseOrders: 0,
             deliveredOrders: 0, ndrDeliveredOrders: 0, drBaseOrders: 0, drDeliveredOrders: 0,
             canceledCount: 0, shippingCount: 0, confirmedCount: 0, processingCount: 0,
+            statusTotalCount: 0, confirmationStatusCount: 0, cancelStatusCount: 0, pendingStatusCount: 0,
             earnedCommission: 0, incomingCommission: 0, lostCommission: 0,
             totalRevenue: 0,
             prepaidCount: 0, codCount: 0,
@@ -1674,6 +1709,15 @@
         var cs = cityStats[cityKeyName];
         var cityOrderKey = cityKeyName + ':' + orderKey;
 
+        // Track statusTotalCount only for net orders (excluding canceled_by_you).
+        // This ensures confirmation/cancel/pending rates divide by net orders.
+        if (inCreatedPeriod && !rowIsCanceledByYou && addOnce(cityOrderSet, 'status:' + cityOrderKey)) {
+          cs.statusTotalCount++;
+          var cityStatusGroup = productStatusGroup(exactBucket);
+          if (cityStatusGroup === 'confirmation') cs.confirmationStatusCount++;
+          else if (cityStatusGroup === 'cancel') cs.cancelStatusCount++;
+          else cs.pendingStatusCount++;
+        }
         if (inCreatedPeriod && rowIsNetOrder && addOnce(cityOrderSet, 'placed:' + cityOrderKey)) {
           cs.count++;
           if (rowIsPrepaid) {
@@ -1752,6 +1796,7 @@
               name: cityProductName || row.sku || raw('منتج غير معروف'),
               orders: 0, delivered: 0, canceled: 0, commission: 0, revenue: 0,
               activeOrders: 0, ndrBaseOrders: 0, confirmed: 0,
+              statusTotalCount: 0, confirmationStatusCount: 0, cancelStatusCount: 0, pendingStatusCount: 0,
               prepaidCount: 0, codCount: 0,
               prepaidNdrBaseOrders: 0, codNdrBaseOrders: 0,
               prepaidDelivered: 0, prepaidCanceled: 0,
@@ -1762,6 +1807,14 @@
 
           var cpOrderKey = cityKeyName + ':' + cityProductKey + ':' + orderKey;
 
+          // Track statusTotalCount only for net orders (excluding canceled_by_you).
+          if (inCreatedPeriod && !rowIsCanceledByYou && addOnce(productOrderSet, 'cityProductStatus:' + cpOrderKey)) {
+            cp.statusTotalCount++;
+            var cityProductStatusGroup = productStatusGroup(exactBucket);
+            if (cityProductStatusGroup === 'confirmation') cp.confirmationStatusCount++;
+            else if (cityProductStatusGroup === 'cancel') cp.cancelStatusCount++;
+            else cp.pendingStatusCount++;
+          }
           if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'cityProductPlaced:' + cpOrderKey)) {
             cp.orders++;
             if (rowIsPrepaid) {
@@ -1844,12 +1897,16 @@
         var campaignProductOrderKey = campaignProductKey + ':' + orderKey;
         if (inCreatedPeriod && addOnce(productOrderSet, 'campaignTotal:' + campaignProductOrderKey)) {
           campaignProduct.totalOrderCount++;
-          campaignProduct.statusTotalCount++;
-          var campaignGroup = productStatusGroup(exactBucket);
-          if (campaignGroup === 'confirmation') campaignProduct.confirmationStatusCount++;
-          else if (campaignGroup === 'cancel') campaignProduct.cancelStatusCount++;
-          else campaignProduct.pendingStatusCount++;
-          if (rowIsCanceledByYou) campaignProduct.canceledCount++;
+          if (rowIsCanceledByYou) {
+            campaignProduct.canceledCount++;
+          } else {
+            // Track statusTotalCount only for net orders (excluding canceled_by_you).
+            campaignProduct.statusTotalCount++;
+            var campaignGroup = productStatusGroup(exactBucket);
+            if (campaignGroup === 'confirmation') campaignProduct.confirmationStatusCount++;
+            else if (campaignGroup === 'cancel') campaignProduct.cancelStatusCount++;
+            else campaignProduct.pendingStatusCount++;
+          }
         }
         if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'campaignPlaced:' + campaignProductOrderKey)) {
           campaignProduct.placedCount++;
@@ -1897,14 +1954,16 @@
 
         if (inCreatedPeriod && addOnce(productOrderSet, 'total:' + productOrderKey)) {
           productStats[productKey].totalOrderCount++;
-          productStats[productKey].statusTotalCount++;
-          var productGroup = productStatusGroup(exactBucket);
-          if (productGroup === 'confirmation') productStats[productKey].confirmationStatusCount++;
-          else if (productGroup === 'cancel') productStats[productKey].cancelStatusCount++;
-          else productStats[productKey].pendingStatusCount++;
           if (rowIsCanceledByYou) {
             productStats[productKey].canceledCount++;
             productStats[productKey].canceledByYouCount++;
+            // canceled_by_you is NOT counted in statusTotalCount (net orders denominator).
+          } else {
+            productStats[productKey].statusTotalCount++;
+            var productGroup = productStatusGroup(exactBucket);
+            if (productGroup === 'confirmation') productStats[productKey].confirmationStatusCount++;
+            else if (productGroup === 'cancel') productStats[productKey].cancelStatusCount++;
+            else productStats[productKey].pendingStatusCount++;
           }
         }
 
@@ -2019,7 +2078,7 @@
               statusTotalCount: 0, confirmationStatusCount: 0, cancelStatusCount: 0, pendingStatusCount: 0
             };
           }
-          if (inCreatedPeriod && addOnce(productOrderSet, 'pieceStatus:' + productKey + ':' + piecesKey + ':' + orderKey)) {
+          if (inCreatedPeriod && !rowIsCanceledByYou && addOnce(productOrderSet, 'pieceStatus:' + productKey + ':' + piecesKey + ':' + orderKey)) {
             _pieceEntry.statusTotalCount++;
             var pieceGroup = productStatusGroup(exactBucket);
             if (pieceGroup === 'confirmation') _pieceEntry.confirmationStatusCount++;
@@ -2048,7 +2107,7 @@
                 statusTotalCount: 0, confirmationStatusCount: 0, cancelStatusCount: 0, pendingStatusCount: 0
               };
             }
-            if (inCreatedPeriod && addOnce(productOrderSet, 'quantityCityStatus:' + productKey + ':' + piecesKey + ':' + cityKey + ':' + orderKey)) {
+            if (inCreatedPeriod && !rowIsCanceledByYou && addOnce(productOrderSet, 'quantityCityStatus:' + productKey + ':' + piecesKey + ':' + cityKey + ':' + orderKey)) {
               _qcEntry.statusTotalCount++;
               var qcGroup = productStatusGroup(exactBucket);
               if (qcGroup === 'confirmation') _qcEntry.confirmationStatusCount++;
@@ -2145,8 +2204,16 @@
         : null;
       stat.ndrPct = ndrPctCity;
       stat.drPct = drPctCity;
-      stat.confirmedCount = stat.drBaseOrders;
-      stat.confirmationPct = cityNdrBase > 0 ? parseFloat(((stat.drBaseOrders / cityNdrBase) * 100).toFixed(1)) : 0;
+      var cityStatusRates = productStatusPercentages(
+        stat.confirmationStatusCount,
+        stat.cancelStatusCount,
+        stat.pendingStatusCount,
+        stat.statusTotalCount
+      );
+      stat.confirmedCount = stat.confirmationStatusCount;
+      stat.confirmationPct = cityStatusRates.confirmationPct;
+      stat.cancelPct = cityStatusRates.cancelPct;
+      stat.pendingPct = cityStatusRates.pendingPct;
       stat.prepaidPct = prepaidPctCity;
       stat.codPct = codPctCity;
       stat.avgOrderValue = avgOrderValue;
@@ -2156,7 +2223,14 @@
         // Existing fields
         key: keyName, name: displayName, country: stat.country || meta.activeCountry || 'sa',
         due: stat.due, collected: stat.collected, gap: stat.gap, sar: stat.gap,
-        count: stat.count, ndrBaseOrders: cityNdrBase, deliveredOrders: stat.deliveredOrders, ndrDeliveredOrders: cityNdrDelivered, drBaseOrders: stat.drBaseOrders,
+        count: stat.count, statusTotalCount: stat.statusTotalCount,
+        confirmationStatusCount: stat.confirmationStatusCount,
+        cancelStatusCount: stat.cancelStatusCount,
+        pendingStatusCount: stat.pendingStatusCount,
+        confirmationPct: stat.confirmationPct,
+        cancelPct: stat.cancelPct,
+        pendingPct: stat.pendingPct,
+        ndrBaseOrders: cityNdrBase, deliveredOrders: stat.deliveredOrders, ndrDeliveredOrders: cityNdrDelivered, drBaseOrders: stat.drBaseOrders,
         drDeliveredOrders: stat.drDeliveredOrders,
         pct: drPctCity,
         // T-06: Province
@@ -2239,11 +2313,16 @@
       var p = productStats[key];
       var total = p.placedCount || 1;
 
-      var statusTotal = p.statusTotalCount || p.totalOrderCount || p.placedCount || 0;
-      var netOrderTotal = p.placedCount || 0;
-      var confirmationPct = netOrderTotal > 0 ? parseFloat((p.confirmationStatusCount / netOrderTotal * 100).toFixed(1)) : 0;
-      var cancelPct = statusTotal > 0 ? parseFloat((p.cancelStatusCount / statusTotal * 100).toFixed(1)) : 0;
-      var pendingPct = statusTotal > 0 ? parseFloat((p.pendingStatusCount / statusTotal * 100).toFixed(1)) : 0;
+      var statusTotal = p.statusTotalCount !== undefined ? p.statusTotalCount : (p.totalOrderCount || p.placedCount || 0);
+      var statusRates = productStatusPercentages(
+        p.confirmationStatusCount,
+        p.cancelStatusCount,
+        p.pendingStatusCount,
+        statusTotal
+      );
+      var confirmationPct = statusRates.confirmationPct;
+      var cancelPct = statusRates.cancelPct;
+      var pendingPct = statusRates.pendingPct;
 
       var productNdrBase = p.ndrBaseCount || p.placedCount;
       var confirmationBase = p.ndrConfirmedCount != null ? p.ndrConfirmedCount : p.confirmedCount;
@@ -2269,20 +2348,26 @@
           var cityBase = cm.ndrBaseOrders || cityOrders || 0;
           var cityStatusTotal = cm.statusTotalCount || cityOrders || 0;
           var cityNetOrders = typeof cityOrders === 'object' ? cityOrders.orders || 0 : cityOrders;
+          var cityStatusRates = productStatusPercentages(
+            cityConfirmed,
+            cm.cancelStatusCount || 0,
+            cm.pendingStatusCount || 0,
+            cityStatusTotal
+          );
           return {
             key:       c,
             name:      cm.name || c,
             country:   cm.country || meta.activeCountry || 'sa',
-            count:     cityNetOrders,
+            count:     cityStatusTotal,
             netOrderCount: cityNetOrders,
             confirmed: cityConfirmed,
             confirmationStatusCount: cityConfirmed,
             cancelStatusCount: cm.cancelStatusCount || 0,
             pendingStatusCount: cm.pendingStatusCount || 0,
             statusTotalCount: cityStatusTotal,
-            confirmationPct: cityNetOrders > 0 ? parseFloat((cityConfirmed / cityNetOrders * 100).toFixed(1)) : 0,
-            cancelPct: cityStatusTotal > 0 ? parseFloat(((cm.cancelStatusCount || 0) / cityStatusTotal * 100).toFixed(1)) : 0,
-            pendingPct: cityStatusTotal > 0 ? parseFloat(((cm.pendingStatusCount || 0) / cityStatusTotal * 100).toFixed(1)) : 0,
+            confirmationPct: cityStatusRates.confirmationPct,
+            cancelPct: cityStatusRates.cancelPct,
+            pendingPct: cityStatusRates.pendingPct,
             delivered: cityDelivered,
             canceled:  cityCanceled,
             ndr:       netDeliveryRatePct(cityNdrDelivered, cityBase),
@@ -2300,18 +2385,24 @@
           var qtyDelivered = typeof entry === 'object' ? entry.delivered || 0 : 0;
           var qtyConfirmed = typeof entry === 'object' ? (entry.confirmationStatusCount != null ? entry.confirmationStatusCount : (entry.confirmed || 0)) : 0;
           var qtyStatusTotal = typeof entry === 'object' ? (entry.statusTotalCount || qtyCount || 0) : qtyCount;
+          var qtyStatusRates = productStatusPercentages(
+            qtyConfirmed,
+            typeof entry === 'object' ? (entry.cancelStatusCount || 0) : 0,
+            typeof entry === 'object' ? (entry.pendingStatusCount || 0) : 0,
+            qtyStatusTotal
+          );
           return {
             qty: k,
-            count: qtyCount,
+            count: qtyStatusTotal,
             netOrderCount: qtyCount,
             confirmed: qtyConfirmed,
             statusTotalCount: qtyStatusTotal,
             confirmationStatusCount: qtyConfirmed,
             cancelStatusCount: typeof entry === 'object' ? (entry.cancelStatusCount || 0) : 0,
             pendingStatusCount: typeof entry === 'object' ? (entry.pendingStatusCount || 0) : 0,
-            confirmationPct: qtyCount > 0 ? parseFloat((qtyConfirmed / qtyCount * 100).toFixed(1)) : 0,
-            cancelPct: qtyStatusTotal > 0 ? parseFloat((((typeof entry === 'object' ? entry.cancelStatusCount : 0) || 0) / qtyStatusTotal * 100).toFixed(1)) : 0,
-            pendingPct: qtyStatusTotal > 0 ? parseFloat((((typeof entry === 'object' ? entry.pendingStatusCount : 0) || 0) / qtyStatusTotal * 100).toFixed(1)) : 0,
+            confirmationPct: qtyStatusRates.confirmationPct,
+            cancelPct: qtyStatusRates.cancelPct,
+            pendingPct: qtyStatusRates.pendingPct,
             delivered: qtyDelivered,
             ndr: netDeliveryRatePct(qtyDelivered, qtyCount)
           };
@@ -2328,19 +2419,26 @@
                 var qcCount = typeof entry === 'object' ? (entry.count || 0) : entry;
                 var qcConfirmed = typeof entry === 'object' ? (entry.confirmationStatusCount != null ? entry.confirmationStatusCount : (entry.confirmed || 0)) : 0;
                 var qcStatusTotal = typeof entry === 'object' ? (entry.statusTotalCount || qcCount || 0) : qcCount;
+                var qcStatusRates = productStatusPercentages(
+                  qcConfirmed,
+                  typeof entry === 'object' ? (entry.cancelStatusCount || 0) : 0,
+                  typeof entry === 'object' ? (entry.pendingStatusCount || 0) : 0,
+                  qcStatusTotal
+                );
                 return {
                   name: cityName,
-                  count: qcCount,
+                  count: qcStatusTotal,
                   netOrderCount: qcCount,
                   statusTotalCount: qcStatusTotal,
                   confirmed: qcConfirmed,
                   confirmationStatusCount: qcConfirmed,
                   cancelStatusCount: typeof entry === 'object' ? (entry.cancelStatusCount || 0) : 0,
                   pendingStatusCount: typeof entry === 'object' ? (entry.pendingStatusCount || 0) : 0,
-                  confirmationPct: qcCount > 0 ? parseFloat((qcConfirmed / qcCount * 100).toFixed(1)) : 0,
-                  cancelPct: qcStatusTotal > 0 ? parseFloat((((typeof entry === 'object' ? entry.cancelStatusCount : 0) || 0) / qcStatusTotal * 100).toFixed(1)) : 0,
-                  pendingPct: qcStatusTotal > 0 ? parseFloat((((typeof entry === 'object' ? entry.pendingStatusCount : 0) || 0) / qcStatusTotal * 100).toFixed(1)) : 0,
-                  delivered: typeof entry === 'object' ? (entry.delivered || 0) : 0
+                  confirmationPct: qcStatusRates.confirmationPct,
+                  cancelPct: qcStatusRates.cancelPct,
+                  pendingPct: qcStatusRates.pendingPct,
+                  delivered: typeof entry === 'object' ? (entry.delivered || 0) : 0,
+                  ndr: netDeliveryRatePct(typeof entry === 'object' ? (entry.delivered || 0) : 0, qcCount)
                 };
               })
               .sort(function (a, b) { return b.count - a.count; })
@@ -2366,10 +2464,10 @@
         name: p.name,
         units: p.deliveredCount,
         pieces: p.deliveredQty,
-        placedCount: p.placedCount,
+        placedCount: p.totalOrderCount || p.placedCount,
         netOrderCount: p.placedCount,
         totalOrderCount: p.totalOrderCount || p.placedCount,
-        statusTotalCount: p.statusTotalCount || p.totalOrderCount || p.placedCount,
+        statusTotalCount: p.statusTotalCount !== undefined ? p.statusTotalCount : (p.totalOrderCount || p.placedCount),
         qty: p.qty,
         revenue: p.revenue,
         commission: p.commission,
@@ -2434,15 +2532,20 @@
       var ndrDelivered = p.ndrDeliveredCount != null ? p.ndrDeliveredCount : p.deliveredCount;
       var confirmed = p.confirmedCount || 0;
       var statusTotal = p.statusTotalCount || p.totalOrderCount || p.placedCount || 0;
-      var netOrderTotal = p.placedCount || 0;
+      var campaignStatusRates = productStatusPercentages(
+        p.confirmationStatusCount,
+        p.cancelStatusCount,
+        p.pendingStatusCount,
+        statusTotal
+      );
       return Object.assign({}, p, {
         key: key,
         orders: p.placedCount,
         netOrderCount: p.placedCount,
         delivered: p.deliveredCount,
-        confirmationPct: netOrderTotal > 0 ? parseFloat((p.confirmationStatusCount / netOrderTotal * 100).toFixed(1)) : 0,
-        cancelPct: statusTotal > 0 ? parseFloat((p.cancelStatusCount / statusTotal * 100).toFixed(1)) : 0,
-        pendingPct: statusTotal > 0 ? parseFloat((p.pendingStatusCount / statusTotal * 100).toFixed(1)) : 0,
+        confirmationPct: campaignStatusRates.confirmationPct,
+        cancelPct: campaignStatusRates.cancelPct,
+        pendingPct: campaignStatusRates.pendingPct,
         ndrPct: netDeliveryRatePct(ndrDelivered, ndrBase),
         drPct: confirmed > 0 ? parseFloat((ndrDelivered / confirmed * 100).toFixed(1)) : 0
       });
@@ -2470,7 +2573,18 @@
       : null;
     // NDR = delivered / (created orders - canceled-status orders).
     var ndrPct = netDeliveryRatePct(ndrDeliveredOrders, ndrBaseOrders);
-    var confirmationPct = ndrBaseOrders > 0 ? parseFloat(((drBaseOrders / ndrBaseOrders) * 100).toFixed(1)) : 0;
+    var statusGroupCounts = { confirmation: 0, cancel: 0, pending: 0 };
+    Object.keys(statusCounts).forEach(function (statusBucketKey) {
+      var statusGroup = productStatusGroup(statusBucketKey);
+      statusGroupCounts[statusGroup] = (statusGroupCounts[statusGroup] || 0) + Number(statusCounts[statusBucketKey] || 0);
+    });
+    var statusGroupRates = productStatusPercentages(
+      statusGroupCounts.confirmation,
+      statusGroupCounts.cancel,
+      statusGroupCounts.pending,
+      placedCount
+    );
+    var confirmationPct = statusGroupRates.confirmationPct;
     var drPct = drBaseOrders > 0 ? parseFloat(((drDeliveredOrders / drBaseOrders) * 100).toFixed(1)) : 0;
 
     // National KPIs moved up before rankedProducts
@@ -2532,7 +2646,7 @@
       });
     });
     var pipelineStages = exactStatusSummary.map(function (row) {
-      var totalForShare = row.businessGroup === 'excluded' ? rawTotalOrders : placedCount;
+      var totalForShare = rawTotalOrders;
       var st = stage(
         row.bucket,
         row.label,
@@ -2602,6 +2716,12 @@
         totalDeliveredSales: { value: totalDeliveredSales, delta: calcDelta(totalDeliveredSales, previousOverview.totalDeliveredSales), unit: meta.activeCurrency || 'SAR', color: 'green'  },
         deliveredAov:        { value: deliveredAov,        delta: calcDelta(deliveredAov, previousOverview.deliveredAov),               unit: meta.activeCurrency || 'SAR', color: 'blue'   },
         confirmationRate:    { value: confirmationPct,     delta: calcDelta(confirmationPct, previousOverview.confirmationRate),        unit: '%',           color: 'blue'   },
+        statusGroups: {
+          total: placedCount,
+          confirmation: { count: statusGroupCounts.confirmation, pct: statusGroupRates.confirmationPct },
+          cancel: { count: statusGroupCounts.cancel, pct: statusGroupRates.cancelPct },
+          pending: { count: statusGroupCounts.pending, pct: statusGroupRates.pendingPct }
+        },
         ndrRate:             { value: ndrPct,              delta: calcDelta(ndrPct, previousOverview.ndrPct),                           unit: '%',           color: 'orange' },
         drRate:              { value: drPct,               delta: calcDelta(drPct, previousOverview.drPct),                             unit: '%',           color: 'blue'   },
         netRoas:             { value: netRoas,             delta: calcDelta(netRoas, previousNetRoas),                                  unit: 'x',           color: 'purple' },
@@ -2615,12 +2735,23 @@
       },
       pipeline: {
         metrics: {
-          totalOrders: ndrBaseOrders, totalDelivery: ndrBaseOrders,
+          totalOrders: rawTotalOrders, totalDelivery: rawTotalOrders,
           deliveredCount: ndrDeliveredOrders, failedCount: failedCount,
           businessTotalOrders: placedCount, businessDeliveredCount: deliveredCount,
           canceledByYouCount: canceledByYouCount,
           rawTotalOrders: rawTotalOrders,
-          confirmedCount: drBaseOrders,
+          confirmedCount: statusGroupCounts.confirmation,
+          confirmationStatusCount: statusGroupCounts.confirmation,
+          cancelStatusCount: statusGroupCounts.cancel,
+          pendingStatusCount: statusGroupCounts.pending,
+          statusTotalCount: placedCount,
+          statusCounts: statusCounts,
+          statusGroups: {
+            total: placedCount,
+            confirmation: { count: statusGroupCounts.confirmation, pct: statusGroupRates.confirmationPct },
+            cancel: { count: statusGroupCounts.cancel, pct: statusGroupRates.cancelPct },
+            pending: { count: statusGroupCounts.pending, pct: statusGroupRates.pendingPct }
+          },
           confirmationRate: confirmationPct,
           activeCount: activePipelineCount,
           deliveryRate: ndrPct, failureRate: failureRate, overallConversion: ndrPct,
@@ -2645,8 +2776,8 @@
       statusBreakdown: statusBreakdown,
       statusSummary: exactStatusSummary,
       lostBreakdown: lostBreakdown,
-      orders: orderLevelRows(createdOrders, false),
-      outcomeOrders: orderLevelRows(outcomeOrders, false),
+      orders: orderLevelRows(createdOrders, true),
+      outcomeOrders: orderLevelRows(outcomeOrders, true),
       cod: {
         totalDue: totalDue, collected: collectedSar, remaining: remaining,
         collectionRate: collectionRate, collectedSar: collectedSar,
@@ -2654,6 +2785,10 @@
         incomingCodSar: incomingCodSar, lostCodSar: lostCodSar, confirmedBaseCodSar: confirmedBaseCodSar,
         drPct: drPct,
         confirmationRate: confirmationPct,
+        confirmationStatusCount: statusGroupCounts.confirmation,
+        cancelStatusCount: statusGroupCounts.cancel,
+        pendingStatusCount: statusGroupCounts.pending,
+        statusTotalCount: placedCount,
         drDeliveredOrders: drDeliveredOrders,
         drBaseOrders: drBaseOrders, drActiveOrders: Math.max(0, drBaseOrders - drDeliveredOrders),
         prepaidDrBaseOrders: prepaidDrBaseOrders, prepaidDrDeliveredOrders: prepaidDrDeliveredOrders,
@@ -2683,9 +2818,10 @@
       commissionTrend: {
         total: earnedCommission,
         totalDelta: calcDelta(secondHalfEarned, firstHalfEarned),
-        periods: { '7': generatePeriodData(7, 'earned'), '14': generatePeriodData(14, 'earned'), '30': generatePeriodData(30, 'earned') },
-        incomingPeriods: { '7': generatePeriodData(7, 'incoming'), '14': generatePeriodData(14, 'incoming'), '30': generatePeriodData(30, 'incoming') },
-        lostPeriods: { '7': generatePeriodData(7, 'lost'), '14': generatePeriodData(14, 'lost'), '30': generatePeriodData(30, 'lost') },
+        periods: { '7': generatePeriodData(7, 'earned'), '14': generatePeriodData(14, 'earned'), '30': generatePeriodData(30, 'earned'), 'month': generatePeriodData(dayKeys.length, 'earned') },
+        incomingPeriods: { '7': generatePeriodData(7, 'incoming'), '14': generatePeriodData(14, 'incoming'), '30': generatePeriodData(30, 'incoming'), 'month': generatePeriodData(dayKeys.length, 'incoming') },
+        lostPeriods: { '7': generatePeriodData(7, 'lost'), '14': generatePeriodData(14, 'lost'), '30': generatePeriodData(30, 'lost'), 'month': generatePeriodData(dayKeys.length, 'lost') },
+        ordersPeriods: { '7': generatePeriodData(7, 'orders'), '14': generatePeriodData(14, 'orders'), '30': generatePeriodData(30, 'orders'), 'month': generatePeriodData(dayKeys.length, 'orders') },
         benchmarks: {
           dailyAvg: dailyAvg,
           weekly: Math.round(dailyAvg * 7),

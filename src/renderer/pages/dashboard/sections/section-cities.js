@@ -917,7 +917,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
     var provBlobs = PROVINCES.map(function (p) {
       return (
-        '<ellipse class="sc-prov-blob" data-province="' + p.id + '"' +
+        '<ellipse class="sc-prov-blob sc-region-shape" data-province="' + p.id + '"' +
         ' cx="' + p.mapCx + '" cy="' + p.mapCy + '"' +
         ' rx="' + p.mapRx + '" ry="' + p.mapRy + '"' +
         ' fill="url(#sc-prov-' + _mapUid + "-" + p.id + ')"' +

@@ -32,6 +32,7 @@ window.renderSection2 = function (mountEl, data, ctx) {
     delivered:  '<path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
     failed:     '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
     canceled_by_you: '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/>',
+    on_hold:         '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
     /* metric / insight icons — slightly larger */
     bag:        '<path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/>',
     trendUp:    '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>',
@@ -132,7 +133,7 @@ window.renderSection2 = function (mountEl, data, ctx) {
     function combine(id, label, ids, color, businessGroup) {
       var rows = ids.map(function (id) { return byId[id]; }).filter(Boolean);
       var count = rows.reduce(function (sum, row) { return sum + Number(row.count || 0); }, 0);
-      var share = pctNum(count, metrics.totalOrders || metrics.totalDelivery || source.reduce(function (sum, row) { return sum + Number(row.count || 0); }, 0));
+      var share = pctNum(count, metrics.businessTotalOrders || metrics.totalOrders || metrics.totalDelivery || source.reduce(function (sum, row) { return sum + Number(row.count || 0); }, 0));
       var sar = rows.reduce(function (sum, row) {
         var rawSar = row.profitAfterTax != null ? row.profitAfterTax : row.sar;
         return sum + Number(String(rawSar == null ? 0 : rawSar).replace(/[^\d.-]/g, '') || 0);
@@ -150,13 +151,14 @@ window.renderSection2 = function (mountEl, data, ctx) {
       });
     }
     return [
-      normalizeStage(pick('received', { id: 'received', label: s2Txt('Order received', 'تم استلام الطلب'), color: '#3b82f6', count: 0 })),
-      normalizeStage(pick('confirmed', { id: 'confirmed', label: s2Txt('Confirmed', 'مؤكد'), color: '#3b82f6', count: 0 })),
-      normalizeStage(pick('waiting', { id: 'waiting', label: s2Txt('Awaiting shipment', 'في انتظار الشحن'), color: '#64748b', count: 0 })),
+      normalizeStage(pick('received',        { id: 'received',        label: s2Txt('Order received',       'تم استلام الطلب'),   color: '#3b82f6',  count: 0 })),
+      normalizeStage(pick('confirmed',       { id: 'confirmed',       label: s2Txt('Confirmed',             'مؤكد'),              color: '#3b82f6',  count: 0 })),
+      normalizeStage(pick('waiting',         { id: 'waiting',         label: s2Txt('Awaiting Shipment',     'في انتظار الشحن'),   color: '#64748b',  count: 0 })),
+      normalizeStage(pick('on_hold',         { id: 'on_hold',         label: s2Txt('Temporarily Suspended', 'معلق مؤقتًا'),       color: '#64748b',  count: 0 })),
       combine('shipping', s2Txt('Out for delivery', 'قيد التوصيل'), ['shipping', 'delivery_suspended', 'after_sales_progress'], '#f59e0b', 'incoming'),
-      normalizeStage(pick('delivered', { id: 'delivered', label: s2Txt('Delivered', 'تم التوصيل'), color: '#00e676', count: 0 })),
-      combine('lost', s2Txt('Failed / Lost', 'فشل / ضائع'), ['customer_refused_confirmation', 'failed', 'return_verified', 'out_of_stock', 'on_hold', 'after_sales_done'], '#ef4444', 'lost'),
-      normalizeStage(pick('canceled_by_you', { id: 'canceled_by_you', label: s2Txt('Canceled by you', 'ملغي بواسطتك'), color: '#94a3b8', count: 0, businessGroup: 'excluded' }))
+      normalizeStage(pick('delivered',       { id: 'delivered',       label: s2Txt('Delivered',             'تم التوصيل'),        color: '#00e676',  count: 0 })),
+      combine('lost', s2Txt('Failed / Lost', 'فشل / ضائع'), ['customer_refused_confirmation', 'failed', 'return_verified', 'out_of_stock', 'after_sales_done'], '#ef4444', 'lost'),
+      normalizeStage(pick('canceled_by_you', { id: 'canceled_by_you', label: s2Txt('Canceled by you',       'ملغي بواسطتك'),      color: '#94a3b8',  count: 0, businessGroup: 'excluded' }))
     ];
   }
 

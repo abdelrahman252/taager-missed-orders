@@ -137,6 +137,22 @@ function productStatusGroup(bucket) {
   return "pending";
 }
 
+function productStatusPercentages(confirmationCount, cancelCount, pendingCount, totalCount) {
+  let total = number(totalCount);
+  const confirmation = number(confirmationCount);
+  const cancel = number(cancelCount);
+  const pending = number(pendingCount);
+  if (total <= 0) total = confirmation + cancel + pending;
+  if (total <= 0) return { confirmationPct: 0, cancelPct: 0, pendingPct: 0 };
+  const confirmationPct = Math.round(confirmation / total * 1000) / 10;
+  const cancelPct = Math.round(cancel / total * 1000) / 10;
+  const countsCoverTotal = Math.abs((confirmation + cancel + pending) - total) < 0.0001;
+  const pendingPct = countsCoverTotal
+    ? Math.round((100 - confirmationPct - cancelPct) * 10) / 10
+    : Math.round(pending / total * 1000) / 10;
+  return { confirmationPct, cancelPct, pendingPct: Math.max(0, pendingPct) };
+}
+
 function rowTotal(row) {
   return number(row.dashboardTotalPrice ?? row.totalPrice ?? row.total ?? row.orderValue);
 }
@@ -445,16 +461,21 @@ function createDashboardQueryService(options) {
       const ndrBase = product.ndrBaseCount || product.placedCount;
       const ndrDelivered = product.ndrDeliveredCount != null ? product.ndrDeliveredCount : product.deliveredCount;
       const confirmed = product.confirmedCount || 0;
-      const statusTotal = product.statusTotalCount || product.totalOrderCount || product.placedCount || 0;
-      const netOrderTotal = product.placedCount || 0;
+      const statusTotal = product.statusTotalCount !== undefined ? product.statusTotalCount : (product.totalOrderCount || product.placedCount || 0);
+      const statusRates = productStatusPercentages(
+        product.confirmationStatusCount,
+        product.cancelStatusCount,
+        product.pendingStatusCount,
+        statusTotal
+      );
       return {
         ...product,
         orders: product.placedCount,
         netOrderCount: product.placedCount,
         delivered: product.deliveredCount,
-        confirmationPct: netOrderTotal ? product.confirmationStatusCount / netOrderTotal * 100 : 0,
-        cancelPct: statusTotal ? product.cancelStatusCount / statusTotal * 100 : 0,
-        pendingPct: statusTotal ? product.pendingStatusCount / statusTotal * 100 : 0,
+        confirmationPct: statusRates.confirmationPct,
+        cancelPct: statusRates.cancelPct,
+        pendingPct: statusRates.pendingPct,
         ndrPct: ndrBase ? ndrDelivered / ndrBase * 100 : 0,
         drPct: confirmed ? ndrDelivered / confirmed * 100 : 0,
       };
@@ -620,9 +641,15 @@ function createDashboardQueryService(options) {
       });
       let list = Array.from(products.values()).map((product) => {
         const confirmationBase = Math.max(0, product.totalOrders - product.pendingCount);
-        const statusTotal = product.statusTotalCount || product.totalOrders || 0;
+        const statusTotal = product.statusTotalCount !== undefined ? product.statusTotalCount : (product.totalOrders || 0);
         const clean = { ...product };
         delete clean.orderKeys;
+        const statusRates = productStatusPercentages(
+          product.confirmationStatusCount,
+          product.cancelStatusCount,
+          product.pendingStatusCount,
+          statusTotal
+        );
         return {
           ...clean,
           placedCount: product.totalOrders,
@@ -630,9 +657,9 @@ function createDashboardQueryService(options) {
           ndrPct: product.totalOrders ? product.deliveredCount / product.totalOrders * 100 : 0,
           drRate: confirmationBase ? product.deliveredCount / confirmationBase * 100 : 0,
           netOrderCount: product.totalOrders,
-          confirmationPct: product.totalOrders ? product.confirmationStatusCount / product.totalOrders * 100 : 0,
-          cancelPct: statusTotal ? product.cancelStatusCount / statusTotal * 100 : 0,
-          pendingPct: statusTotal ? product.pendingStatusCount / statusTotal * 100 : 0,
+          confirmationPct: statusRates.confirmationPct,
+          cancelPct: statusRates.cancelPct,
+          pendingPct: statusRates.pendingPct,
           accountCount: Object.keys(product.accounts).length,
           cityCount: Object.keys(product.cities).length,
           adSpend: 0,
@@ -766,23 +793,42 @@ function createDashboardQueryService(options) {
       });
       Object.keys(details).forEach((key) => {
         const detail = details[key];
-        detail.cityBreakdown = Object.values(detail.cities).map((city) => ({
-          ...city,
-          netOrderCount: city.count,
-          confirmationPct: city.count ? city.confirmationStatusCount / city.count * 100 : 0,
-          cancelPct: city.statusTotalCount ? city.cancelStatusCount / city.statusTotalCount * 100 : 0,
-          pendingPct: city.statusTotalCount ? city.pendingStatusCount / city.statusTotalCount * 100 : 0,
-          ndr: city.count ? city.delivered / city.count * 100 : 0,
-        })).sort((a, b) => b.count - a.count);
+        detail.cityBreakdown = Object.values(detail.cities).map((city) => {
+          const statusRates = productStatusPercentages(
+            city.confirmationStatusCount,
+            city.cancelStatusCount,
+            city.pendingStatusCount,
+            city.statusTotalCount
+          );
+          return {
+            ...city,
+            count: city.statusTotalCount,
+            netOrderCount: city.count,
+            confirmationPct: statusRates.confirmationPct,
+            cancelPct: statusRates.cancelPct,
+            pendingPct: statusRates.pendingPct,
+            ndr: city.count ? city.delivered / city.count * 100 : 0,
+          };
+        }).sort((a, b) => b.count - a.count);
         detail.quantityCityBreakdown = Object.keys(detail.quantities).map((qty) => ({
           qty,
-          cities: Object.values(detail.quantities[qty]).map((city) => ({
-            ...city,
-            netOrderCount: city.count,
-            confirmationPct: city.count ? city.confirmationStatusCount / city.count * 100 : 0,
-            cancelPct: city.statusTotalCount ? city.cancelStatusCount / city.statusTotalCount * 100 : 0,
-            pendingPct: city.statusTotalCount ? city.pendingStatusCount / city.statusTotalCount * 100 : 0,
-          })).sort((a, b) => b.count - a.count),
+          cities: Object.values(detail.quantities[qty]).map((city) => {
+            const statusRates = productStatusPercentages(
+              city.confirmationStatusCount,
+              city.cancelStatusCount,
+              city.pendingStatusCount,
+              city.statusTotalCount
+            );
+            return {
+              ...city,
+              count: city.statusTotalCount,
+              netOrderCount: city.count,
+              confirmationPct: statusRates.confirmationPct,
+              cancelPct: statusRates.cancelPct,
+              pendingPct: statusRates.pendingPct,
+              ndr: city.count ? city.delivered / city.count * 100 : 0,
+            };
+          }).sort((a, b) => b.count - a.count),
         })).sort((a, b) => number(a.qty) - number(b.qty));
         delete detail.cities;
         delete detail.quantities;

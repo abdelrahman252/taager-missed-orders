@@ -124,6 +124,10 @@
     window.setDashboardUpdateOverlay = setDashboardUpdateOverlay;
     if (window._dashboardFetchState) setDashboardUpdateOverlay(window._dashboardFetchState);
 
+    window.refreshDashboard = function () {
+      runAggregator(true);
+    };
+
     function ensureMarketingStatusLoaded(data) {
       var store = window.DashboardMarketingState;
       if (!store || typeof store.get !== 'function' || typeof store.load !== 'function') return Promise.resolve(null);

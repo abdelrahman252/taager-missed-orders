@@ -14,7 +14,7 @@
     { id: 'cod',        key: 'nav.cod',        iconName: 'creditCard' },
     { id: 'products',   key: 'nav.products',   iconName: 'package'    },
     { id: 'cities',     key: 'nav.cities',     iconName: 'mapPin'     },
-    { id: 'commission', key: 'nav.commission', iconName: 'fileText'   },
+    { id: 'commission', key: 'nav.commission', iconName: 'barChart'   },
     { id: 'marketing',  key: 'nav.marketing',  iconName: 'activity'   },
     { id: 'campaigns',  key: 'nav.campaigns',  iconName: 'megaphone'  },
     { id: 'calculator', key: 'nav.calculator', iconName: 'calculator' },

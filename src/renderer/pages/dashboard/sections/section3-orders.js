@@ -560,6 +560,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
         color: window.TaagerStatus.color(meta.bucket),
         iconSvg: meta.delivered ? STAGE_TEMPLATE_BY_ID.delivered.iconSvg :
           meta.bucket === 'canceled_by_you' ? STAGE_TEMPLATE_BY_ID.waiting.iconSvg :
+          meta.bucket === 'received' ? FALLBACK_STAGE_TEMPLATE.iconSvg :
           dashboardBucket === 'failed' ? STAGE_TEMPLATE_BY_ID.failed.iconSvg :
           dashboardBucket === 'shipping' ? STAGE_TEMPLATE_BY_ID.shipping.iconSvg :
           dashboardBucket === 'confirmed' ? STAGE_TEMPLATE_BY_ID.confirmed.iconSvg :

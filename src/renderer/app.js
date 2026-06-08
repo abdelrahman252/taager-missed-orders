@@ -58,6 +58,11 @@ const _STRINGS = {
     "setup.taager_phone_label": "Taager Phone",
     "setup.taager_phone_ph": "5xxxxxxxx",
     "setup.save_btn":     "Save & Continue →",
+    "setup.dashboard_enrichment_label":        "Dashboard Data Source",
+    "setup.dashboard_enrichment_taager":        "Taager Only",
+    "setup.dashboard_enrichment_easyorders":    "Taager + EasyOrders",
+    "setup.dashboard_enrichment_hint_taager":   "Your dashboard will use Taager as the only data source for orders, profits, and product info. Simple and fast — recommended if you don't use EasyOrders.",
+    "setup.dashboard_enrichment_hint_easyorders": "Your dashboard will pull orders and profits from Taager, and also connect to EasyOrders to enrich product names and payment data. Best choice if you use both platforms.",
     "setup.err_missing":  "<strong>Missing fields</strong> — All required fields must be filled.",
     "setup.err_locked":   "<strong>Account Locked</strong> — This license is already linked to different accounts. Contact support to change them.",
     "welcome.app_title":      "Taager Bot",
@@ -512,6 +517,11 @@ const _STRINGS = {
     "setup.taager_phone_label": "هاتف تاجر",
     "setup.taager_phone_ph": "5xxxxxxxx",
     "setup.save_btn":     "حفظ والمتابعة ←",
+    "setup.dashboard_enrichment_label":        "مصدر بيانات لوحة التحكم",
+    "setup.dashboard_enrichment_taager":        "Taager فقط",
+    "setup.dashboard_enrichment_easyorders":    "Taager + EasyOrders",
+    "setup.dashboard_enrichment_hint_taager":   "ستعتمد لوحة التحكم على Taager كمصدر وحيد للطلبات والأرباح وبيانات المنتجات. خيار بسيط وسريع — مناسب إذا لم تكن تستخدم EasyOrders.",
+    "setup.dashboard_enrichment_hint_easyorders": "ستجلب لوحة التحكم الطلبات والأرباح من Taager، وتتصل أيضاً بـ EasyOrders لتحسين أسماء المنتجات وبيانات الدفع. الخيار الأمثل إذا كنت تستخدم المنصتين معاً.",
     "setup.err_missing":  "<strong>حقول مفقودة</strong> — يجب ملء جميع الحقول المطلوبة.",
     "setup.err_locked":   "<strong>حساب مقفل</strong> — هذا الترخيص مرتبط بحسابات مختلفة. تواصل مع الدعم.",
     "welcome.app_title":      "Taager Bot",
@@ -2498,7 +2508,7 @@ async function init() {
   // Route based on credential state:
   // - Accounts exist → skip the accounts management step, go straight to run step
   // - No accounts    → land on accounts step so user can add their first account
-  const hasAccounts = (creds.accounts && creds.accounts.length > 0) || !!creds.easyEmail;
+  const hasAccounts = creds.accounts && creds.accounts.length > 0;
   if (window._teamLeaderEnabled && hasAccounts) goToDashboard();
   else goToSetup(hasAccounts ? "run" : "accounts");
   scheduleFeaturePrewarm(window._teamLeaderEnabled ? "dashboard" : null);
@@ -2531,7 +2541,10 @@ async function refreshStartupStateFromServer() {
     window._dashboardEnabled  = freshCreds.dashboardEnabled  === true;
     window._teamLeaderEnabled = freshCreds.teamLeaderEnabled === true;
     updateTopBarText();
-    if (_activePageId === "page-setup" && typeof window.renderSetup === "function") goToSetup("run");
+    if (_activePageId === "page-setup" && typeof window.renderSetup === "function") {
+      const hasAccounts = freshCreds.accounts && freshCreds.accounts.length > 0;
+      goToSetup(hasAccounts ? "run" : "accounts");
+    }
   } catch (e) {
     if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(e, { operation: "startup.backgroundRefresh" });
   }
@@ -2578,7 +2591,7 @@ async function afterLicense(isFlush = false) {
   window._operationsEnabled = creds.operationsEnabled !== false;
   window._dashboardEnabled  = creds.dashboardEnabled  === true;
   window._teamLeaderEnabled = creds.teamLeaderEnabled === true;
-  const hasAccounts = (creds.accounts && creds.accounts.length > 0) || !!creds.easyEmail;
+  const hasAccounts = creds.accounts && creds.accounts.length > 0;
   if (window._teamLeaderEnabled && hasAccounts) goToDashboard();
   else goToSetup(hasAccounts ? "run" : "accounts");
   scheduleFeaturePrewarm(window._teamLeaderEnabled ? "dashboard" : null);

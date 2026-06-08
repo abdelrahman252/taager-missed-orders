@@ -91,7 +91,7 @@ window.renderSection1 = function (mountEl, data, ctx) {
     { label: s1Txt('Incoming Profit After Tax', 'الربح القادم بعد الضريبة'),    value: d.incomingCommission.value,  unit: d.incomingCommission.unit,  delta: d.incomingCommission.delta,  color: 'orange', spark: d.sparklines.incoming,  iconType: 'orange', tooltip: s1Txt('Incoming Profit After Tax = sum(order profit - tax profit) for active non-delivered orders.', 'الربح القادم بعد الضريبة = مجموع (ربح الطلب - ربح الضريبة) للطلبات النشطة غير المسلمة.') },
     { label: s1Txt('Lost Profit After Tax', 'الربح الضائع بعد الضريبة'),   value: d.lostCommission.value,      unit: d.lostCommission.unit,      delta: d.lostCommission.delta,      color: 'red',    spark: d.sparklines.lost,      iconType: 'red', tooltip: s1Txt('Lost Profit After Tax = sum(order profit - tax profit) for failed, canceled, and lost orders.', 'الربح الضائع بعد الضريبة = مجموع (ربح الطلب - ربح الضريبة) للطلبات الفاشلة والملغاة.') },
     { label: s1Txt('Total / Net Orders', 'إجمالي / صافي الطلبات'), value: netTotalOrders, displayValue: totalOrdersDisplay, staticDisplay: true, unit: s1Txt('orders', 'طلب'), delta: d.totalOrders.delta, color: 'blue', spark: d.sparklines.orders, iconType: 'blue', tooltip: tx('kpi.orders.tooltip', 'Total / Net Orders = raw orders / orders after excluding Canceled by you. Business metrics use net orders.') },
-    { label: s1Txt('Confirmation Rate', 'نسبة التأكيد'), value: d.confirmationRate ? d.confirmationRate.value : (((window.dashboardGeoData || {}).pipeline || {}).metrics || {}).confirmationRate || 0, unit: '%', delta: d.confirmationRate ? d.confirmationRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.confirmationRate.tooltip', 'Confirmation Rate = confirmed orders / net placed orders.') },
+    { label: s1Txt('Confirmation Rate', 'نسبة التأكيد'), value: d.confirmationRate ? d.confirmationRate.value : (((window.dashboardGeoData || {}).pipeline || {}).metrics || {}).confirmationRate || 0, unit: '%', delta: d.confirmationRate ? d.confirmationRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.confirmationRate.tooltip', 'Confirmation Rate = progressed statuses / all orders. Confirmation + cancel + pending = 100%.') },
     { label: s1Txt('DR Rate', 'نسبة DR'), value: d.drRate ? d.drRate.value : (((window.dashboardGeoData || {}).pipeline || {}).metrics || {}).drPct || 0, unit: '%', delta: d.drRate ? d.drRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.drRate.tooltip', 'DR = delivered orders / confirmed orders.') },
   ];
 
@@ -221,7 +221,7 @@ window.renderSection1 = function (mountEl, data, ctx) {
       var bucket = window.TaagerStatus.dashboardBucket(status);
       if (bucket === 'delivered') return 'delivered';
       if (bucket === 'failed' || bucket === 'canceled_by_you') return 'lost';
-      if (bucket === 'shipping' || bucket === 'confirmed' || bucket === 'processing' || bucket === 'waiting') return 'incoming';
+      if (bucket === 'shipping' || bucket === 'confirmed' || bucket === 'processing' || bucket === 'pending' || bucket === 'waiting') return 'incoming';
       return 'other';
     }
     var s = String(status || '').toLowerCase();

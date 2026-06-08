@@ -1,4 +1,4 @@
-﻿// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // section5-products.js  -  Task 5: أفضل المنتجات
 //
 // FIXES vs v6:
@@ -628,7 +628,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
       return {
         key: productKey, sku: p.sku || '', rank, name: p.name || 'منتج غير معروف', cat: `SKU: ${p.sku || 'N/A'}`,
-        deliveries: units, placedCount: p.netOrderCount || p.placedCount || 0, pieces: p.pieces || p.qty || 0,
+        deliveries: units, placedCount: p.totalOrderCount || p.placedCount || 0, pieces: p.pieces || p.qty || 0,
         sharePct, revenue: commission, delta: Number(p.delta || 0), spark, ...styleCfg,
         commission, deliveredCount: units,
         totalPieces:     p.totalPieces     || p.qty || 0,
@@ -638,7 +638,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         shippingCount:   p.shippingCount   || 0,
         processingCount: p.processingCount || 0,
         statusTotalCount: p.statusTotalCount || p.totalOrderCount || p.placedCount || 0,
-        netOrderCount: p.netOrderCount || p.placedCount || 0,
+        netOrderCount: p.netOrderCount || 0,
         confirmationStatusCount: p.confirmationStatusCount || p.confirmedCount || 0,
         cancelStatusCount: p.cancelStatusCount || p.canceledCount || 0,
         pendingStatusCount: p.pendingStatusCount || p.pendingCount || 0,
@@ -867,7 +867,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
       waitingCount: Number(row.waitingCount || 0),
       pendingCount: Number(row.pendingCount || 0),
       statusTotalCount: Number(row.statusTotalCount || row.totalOrderCount || row.placedCount || row.totalOrders || 0),
-      netOrderCount: Number(row.netOrderCount || row.placedCount || row.totalOrders || 0),
+      netOrderCount: Number(row.netOrderCount || 0),
       confirmationStatusCount: Number(row.confirmationStatusCount || row.confirmedCount || 0),
       cancelStatusCount: Number(row.cancelStatusCount || row.canceledCount || 0),
       pendingStatusCount: Number(row.pendingStatusCount || row.pendingCount || 0),
@@ -1095,7 +1095,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
   // ── Funnel panel content ─────────────────────────────────────────────────
   function funnelHTML(p) {
-    const total = p.netOrderCount || p.placedCount || p.totalOrderCount || 1;
+    const total = p.statusTotalCount || p.totalOrderCount || p.netOrderCount || p.placedCount || 1;
     const stages = [
       { label:s5Txt('Total Orders', s5Txt('Total Orders', 'إجمالي الطلبات')), count: total, color:'#fff', pct: 100 },
       { label:s5Txt('Confirmed', 'مؤكدة'), count: p.confirmationStatusCount || p.confirmedCount, color:'#3b82f6', pct: p.confirmationPct },
@@ -1127,7 +1127,25 @@ window.renderSection5 = function (mountEl, data, ctx) {
     const _gpm  = _geoD && _geoD.geo && _geoD.geo.geoProductMap;
     const _prodKey = p.key || p.sku || p.name || '';
 
-    function _getCityStats(cityName) {
+  function _getCityStats(cityRow) {
+    var cityName = cityRow && cityRow.name ? cityRow.name : cityRow;
+    if (cityRow && typeof cityRow === 'object' && cityRow.statusTotalCount != null) {
+      const statusTotal = Number(cityRow.statusTotalCount || cityRow.count || 0);
+      const netOrders = Number(cityRow.netOrderCount != null ? cityRow.netOrderCount : cityRow.count || 0);
+      const confirmed = Number(cityRow.confirmationStatusCount != null ? cityRow.confirmationStatusCount : cityRow.confirmed || 0);
+      return {
+        orders: statusTotal,
+        netOrders: netOrders,
+        confirmed: confirmed,
+        delivered: Number(cityRow.delivered || 0),
+        confirmationRate: cityRow.confirmationPct != null
+          ? Number(cityRow.confirmationPct)
+          : (statusTotal ? confirmed / statusTotal * 100 : 0),
+        ndr: cityRow.ndr != null
+          ? Number(cityRow.ndr)
+          : (netOrders ? Number(cityRow.delivered || 0) / netOrders * 100 : 0)
+      };
+    }
       if (!_gpm) return null;
       var cell = _gpm[cityName] && _gpm[cityName][_prodKey];
       if (!cell) {
@@ -1422,8 +1440,12 @@ window.renderSection5 = function (mountEl, data, ctx) {
     else if (filterState.statusKey === 'failed') hlCount = p.failedCount || 0;
     else if (filterState.statusKey === 'canceled') hlCount = p.canceledCount || 0;
     else if (filterState.statusKey === 'processing') hlCount = p.processingCount || 0;
-    const displayOrderCount = p.netOrderCount || p.placedCount || p.totalOrderCount || 0;
+    const displayOrderCount = p.placedCount || p.statusTotalCount || p.totalOrderCount || 0;
+    const displayNetOrderCount = p.netOrderCount || 0;
+    const displayConfirmedCount = p.confirmationStatusCount || p.confirmedCount || 0;
     const placedText = productCompactNumber(displayOrderCount, 0, 10000);
+    const netOrderText = productCompactNumber(displayNetOrderCount, 0, 10000);
+    const confirmedText = productCompactNumber(displayConfirmedCount, 0, 10000);
     const hlCountText = productCompactNumber(hlCount, 0, 10000);
     const revenueInFinancialCurrency = commissionInCurrency(p.revenue || 0);
     const revenueText = productCompactNumber(revenueInFinancialCurrency, 0, 10000);
@@ -1453,6 +1475,12 @@ window.renderSection5 = function (mountEl, data, ctx) {
       </div>
       ${DIV}
 
+      <!-- Col 2b: Net Orders (excludes canceled-by-you) -->
+      <div class="s5-cell s5-cell-net-orders" style="flex:0 0 64px;text-align:center;padding:0 5px">
+        <div class="s5-number-fit" title="${attr(productNumber(displayNetOrderCount, 0))}" style="font-size:${compact?'15px':'17px'};font-weight:900;color:#38bdf8">${netOrderText}</div>
+      </div>
+      ${DIV}
+
       <!-- Col 3: Quantity -->
       <div class="s5-cell s5-cell-pieces" style="flex:0 0 68px;text-align:center;padding:0 5px">
         <div class="s5-number-fit" title="${attr(productNumber(p.totalPieces || 0, 0))}" style="font-size:${compact?'14px':'16px'};font-weight:800;color:#3b82f6">${totalPiecesText}</div>
@@ -1468,6 +1496,12 @@ window.renderSection5 = function (mountEl, data, ctx) {
       <!-- Col 5: Canceled Orders raw count -->
       <div class="s5-cell s5-cell-canceled-raw" style="flex:0 0 68px;text-align:center;padding:0 5px">
         <div class="s5-number-fit" title="${attr(productNumber(p.canceledCount || 0, 0))}" style="font-size:${compact?'14px':'16px'};font-weight:800;color:#ef4444">${canceledText}</div>
+      </div>
+      ${DIV}
+
+      <!-- Col 5b: Confirmed Orders count -->
+      <div class="s5-cell s5-cell-confirmed-count" style="flex:0 0 64px;text-align:center;padding:0 5px">
+        <div class="s5-number-fit" title="${attr(productNumber(displayConfirmedCount, 0))}" style="font-size:${compact?'14px':'16px'};font-weight:800;color:#3b82f6">${confirmedText}</div>
       </div>
       ${DIV}
 
@@ -1937,13 +1971,17 @@ window.renderSection5 = function (mountEl, data, ctx) {
     return `<div class="s5-header-cols s5-metrics-track" style="display:flex;align-items:center;padding:0 0 10px 0;border-bottom:1px solid rgba(255,255,255,0.05);margin-bottom:10px;position:sticky;top:0;z-index:9;background:#080b12">
       <div class="s5-header-product" style="flex:0 0 200px;min-width:200px;padding-inline-start:10px;font-size:10px;color:rgba(255,255,255,0.42);font-weight:800;text-align:start">${s5Txt('Product', 'المنتج')}</div>
       <div style="width:1px"></div>
-      ${colHeaderBtn(s5Txt('Orders', 'الطلبات'),'netOrderCount','flex:0 0 64px')}
+      ${colHeaderBtn(s5Txt('Orders', 'الطلبات'),'placedCount','flex:0 0 64px')}
+      <div style="width:1px"></div>
+      ${colHeaderBtn(s5Txt('Net Orders', 'الطلبات الصافية'),'netOrderCount','flex:0 0 64px')}
       <div style="width:1px"></div>
       ${colHeaderBtn(s5Txt('Quantity', 'القطع'),'totalPieces','flex:0 0 68px')}
       <div style="width:1px"></div>
       ${colHeaderBtn(p5Txt('failedOrders'),'failedCount','flex:0 0 64px')}
       <div style="width:1px"></div>
       ${colHeaderBtn(p5Txt('canceledOrders'),'canceledCount','flex:0 0 68px')}
+      <div style="width:1px"></div>
+      ${colHeaderBtn(s5Txt('Confirmed', 'مؤكد'),'confirmationStatusCount','flex:0 0 64px')}
       <div style="width:1px"></div>
       ${colHeaderBtn(s5Txt('Confirm', 'التأكيد'),'confirmationPct',`flex:0 0 ${compact?'66':'70'}px`)}
       <div style="width:1px"></div>
@@ -3601,7 +3639,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         selectorHTML(side, product) +
         '<div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:rgba(0,0,0,0.18);border:1px solid rgba(255,255,255,0.06);margin-bottom:4px">' +
           '<div style="width:36px;height:36px;border-radius:10px;flex-shrink:0;background:' + sideColor + '22;border:1px solid ' + sideColor + '55;color:' + sideColor + ';display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:950">#' + cmpNum(product.rank) + '</div>' +
-          '<div style="min-width:0"><div style="font-size:13px;font-weight:950;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(product.name || '') + '</div>' +
+          '<div style="min-width:0"><div data-i18n-preserve style="font-size:13px;font-weight:950;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(product.name || '') + '</div>' +
           '<div style="font-size:10px;color:rgba(255,255,255,0.38);margin-top:2px">SKU: ' + esc(product.sku || '-') + '</div></div>' +
         '</div>' +
         sections +
@@ -3871,9 +3909,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
       /* Funnel bars */
       var rawTotal = p.statusTotalCount || p.totalOrderCount || p.placedCount || 1;
-      var netTotal = p.netOrderCount || p.placedCount || p.totalOrderCount || 1;
       var funnel = [
-        { label: s5Txt('Confirmed', 'مؤكد'), count: p.confirmationStatusCount || p.confirmedCount || 0, base: netTotal, color: '#3b82f6' },
+        { label: s5Txt('Confirmed', 'مؤكد'), count: p.confirmationStatusCount || p.confirmedCount || 0, color: '#3b82f6' },
         { label: s5Txt('Pending', 'قيد الانتظار'), count: p.pendingStatusCount || p.pendingCount || 0, color: '#a855f7' },
         { label: p5Txt('funnelCanceled'), count: p.cancelStatusCount || p.canceledCount || 0, color: '#ef4444' },
         { label: s5Txt('Delivered', 'تم التسليم'),  count: p.deliveredCount || 0, color: '#00e676' },
@@ -3915,7 +3952,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
               '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2" stroke-linecap="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>' +
             '</div>' +
             '<div>' +
-              '<div style="font-size:18px;font-weight:900;color:#fff">' + esc(p.name || s5Txt('product', 'منتج')) + '</div>' +
+              '<div data-i18n-preserve style="font-size:18px;font-weight:900;color:#fff">' + esc(p.name || s5Txt('product', 'منتج')) + '</div>' +
               '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:3px">SKU: ' + esc(p.sku || '-') + '  ·  ' + s5Txt('Rank #', 'رتبة #') + esc(p.rank || '-') + '</div>' +
             '</div>' +
           '</div>' +
@@ -3929,7 +3966,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         '<div class="s5-modal-kpi-grid" style="padding:20px 28px;display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;' +
           'border-bottom:1px solid rgba(255,255,255,0.06);">' +
           [
-            { label: s5Txt('Total Orders', 'إجمالي الطلبات'), value: num(total),          color: '#a855f7', badge: null },
+            { label: s5Txt('Total Orders', 'إجمالي الطلبات'), value: num(rawTotal),          color: '#a855f7', badge: null },
             { label: s5Txt('Delivery Rate', 'معدل التسليم'),   value: pct(drVal),          color: drColor(drVal), badge: null },
             { label: s5Txt('Cancel Rate', 'معدل الإلغاء'),   value: pct(cancelVal),      color: '#ef4444', badge: null },
             { label: s5Txt('Confirm Rate', 'التأكيد'),        value: pct(cnfVal),         color: '#14b8a6', badge: null },

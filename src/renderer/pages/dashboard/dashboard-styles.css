@@ -4105,7 +4105,7 @@ button {
   min-width: 0 !important;
   min-height: 0 !important;
   max-width: 100% !important;
-
+  overflow-x: hidden !important;
 }
 
 #page-dashboard #dash-section-pane {
@@ -4656,6 +4656,15 @@ button {
 #page-dashboard .s8-kpi-row > * {
   min-width: 0 !important;
   max-width: 100% !important;
+}
+
+#page-dashboard .s8-kpi-row > * {
+  display: flex !important;
+  width: 100% !important;
+}
+
+#page-dashboard .s8-kpi-row .s8-kpi-card {
+  width: 100% !important;
 }
 
 #page-dashboard .dash-size-md .s8-row2 > *,

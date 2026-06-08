@@ -150,6 +150,9 @@
     activity:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
       '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
+    barChart:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
     upload:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
       '<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>',
@@ -333,7 +336,7 @@
     var _liveTime = ('0' + _d.getHours()).slice(-2) + ':' + ('0' + _d.getMinutes()).slice(-2);
 
     var tr = window.dashboardI18n;
-    var title   = tr ? tr.raw(opts.centerTitle || tr.t('nav.master')) : (opts.centerTitle || 'لوحة التحكم');
+    var title   = tr ? tr.raw(opts.centerTitle || tr.t('nav.master')) : (opts.centerTitle || 'رؤى سريعة');
     var account = tr ? tr.raw(opts.account || window.currentActiveAccountLabel || tr.t('shell.allAccounts')) : (opts.account || window.currentActiveAccountLabel || 'كل الحسابات المشتركة');
     var month   = opts.month       || _defaultMonth;
     var liveLabel = tr ? tr.t('shell.lastUpdateToday') : 'آخر تحديث: اليوم';

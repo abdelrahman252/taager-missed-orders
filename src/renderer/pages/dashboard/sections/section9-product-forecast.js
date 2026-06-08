@@ -1,4 +1,4 @@
-﻿// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // section9-product-forecast.js — Product-Level Smart Forecasting Engine
 // Parity with Account Calculator (Section 7) — same inputs, tooltips, metrics
 // ─────────────────────────────────────────────────────────────────────────────
@@ -712,7 +712,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       var netProfitColor = realNetProfit < 0 ? '#ef4444' : (realNetProfit > 0 ? (isLight ? '#10b981' : '#00e676') : (isLight ? '#6b7280' : 'rgba(255,255,255,0.6)'));
 
       return '<tr style="' + trStyle + '" data-idx="' + absoluteIdx + '" class="s9-row">' +
-        '<td style="padding:12px 16px;font-weight:700;color:#fff;">' + s.name +
+        '<td data-i18n-preserve style="padding:12px 16px;font-weight:700;color:#fff;">' + s.name +
           '<div style="font-size:10px;font-weight:700;color:rgba(255,255,255,.42);margin-top:3px;" dir="ltr">SKU: ' + (s.sku || 'N/A') + '</div>' +
           '<div style="font-size:10px;font-weight:700;color:' + (s.syncedAdSpend ? '#2dd4bf' : '#f59e0b') + ';margin-top:3px;">' + matchMethodLabel(s) + '</div>' +
         '</td>' +
@@ -1030,7 +1030,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       '<div style="padding:20px 24px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">' +
         '<div style="min-width:0;flex:1;overflow:hidden;">' +
           '<div style="font-size:12px;color:#3b82f6;font-weight:700;letter-spacing:1px;margin-bottom:4px;white-space:nowrap;">' + p9Txt('PRODUCT SMART FORECAST', 'مُحاكي التوقعات الذكية') + '</div>' +
-          '<div style="font-size:18px;font-weight:900;color:#fff;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.35;word-break:break-word;" title="' + s.name.replace(/"/g, '&quot;') + '">' + s.name + '</div>' +
+          '<div data-i18n-preserve style="font-size:18px;font-weight:900;color:#fff;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.35;word-break:break-word;" title="' + s.name.replace(/"/g, '&quot;') + '">' + s.name + '</div>' +
           '<div style="font-size:10px;font-weight:700;color:' + (s.syncedAdSpend ? '#2dd4bf' : '#f59e0b') + ';margin-top:5px;">SKU: ' + (s.sku || 'N/A') + ' · ' + matchMethodLabel(s) + '</div>' +
         '</div>' +
         '<div style="flex-shrink:0;margin-top:2px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;">' +

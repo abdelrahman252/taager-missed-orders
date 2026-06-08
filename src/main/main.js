@@ -1797,24 +1797,25 @@ function persistAccountsAfterAdminDelete(nextAccounts) {
 function getLocalCredentialsSnapshot() {
   const rawAccounts = store.get("accounts", null);
   let accounts = rawAccounts || [];
-  const legacyEmail = store.get("easyEmail", "");
   const unlockedAccountIds = store.get("unlockedAccountIds", []);
   const accountsWithStatus = accounts.map(a => ({ ...a, locked: !unlockedAccountIds.includes(a.id) && accounts.length > 0 }));
+  const hasAny = accountsWithStatus.length > 0;
   return {
-    hasCredentials:   accountsWithStatus.length > 0 || !!legacyEmail,
+    hasCredentials:   hasAny,
     accounts:         accountsWithStatus,
     maxAccounts:      licenseStore.get("maxAccounts", 1),
     analyticsEnabled:  licenseStore.get("analyticsEnabled",  true),
     operationsEnabled: licenseStore.get("operationsEnabled", true),
     dashboardEnabled:  licenseStore.get("dashboardEnabled",  false),
     teamLeaderEnabled: licenseStore.get("teamLeaderEnabled", false),
-    easyEmail:        store.get("easyEmail",       ""),
-    easyStore:        store.get("easyStore",       ""),
-    taagerEmail:      store.get("taagerEmail",     store.get("taagerEmail", "")),
-    taagerPhone:      store.get("taagerPhone",     ""),
-    taagerCountry:    store.get("taagerCountry",   store.get("taagerCountry", "sa")),
-    taagerLoginMethod: store.get("taagerLoginMethod", "email"),
-    taagerAffiliateCode: store.get("taagerAffiliateCode", ""),
+    // Only return legacy flat fields when real accounts exist — avoids ghost account resurrection
+    easyEmail:        hasAny ? store.get("easyEmail",       "") : "",
+    easyStore:        hasAny ? store.get("easyStore",       "") : "",
+    taagerEmail:      hasAny ? store.get("taagerEmail",     store.get("taagerEmail", "")) : "",
+    taagerPhone:      hasAny ? store.get("taagerPhone",     "") : "",
+    taagerCountry:    hasAny ? store.get("taagerCountry",   store.get("taagerCountry", "sa")) : "sa",
+    taagerLoginMethod: hasAny ? store.get("taagerLoginMethod", "email") : "email",
+    taagerAffiliateCode: hasAny ? store.get("taagerAffiliateCode", "") : "",
     autoRun:          store.get("autoRun",         false),
     autoRunInterval:  store.get("autoRunInterval", 30),
     autoRunAccountIds: store.get("autoRunAccountIds", []),
@@ -1842,7 +1843,7 @@ ipcMain.handle("get-credentials", async () => {
   const rawAccounts = store.get("accounts", null);
   const maxAccounts = await getMaxAccounts();
   const legacyEmail = store.get("easyEmail", "");
-  const accounts = rawAccounts || [];
+  let accounts = rawAccounts || [];
 
   // Fetch per-account lock status from license_accounts table
   let licenseRows = null;
@@ -1922,15 +1923,15 @@ ipcMain.handle("get-credentials", async () => {
     operationsEnabled: licenseStore.get("operationsEnabled", true),
     dashboardEnabled:  licenseStore.get("dashboardEnabled",  false),
     teamLeaderEnabled: licenseStore.get("teamLeaderEnabled", false),
-    easyEmail:        store.get("easyEmail",       ""),
-    easyStore:        store.get("easyStore",       ""),
-    taagerEmail:        store.get("taagerEmail",       ""),
-    taagerCountry:      store.get("taagerCountry",     "sa"),
-    taagerLoginMethod: store.get("taagerLoginMethod", "email"),
-    taagerEmail:      store.get("taagerEmail",     store.get("taagerEmail", "")),
-    taagerPhone:      store.get("taagerPhone",     ""),
-    taagerCountry:    store.get("taagerCountry",   store.get("taagerCountry", "sa")),
-    taagerAffiliateCode: store.get("taagerAffiliateCode", ""),
+    // Suppress legacy flat fields when accounts array is empty — if we still return
+    // easyEmail here, the renderer's loadAccounts() will resurrect a ghost account.
+    easyEmail:        accountsWithStatus.length > 0 ? store.get("easyEmail",       "") : "",
+    easyStore:        accountsWithStatus.length > 0 ? store.get("easyStore",       "") : "",
+    taagerEmail:      accountsWithStatus.length > 0 ? store.get("taagerEmail",     store.get("taagerEmail", "")) : "",
+    taagerCountry:    accountsWithStatus.length > 0 ? store.get("taagerCountry",   store.get("taagerCountry", "sa")) : "sa",
+    taagerLoginMethod: accountsWithStatus.length > 0 ? store.get("taagerLoginMethod", "email") : "email",
+    taagerPhone:      accountsWithStatus.length > 0 ? store.get("taagerPhone",     "") : "",
+    taagerAffiliateCode: accountsWithStatus.length > 0 ? store.get("taagerAffiliateCode", "") : "",
     autoRun:          store.get("autoRun",         false),
     autoRunInterval:  store.get("autoRunInterval", 30),
     autoRunAccountIds: store.get("autoRunAccountIds", []),
@@ -2135,6 +2136,11 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
     store.set("taagerPhone",    accounts[0].taagerPhone    || "");
     store.set("taagerPassword", accounts[0].taagerPassword || accounts[0].taagerPassword || store.get(`pwd_taager_${accounts[0].id}`, ""));
     store.set("taagerCountry",  accounts[0].taagerCountry  || accounts[0].taagerCountry || "sa");
+  } else {
+    // All accounts deleted — clear legacy flat fields so the renderer can't
+    // resurrect a ghost account from stale easyEmail / taagerEmail values
+    ["easyEmail", "easyPassword", "easyStore", "taagerEmail", "taagerPassword",
+     "taagerCountry", "taagerLoginMethod", "taagerPhone", "taagerAffiliateCode"].forEach(k => store.delete(k));
   }
   // Cache maxAccounts locally
   licenseStore.set("maxAccounts", maxAccounts);
