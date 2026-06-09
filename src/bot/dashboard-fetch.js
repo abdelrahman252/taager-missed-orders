@@ -114,6 +114,53 @@ async function reloadWithNetworkRetries(page, label, options = {}) {
   }
 }
 
+function isOnLoginPage(url) {
+  return (
+    url.includes("/login") ||
+    url.includes("/auth/login") ||
+    url.includes("#/login") ||
+    url.includes("/auth")
+  );
+}
+
+async function debugScreenshot(page, label) {
+  try {
+    const ts = Date.now();
+    const p = require("os").tmpdir() + `/kbot-debug-${label}-${ts}.png`;
+    await page.screenshot({ path: p, fullPage: false });
+    log(`📸 [DEBUG] Screenshot saved: ${p}`);
+    process.send && process.send({ type: "debug-screenshot", path: p, label });
+  } catch (_) {}
+}
+
+async function withSessionGuard(page, actionFn, reloginFn, siteName) {
+  try {
+    const result = await actionFn();
+    const urlAfter = page.url();
+    if (isOnLoginPage(urlAfter)) {
+      log(`⚠️ ${siteName}: action succeeded but page landed on login — SESSION_DESYNC detected`);
+      process.send && process.send({ type: "session-event", site: siteName, event: "session-desync-post-action", url: urlAfter });
+      await debugScreenshot(page, `${siteName}-desync`);
+      await reloginFn();
+      log(`🔄 ${siteName}: retrying after re-login (desync recovery)...`);
+      return await actionFn();
+    }
+    return result;
+  } catch (err) {
+    const url = page.url();
+    const isLoggedOut = isOnLoginPage(url);
+    if (isLoggedOut) {
+      log(`⚠️ ${siteName}: session expired mid-run — re-logging in...`);
+      process.send && process.send({ type: "session-event", site: siteName, event: "session-expired", url });
+      await debugScreenshot(page, `${siteName}-session-expired`);
+      await reloginFn();
+      log(`🔄 ${siteName}: retrying after re-login...`);
+      return await actionFn();
+    }
+    throw err;
+  }
+}
+
 function normalizeIdentityText(value) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -274,6 +321,9 @@ function normalizeTaagerCode(value) {
 }
 
 async function readTaagerIdentity(page) {
+  if (isOnLoginPage(page.url())) {
+    throw new Error("SESSION_EXPIRED: cannot read identity from login page");
+  }
   let identity = await page.evaluate(() => {
     const href = document.querySelector("#complaints-suggestions-link")?.getAttribute("href") || "";
     let merchantId = "";
@@ -638,7 +688,12 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
 
     log(`Dashboard fetch - Taager ${formatDataDay(exportDateFrom)} -> ${formatDataDay(exportDateTo)} (saving created-date range ${formatDataDay(dateFrom)} -> ${formatDataDay(dateTo)})`);
     await taagerLogin(page);
-    const buffer = await exportTaagerOrders(page, exportDateFrom, exportDateTo);
+    const buffer = await withSessionGuard(
+      page,
+      () => exportTaagerOrders(page, exportDateFrom, exportDateTo),
+      () => taagerLogin(page),
+      "Taager"
+    );
     let easyBuffer = null;
     let enrichmentError = "";
     if (DASHBOARD_ENRICHMENT_PROVIDER === "easyorders") {
