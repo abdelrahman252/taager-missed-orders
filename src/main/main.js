@@ -3989,3 +3989,4 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
   mainWindow.webContents.send("bot-run-complete");
   const allOk = results.every(r => r.success);
   return { success: allOk, multiAccount: true, results };
+});
