@@ -545,11 +545,19 @@ async function pickTaagerDateRange(page, dateFrom, dateTo) {
   await pickDateInTaagerCalendar(page, dateFrom);
   await page.waitForTimeout(300);
 
-  if (dateTo) {
+  const now = new Date();
+  const isDateToToday = dateTo &&
+    dateTo.getFullYear() === now.getFullYear() &&
+    dateTo.getMonth() === now.getMonth() &&
+    dateTo.getDate() === now.getDate();
+
+  if (dateTo && !isDateToToday) {
     if ((await toButton.count()) > 0) await toButton.click();
     else await dateButtons.nth(1).click();
     await pickDateInTaagerCalendar(page, dateTo);
     await page.waitForTimeout(300);
+  } else {
+    log(`Taager pickDateRange: dateTo is today (${dateTo ? formatDataDay(dateTo) : "none"}) or empty, leaving "to date" empty.`);
   }
 
   await page.keyboard.press("Escape").catch(() => {});
