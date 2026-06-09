@@ -2684,8 +2684,13 @@ window.renderSection5 = function (mountEl, data, ctx) {
     // Re-render filter bar so pills and dropdown show correct active state
     const filterBarEl = mountEl.querySelector('#s5-filter-bar');
     if (filterBarEl && !options.keepFilterBar) {
+      // Clean up any previous sort-menu document listener before blowing away the DOM
+      if (_sortMenuCleanup) { _sortMenuCleanup(); _sortMenuCleanup = null; }
       filterBarEl.outerHTML = filterBarHTML(list);
       refreshProductControls();
+    } else if (options.keepFilterBar) {
+      // Patch pills and sort controls in-place without rebuilding the filter bar
+      _refreshFilterBarInPlace(list);
     }
 
     const rowsEl  = mountEl.querySelector('#s5-rows');
@@ -2809,6 +2814,60 @@ window.renderSection5 = function (mountEl, data, ctx) {
     }
   }
 
+  // ── In-place filter bar refresh (used when keepFilterBar:true) ─────────────
+  function _refreshFilterBarInPlace(list) {
+    // Patch pill active states
+    const pillsEl = mountEl.querySelector('#s5-status-pills');
+    if (pillsEl) {
+      pillsEl.querySelectorAll('.s5-pill').forEach(function (btn) {
+        const key = btn.dataset.key || 'all';
+        const pill = STATUS_PILLS.find(function (p) { return p.key === key; });
+        const isActive = filterState.statusKey === key;
+        const isAll = key === 'all';
+        if (isAll) {
+          btn.style.fontWeight = isActive ? '800' : '600';
+          btn.style.border = '1px solid ' + (isActive ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.1)');
+          btn.style.background = isActive ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.04)';
+          btn.style.color = isActive ? '#fff' : 'rgba(255,255,255,0.5)';
+          // update count badge
+          var badge = btn.querySelector('span');
+          if (isActive) {
+            var count = backendProductsActive ? backendProductsTotal : (list ? list.length : 0);
+            if (!badge) {
+              badge = document.createElement('span');
+              badge.style.cssText = 'background:#f59e0b;color:#000;font-size:9px;font-weight:900;padding:1px 6px;border-radius:100px;line-height:1.5';
+              btn.appendChild(badge);
+            }
+            badge.textContent = count;
+          } else if (badge) {
+            badge.remove();
+          }
+        } else if (pill) {
+          var dot = btn.querySelector('span');
+          btn.style.fontWeight = isActive ? '800' : '600';
+          btn.style.border = '1px solid ' + (isActive ? pill.color + '60' : 'rgba(255,255,255,0.08)');
+          btn.style.background = isActive ? pill.color + '18' : 'rgba(255,255,255,0.03)';
+          btn.style.color = isActive ? pill.color : 'rgba(255,255,255,0.45)';
+          if (dot) dot.style.background = isActive ? pill.color : 'rgba(255,255,255,0.2)';
+        }
+      });
+    }
+    // Patch sort label
+    var sortLabel = mountEl.querySelector('#s5-sort-label');
+    if (sortLabel) sortLabel.textContent = activeSortLabel();
+    // Patch sort menu active states
+    var existingMenu = document.getElementById('s5-body-sort-menu');
+    if (existingMenu && mountEl._s5SortMenu === existingMenu) {
+      existingMenu.querySelectorAll('.s5-sort-option').forEach(function (btn) {
+        var isActive = sortState.field === btn.dataset.value;
+        btn.classList.toggle('active', isActive);
+        btn.style.background = isActive ? 'rgba(245,158,11,0.12)' : 'transparent';
+        btn.style.color = isActive ? '#f59e0b' : 'rgba(255,255,255,0.65)';
+      });
+    }
+    syncSearchClearButton();
+  }
+
   function refreshProductControls() {
     const searchEl = mountEl.querySelector('#s5-search');
     if (searchEl) ensureSearchClearButton(searchEl);
@@ -2819,17 +2878,19 @@ window.renderSection5 = function (mountEl, data, ctx) {
     // Only rebuild from scratch on first call or if it has been removed from DOM.
     var existingMenu = document.getElementById('s5-body-sort-menu');
     if (existingMenu && mountEl._s5SortMenu === existingMenu) {
-      // Just refresh the active state of each option button
+      // Refresh active state + sort label
       existingMenu.querySelectorAll('.s5-sort-option').forEach(function (btn) {
         var isActive = sortState.field === btn.dataset.value;
         btn.classList.toggle('active', isActive);
         btn.style.background = isActive ? 'rgba(245,158,11,0.12)' : 'transparent';
         btn.style.color = isActive ? '#f59e0b' : 'rgba(255,255,255,0.65)';
       });
+      var sortLabel = mountEl.querySelector('#s5-sort-label');
+      if (sortLabel) sortLabel.textContent = activeSortLabel();
       return; // Skip the expensive rebuild
     }
 
-    if (_sortMenuCleanup) _sortMenuCleanup();
+    if (_sortMenuCleanup) { _sortMenuCleanup(); _sortMenuCleanup = null; }
     const staleMenu = document.getElementById('s5-body-sort-menu');
     if (staleMenu) staleMenu.remove();
 
@@ -2854,7 +2915,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
       sortState.dir = sortState.field === 'default' ? 'asc' : 'desc';
       currentPage = 1;
       closeProductSortMenu();
-      renderProductPage();
+      renderProductPage({ keepFilterBar: true });
+      updateSortArrows();
     });
 
     function outsideClick(event) {
@@ -2894,6 +2956,9 @@ window.renderSection5 = function (mountEl, data, ctx) {
   }
 
   function bindFilterBar() {
+    // bindFilterBar is kept for legacy compatibility but the sort menu
+    // is now managed entirely by refreshProductControls.
+    // Just wire up the search input debounce here.
     if (_sortMenuCleanup) {
       _sortMenuCleanup();
       _sortMenuCleanup = null;
@@ -2932,150 +2997,11 @@ window.renderSection5 = function (mountEl, data, ctx) {
     syncSearchClearButton();
     bindProductCurrencySelect();
 
-
-    // ── Custom sort dropdown - body-teleported to escape overflow:hidden ──────
-    // Remove any stale body-menu from a previous render cycle
-    const staleMenu = document.getElementById('s5-body-sort-menu');
-    if (staleMenu) staleMenu.remove();
-
-    const trigger = mountEl.querySelector('#s5-sort-trigger');
-
-    // Build the floating menu and append to <body>
-    const sortMenuHTML2 = SORT_OPTIONS.map(opt => {
-      const isActive = sortState.field === opt.value;
-      return `<div class="s5-sort-option ${isActive ? 'active' : ''}" data-value="${opt.value}"
-        style="display:flex;align-items:center;gap:10px;padding:10px 14px;
-               font-size:12px;font-weight:600;
-               color:${isActive ? '#f59e0b' : 'rgba(255,255,255,0.65)'};
-               cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04);
-               font-family:'Cairo',sans-serif;direction:${isAr ? 'rtl' : 'ltr'};
-               background:${isActive ? 'rgba(245,158,11,0.12)' : 'transparent'};
-               transition:background 0.15s,color 0.15s">
-        <span style="width:6px;height:6px;border-radius:50%;flex-shrink:0;background:#f59e0b;
-                     opacity:${isActive ? 1 : 0};transition:opacity 0.15s"></span>
-        <span style="font-size:14px;line-height:1">${opt.icon}</span>
-        <span>${opt.label}</span>
-        ${isActive ? `<svg style="margin-right:auto;flex-shrink:0" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>` : ''}
-      </div>`;
-    }).join('');
-
-    const bodyMenu = document.createElement('div');
-    bodyMenu.id = 's5-body-sort-menu';
-    bodyMenu.innerHTML = `
-      <div style="padding:10px 14px 8px;border-bottom:1px solid rgba(255,255,255,0.06);
-                  font-size:10px;font-weight:700;color:rgba(255,255,255,0.3);
-                  text-transform:uppercase;letter-spacing:0.6px;direction:${isAr ? 'rtl' : 'ltr'}">${s5Txt('Sort By', 'ترتيب حسب')}</div>
-      ${sortMenuHTML2}`;
-    bodyMenu.style.cssText = `
-      position:fixed;
-      background:#0f1523;
-      border:1px solid rgba(255,255,255,0.14);
-      border-radius:12px;
-      overflow:hidden;
-      z-index:2147483647;
-      box-shadow:0 20px 60px rgba(0,0,0,0.85),0 0 0 1px rgba(255,255,255,0.04);
-      opacity:0;
-      transform:translateY(-8px) scale(0.97);
-      pointer-events:none;
-      transition:opacity 0.2s ease,transform 0.2s cubic-bezier(0.4,0,0.2,1);
-      min-width:180px;
-      direction:${isAr ? 'rtl' : 'ltr'};
-    `;
-    document.body.appendChild(bodyMenu);
-
-    function positionMenu() {
-      if (!trigger) return;
-      const rect = trigger.getBoundingClientRect();
-      bodyMenu.style.top  = (rect.bottom + 6) + 'px';
-      // Align right edge of menu to right edge of trigger
-      const menuW = bodyMenu.offsetWidth || 180;
-      bodyMenu.style.left = (rect.right - menuW) + 'px';
-    }
-
-    function openMenu() {
-      if (!trigger) return;
-      positionMenu();
-      bodyMenu.style.opacity       = '1';
-      bodyMenu.style.transform     = 'translateY(0) scale(1)';
-      bodyMenu.style.pointerEvents = 'all';
-      trigger.classList.add('open');
-      _dropdownOpen = true;
-    }
-    function closeMenu() {
-      bodyMenu.style.opacity       = '0';
-      bodyMenu.style.transform     = 'translateY(-8px) scale(0.97)';
-      bodyMenu.style.pointerEvents = 'none';
-      if (trigger) trigger.classList.remove('open');
-      _dropdownOpen = false;
-    }
-    function toggleMenu() {
-      if (_dropdownOpen) closeMenu(); else openMenu();
-    }
-
-    if (trigger) {
-      trigger.addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(); });
-      trigger.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMenu(); }
-        if (e.key === 'Escape') closeMenu();
-      });
-    }
-
-    // Outside-click closes menu; also clean up body menu when section unmounts
-    function s5OutsideClick(e) {
-      const dropdown = mountEl.querySelector('#s5-sort-dropdown');
-      if (dropdown && !dropdown.contains(e.target) && !bodyMenu.contains(e.target)) closeMenu();
-      if (!mountEl.isConnected) {
-        if (_sortMenuCleanup) _sortMenuCleanup();
-      }
-    }
-    document.addEventListener('click', s5OutsideClick);
-    _sortMenuCleanup = function () {
-      document.removeEventListener('click', s5OutsideClick);
-      if (bodyMenu && bodyMenu.parentNode) bodyMenu.remove();
-      if (trigger) trigger.classList.remove('open');
-      _dropdownOpen = false;
-    };
-
-    // Option click
-    bodyMenu.querySelectorAll('.s5-sort-option').forEach(opt => {
-      opt.addEventListener('mouseenter', function() {
-        this.style.background = 'rgba(255,255,255,0.06)';
-        this.style.color      = '#fff';
-      });
-      opt.addEventListener('mouseleave', function() {
-        const isActive = sortState.field === this.dataset.value;
-        this.style.background = isActive ? 'rgba(245,158,11,0.12)' : 'transparent';
-        this.style.color      = isActive ? '#f59e0b' : 'rgba(255,255,255,0.65)';
-      });
-      opt.addEventListener('click', function(e) {
-        e.stopPropagation();
-        const val = this.dataset.value;
-        if (val) {
-          sortState.field = val;
-          sortState.dir   = 'desc';
-          currentPage     = 1;
-          closeMenu();
-          renderProductPage();
-          updateSortArrows();
-        }
-      });
-    });
-
-    // Direction toggle
-    const dirBtn = mountEl.querySelector('#s5-sort-dir-btn');
-    if (dirBtn) {
-      dirBtn.addEventListener('mouseenter', () => {
-        dirBtn.style.background  = 'rgba(255,255,255,0.08)';
-        dirBtn.style.borderColor = 'rgba(255,255,255,0.2)';
-        dirBtn.style.color       = '#fff';
-      });
-      dirBtn.addEventListener('mouseleave', () => {
-        dirBtn.style.background  = 'rgba(255,255,255,0.04)';
-        dirBtn.style.borderColor = 'rgba(255,255,255,0.1)';
-        dirBtn.style.color       = 'rgba(255,255,255,0.6)';
-      });
-    }
+    // Delegate sort menu creation to refreshProductControls (already called by renderProductPage)
+    refreshProductControls();
   }
+
+
   refreshProductControls();
 
   // ── Expand buttons ────────────────────────────────────────────────────────
@@ -3242,13 +3168,10 @@ window.renderSection5 = function (mountEl, data, ctx) {
         else if (key === 'canceled') sortState = { field: 'canceledCount', dir: 'desc' };
         else if (key === 'delivered') sortState = { field: 'deliveredCount', dir: 'desc' };
         else sortState = { field: 'default', dir: 'asc' };
-        
-        const labelEl = mountEl.querySelector('#s5-sort-label');
-        if (labelEl) labelEl.textContent = activeSortLabel();
         currentPage = 1;
         const headers = mountEl.querySelector('.s5-header-cols');
         if (headers) headers.outerHTML = columnHeadersHTML();
-        renderProductPage();
+        renderProductPage({ keepFilterBar: true });
         updateSortArrows();
         return;
       }
@@ -3262,10 +3185,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
           sortState.field = field;
           sortState.dir   = 'desc';
         }
-        const labelEl = mountEl.querySelector('#s5-sort-label');
-        if (labelEl) labelEl.textContent = activeSortLabel();
         currentPage = 1;
-        renderProductPage();
+        renderProductPage({ keepFilterBar: true });
         updateSortArrows();
         return;
       }
@@ -3273,17 +3194,15 @@ window.renderSection5 = function (mountEl, data, ctx) {
       if (target.closest('#s5-sort-dir-btn')) {
         sortState.dir = sortState.dir === 'desc' ? 'asc' : 'desc';
         currentPage = 1;
-        renderProductPage();
+        renderProductPage({ keepFilterBar: true });
         updateSortArrows();
         return;
       }
 
       if (target.closest('#s5-clear-sort')) {
         sortState = { field: 'default', dir: 'asc' };
-        const labelEl = mountEl.querySelector('#s5-sort-label');
-        if (labelEl) labelEl.textContent = activeSortLabel();
         currentPage = 1;
-        renderProductPage();
+        renderProductPage({ keepFilterBar: true });
         updateSortArrows();
         return;
       }
