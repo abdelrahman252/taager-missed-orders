@@ -798,6 +798,21 @@ function createDashboardQueryService(options) {
         const city = rowCity(row);
         if (city) product.cities[city] = (product.cities[city] || 0) + 1;
       });
+      const isExpected = text(input && input.deliveredDateMode) === "expected";
+      let globalExpectedNdrRate = 0.35;
+      if (isExpected) {
+        let globalNdrDelivered = 0;
+        let globalNdrBase = 0;
+        const hasNdrPeriod = !!(ndrFrom && ndrTo);
+        Array.from(products.values()).forEach((product) => {
+          globalNdrDelivered += hasNdrPeriod ? product.ndrDeliveredCount : product.deliveredCount;
+          globalNdrBase += hasNdrPeriod ? product.ndrBaseCount : product.netOrderCount;
+        });
+        if (globalNdrBase > 0) {
+          globalExpectedNdrRate = globalNdrDelivered / globalNdrBase;
+        }
+      }
+
       let list = Array.from(products.values()).map((product) => {
         // Bug A fix: use confirmedCount (orders in CONFIRMED_BUCKETS) as the DR denominator,
         // matching the frontend aggregator. The old formula (totalOrders - pendingCount)
@@ -822,18 +837,35 @@ function createDashboardQueryService(options) {
         // Bug C fix: add deliveryPct (delivered / totalOrders) which the frontend
         // mapper and AI engine both use as a fallback when drRate is absent.
         const deliveryPct  = product.netOrderCount ? parseFloat((product.deliveredCount / product.netOrderCount * 100).toFixed(1)) : 0;
+
+        const ndrRate = ndrBase ? (ndrDelivered / ndrBase) : globalExpectedNdrRate;
+        const avgCommission = product.deliveredCount ? (product.commission / product.deliveredCount) : 0;
+
+        const expectedDeliveries = Math.round(product.totalOrderCount * ndrRate);
+        const expectedCommission = expectedDeliveries * avgCommission;
+
+        const deliveriesVal = isExpected ? expectedDeliveries : product.deliveredCount;
+        const commissionVal = isExpected ? expectedCommission : product.commission;
+
+        const ndrPctVal = ndrRate * 100;
+        const drRateVal = isExpected
+          ? (confirmationBase > 0 ? (expectedDeliveries / confirmationBase * 100) : 0)
+          : (drBase ? ndrDelivered / drBase * 100 : 0);
+        const deliveryPctVal = isExpected
+          ? (product.totalOrderCount > 0 ? (expectedDeliveries / product.totalOrderCount * 100) : 0)
+          : (product.netOrderCount ? (product.deliveredCount / product.netOrderCount * 100) : 0);
+
         return {
           ...clean,
           placedCount: product.totalOrderCount,
           totalOrders: product.totalOrderCount,
-          deliveries: product.deliveredCount,
-          revenue: product.commission,
-          ndrPct: ndrBase ? ndrDelivered / ndrBase * 100 : 0,
-          // Bug A+B fix: DR uses the correct confirmed base (not totalOrders-pendingCount)
-          // and respects the ndrPeriod cohort when provided.
-          drRate: drBase ? ndrDelivered / drBase * 100 : 0,
-          // Bug C fix: deliveryPct is the raw delivered/total ratio the frontend fallbacks to.
-          deliveryPct,
+          deliveries: deliveriesVal,
+          deliveredCount: deliveriesVal,
+          revenue: commissionVal,
+          commission: commissionVal,
+          ndrPct: ndrPctVal,
+          drRate: drRateVal,
+          deliveryPct: deliveryPctVal,
           netOrderCount: product.netOrderCount,
           confirmationPct: statusRates.confirmationPct,
           cancelPct: statusRates.cancelPct,
@@ -899,7 +931,7 @@ function createDashboardQueryService(options) {
           uniqueProducts: list.length,
           totalOrders: globalNetOrderKeys.size,
           totalPieces: list.reduce((sum, product) => sum + product.totalPieces, 0),
-          totalCommission: globalDeliveredCommission,
+          totalCommission: isExpected ? list.reduce((sum, p) => sum + p.commission, 0) : globalDeliveredCommission,
           deliveredOrders: list.reduce((sum, product) => sum + product.deliveredCount, 0),
           campaignSpend: list.reduce((sum, product) => sum + product.allocatedAdSpend, 0),
           ndrPct: list.reduce((sum, product) => sum + product.netOrderCount, 0)

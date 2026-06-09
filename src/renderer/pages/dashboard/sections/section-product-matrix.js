@@ -190,8 +190,8 @@
         '</div>';
       }
 
-      /* Net Orders = delivered orders for this product */
-      var netOrders = p.deliveredCount || 0;
+      /* Net Orders = net placed orders for this product */
+      var netOrders = p.netOrderCount !== undefined ? p.netOrderCount : (p.placedCount || 0);
       var netColor = window.dashboardRateColor ? window.dashboardRateColor(overallDr) : drColor;
 
       var rowEl = document.createElement('div');

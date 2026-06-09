@@ -310,7 +310,7 @@ function exactSkuMatch(campaign, products) {
   products.forEach((product) => {
     if (accountId && product.accountId && product.accountId !== accountId) return;
     const prodCountry = product.country && product.country !== "unknown" ? product.country : "";
-    if (!accountId && country && prodCountry && prodCountry !== country) return;
+    if (country && prodCountry && prodCountry !== country) return;
     const skus = productSkus(product.sku);
     skus.forEach((sku) => {
       if (campaignText.indexOf(" " + sku + " ") !== -1) {

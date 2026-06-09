@@ -859,10 +859,14 @@ window.renderSection5 = function (mountEl, data, ctx) {
     var expectedNdrRate = null;
     if (window.isExpectedNdrMode && window.isExpectedNdrMode()) {
       var globalExpectedNdrRate = (data && data.overview && data.overview.deliveryRate != null) ? (data.overview.deliveryRate / 100) : 0.35;
-      var productInList = data && data.products && data.products.rankedList && data.products.rankedList.find(function (p) {
-        return String(p.sku || '').toLowerCase() === String(row.sku || '').toLowerCase();
-      });
-      expectedNdrRate = productInList ? (productInList.ndrPct / 100) : globalExpectedNdrRate;
+      if (row.ndrPct != null) {
+        expectedNdrRate = row.ndrPct / 100;
+      } else {
+        var productInList = data && data.products && data.products.rankedList && data.products.rankedList.find(function (p) {
+          return String(p.sku || '').toLowerCase() === String(row.sku || '').toLowerCase();
+        });
+        expectedNdrRate = productInList ? (productInList.ndrPct / 100) : globalExpectedNdrRate;
+      }
     }
 
     const placedCountVal = Number(row.placedCount || row.totalOrders || 0);
@@ -1096,7 +1100,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
   // ── Health row styling ────────────────────────────────────────────────────
   function healthRowStyle(p) {
-    if (p.deliveredCount === 0) {
+    const totalOrders = p.placedCount || p.statusTotalCount || p.totalOrderCount || 0;
+    if (totalOrders === 0) {
       return { border: 'rgba(255,255,255,0.05)', shadow: 'none', bg: 'rgba(255,255,255,0.012)', opacity: '0.45' };
     }
     if (p.rank <= 3) {
@@ -1123,9 +1128,10 @@ window.renderSection5 = function (mountEl, data, ctx) {
     { bg:'linear-gradient(135deg,#fb923c,#b45309)', shadow:'0 0 8px rgba(251,146,60,0.4)',   color:'#fff'    },
     { bg:'rgba(255,255,255,0.07)',                   shadow:'none',                            color:'rgba(255,255,255,0.4)' },
   ];
-  function rankBadgeHTML(rank, deliveredCount) {
+  function rankBadgeHTML(rank, deliveredCount, placedCount) {
     const hasDeliveries = (deliveredCount || 0) > 0;
-    if (!hasDeliveries) {
+    const hasOrders = (placedCount || 0) > 0;
+    if (!hasDeliveries && !hasOrders) {
       return `<div style="width:32px;height:32px;border-radius:50%;flex-shrink:0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.25);font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center">${rank}</div>`;
     }
     const cfg = (rank <= 3) ? RANK_CFG[rank - 1] : RANK_CFG[3];
@@ -1184,6 +1190,33 @@ window.renderSection5 = function (mountEl, data, ctx) {
     }).join('');
   }
 
+  // ── Pre-built per-product geoProductMap index (city name → cell) ─────────
+  // Built lazily and cached so citiesHTML() does O(1) lookups instead of
+  // O(cities) Object.keys().find() on every render.
+  var _gpmProductIndexCache = null; // { productKey: { lowerCityName: cell } }
+  var _gpmProductIndexGpm = null;   // reference to detect when gpm changes
+
+  function _getGpmProductIndex(gpm, prodKey) {
+    if (!gpm) return null;
+    if (gpm !== _gpmProductIndexGpm) {
+      // geoProductMap changed – clear cache
+      _gpmProductIndexCache = {};
+      _gpmProductIndexGpm = gpm;
+    }
+    if (!_gpmProductIndexCache) _gpmProductIndexCache = {};
+    if (_gpmProductIndexCache[prodKey] !== undefined) return _gpmProductIndexCache[prodKey];
+    // Build index for this product key across all cities
+    var index = {};
+    var cities = Object.keys(gpm);
+    for (var ci = 0; ci < cities.length; ci++) {
+      var cityKey = cities[ci];
+      var cell = gpm[cityKey][prodKey];
+      if (cell) index[cityKey] = cell;
+    }
+    _gpmProductIndexCache[prodKey] = index;
+    return index;
+  }
+
   function citiesHTML(p) {
     if (!p.cityBreakdown || !p.cityBreakdown.length) return `<div style="color:rgba(255,255,255,0.3);font-size:12px">${s5Txt('No data', 'لا توجد بيانات')}</div>`;
     const topCities = p.cityBreakdown.slice(0, 5);
@@ -1192,7 +1225,9 @@ window.renderSection5 = function (mountEl, data, ctx) {
     // Pull per-city NDR/delivered for this product from geoProductMap
     const _geoD = window.dashboardGeoData;
     const _gpm  = _geoD && _geoD.geo && _geoD.geo.geoProductMap;
-    const _prodKey = p.key || p.sku || p.name || '';
+    const _prodKey = (p.key || p.sku || p.name || '').toLowerCase();
+    // O(1) lookup index (city name → cell for this product)
+    const _prodIndex = _gpm ? _getGpmProductIndex(_gpm, _prodKey) : null;
 
   function _getCityStats(cityRow) {
     var cityName = cityRow && cityRow.name ? cityRow.name : cityRow;
@@ -1213,19 +1248,24 @@ window.renderSection5 = function (mountEl, data, ctx) {
           : (netOrders ? Number(cityRow.delivered || 0) / netOrders * 100 : 0)
       };
     }
-      if (!_gpm) return null;
-      var cell = _gpm[cityName] && _gpm[cityName][_prodKey];
-      if (!cell) {
-        const lc = cityName.toLowerCase();
-        const found = Object.keys(_gpm).find(k => k.toLowerCase().indexOf(lc) !== -1 || lc.indexOf(k.toLowerCase()) !== -1);
-        cell = found && _gpm[found][_prodKey];
+    if (!_prodIndex) return null;
+    // O(1) direct hit
+    var cityLower = cityName.toLowerCase();
+    var cell = _prodIndex[cityLower] || _prodIndex[cityName];
+    if (!cell) {
+      // Fuzzy: check if any index key contains / is contained by cityName
+      var keys = Object.keys(_prodIndex);
+      for (var ki = 0; ki < keys.length; ki++) {
+        var k = keys[ki];
+        if (k.indexOf(cityLower) !== -1 || cityLower.indexOf(k) !== -1) { cell = _prodIndex[k]; break; }
       }
-      if (!cell || (!cell.orders && !cell.delivered)) return null;
-      const confirmed = cell.confirmed || 0;
-      const confirmationRate = cell.orders > 0 ? Math.round(confirmed / cell.orders * 1000) / 10 : null;
-      const ndr = cell.orders > 0 ? Math.round((cell.delivered || 0) / cell.orders * 1000) / 10 : null;
-      return { confirmed, confirmationRate, delivered: cell.delivered || 0, ndr };
     }
+    if (!cell || (!cell.orders && !cell.delivered)) return null;
+    const confirmed = cell.confirmed || 0;
+    const confirmationRate = cell.orders > 0 ? Math.round(confirmed / cell.orders * 1000) / 10 : null;
+    const ndr = cell.orders > 0 ? Math.round((cell.delivered || 0) / cell.orders * 1000) / 10 : null;
+    return { confirmed, confirmationRate, delivered: cell.delivered || 0, ndr };
+  }
 
     const headerRow = `<div style="display:grid;grid-template-columns:1fr 42px 42px 42px 42px 42px;gap:5px;
       padding:3px 6px 6px;margin-bottom:2px;border-bottom:1px solid rgba(255,255,255,0.06);">
@@ -1424,8 +1464,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
       '<div style="display:grid;gap:12px;">' +
         /* AI Advisor — full width */
         (aiHtml ? '<div style="' + cardStyle + '">' + aiHtml + '</div>' : '') +
-        /* Row 1: Funnel | Top Cities */
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+        /* Row 1: Funnel | Top Cities | Quantity Distribution */
+        '<div class="s5-quick-analysis-grid" style="display:grid;grid-template-columns:repeat(3, 1fr);gap:12px;">' +
           '<div style="' + cardStyle + '">' +
             '<div style="' + labelStyle + '">' + s5Txt('Order Funnel', 'مسار الطلبات') + '</div>' +
             funnelHTML(p) +
@@ -1434,13 +1474,12 @@ window.renderSection5 = function (mountEl, data, ctx) {
             '<div style="' + labelStyle + '">' + s5Txt('Top Cities', 'أبرز المدن') + '</div>' +
             citiesHTML(p) +
           '</div>' +
+          '<div style="' + cardStyle + '">' +
+            '<div style="' + labelStyle + '">' + s5Txt('Quantity Distribution', 'توزيع الكميات') + '</div>' +
+            piecesBreakdownHTML(p) +
+          '</div>' +
         '</div>' +
-        /* Row 2: Quantity Distribution — single card, constrained width */
-        '<div style="' + cardStyle + 'max-width:100%">' +
-          '<div style="' + labelStyle + '">' + s5Txt('Quantity Distribution', 'توزيع الكميات') + '</div>' +
-          piecesBreakdownHTML(p) +
-        '</div>' +
-        /* Row 3: Top Cities by Quantity — full width */
+        /* Row 2: Top Cities by Quantity — full width */
         '<div style="' + cardStyle + '">' +
           '<div style="' + labelStyle + '">' + s5Txt('Top Cities by Quantity', 'أبرز المدن حسب الكمية') + '</div>' +
           quantityCitiesHTML(p) +
@@ -1536,7 +1575,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
       <!-- Col 1: Identity -->
       <div class="s5-cell s5-cell-identity" style="flex:0 0 200px;min-width:200px;padding:10px 10px;display:flex;align-items:center;gap:9px">
-        ${rankBadgeHTML(p.rank, p.deliveredCount)}
+        ${rankBadgeHTML(p.rank, p.deliveredCount, p.placedCount || p.statusTotalCount || p.totalOrderCount)}
         <div style="text-align:start;min-width:0">
           <div class="s5-product-title s5-product-name-edit" data-i18n-preserve data-product-sku="${attrData(p.sku || productKey)}" data-product-name="${attrData(p.name || '')}" title="${attrData(p.name || '')}" style="font-size:14px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">${escData(p.name)}</div>
           <button type="button" class="s5-product-name-edit" data-product-sku="${attrData(p.sku || productKey)}" data-product-name="${attrData(p.name || '')}" style="margin-top:4px;background:transparent;border:0;color:#38bdf8;font-size:10px;font-weight:800;cursor:pointer;padding:0">${s5Txt('Edit name', 'تعديل الاسم')}</button>
@@ -2239,11 +2278,14 @@ window.renderSection5 = function (mountEl, data, ctx) {
       .s5-qty-city-grid {
         grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
       }
+      .s5-quick-analysis-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+      }
       @media (max-width: 1180px) {
-        .s5-qty-city-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+        .s5-qty-city-grid, .s5-quick-analysis-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
       }
       @media (max-width: 760px) {
-        .s5-qty-city-grid { grid-template-columns: 1fr !important; }
+        .s5-qty-city-grid, .s5-quick-analysis-grid { grid-template-columns: 1fr !important; }
       }
 
       #s5-search:focus {
@@ -2514,6 +2556,10 @@ window.renderSection5 = function (mountEl, data, ctx) {
           min-width: 0;
         }
       }
+      @keyframes s5spin {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+      }
     </style>
     <div class="s5-root dash-scroll" dir="${isAr ? 'rtl' : 'ltr'}" style="flex:1 1 auto;display:flex;flex-direction:column;background:#080b12;color:#fff;font-family:'Cairo',sans-serif;overflow-y:auto;overflow-x:hidden;height:100%;min-height:0">
 
@@ -2592,18 +2638,44 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
   // ── FIX 3: renderProductPage re-renders filter bar + pills ────────────────
   let pageRenderToken = 0;
+  let _scheduleRenderTimer = null;
   function scheduleProductPageRender(options) {
-    renderProductPage(options || { keepFilterBar: true });
+    if (_scheduleRenderTimer) clearTimeout(_scheduleRenderTimer);
+    _scheduleRenderTimer = setTimeout(function () {
+      _scheduleRenderTimer = null;
+      renderProductPage(options || { keepFilterBar: true });
+    }, 0);
   }
 
   function renderProductPage(options) {
     options = options || {};
     if (backendProductsEnabled && !options.backendReady) {
-      requestBackendProductPage(false).then(function (ok) {
-        if (ok && mountEl.isConnected && mountEl._s5RenderToken === renderToken) {
-          renderProductPage(Object.assign({}, options, { backendReady: true }));
+      const params = backendProductParams();
+      const key = JSON.stringify(params);
+      const isCached = backendProductsActive && backendProductsQueryKey === key;
+      if (isCached) {
+        options.backendReady = true;
+      } else {
+        // Pre-render the filter bar so clicked pills/options immediately show active state
+        const filterBarEl = mountEl.querySelector('#s5-filter-bar');
+        if (filterBarEl && !options.keepFilterBar) {
+          const list = currentList();
+          filterBarEl.outerHTML = filterBarHTML(list);
+          refreshProductControls();
         }
-      });
+
+        requestBackendProductPage(false).then(function (ok) {
+          if (mountEl.isConnected && mountEl._s5RenderToken === renderToken) {
+            renderProductPage(Object.assign({}, options, { backendReady: true }));
+          }
+        });
+
+        const rowsEl = mountEl.querySelector('#s5-rows');
+        if (rowsEl) {
+          rowsEl.style.opacity = '0.5';
+        }
+        return;
+      }
     }
     const token = ++pageRenderToken;
     const list = currentList();
@@ -2620,6 +2692,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
     const pagerEl = mountEl.querySelector('#s5-pagination-wrap');
     if (!mountEl.isConnected || mountEl._s5RenderToken !== renderToken || token !== pageRenderToken) return;
     if (rowsEl) {
+      rowsEl.style.opacity = '1';
       if (visibleProducts.length === 0) {
         rowsEl.innerHTML = `
           <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;margin-bottom:12px;">
@@ -2642,6 +2715,27 @@ window.renderSection5 = function (mountEl, data, ctx) {
     updateSortArrows();
     _bindProductRowClicks();
     if (_s5SelectedProductKey) _selectS5Row(_s5SelectedProductKey);
+
+    // ── Eager prefetch: load backend details for all visible products now ─────
+    // So when a user clicks any row, loadBackendProductDetails returns from
+    // cache (Promise.resolve) instead of firing a real query.
+    if (window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.query === 'function') {
+      var _prefetchKeys = visibleProducts
+        .filter(function (p) { return p && p.key && !backendProductDetailsCache.has(p.key); })
+        .map(function (p) { return p.key; });
+      if (_prefetchKeys.length) {
+        var _doPrefetch = function () {
+          if (mountEl.isConnected && mountEl._s5RenderToken === renderToken) {
+            loadBackendProductDetails(_prefetchKeys);
+          }
+        };
+        if (typeof requestIdleCallback === 'function') {
+          requestIdleCallback(_doPrefetch, { timeout: 800 });
+        } else {
+          setTimeout(_doPrefetch, 100);
+        }
+      }
+    }
   }
 
   function syncSearchClearButton() {
@@ -2721,6 +2815,20 @@ window.renderSection5 = function (mountEl, data, ctx) {
     syncSearchClearButton();
     bindProductCurrencySelect();
 
+    // Reuse the existing sort menu instead of destroying and recreating it every time.
+    // Only rebuild from scratch on first call or if it has been removed from DOM.
+    var existingMenu = document.getElementById('s5-body-sort-menu');
+    if (existingMenu && mountEl._s5SortMenu === existingMenu) {
+      // Just refresh the active state of each option button
+      existingMenu.querySelectorAll('.s5-sort-option').forEach(function (btn) {
+        var isActive = sortState.field === btn.dataset.value;
+        btn.classList.toggle('active', isActive);
+        btn.style.background = isActive ? 'rgba(245,158,11,0.12)' : 'transparent';
+        btn.style.color = isActive ? '#f59e0b' : 'rgba(255,255,255,0.65)';
+      });
+      return; // Skip the expensive rebuild
+    }
+
     if (_sortMenuCleanup) _sortMenuCleanup();
     const staleMenu = document.getElementById('s5-body-sort-menu');
     if (staleMenu) staleMenu.remove();
@@ -2794,12 +2902,18 @@ window.renderSection5 = function (mountEl, data, ctx) {
     const searchEl = mountEl.querySelector('#s5-search');
     if (searchEl) {
       ensureSearchClearButton(searchEl);
+      var _searchDebounce = null;
       searchEl.addEventListener('input', function() {
         const val = this.value.trim();
         filterState.search = val;
         currentPage = 1;
         syncSearchClearButton();
-        renderProductPage({ keepFilterBar: true });
+        // Debounce: wait 120ms after last keystroke before re-rendering
+        if (_searchDebounce) clearTimeout(_searchDebounce);
+        _searchDebounce = setTimeout(function () {
+          _searchDebounce = null;
+          renderProductPage({ keepFilterBar: true });
+        }, 120);
       });
     }
 
@@ -2950,20 +3064,6 @@ window.renderSection5 = function (mountEl, data, ctx) {
     // Direction toggle
     const dirBtn = mountEl.querySelector('#s5-sort-dir-btn');
     if (dirBtn) {
-      dirBtn.addEventListener('click', () => {
-        sortState.dir = sortState.dir === 'desc' ? 'asc' : 'desc';
-        const descArrow = '<path d="M12 20V4M5 13l7 7 7-7"/>';
-        const ascArrow  = '<path d="M12 4v16M5 11l7-7 7 7"/>';
-        const svgEl = dirBtn.querySelector('svg');
-        if (svgEl) svgEl.innerHTML = sortState.dir === 'desc' ? descArrow : ascArrow;
-        dirBtn.title = sortState.dir === 'desc' ? s5Txt('Ascending', 'تصاعدي') : s5Txt('Descending', 'تنازلي');
-        dirBtn.style.color = 'rgba(255,255,255,0.6)';
-        dirBtn.style.borderColor = 'rgba(255,255,255,0.1)';
-        dirBtn.style.background = 'rgba(255,255,255,0.04)';
-        currentPage = 1;
-        renderProductPage();
-        updateSortArrows();
-      });
       dirBtn.addEventListener('mouseenter', () => {
         dirBtn.style.background  = 'rgba(255,255,255,0.08)';
         dirBtn.style.borderColor = 'rgba(255,255,255,0.2)';
@@ -2975,68 +3075,26 @@ window.renderSection5 = function (mountEl, data, ctx) {
         dirBtn.style.color       = 'rgba(255,255,255,0.6)';
       });
     }
-
-    const clearSortBtn = mountEl.querySelector('#s5-clear-sort');
-    if (clearSortBtn) {
-      clearSortBtn.addEventListener('click', () => {
-        sortState.field = 'default';
-        sortState.dir = 'asc';
-        currentPage = 1;
-        renderProductPage();
-        updateSortArrows();
-      });
-    }
-
-    // FIX 3: Status pills - active state now visible because filterBarHTML re-renders
-    mountEl.querySelectorAll('.s5-pill').forEach(pill => {
-      pill.addEventListener('click', function(e) {
-        e.preventDefault();
-        const key = e.currentTarget.dataset.key || this.dataset.key;
-        filterState.statusKey = key;
-        
-        if (key === 'shipping') { sortState.field = 'shippingCount'; sortState.dir = 'desc'; }
-        else if (key === 'processing') { sortState.field = 'processingCount'; sortState.dir = 'desc'; }
-        else if (key === 'failed') { sortState.field = 'failedCount'; sortState.dir = 'desc'; }
-        else if (key === 'canceled') { sortState.field = 'canceledCount'; sortState.dir = 'desc'; }
-        else if (key === 'delivered') { sortState.field = 'deliveredCount'; sortState.dir = 'desc'; }
-        else { sortState.field = 'default'; sortState.dir = 'asc'; }
-
-        currentPage = 1;
-        renderProductPage(); // re-renders entire filter bar including pills
-        
-        // Ensure column headers refresh to show the newly sorted column
-        const headersWrap = mountEl.querySelector('.s5-header-cols');
-        if (headersWrap) {
-          headersWrap.outerHTML = columnHeadersHTML();
-          if (typeof bindSortCols === 'function') bindSortCols();
-        }
-      });
-    });
   }
   refreshProductControls();
 
-  // ── Column sort ───────────────────────────────────────────────────────────
-  function bindSortCols() {
-    mountEl.querySelectorAll('.s5-sort-col').forEach(btn => {
-      btn.addEventListener('click', function() {
-        const field = this.dataset.field;
-        if (sortState.field === field && field !== 'default') {
-          sortState.dir = sortState.dir === 'desc' ? 'asc' : 'desc';
-        } else {
-          sortState.field = field;
-          sortState.dir   = 'desc';
-        }
-        const labelEl = mountEl.querySelector('#s5-sort-label');
-        if (labelEl) labelEl.textContent = activeSortLabel();
-        updateSortArrows();
-        currentPage = 1;
-        renderProductPage();
-      });
-    });
+  // ── Expand buttons ────────────────────────────────────────────────────────
+  // Lightweight skeleton shown while quick-analysis content renders in next rAF
+  function _s5ExpandSkeleton() {
+    var bar = function(w, h, mb) {
+      return '<div style="height:' + (h||10) + 'px;width:' + (w||'100%') + ';border-radius:6px;background:linear-gradient(90deg,rgba(255,255,255,0.06) 25%,rgba(255,255,255,0.12) 50%,rgba(255,255,255,0.06) 75%);background-size:400% 100%;animation:s5shimmer 1.2s ease infinite;margin-bottom:' + (mb||8) + 'px"></div>';
+    };
+    return '<style>@keyframes s5shimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}</style>' +
+      '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:4px 0">' +
+        '<div>' + bar('60%',8,10) + bar('85%',22,6) + bar('45%',8) + '</div>' +
+        '<div>' + bar('55%',8,10) + bar('70%',22,6) + bar('40%',8) + '</div>' +
+        '<div>' + bar('65%',8,10) + bar('80%',22,6) + bar('50%',8) + '</div>' +
+      '</div>' +
+      '<div style="margin-top:18px">' + bar('100%',10,10) + bar('100%',80) + '</div>';
   }
 
-  // ── Expand buttons ────────────────────────────────────────────────────────
   function bindExpandButtons() {
+
     mountEl.querySelectorAll('.s5-expand-btn').forEach(btn => {
       btn.addEventListener('click', function(e) {
         e.stopPropagation();
@@ -3065,18 +3123,10 @@ window.renderSection5 = function (mountEl, data, ctx) {
           const product = pagedProducts()[parseInt(idx, 10)];
           const detailToken = String(Date.now()) + '-' + Math.random().toString(36).slice(2);
           panel.dataset.detailToken = detailToken;
-          if (product) {
-            panel.innerHTML = cachedDetailPanelContent(product);
-            bindQuantityCityPagination(panel, product);
-            if (backendProductsActive && product._backendProduct) {
-              loadBackendProductDetails([product.key]).then(function () {
-                if (!panel.isConnected || panel.dataset.detailToken !== detailToken) return;
-                refreshDetailPanelContent(panel, product, detailToken);
-              });
-            }
-          }
 
-          panel.style.maxHeight    = (panel.scrollHeight + 40) + 'px';
+          // Show panel open immediately with skeleton — content fills in next frame
+          panel.innerHTML = _s5ExpandSkeleton();
+          panel.style.maxHeight    = '320px';
           panel.style.opacity      = '1';
           panel.style.padding      = '20px 24px';
           panel.style.marginBottom = '8px';
@@ -3086,7 +3136,24 @@ window.renderSection5 = function (mountEl, data, ctx) {
           if (arrow) { arrow.style.transform = 'rotate(180deg)'; arrow.setAttribute('stroke', '#f59e0b'); }
           this.style.background = 'rgba(245,158,11,0.15)';
           this.style.borderColor = 'rgba(245,158,11,0.5)';
-          if (product && window.TaagerUI) window.TaagerUI.enhance(panel);
+
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              if (!panel.isConnected || panel.dataset.detailToken !== detailToken) return;
+              if (product) {
+                panel.innerHTML = cachedDetailPanelContent(product);
+                panel.style.maxHeight = (panel.scrollHeight + 40) + 'px';
+                bindQuantityCityPagination(panel, product);
+                if (backendProductsActive && product._backendProduct) {
+                  loadBackendProductDetails([product.key]).then(function () {
+                    if (!panel.isConnected || panel.dataset.detailToken !== detailToken) return;
+                    refreshDetailPanelContent(panel, product, detailToken);
+                  });
+                }
+              }
+              if (product && window.TaagerUI) window.TaagerUI.enhance(panel);
+            });
+          });
         }
       });
     });
@@ -3122,6 +3189,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
   }
 
   function _bindProductRowClicks() {
+    // Guard: only bind the single delegated listener once per mount element
     if (mountEl._s5DelegatedBound) return;
     mountEl._s5DelegatedBound = true;
 
@@ -3174,20 +3242,31 @@ window.renderSection5 = function (mountEl, data, ctx) {
         else if (key === 'canceled') sortState = { field: 'canceledCount', dir: 'desc' };
         else if (key === 'delivered') sortState = { field: 'deliveredCount', dir: 'desc' };
         else sortState = { field: 'default', dir: 'asc' };
+        
+        const labelEl = mountEl.querySelector('#s5-sort-label');
+        if (labelEl) labelEl.textContent = activeSortLabel();
         currentPage = 1;
         const headers = mountEl.querySelector('.s5-header-cols');
         if (headers) headers.outerHTML = columnHeadersHTML();
         renderProductPage();
+        updateSortArrows();
         return;
       }
 
       const sortColumn = target.closest('.s5-sort-col');
       if (sortColumn) {
         const field = sortColumn.dataset.field;
-        sortState.dir = sortState.field === field && sortState.dir === 'desc' ? 'asc' : 'desc';
-        sortState.field = field;
+        if (sortState.field === field && field !== 'default') {
+          sortState.dir = sortState.dir === 'desc' ? 'asc' : 'desc';
+        } else {
+          sortState.field = field;
+          sortState.dir   = 'desc';
+        }
+        const labelEl = mountEl.querySelector('#s5-sort-label');
+        if (labelEl) labelEl.textContent = activeSortLabel();
         currentPage = 1;
         renderProductPage();
+        updateSortArrows();
         return;
       }
 
@@ -3195,13 +3274,17 @@ window.renderSection5 = function (mountEl, data, ctx) {
         sortState.dir = sortState.dir === 'desc' ? 'asc' : 'desc';
         currentPage = 1;
         renderProductPage();
+        updateSortArrows();
         return;
       }
 
       if (target.closest('#s5-clear-sort')) {
         sortState = { field: 'default', dir: 'asc' };
+        const labelEl = mountEl.querySelector('#s5-sort-label');
+        if (labelEl) labelEl.textContent = activeSortLabel();
         currentPage = 1;
         renderProductPage();
+        updateSortArrows();
         return;
       }
 
@@ -3256,16 +3339,25 @@ window.renderSection5 = function (mountEl, data, ctx) {
           const product = PRODUCT_BY_KEY[productKey];
           const detailToken = String(Date.now());
           panel.dataset.detailToken = detailToken;
-          if (product) panel.innerHTML = cachedDetailPanelContent(product);
+
+          // Show the panel open immediately with a skeleton, fill content next frame
+          panel.innerHTML = _s5ExpandSkeleton();
           panel.style.display = 'block';
           panel.style.padding = '20px 24px';
           panel.style.marginBottom = '8px';
           panel.style.borderColor = 'rgba(255,255,255,0.06)';
-          if (backendProductsActive && product && product._backendProduct) {
-            loadBackendProductDetails([product.key]).then(function () {
-              if (panel.isConnected && panel.dataset.detailToken === detailToken) refreshDetailPanelContent(panel, product, detailToken);
+
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              if (!panel.isConnected || panel.dataset.detailToken !== detailToken) return;
+              if (product) panel.innerHTML = cachedDetailPanelContent(product);
+              if (backendProductsActive && product && product._backendProduct) {
+                loadBackendProductDetails([product.key]).then(function () {
+                  if (panel.isConnected && panel.dataset.detailToken === detailToken) refreshDetailPanelContent(panel, product, detailToken);
+                });
+              }
             });
-          }
+          });
         }
         return;
       }
@@ -3317,11 +3409,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
     });
 
     mountEl.addEventListener('input', function (e) {
-      if (!e.target.matches('#s5-search')) return;
-      filterState.search = e.target.value.trim();
-      currentPage = 1;
-      syncSearchClearButton();
-      renderProductPage({ keepFilterBar: true });
+      // Search is handled with debounce in bindFilterBar — skip duplicate here
+      if (e.target.matches('#s5-search')) return;
     });
 
     mountEl.addEventListener('change', function (e) {
@@ -3944,8 +4033,12 @@ window.renderSection5 = function (mountEl, data, ctx) {
       var cityPaginationHtml = '';
       if (gpm) {
         var cityEntries = [];
-        Object.keys(gpm).forEach(function (cityName) {
-          var cell = gpm[cityName] && gpm[cityName][prodKey];
+        // Use pre-built product index for O(1) per-city lookup instead of
+        // iterating ALL cities on every modal open
+        var _modalProdIndex = _getGpmProductIndex ? _getGpmProductIndex(gpm, prodKey) : null;
+        var _modalCityKeys = _modalProdIndex ? Object.keys(_modalProdIndex) : Object.keys(gpm);
+        _modalCityKeys.forEach(function (cityName) {
+          var cell = _modalProdIndex ? _modalProdIndex[cityName] : (gpm[cityName] && gpm[cityName][prodKey]);
           if (cell && ((cell.orders || 0) > 0 || (cell.delivered || 0) > 0)) {
             var cellNdr = (cell.orders || 0) > 0 ? (cell.delivered || 0) / (cell.orders || 0) * 100 : 0;
             cellNdr = isNaN(cellNdr) ? 0 : cellNdr;
@@ -4219,19 +4312,27 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
       var p = PRODUCT_BY_KEY[productKey] || null;
       if (!p) return;
-      modal.innerHTML = modalHTML(p);
+
+      // Show the overlay immediately (feels instant) then paint content on next frame
       modal.style.display = 'flex';
       document.body.style.overflow = 'hidden';
+      // Show a lightweight skeleton so the modal appears open right away
+      modal.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;width:min(1040px,96vw);height:220px;background:#0c1121;border:1px solid rgba(255,255,255,0.1);border-radius:22px"><div style="width:32px;height:32px;border:3px solid rgba(255,255,255,0.08);border-top-color:#a855f7;border-radius:50%;animation:s5spin 0.6s linear infinite"></div></div>';
 
-      var closeBtn = modal.querySelector('#s5-modal-close');
-      if (closeBtn) closeBtn.addEventListener('click', closeModal);
-      
-      bindModalCityPagination();
-      if (backendProductsActive && p._backendProduct) {
-        loadBackendProductDetails([p.key]).then(function () {
-          if (modal.style.display !== 'none' && currentModalProductKey === productKey) refreshModal();
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          if (modal.style.display === 'none' || currentModalProductKey !== productKey) return;
+          modal.innerHTML = modalHTML(p);
+          var closeBtn = modal.querySelector('#s5-modal-close');
+          if (closeBtn) closeBtn.addEventListener('click', closeModal);
+          bindModalCityPagination();
+          if (backendProductsActive && p._backendProduct) {
+            loadBackendProductDetails([p.key]).then(function () {
+              if (modal.style.display !== 'none' && currentModalProductKey === productKey) refreshModal();
+            });
+          }
         });
-      }
+      });
     }
 
     function closeModal() {

@@ -442,13 +442,16 @@ window.renderSection3 = function (mountEl, data, ctx) {
 
   function _localExportToExcel(ordersToExport) {
     try {
-      var XLSX = window.XLSX;
+      var XLSX = window.XLSX || (typeof require !== 'undefined' ? require('xlsx') : null);
       var tx = window.dashboardI18n ? window.dashboardI18n.raw.bind(window.dashboardI18n) : function (s) { return s; };
       if (!XLSX) {
         var missingMsg = tx("المكتبة XLSX غير متوفرة.");
         if (window.TaagerUI) window.TaagerUI.toast(missingMsg, { kind: "error" });
         else alert(missingMsg);
         return;
+      }
+      if (!window.XLSX) {
+        window.XLSX = XLSX;
       }
 
       var rows = ordersToExport.map(function(o) {

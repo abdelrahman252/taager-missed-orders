@@ -48,6 +48,8 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     var delivered = p.deliveredCount || p.units || 0;
     var realNdr   = orders > 0 ? (delivered / orders) : 0;
     var realComm  = delivered > 0 ? (p.commission / delivered) : 0;
+    if (realComm === 0) realComm = 35;
+
     var realTaagerProfitAfterTax = Number(p.commission || 0);
     var realConfirmationRate = Number(p.confirmationPct || p.confirmationRate || 0) / 100;
     var realDr = Number(p.drRate || p.drPct || 0) / 100;
@@ -55,8 +57,29 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     var realDeliveredAov = p.deliveredAov !== undefined
       ? Number(p.deliveredAov || 0)
       : (delivered > 0 ? realDeliveredSales / delivered : 0);
-    if (realNdr  === 0) realNdr  = 0.30;
-    if (realComm === 0) realComm = 35;
+
+    var isExpectedNdr = window.isExpectedNdrMode && window.isExpectedNdrMode();
+    if (isExpectedNdr) {
+      var globalExpectedNdrRate = (data && data.overview && data.overview.deliveryRate != null) ? (data.overview.deliveryRate / 100) : 0.35;
+      var expectedNdrRate = (p.ndrPct != null) ? (p.ndrPct / 100) : globalExpectedNdrRate;
+      
+      realNdr = expectedNdrRate;
+      delivered = Math.round(orders * expectedNdrRate);
+      realTaagerProfitAfterTax = delivered * realComm;
+      
+      var originalDelivered = p.deliveredCount || p.units || 0;
+      if (originalDelivered > 0) {
+        realDeliveredSales = realDeliveredSales * (delivered / originalDelivered);
+      } else {
+        var totalSales = Number(p.revenue || p.sales || p.totalSales || 0);
+        var placedOrders = p.placedCount || p.totalOrderCount || orders;
+        var avgAov = placedOrders > 0 ? totalSales / placedOrders : 0;
+        realDeliveredSales = delivered * (realDeliveredAov || avgAov);
+      }
+      realDeliveredAov = delivered > 0 ? realDeliveredSales / delivered : 0;
+    } else {
+      if (realNdr  === 0) realNdr  = 0.30;
+    }
 
     var pId = p.key || p.sku || p.name;
     var savedPSpend = localStorage.getItem('kbot_s9_spend_' + pId);

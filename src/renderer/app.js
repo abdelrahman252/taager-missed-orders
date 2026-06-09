@@ -1781,7 +1781,10 @@ const FEATURE_SCRIPT_GROUPS = {
   ],
   dashboardOverview: ["pages/dashboard/sections/section1-overview.js"],
   dashboardPipeline: ["pages/dashboard/sections/section2-pipeline.js"],
-  dashboardOrders: ["pages/dashboard/sections/section3-orders.js"],
+  dashboardOrders: [
+    "../../node_modules/xlsx/dist/xlsx.full.min.js",
+    "pages/dashboard/sections/section3-orders.js"
+  ],
   dashboardCod: [
     "pages/dashboard/sections/section-city-drawer.js",
     "pages/dashboard/sections/section4-cod.js",

@@ -29,10 +29,13 @@ tmp/
 *.xlsx
 *.zip
 *.exe
+*.dmg
+*.crdownload
 data.txt
 data - Copy.txt
 /*.png
 /*.jpg
+/*.jpeg
 /*.jpeg
 /*.gif
 

@@ -2797,7 +2797,7 @@ ipcMain.handle("export-dashboard-orders-query", async (_, payload = {}) => {
       Account: row.accountLabel || row.accountId || "",
       "Order Number": row.taagerOrderNumber || row.orderNumber || row.id || "",
       Customer: row.customerName || row.name || "",
-      Phone: row.phone || row.phone1 || row.phone2 || "",
+      Phone: (row.phone || row.phone1 || row.phone2 || "").toString().replace(/[\s\-\+]/g, "").replace(/^966/, "0"),
       City: row.city || "",
       Products: row.products || "",
       SKUs: row.sku || "",

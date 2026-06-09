@@ -1267,6 +1267,60 @@
         creativeSummary: {},
         sourceOfTruth: "Taager dashboard orders only."
       };
+      
+      if (expectedMode) {
+        var globalExpectedNdrRate = (data && data.overview && data.overview.deliveryRate != null) ? (data.overview.deliveryRate / 100) : 0.35;
+        
+        var totalSpend = 0;
+        var totalOrders = 0;
+        var totalDelivered = 0;
+        var totalProfit = 0;
+        var totalSalesSum = 0;
+        
+        var productGroups = intel.allProductGroups || [];
+        productGroups.forEach(function (group) {
+          var productInList = data && data.products && data.products.rankedList && data.products.rankedList.find(function (p) {
+            return String(p.sku || '').toLowerCase() === String(group.sku || '').toLowerCase();
+          });
+          var expectedNdrRate = productInList ? (productInList.ndrPct / 100) : globalExpectedNdrRate;
+          
+          var oldDelivered = group.taagerDelivered;
+          group.taagerDelivered = Math.round(group.taagerOrders * expectedNdrRate);
+          group.taagerNdrPct = expectedNdrRate * 100;
+          
+          var avgDeliveredProfit = oldDelivered > 0 ? (group.taagerProfit / oldDelivered) : (group.avgDeliveredProfit || 0);
+          group.taagerProfit = group.taagerDelivered * avgDeliveredProfit;
+          group.netProfit = group.taagerProfit - (group.spend || 0);
+          group.roiPct = (group.spend > 0) ? (group.netProfit / group.spend * 100) : 0;
+          group.profitRoas = (group.spend > 0) ? (group.taagerProfit / group.spend) : 0;
+          group.deliveredCpa = (group.taagerDelivered > 0) ? ((group.spend || 0) / group.taagerDelivered) : 0;
+          
+          var oldSales = group.totalSales != null ? group.totalSales : (group.deliveredSales || 0);
+          group.totalSales = oldSales * (oldDelivered > 0 ? (group.taagerDelivered / oldDelivered) : expectedNdrRate);
+          group.deliveredSales = group.totalSales;
+          group.totalSalesRoas = (group.spend > 0) ? (group.totalSales / group.spend) : 0;
+          
+          totalSpend += (group.spend || 0);
+          totalOrders += (group.taagerOrders || 0);
+          totalDelivered += group.taagerDelivered;
+          totalProfit += group.taagerProfit;
+          totalSalesSum += (group.totalSales || 0);
+        });
+        
+        if (intel.totals) {
+          intel.totals.taagerDelivered = totalDelivered;
+          intel.totals.taagerProfit = totalProfit;
+          intel.totals.netProfit = totalProfit - (intel.totals.spend || totalSpend);
+          intel.totals.roiPct = (intel.totals.spend || totalSpend) > 0 ? (intel.totals.netProfit / (intel.totals.spend || totalSpend) * 100) : 0;
+          intel.totals.profitRoas = (intel.totals.spend || totalSpend) > 0 ? (intel.totals.taagerProfit / (intel.totals.spend || totalSpend)) : 0;
+          intel.totals.deliveredCpa = totalDelivered > 0 ? ((intel.totals.spend || totalSpend) / totalDelivered) : 0;
+          intel.totals.taagerNdrPct = totalOrders > 0 ? (totalDelivered / totalOrders * 100) : (globalExpectedNdrRate * 100);
+          intel.totals.totalSales = totalSalesSum;
+          intel.totals.deliveredSales = totalSalesSum;
+          intel.totals.totalSalesRoas = (intel.totals.spend || totalSpend) > 0 ? (totalSalesSum / (intel.totals.spend || totalSpend)) : 0;
+        }
+      }
+      
       rememberCampaignIntel(sharedCacheKey, intel);
     }
 

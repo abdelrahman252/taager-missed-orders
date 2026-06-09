@@ -5,6 +5,26 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   "use strict";
   var activeCurrency = data && data.meta && data.meta.activeCurrency || window.dashboardActiveCurrency || "SAR";
 
+  // Clean up old subscriptions to avoid memory leaks
+  if (window.DashboardFilterBus && mountEl._onCitiesFilterBusChange) {
+    window.DashboardFilterBus.unsubscribe(mountEl._onCitiesFilterBusChange);
+  }
+  if (mountEl._citiesFilterBusObserver) {
+    mountEl._citiesFilterBusObserver.disconnect();
+  }
+
+  // Generate unique render token for this mount call
+  var renderToken = Date.now() + Math.random();
+  mountEl._citiesRenderToken = renderToken;
+
+  // Track query state for this account/period key
+  var currentQueryKey = (data && data.meta && data.meta.activeAccountId || "__all__") + "|" +
+    (window.DashboardPeriodState && typeof window.DashboardPeriodState.get === "function" ? JSON.stringify(window.DashboardPeriodState.get()) : "");
+  if (mountEl._citiesQueryKey !== currentQueryKey) {
+    mountEl._citiesQueryKey = currentQueryKey;
+    mountEl._citiesQueryDone = false;
+  }
+
   // =======================================================================
   // IMPORTANT WARNING: Do not translate cities or provinces.
   // Do not translate cities or provinces.
@@ -545,17 +565,20 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       : false;
     var dirStr = isAr ? "rtl" : "ltr";
 
+    var selProv = mountEl._citiesSelectedProvince || (window.DashboardFilterBus && window.DashboardFilterBus.getState().selectedProvince) || "";
     var provinceOpts =
       '<option value="">' +
       s6Txt("Region: All", "المنطقة: الكل") +
       "</option>" +
       PROVINCES.map(function (p) {
+        var sel = p.id === selProv ? ' selected' : '';
         return (
-          '<option value="' + p.id + '">' + shortProvName(p.name) + "</option>"
+          '<option value="' + p.id + '"' + sel + '>' + shortProvName(p.name) + "</option>"
         );
       }).join("");
 
     var geoD = window.dashboardGeoData;
+    var selProduct = mountEl._citiesSelectedProduct || (window.DashboardFilterBus && window.DashboardFilterBus.getState().selectedProduct) || "";
     var productOpts =
       '<option value="">' + s6Txt("Product: All", "المنتج: الكل") + "</option>";
     if (geoD && geoD.products && geoD.products.rankedList) {
@@ -565,8 +588,9 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         if (p.sku && p.sku !== p.name) {
           lbl = p.name + " (" + p.sku + ")";
         }
+        var sel = k === selProduct ? ' selected' : '';
         productOpts +=
-          '<option value="' + esc(k) + '">' + esc(lbl) + "</option>";
+          '<option value="' + esc(k) + '"' + sel + '>' + esc(lbl) + "</option>";
       });
     }
 
@@ -586,9 +610,10 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       "transition:border-color 0.2s,box-shadow 0.2s;";
 
     var payVal =
-      window.DashboardFilterBus && window.DashboardFilterBus.getState
+      mountEl._citiesPaymentFilter ||
+      (window.DashboardFilterBus && window.DashboardFilterBus.getState
         ? window.DashboardFilterBus.getState().paymentFilter || "all"
-        : "all";
+        : "all");
 
     function pillStyle(active) {
       return (
@@ -605,6 +630,8 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         ";"
       );
     }
+
+    var searchVal = mountEl._citiesSearchValue || "";
 
     return (
       '<div id="sc-filter-bar" class="fade-up" style="animation-delay:100ms;' +
@@ -643,7 +670,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       '<div style="flex:1;min-width:180px;">' +
       '<input id="sc-fb-search" type="text" placeholder="' +
       s6Txt("Search city...", "بحث عن مدينة...") +
-      '" style="' +
+      '" value="' + esc(searchVal) + '" style="' +
       "width:100%;background:#0b1120;border:1px solid rgba(255,255,255,0.1);border-radius:10px;" +
       "color:#fff;font-family:Cairo,sans-serif;font-size:12px;padding:8px 12px;outline:none;" +
       'box-sizing:border-box;transition:border-color 0.2s;" dir="' +
@@ -926,7 +953,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         ' rx="' + p.mapRx + '" ry="' + p.mapRy + '"' +
         ' fill="url(#sc-prov-' + _mapUid + "-" + p.id + ')"' +
         ' clip-path="url(#scMapClip_' + _mapUid + ')"' +
-        ' data-default-fill="' + p.color + '" data-default-opacity="1"' +
+        ' data-default-fill="url(#sc-prov-' + _mapUid + '-' + p.id + ')" data-default-opacity="1"' +
         ' style="cursor:pointer;transition:opacity 0.3s,transform 0.3s;"/>' 
       );
     }).join("");
@@ -1410,9 +1437,9 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       s6Txt("City", "المدينة") +
       "</div>" +
       '<div class="sc-lb-orders-hdr cool-tooltip" data-tooltip="' +
-      s6Txt("Total order count", "إجمالي عدد الطلبات") +
+      s6Txt("Net order count", "إجمالي الطلبات الصافية") +
       '">' +
-      s6Txt("Orders", "الطلبات") +
+      s6Txt("Net Orders", "الطلبات الصافية") +
       "</div>" +
       '<div class="cool-tooltip" data-tooltip="' +
       s6Txt(
@@ -1684,8 +1711,11 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     "<div>" +
     '<h1 class="fade-up" style="font-size:30px;font-weight:900;color:#fff;margin:0;text-align:' +
     alignStr +
-    '">' +
+    ';display:inline-flex;align-items:center;gap:12px;">' +
     s6Txt("Cities & Regions", "المدن والمناطق") +
+    '<span id="cities-updating-badge" style="font-size:12px;font-weight:normal;color:#a855f7;background:rgba(168,85,247,0.1);padding:4px 8px;border-radius:6px;transition:opacity 0.3s;opacity:0;">' +
+    s6Txt("⏳ Updating...", "⏳ جاري التحديث...") +
+    '</span>' +
     "</h1>" +
     '<p class="fade-up" style="font-size:11px;color:rgba(255,255,255,0.32);margin:6px 0 0;text-align:' +
     alignStr +
@@ -1729,7 +1759,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   }, 10);
 
   // ── Province selection logic ────────────────────────────────────────────────
-  var selectedProvince = null;
+  var selectedProvince = mountEl._citiesSelectedProvince !== undefined ? mountEl._citiesSelectedProvince : null;
 
   function updateSelection() {
     var sel = selectedProvince;
@@ -1928,7 +1958,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   });
 
   /* ── T-15: Heatmap mode pills ─────────────────────────────────────────────── */
-  var currentHeatMode = "default";
+  var currentHeatMode = mountEl._citiesHeatMode !== undefined ? mountEl._citiesHeatMode : "default";
 
   function hexInterpolate(low, high, t) {
     /* Interpolate between two 6-char hex colors (no #) */
@@ -2007,6 +2037,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   mountEl.querySelectorAll(".sc-heat-pill").forEach(function (btn) {
     btn.addEventListener("click", function () {
       var mode = btn.dataset.mode;
+      mountEl._citiesHeatMode = mode; // Save state!
       mountEl.querySelectorAll(".sc-heat-pill").forEach(function (b) {
         var active = b === btn;
         b.style.background = active ? "#7c3aed" : "transparent";
@@ -2962,6 +2993,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
     if (fbProvince) {
       fbProvince.addEventListener("change", function () {
+        mountEl._citiesSelectedProvince = fbProvince.value; // Save state!
         applyFilters();
         /* Visual focus on the custom button, not the hidden select */
         var pb = fbProvince._customBtn;
@@ -2978,6 +3010,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
     if (fbProduct) {
       fbProduct.addEventListener("change", function () {
+        mountEl._citiesSelectedProduct = fbProduct.value; // Save state!
         applyFilters();
         var prb = fbProduct._customBtn;
         if (prb) {
@@ -2993,6 +3026,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
     if (fbSearch) {
       fbSearch.addEventListener("input", function () {
+        mountEl._citiesSearchValue = fbSearch.value; // Save state!
         applyFilters();
       });
       fbSearch.addEventListener("focus", function () {
@@ -3018,10 +3052,10 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       if (ordersHdr) {
         ordersHdr.textContent =
           payVal === "cod"
-            ? s6Txt("COD Orders", "طلبات COD")
+            ? s6Txt("COD Net Orders", "طلبات COD الصافية")
             : payVal === "prepaid"
-              ? s6Txt("Prepaid Orders", "طلبات مسبقة")
-              : s6Txt("Orders", "الطلبات");
+              ? s6Txt("Prepaid Net Orders", "الطلبات الصافية مسبقة الدفع")
+              : s6Txt("Net Orders", "الطلبات الصافية");
       }
       var ndrHdr = mountEl.querySelector(".sc-lb-ndr-hdr");
       if (ndrHdr) {
@@ -3094,6 +3128,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
     mountEl.querySelectorAll(".sc-pay-pill").forEach(function (btn) {
       btn.addEventListener("click", function () {
+        mountEl._citiesPaymentFilter = btn.dataset.pay; // Save state!
         applyPaymentView(btn.dataset.pay);
       });
     });
@@ -3142,6 +3177,12 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     }
 
     fbReset.addEventListener("click", function () {
+        mountEl._citiesSelectedProvince = null;
+        mountEl._citiesSelectedProduct = null;
+        mountEl._citiesSearchValue = "";
+        mountEl._citiesPaymentFilter = "all";
+        mountEl._citiesHeatMode = "default";
+
         if (fbProvince) {
           fbProvince.value = "";
           var pb = fbProvince._customBtn;
@@ -3171,7 +3212,15 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         selectedProvince = null;
         currentHeatMode = "default";
         applyProductFocusMode(null);
+        applyHeatMode("default");
         restoreDefaultProvinceBlobs();
+        var descEl = mountEl.querySelector("#sc-heat-desc");
+        if (descEl) {
+          descEl.innerText = s6Txt(
+            "Displays regions grouped by color to show overall activity.",
+            "يعرض المناطق مجمعة حسب اللون لإظهار النشاط العام."
+          );
+        }
         mountEl.querySelectorAll(".sc-heat-pill").forEach(function (btn) {
           var active = btn.dataset.mode === "default";
           btn.style.background = active ? "#7c3aed" : "transparent";
@@ -3206,7 +3255,10 @@ window.renderSectionCities = function (mountEl, data, ctx) {
             : "none";
         }
       }
+      mountEl._citiesSelectedProvince = selectedProvince || null;
     };
+    var initialPayVal = mountEl._citiesPaymentFilter || (window.DashboardFilterBus && window.DashboardFilterBus.getState().paymentFilter) || "all";
+    applyPaymentView(initialPayVal);
   })();
 
   /* Phase 5: Mount Product × City Matrix */
@@ -3384,6 +3436,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   }
 
   if (window.DashboardFilterBus) {
+    mountEl._onCitiesFilterBusChange = _onFilterBusChange;
     window.DashboardFilterBus.subscribe(_onFilterBusChange);
     var _filterBusObserver = new MutationObserver(function () {
       if (!document.body.contains(mountEl)) {
@@ -3394,7 +3447,93 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     if (mountEl.parentNode) {
       _filterBusObserver.observe(mountEl.parentNode, { childList: true });
     }
+    mountEl._citiesFilterBusObserver = _filterBusObserver;
     /* Apply current state immediately (handles section re-mount with persisted state) */
     _onFilterBusChange(window.DashboardFilterBus.getState());
   }
+
+  /* Restore heat mode if active */
+  if (currentHeatMode && currentHeatMode !== "default") {
+    applyHeatMode(currentHeatMode);
+    mountEl.querySelectorAll(".sc-heat-pill").forEach(function (btn) {
+      var active = btn.dataset.mode === currentHeatMode;
+      btn.style.background = active ? "#7c3aed" : "transparent";
+      btn.style.color = active ? "#fff" : "rgba(255,255,255,0.38)";
+      btn.style.boxShadow = active
+        ? "0 2px 10px rgba(124,58,237,0.4)"
+        : "none";
+    });
+  }
+
+  /* ── Async Query Trigger ──────────────────────────────────────────────────── */
+  if (window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.flags === "function") {
+    window.DashboardQueryRuntime.flags().then(function (flags) {
+      var citiesEnabled = !!(flags && flags.cities);
+      if (!citiesEnabled) return;
+      if (!mountEl.isConnected || mountEl._citiesRenderToken !== renderToken) return;
+      if (mountEl._citiesQueryDone) return;
+
+      var badge = mountEl.querySelector("#cities-updating-badge");
+      if (badge) {
+        badge.style.opacity = "1";
+      }
+
+      window.DashboardQueryRuntime.query("cities", {}, data).then(function (result) {
+        if (!mountEl.isConnected || mountEl._citiesRenderToken !== renderToken) return;
+        if (result && result.ok && Array.isArray(result.cities)) {
+          // Rebuild global cache:
+          if (window.dashboardGeoData) {
+            window.dashboardGeoData.cod = window.dashboardGeoData.cod || {};
+            window.dashboardGeoData.cod.cities = result.cities;
+            
+            // Build cityStats map:
+            var cityStats = {};
+            result.cities.forEach(function (c) {
+              cityStats[c.name] = c;
+            });
+            window.dashboardGeoData.geo = window.dashboardGeoData.geo || {};
+            
+            // Call buildGeoProductMap:
+            var rebuiltGeo = window.buildGeoProductMap ? window.buildGeoProductMap(
+              cityStats,
+              window.dashboardGeoData.geo.productStats || {},
+              window.dashboardGeoData.geo.kpis || {},
+              window.dashboardGeoData.meta || {}
+            ) : null;
+            
+            window.dashboardGeoData.geo.cityStats = cityStats;
+            if (rebuiltGeo) {
+              window.dashboardGeoData.geo.geoProductMap = rebuiltGeo.geoProductMap;
+              window.dashboardGeoData.geo.provinceMap = rebuiltGeo.provinceMap;
+              window.dashboardGeoData.geo.prepaidIntelligence = rebuiltGeo.prepaidIntelligence;
+            }
+          }
+          
+          mountEl._citiesQueryDone = true;
+          // Trigger recursive re-render:
+          window.renderSectionCities(mountEl, data, ctx);
+        } else {
+          // Query finished/failed:
+          if (badge) {
+            badge.style.opacity = "0";
+          }
+        }
+      }).catch(function (err) {
+        console.error("[Cities] Async query failed:", err);
+        if (badge) {
+          badge.style.opacity = "0";
+        }
+      });
+    });
+  }
+
+  /* Return cleanup function */
+  return function () {
+    if (window.DashboardFilterBus && mountEl._onCitiesFilterBusChange) {
+      window.DashboardFilterBus.unsubscribe(mountEl._onCitiesFilterBusChange);
+    }
+    if (mountEl._citiesFilterBusObserver) {
+      mountEl._citiesFilterBusObserver.disconnect();
+    }
+  };
 };

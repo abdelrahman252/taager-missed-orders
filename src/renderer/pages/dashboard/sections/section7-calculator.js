@@ -92,8 +92,21 @@ window.renderSection7 = function (mountEl, data, ctx) {
   var realTaagerProfitAfterTax = d.taagerProfitAfterTax != null
     ? Number(d.taagerProfitAfterTax)
     : realAvgCommission;
+
+  if (window.isExpectedNdrMode && window.isExpectedNdrMode()) {
+    var globalExpectedNdrRate = 35;
+    if (ctx && ctx.data && ctx.data.overview) {
+      if (ctx.data.overview.deliveryRate != null) {
+        globalExpectedNdrRate = Number(ctx.data.overview.deliveryRate);
+      } else if (ctx.data.overview.ndrRate && ctx.data.overview.ndrRate.value != null) {
+        globalExpectedNdrRate = Number(ctx.data.overview.ndrRate.value);
+      }
+    }
+    realNdrPct = globalExpectedNdrRate;
+  }
+
   var realExpectedDvl =
-    d.deliveredCount != null
+    d.deliveredCount != null && !(window.isExpectedNdrMode && window.isExpectedNdrMode())
       ? Number(d.deliveredCount || 0)
       : Math.round((realNdrPct / 100) * realTotalOrders);
 
@@ -111,7 +124,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     totalOrders: realTotalOrders,
     ndr: realNdrPct / 100,
     avgCommission: realAvgCommission,
-    adSpend: d.adSpend != null ? Number(d.adSpend) : 0,
+    adSpend: d.adSpend != null ? convert(Number(d.adSpend), state.currency, nativeCurrency) : 0,
     egpRate: d.egpRate != null ? d.egpRate : 52.0,
     viewCurrency: d.currency || nativeCurrency,
     _isModified: false,
@@ -655,21 +668,35 @@ window.renderSection7 = function (mountEl, data, ctx) {
     var cpaSAR = realTotalOrders > 0 ? spendSAR / realTotalOrders : 0;
     var breakEvenCpaSAR = realAvgCommission * (realNdrPct / 100);
     var deliveredSalesSAR = Number(d.totalDeliveredSales || d.deliveredSales || 0);
+
+    var actualDelivered = d.deliveredCount != null ? Number(d.deliveredCount) : 0;
+    if (window.isExpectedNdrMode && window.isExpectedNdrMode()) {
+      if (actualDelivered > 0) {
+        deliveredSalesSAR = deliveredSalesSAR * (realExpectedDvl / actualDelivered);
+      } else {
+        var totalSales = (ctx && ctx.data && ctx.data.overview && ctx.data.overview.totalSales && ctx.data.overview.totalSales.value != null)
+          ? Number(ctx.data.overview.totalSales.value)
+          : (d.totalSales || d.sales || 0);
+        deliveredSalesSAR = totalSales * (realNdrPct / 100);
+      }
+    }
+
     var revSAR = realAvgCommission * realExpectedDvl;
     var netSAR = revSAR - spendSAR;
     var roi = spendSAR > 0 ? (netSAR / spendSAR) * 100 : 0;
     var returnPerSar = spendSAR > 0 ? revSAR / spendSAR : 0;
     var netRoas = spendSAR > 0 ? deliveredSalesSAR / spendSAR : 0;
 
+    var activeReportCurrency = window.dashboardActiveCurrency || "SAR";
     return {
       spendSAR,
       cpaSAR,
       breakEvenCpaSAR,
-      cpa: convert(cpaSAR, "SAR", state.currency),
-      breakEvenCpa: convert(breakEvenCpaSAR, "SAR", state.currency),
-      profit: convert(revSAR, "SAR", state.currency),
-      net: convert(netSAR, "SAR", state.currency),
-      spend: convert(spendSAR, "SAR", state.currency),
+      cpa: convert(cpaSAR, activeReportCurrency, state.currency),
+      breakEvenCpa: convert(breakEvenCpaSAR, activeReportCurrency, state.currency),
+      profit: convert(revSAR, activeReportCurrency, state.currency),
+      net: convert(netSAR, activeReportCurrency, state.currency),
+      spend: convert(spendSAR, activeReportCurrency, state.currency),
       roi,
       returnPerSar,
       netRoas,
@@ -893,8 +920,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
     var step = baseSpendSAR * 0.2;
     for (var b = baseSpendSAR * 0.2; b <= baseSpendSAR * 2.0; b += step) {
       var proj = computeProjection(b, cpaSAR);
-      var bCurr = convert(b, "SAR", state.currency);
-      var netCurr = convert(proj.net, "SAR", state.currency);
+      var bCurr = convert(b, window.dashboardActiveCurrency || "SAR", state.currency);
+      var netCurr = convert(proj.net, window.dashboardActiveCurrency || "SAR", state.currency);
 
       labels.push((b / baseSpendSAR).toFixed(1).replace(".0", "") + "x");
       budgetData.push(bCurr);
@@ -1108,8 +1135,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
           (isLight ? "#cbd5e1" : "rgba(255,255,255,0.04)") +
           ";";
 
-      var budVal = convert(sc.bud, "SAR", state.currency);
-      var netVal = convert(proj.net, "SAR", state.currency);
+      var budVal = convert(sc.bud, window.dashboardActiveCurrency || "SAR", state.currency);
+      var netVal = convert(proj.net, window.dashboardActiveCurrency || "SAR", state.currency);
 
       html +=
         '<div class="s7-scen-row" style="background:' +
@@ -3579,10 +3606,10 @@ window.renderSection7 = function (mountEl, data, ctx) {
     var inpComm = document.getElementById("sfe-comm");
     if (inpOrders) inpOrders.value = simState.totalOrders;
 
-    // Display SFE simulation spend converted from SAR to state.currency
+    // Display SFE simulation spend converted from active currency to state.currency
     if (inpSpend)
       inpSpend.value = Math.round(
-        convert(simState.adSpend, "SAR", state.currency),
+        convert(simState.adSpend, window.dashboardActiveCurrency || "SAR", state.currency),
       );
 
     if (inpNdr) inpNdr.value = Math.round(simState.ndr * 100);
@@ -3640,11 +3667,11 @@ window.renderSection7 = function (mountEl, data, ctx) {
       });
     if (spendEl)
       spendEl.addEventListener("input", function (e) {
-        // User typed value in state.currency (e.g. USD) -> convert back to SAR internally
+        // User typed value in state.currency (e.g. USD) -> convert back to active currency internally
         var valInCurr = parseFloat(e.target.value) || 0;
         simState.adSpend = Math.max(
           0,
-          convert(valInCurr, state.currency, "SAR"),
+          convert(valInCurr, state.currency, window.dashboardActiveCurrency || "SAR"),
         );
         onChange();
       });
@@ -3667,7 +3694,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         simState.totalOrders = realTotalOrders;
         simState.ndr = realNdrPct / 100;
         simState.avgCommission = realAvgCommission;
-        simState.adSpend = d.adSpend != null ? Number(d.adSpend) : 0;
+        simState.adSpend = d.adSpend != null ? convert(Number(d.adSpend), state.currency, window.dashboardActiveCurrency || "SAR") : 0;
         simState.egpRate = d.egpRate != null ? d.egpRate : 52.0;
         simState.viewCurrency = state.currency; // Keep in sync with main currency
         simState._isModified = false;
