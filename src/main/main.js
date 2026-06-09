@@ -1583,7 +1583,12 @@ ipcMain.handle("install-update", () => {
   const toKill = botChildren.length ? botChildren : (currentBotChild ? [currentBotChild] : []);
   for (const child of toKill) { try { child.kill("SIGKILL"); } catch (_) {} }
 
-  try { if (tray && !tray.isDestroyed()) tray.destroy(); } catch (_) {}
+  try {
+    if (tray && !tray.isDestroyed()) {
+      tray.removeAllListeners();
+      tray.destroy();
+    }
+  } catch (_) {}
   try {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.removeAllListeners("close");
