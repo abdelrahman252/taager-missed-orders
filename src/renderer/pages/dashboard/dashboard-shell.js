@@ -884,13 +884,6 @@
     if (!guidance) return;
     var show = !!(data && data.meta && data.meta.hasData === false) && !isDashboardPreviewMode();
     guidance.style.display = show ? 'flex' : 'none';
-    var btn = guidance.querySelector('#dashboard-first-run-btn');
-    if (btn && !btn._dashFirstRunReady) {
-      btn._dashFirstRunReady = true;
-      btn.addEventListener('click', function () {
-        if (typeof goToSetup === 'function') goToSetup('run');
-      });
-    }
   }
 
   function applyInnerCollapse(shellEl, collapsed) {
@@ -1234,9 +1227,8 @@
         '<div id="dashboard-first-run-guidance" class="dashboard-first-run-guidance" style="display:none;margin:12px 16px 0;padding:14px 16px;border:1px solid var(--dash-border, var(--border));border-radius:12px;background:var(--dash-card, var(--bg2));align-items:center;justify-content:space-between;gap:14px;box-shadow:0 10px 28px rgba(0,0,0,.10);">' +
           '<div style="min-width:0;">' +
             '<div style="font-size:13px;font-weight:800;color:var(--dash-text, var(--text));margin-bottom:3px;">' + trText('shell.firstRunTitle', 'Dashboard is ready') + '</div>' +
-            '<div style="font-size:12px;color:var(--dash-muted, var(--text2));line-height:1.5;">' + trText('shell.firstRunBody', 'Run the bot or update the dashboard to start filling every section with live account data. Until then, the dashboard stays visible with zero-value metrics.') + '</div>' +
+            '<div style="font-size:12px;color:var(--dash-muted, var(--text2));line-height:1.5;">' + trText('shell.firstRunBody', 'Update the dashboard to start filling every section with live account data. Until then, the dashboard stays visible with zero-value metrics.') + '</div>' +
           '</div>' +
-          '<button type="button" class="dash-update-btn" id="dashboard-first-run-btn">' + icon('play', 'currentColor') + '<span>' + trText('shell.firstRunAction', 'Go to Run') + '</span></button>' +
         '</div>' +
         '<div id="dash-section-pane" class="dash-scroll dash-content" style="flex:1 1 0;display:flex;flex-direction:column;min-width:0;min-height:0;overflow-y:auto;overflow-x:hidden;"></div>' +
       '</div>';
