@@ -86,6 +86,8 @@
           placedCount: 0,
           deliveredCount: 0,
           canceledCount: 0,
+          cancelStatusCount: 0,
+          statusTotalCount: 0,
           failedCount: 0,
           confirmedCount: 0,
           confirmationStatusCount: 0,
@@ -116,6 +118,8 @@
       g.placedCount += num(p.placedCount || p.orders);
       g.deliveredCount += num(p.deliveredCount || p.units || p.delivered);
       g.canceledCount += num(p.canceledCount || 0);
+      g.cancelStatusCount += num(p.cancelStatusCount || p.canceledCount || 0);
+      g.statusTotalCount += num(p.statusTotalCount || p.placedCount || p.orders || 0);
       g.failedCount += num(p.failedCount || p.realFailedCount || 0);
       g.confirmedCount += num(p.confirmedCount || 0);
       g.confirmationStatusCount += num(p.confirmationStatusCount || p.confirmedCount || 0);
@@ -180,7 +184,7 @@
       
       var ndrPct = placed > 0 ? parseFloat(((delivered / placed) * 100).toFixed(1)) : 0;
       var drPct = activeTotal > 0 ? parseFloat(((delivered / activeTotal) * 100).toFixed(1)) : 0;
-      var cancelPct = placed > 0 ? parseFloat(((g.canceledCount / placed) * 100).toFixed(1)) : 0;
+      var cancelPct = placed > 0 ? parseFloat((((g.cancelStatusCount || g.canceledCount) / placed) * 100).toFixed(1)) : 0;
       var confirmationPct = placed > 0 ? parseFloat(((g.confirmationStatusCount / placed) * 100).toFixed(1)) : 0;
       
       var deliveredAov = delivered > 0 ? parseFloat((g.deliveredSales / delivered).toFixed(2)) : 0;

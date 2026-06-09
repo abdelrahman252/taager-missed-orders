@@ -279,7 +279,7 @@ window.renderSection2 = function (mountEl, data, ctx) {
     var iconHtml = svgIcon(PATHS[iconKey], s.color, 22);
 
     return '<div class="s2-stage-wrapper fade-up" style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:0;animation-delay:' + (i * 80) + 'ms;">' +
-      '<div class="s2-stage-label" style="font-size:13px;font-weight:700;margin-bottom:12px;white-space:nowrap;color:' + s.color + ';text-shadow:' + (isLight ? 'none' : '0 0 10px ' + s.color + '77') + ';">' + s.label + '</div>' +
+      '<div class="s2-stage-label" style="font-size:13px;font-weight:700;margin-bottom:12px;white-space:nowrap;color:' + s.color + ';text-shadow:' + (isLight ? 'none' : '0 0 10px ' + s.color + '77') + ';">' + s.label + window.supposedBadgeHtml(s.label) + '</div>' +
       '<div class="s2-stage-card" style="position:relative;width:92%;height:220px;border-radius:16px;transform:skewX(-6deg);background:' + bg + ';border:1.5px solid ' + s.color + ';box-shadow:' + glowBase + ';">' +
         '<div class="s2-card-inner" style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:24px 8px;box-sizing:border-box;transform:skewX(6deg);">' +
           '<div class="s2-card-top" style="text-align:center;margin-top:8px;">' +
@@ -345,7 +345,7 @@ window.renderSection2 = function (mountEl, data, ctx) {
     var iconHtml  = svgIcon(PATHS[iconKey] || PATHS.bag, color, 30);
     return '<div class="s2-metric-card fade-up" style="flex:1;min-width:0;background:#0b1120;border:1px solid rgba(255,255,255,0.10);border-radius:16px;padding:32px;display:flex;align-items:center;gap:24px;flex-direction:' + rowDir + ';animation-delay:' + delay + 'ms;box-shadow:inset 0 0 30px ' + color + '08;">' +
       '<div class="s2-metric-text" style="flex:1;text-align:' + textAlign + ';">' +
-        '<div class="s2-metric-label" style="font-size:14px;color:rgba(255,255,255,0.6);font-weight:600;margin-bottom:8px;">' + label + '</div>' +
+        '<div class="s2-metric-label" style="font-size:14px;color:rgba(255,255,255,0.6);font-weight:600;margin-bottom:8px;">' + label + window.supposedBadgeHtml(label) + '</div>' +
         '<div class="s2-metric s2-metric-value" data-to="' + value + '" data-decimals="' + (isPercent ? '1' : '0') + '" data-suffix="' + (isPercent ? '%' : '') + '" id="' + animId + '" style="font-size:40px;font-weight:900;line-height:1;letter-spacing:-2px;color:' + color + ';text-shadow:0 0 20px ' + color + '55;">0</div>' +
         '<div class="s2-metric-sub" style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:8px;">' + sub + '</div>' +
       '</div>' +
@@ -371,7 +371,7 @@ window.renderSection2 = function (mountEl, data, ctx) {
         svgIcon(PATHS[iconKey] || PATHS.barChart, color, 20) +
       '</div>' +
       '<div style="min-width:0;flex:1;text-align:' + textAlign + ';">' +
-        '<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.48);margin-bottom:7px;">' + label + '</div>' +
+        '<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.48);margin-bottom:7px;">' + label + window.supposedBadgeHtml(label) + '</div>' +
         '<div class="s2-metric s2-analytics-value" data-to="' + value + '" data-decimals="' + (suffix === '%' ? '1' : '0') + '" data-suffix="' + (suffix || '') + '" id="' + animId + '" style="font-size:26px;font-weight:900;line-height:1;color:#fff;font-variant-numeric:tabular-nums;">0</div>' +
         '<div style="font-size:11px;color:rgba(255,255,255,0.42);margin-top:7px;line-height:1.35;">' + sub + '</div>' +
       '</div>' +

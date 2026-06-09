@@ -393,6 +393,37 @@
     return window.icon(name, { size: size, color: accent });
   }
 
+  /* ── Supposed Badging Helpers for Expected NDR Mode ────────────────────────── */
+  window.isExpectedNdrMode = function () {
+    return window.DashboardDeliveredDateState &&
+           typeof window.DashboardDeliveredDateState.get === 'function' &&
+           window.DashboardDeliveredDateState.get() === 'expected';
+  };
+
+  window.supposedBadgeHtml = function (labelKey) {
+    if (!window.isExpectedNdrMode()) return '';
+    var label = String(labelKey || '').toLowerCase();
+    var matches = /delivered|earned|profit|roas|dr|aov|sales|revenue|commission|success|failure|lost|cpa|breakeven|roi|توصيل|مسلم|محقق|العائد|الربح|متوسط|إيراد|عمولة|نجاح|فشل|مرتجع/i.test(label);
+    if (!matches) return '';
+    
+    var isAr = window.dashboardI18n ? window.dashboardI18n.currentLocale === 'ar' : true;
+    var badgeText = isAr ? 'مفترض' : 'supposed';
+    
+    return ' <span class="supposed-badge" style="font-size: 11px; font-weight: 700; color: #fbbf24; margin-inline-start: 4px; vertical-align: middle;">(' + badgeText + ')</span>';
+  };
+
+  (function() {
+    var styleId = 'supposed-badge-styles';
+    if (!document.getElementById(styleId)) {
+      var style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = 
+        '@keyframes supposed-pulse { 0% { opacity: 0.95; } 50% { opacity: 0.6; } 100% { opacity: 0.95; } }\n' +
+        '.supposed-badge { display: inline-block; animation: supposed-pulse 2s infinite ease-in-out; }';
+      document.head.appendChild(style);
+    }
+  })();
+
   /* ── kpiCard (full-size, portrait — Section 1 / Sections 1–4 of S8) ─────── */
   window.kpiCard = function (opts) {
     var label    = window.dashboardI18n ? window.dashboardI18n.raw(opts.label || '') : (opts.label || '');
@@ -443,7 +474,7 @@
         /* value */
         '<div class="dash-kpi-value" title="' + fullValue + (unit ? ' ' + unit : '') + '" style="font-size:' + numSize + ';font-weight:900;color:#fff;line-height:1;letter-spacing:0;' +
           'position:relative;z-index:2;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">' +
-          '<span class="' + ((hideDelta || staticDisplay) ? '' : 'kpi-num') + '" data-id="' + id + '" data-decimals="' + decimals + '" data-compact="true" ' + ((hideDelta || staticDisplay) ? '' : 'data-to="' + value + '"') + '>' + ((hideDelta || staticDisplay) ? displayValue : '0') + '</span>' +
+          '<span class="' + ((hideDelta || staticDisplay) ? '' : 'kpi-num') + '" data-id="' + id + '" data-decimals="' + decimals + '" data-compact="true" ' + ((hideDelta || staticDisplay) ? '' : 'data-to="' + value + '"') + '>' + ((hideDelta || staticDisplay) ? displayValue : '0') + '</span>' + window.supposedBadgeHtml(opts.label) +
         '</div>' +
         /* unit */
         '<div style="font-size:' + unitSize + ';color:' + accent + ';font-weight:700;margin-top:8px;' +
@@ -523,7 +554,7 @@
         '<div class="dash-kpi-label" style="font-size:10px;text-align:' + (window.dashboardI18n && !window.dashboardI18n.isRtl() ? 'left' : 'right') + ';direction:inherit;margin-bottom:3px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + label + helpHtml(tooltip) + '</div>' +
         '<div style="display:flex;align-items:baseline;justify-content:flex-end;gap:4px;line-height:1;">' +
           '<span title="' + fullValue + (unit ? ' ' + unit : '') + '" style="font-size:20px;font-weight:900;color:#fff;letter-spacing:0;line-height:1;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums;" class="dash-kpi-value ' + ((hideDelta || staticDisplay) ? '' : 'kpi-num') + '" data-id="'+id+'" data-decimals="' + decimals + '" data-compact="true" ' + ((hideDelta || staticDisplay) ? '' : 'data-to="'+value+'"') + '>' + ((hideDelta || staticDisplay) ? displayValue : '0') + '</span>' +
-          '<span style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.5);direction:inherit;">'+unit+'</span>' +
+          '<span style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.5);direction:inherit;">'+unit+'</span>' + window.supposedBadgeHtml(opts.label) +
         '</div>' +
         (hideDelta ? '' : '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin-top:4px;">' +
           '<span style="font-size:12px;font-weight:700;color:'+dColor+';line-height:1;">'+(isPositive?'↑':'↓')+'&nbsp;'+Math.abs(delta)+'%</span>' +

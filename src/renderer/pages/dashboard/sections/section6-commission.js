@@ -339,11 +339,6 @@ window.renderSection6 = function (mountEl, data, ctx) {
           </div>
           <div style="width:1px;height:24px;background:rgba(255,255,255,0.1);"></div>
           ${switcherHtml}
-          <div style="width:1px;height:24px;background:rgba(255,255,255,0.1);"></div>
-          <div style="display:flex;align-items:center;gap:6px;padding:4px 7px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);" title="${s6Txt('Calculator & chart display currency', 'عملة عرض المحاكي والمخططات')}">
-            <span style="font-size:10px;color:rgba(255,255,255,0.42);font-weight:800;white-space:nowrap;text-transform:uppercase;letter-spacing:0.4px">${s6Txt('Currency', 'العملة')}</span>
-            <div id="s6-currency-select-wrap" style="width:88px;min-width:88px"></div>
-          </div>
         </div>
 
         <!-- right (visually): total -->

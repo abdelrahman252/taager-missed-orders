@@ -4118,7 +4118,7 @@ button {
 
 #page-dashboard .dash-global-topbar {
   display: grid !important;
-  grid-template-columns: minmax(220px, 1.2fr) minmax(120px, auto) minmax(180px, .9fr);
+  grid-template-columns: minmax(220px, 1.2fr) minmax(120px, auto) minmax(250px, .9fr);
   align-items: center;
 }
 
@@ -8231,32 +8231,70 @@ button {
   border-color: #bae6fd;
 }
 
-#page-dashboard .campaign-financial-positive {
+#page-dashboard .campaign-financial-positive,
+#page-dashboard .campaign-table strong.campaign-financial-positive,
+#page-dashboard .campaign-table small.campaign-financial-positive {
   color: #34d399 !important;
 }
 
-#page-dashboard .campaign-financial-negative {
+#page-dashboard .campaign-financial-negative,
+#page-dashboard .campaign-table strong.campaign-financial-negative,
+#page-dashboard .campaign-table small.campaign-financial-negative {
   color: #fb7185 !important;
 }
 
-#page-dashboard .campaign-financial-zero {
+#page-dashboard .campaign-financial-zero,
+#page-dashboard .campaign-table strong.campaign-financial-zero,
+#page-dashboard .campaign-table small.campaign-financial-zero {
   color: #fbbf24 !important;
 }
 
-#page-dashboard .campaign-financial-neutral {
+#page-dashboard .campaign-financial-neutral,
+#page-dashboard .campaign-table strong.campaign-financial-neutral,
+#page-dashboard .campaign-table small.campaign-financial-neutral {
   color: var(--campaign-muted, #94a3b8) !important;
 }
 
-[data-theme="light"] #page-dashboard .campaign-financial-positive {
+[data-theme="light"] #page-dashboard .campaign-financial-positive,
+[data-theme="light"] #page-dashboard .campaign-table strong.campaign-financial-positive,
+[data-theme="light"] #page-dashboard .campaign-table small.campaign-financial-positive {
   color: #047857 !important;
 }
 
-[data-theme="light"] #page-dashboard .campaign-financial-negative {
+[data-theme="light"] #page-dashboard .campaign-financial-negative,
+[data-theme="light"] #page-dashboard .campaign-table strong.campaign-financial-negative,
+[data-theme="light"] #page-dashboard .campaign-table small.campaign-financial-negative {
   color: #be123c !important;
 }
 
-[data-theme="light"] #page-dashboard .campaign-financial-zero {
+[data-theme="light"] #page-dashboard .campaign-financial-zero,
+[data-theme="light"] #page-dashboard .campaign-table strong.campaign-financial-zero,
+[data-theme="light"] #page-dashboard .campaign-table small.campaign-financial-zero {
   color: #a16207 !important;
+}
+
+#page-dashboard .campaign-financial-cell-positive {
+  background-color: rgba(52, 211, 153, 0.08) !important;
+}
+
+#page-dashboard .campaign-financial-cell-negative {
+  background-color: rgba(251, 113, 133, 0.08) !important;
+}
+
+#page-dashboard .campaign-financial-cell-zero {
+  background-color: rgba(251, 191, 36, 0.08) !important;
+}
+
+[data-theme="light"] #page-dashboard .campaign-financial-cell-positive {
+  background-color: rgba(52, 211, 153, 0.12) !important;
+}
+
+[data-theme="light"] #page-dashboard .campaign-financial-cell-negative {
+  background-color: rgba(251, 113, 133, 0.12) !important;
+}
+
+[data-theme="light"] #page-dashboard .campaign-financial-cell-zero {
+  background-color: rgba(251, 191, 36, 0.12) !important;
 }
 
 .campaign-decision-tooltip {

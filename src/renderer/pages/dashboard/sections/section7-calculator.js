@@ -1,4 +1,4 @@
-﻿// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // section7-calculator.js — ROI Calculator + Smart Forecasting Engine
 // Fully integrated: Calculator + Break-even Simulator + AI Insights
 // -----------------------------------------------------------------------------
@@ -67,9 +67,23 @@ window.renderSection7 = function (mountEl, data, ctx) {
   var MARKETING_SOURCE_PAGE_SIZE = 3;
   mountEl._s7MarketingSourcePage = Math.max(1, Number(mountEl._s7MarketingSourcePage) || 1);
   if (syncedSpendActive) {
-    d = Object.assign({}, d, {
-      adSpend: Number(marketingState.summary.adSpend || 0),
-    });
+    var _rawSyncedSpend = Number(marketingState.summary.adSpend || 0);
+    var _syncedCurrency = String((marketingState.summary && marketingState.summary.currency) || 'SAR').toUpperCase();
+    var _roiCurrency = String(d.currency || window.dashboardActiveCurrency || 'SAR').toUpperCase();
+    var _convertedSyncedSpend = _rawSyncedSpend;
+    console.log('[DIAGNOSTIC][S7] syncedSpendActive is active. Raw adSpend:', _rawSyncedSpend, 'Synced Currency:', _syncedCurrency, 'ROI Currency:', _roiCurrency);
+    if (_syncedCurrency !== _roiCurrency) {
+      if (window.TaagerCurrency && typeof window.TaagerCurrency.convert === 'function') {
+        _convertedSyncedSpend = window.TaagerCurrency.convert(_rawSyncedSpend, _syncedCurrency, _roiCurrency);
+        console.log('[DIAGNOSTIC][S7] Conversion via window.TaagerCurrency.convert:', _convertedSyncedSpend);
+      } else {
+        var _rates = { USD: 1, SAR: 3.75, EGP: 52, AED: 3.6725, IQD: 1310, OMR: 0.385 };
+        var _fr = _rates[_syncedCurrency]; var _tr = _rates[_roiCurrency];
+        if (_fr && _tr) _convertedSyncedSpend = (_rawSyncedSpend / _fr) * _tr;
+        console.log('[DIAGNOSTIC][S7] Conversion via local rates fallback:', _convertedSyncedSpend);
+      }
+    }
+    d = Object.assign({}, d, { adSpend: _convertedSyncedSpend });
   }
   var realTotalOrders = d.totalOrders != null ? Number(d.totalOrders) : 0;
   var realNdrPct = d.ndrPct != null ? Number(d.ndrPct) : 0;
@@ -519,6 +533,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
   if (syncedSpendActive && sourceBreakdown.length) {
     state.budget = syncedBudgetInCurrency();
     d.adSpend = state.budget;
+    simState.adSpend = state.budget;
   }
 
   function fmt(n, dec) {
@@ -1225,7 +1240,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         '<div class="sfe-metric-val" style="color:' +
         valColor +
         '">' +
-        val +
+        val + window.supposedBadgeHtml(label) +
         "</div>" +
         '<div class="sfe-metric-sub" style="color:' +
         subColor +
@@ -1901,7 +1916,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
   function updateSimUI() {
     var c = computeSim();
     var delivEl = document.getElementById("sfe-delivered-display");
-    if (delivEl) delivEl.textContent = s7Num(Math.round(c.deliveredOrders));
+    if (delivEl) delivEl.innerHTML = s7Num(Math.round(c.deliveredOrders)) + window.supposedBadgeHtml('delivered');
     var ndrHint = document.getElementById("sfe-ndr-hint");
     var commHint = document.getElementById("sfe-comm-hint");
     if (ndrHint) ndrHint.textContent = Math.round(simState.ndr * 100) + "%";
@@ -1956,14 +1971,14 @@ window.renderSection7 = function (mountEl, data, ctx) {
     document.getElementById("s7-out-cpa").textContent = fmt(res.cpa, 2);
     var breakEvenEl = document.getElementById("s7-out-breakeven-cpa");
     if (breakEvenEl) {
-      breakEvenEl.textContent = fmt(res.breakEvenCpa, 2);
+      breakEvenEl.innerHTML = fmt(res.breakEvenCpa, 2) + window.supposedBadgeHtml('breakeven');
       breakEvenEl.style.color = res.cpaSAR > res.breakEvenCpaSAR ? "#ef4444" : "#00e676";
     }
-    document.getElementById("s7-out-revenue").textContent = fmt(res.profit);
+    document.getElementById("s7-out-revenue").innerHTML = fmt(res.profit) + window.supposedBadgeHtml('revenue');
 
     var netEl = document.getElementById("s7-out-net");
     if (netEl) {
-      netEl.textContent = (res.net > 0 ? "+" : "") + fmt(res.net);
+      netEl.innerHTML = (res.net > 0 ? "+" : "") + fmt(res.net) + window.supposedBadgeHtml('profit');
       netEl.style.color =
         res.net < 0
           ? "#ef4444"
@@ -1985,11 +2000,11 @@ window.renderSection7 = function (mountEl, data, ctx) {
 
     var retEl = document.getElementById("s7-out-return");
     if (retEl) {
-      retEl.textContent =
-        s7Txt("Return: ", "??????: ") +
+      retEl.innerHTML =
+        s7Txt("Return: ", "العائد: ") +
         res.returnPerSar.toFixed(2) +
         " " +
-        state.currency;
+        state.currency + window.supposedBadgeHtml('roas');
       retEl.style.color =
         res.roi < 0
           ? "#ef4444"
@@ -1999,8 +2014,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
     }
     var netRoasEl = document.getElementById("s7-out-net-roas");
     if (netRoasEl) {
-      netRoasEl.textContent =
-        s7Txt("Net ROAS: ", "?????? ??????: ") + res.netRoas.toFixed(2) + "x";
+      netRoasEl.innerHTML =
+        s7Txt("Net ROAS: ", "صافي العائد: ") + res.netRoas.toFixed(2) + "x" + window.supposedBadgeHtml('roas');
       netRoasEl.style.color =
         res.netRoas >= 1
           ? document.documentElement.getAttribute("data-theme") === "light"

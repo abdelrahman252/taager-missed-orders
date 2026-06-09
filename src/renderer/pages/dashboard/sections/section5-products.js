@@ -280,12 +280,20 @@ window.renderSection5 = function (mountEl, data, ctx) {
   }
 
   function setProductCurrency(currency) {
+    console.log('[DIAGNOSTIC][S5] setProductCurrency called with:', currency, 'Current selected currency:', selectedCurrency());
     var nextCurrency = String(currency || selectedCurrency()).toUpperCase();
     if (window.TaagerCurrency && window.TaagerCurrency.cleanCurrency) {
       nextCurrency = window.TaagerCurrency.cleanCurrency(nextCurrency, selectedCurrency());
     }
-    if (supportedProductCurrencies().indexOf(nextCurrency) === -1) return;
-    if (nextCurrency === selectedCurrency()) return;
+    console.log('[DIAGNOSTIC][S5] Cleaned nextCurrency:', nextCurrency);
+    if (supportedProductCurrencies().indexOf(nextCurrency) === -1) {
+      console.log('[DIAGNOSTIC][S5] Currency not supported:', nextCurrency, supportedProductCurrencies());
+      return;
+    }
+    if (nextCurrency === selectedCurrency()) {
+      console.log('[DIAGNOSTIC][S5] nextCurrency matches selectedCurrency. No change.');
+      return;
+    }
 
     if (window.DashboardRoiState) {
       productFinancialSettings = window.DashboardRoiState.set(
@@ -293,11 +301,19 @@ window.renderSection5 = function (mountEl, data, ctx) {
         productAccountId,
         productFinancialSettings
       );
+      console.log('[DIAGNOSTIC][S5] Updated productFinancialSettings via DashboardRoiState:', productFinancialSettings);
     } else {
       productFinancialSettings = Object.assign({}, productFinancialSettings, { currency: nextCurrency });
+      console.log('[DIAGNOSTIC][S5] Updated productFinancialSettings locally:', productFinancialSettings);
     }
 
-    applyProductFinancials();
+    if (backendProductsEnabled) {
+      console.log('[DIAGNOSTIC][S5] Backend products enabled. Refreshing backend products...');
+      refreshBackendProducts(true);
+    } else {
+      console.log('[DIAGNOSTIC][S5] Backend products not enabled. Running local applyProductFinancials...');
+      applyProductFinancials();
+    }
     listCache = null;
     listCacheKey = '';
     clearProductDetailCache();
@@ -577,8 +593,9 @@ window.renderSection5 = function (mountEl, data, ctx) {
         ? (synced ? sarToSelectedCurrency(Number(synced.spendSar.toFixed(2))) : 0)
         : (totalPlaced > 0 ? budget * placed / totalPlaced : 0);
       p.cpa = placed > 0 ? p.allocatedAdSpend / placed : 0;
-      var delivered = Number(p.deliveredCount) || 0;
-      var avgCommissionSar = delivered > 0 ? (Number(p.commission) || 0) / delivered : 0;
+      var delivered = p.actualDeliveredCount !== undefined ? p.actualDeliveredCount : (Number(p.deliveredCount) || 0);
+      var commissionVal = p.actualCommission !== undefined ? p.actualCommission : (Number(p.commission) || 0);
+      var avgCommissionSar = delivered > 0 ? (Number(commissionVal) || 0) / delivered : 0;
       p.averageProfit = sarToSelectedCurrency(avgCommissionSar);
       var breakEvenSar = avgCommissionSar * ((Number(p.ndrPct) || 0) / 100);
       p.breakEvenCpa = sarToSelectedCurrency(breakEvenSar);
@@ -631,6 +648,10 @@ window.renderSection5 = function (mountEl, data, ctx) {
         deliveries: units, placedCount: p.totalOrderCount || p.placedCount || 0, pieces: p.pieces || p.qty || 0,
         sharePct, revenue: commission, delta: Number(p.delta || 0), spark, ...styleCfg,
         commission, deliveredCount: units,
+        actualDeliveredCount: p.actualDeliveredCount,
+        actualCommission: p.actualCommission,
+        actualDeliveredQty: p.actualDeliveredQty,
+        actualDeliveredSales: p.actualDeliveredSales,
         totalPieces:     p.totalPieces     || p.qty || 0,
         failedCount:     p.failedCount     || 0,
         canceledCount:   p.canceledByYouCount || p.canceledCount || 0,
@@ -835,6 +856,37 @@ window.renderSection5 = function (mountEl, data, ctx) {
       const factor = Math.pow(10, digits == null ? 2 : digits);
       return isFinite(n) ? Math.round(n * factor) / factor : 0;
     }
+    var expectedNdrRate = null;
+    if (window.isExpectedNdrMode && window.isExpectedNdrMode()) {
+      var globalExpectedNdrRate = (data && data.overview && data.overview.deliveryRate != null) ? (data.overview.deliveryRate / 100) : 0.35;
+      var productInList = data && data.products && data.products.rankedList && data.products.rankedList.find(function (p) {
+        return String(p.sku || '').toLowerCase() === String(row.sku || '').toLowerCase();
+      });
+      expectedNdrRate = productInList ? (productInList.ndrPct / 100) : globalExpectedNdrRate;
+    }
+
+    const placedCountVal = Number(row.placedCount || row.totalOrders || 0);
+    const deliveriesVal = expectedNdrRate !== null ? Math.round(placedCountVal * expectedNdrRate) : Number(row.deliveredCount || 0);
+    const commissionVal = expectedNdrRate !== null ? (deliveriesVal * Number(row.averageProfit || 0)) : Number(row.commission || 0);
+    const breakEvenCpaVal = expectedNdrRate !== null ? (Number(row.averageProfit || 0) * expectedNdrRate) : Number(row.breakEvenCpa || 0);
+    const profitLossVal = expectedNdrRate !== null ? (commissionVal - Number(row.allocatedAdSpend || row.adSpend || 0)) : Number(row.profitLoss || row.netProfit || 0);
+    const ndrPctVal = expectedNdrRate !== null ? (expectedNdrRate * 100) : Number(row.ndrPct || 0);
+
+    const failedCountVal = Number(row.failedCount || 0);
+    const canceledCountVal = Number(row.canceledCount || 0);
+    const confirmedCountVal = Number(row.confirmedCount || 0);
+    const shippingCountVal = Number(row.shippingCount || 0);
+    const processingCountVal = Number(row.processingCount || 0);
+    const waitingCountVal = Number(row.waitingCount || 0);
+    const pendingCountVal = Number(row.pendingCount || 0);
+
+    const drRateVal = expectedNdrRate !== null
+      ? roundTo(confirmedCountVal > 0 ? (deliveriesVal / confirmedCountVal * 100) : 0, 1)
+      : roundTo(row.drRate || 0, 1);
+    const deliveryPctVal = expectedNdrRate !== null
+      ? roundTo(placedCountVal > 0 ? (deliveriesVal / placedCountVal * 100) : 0, 1)
+      : roundTo(row.deliveryPct || 0, 1);
+
     const rank = Number(row.rank || 0);
     const rankIdx = Math.min(Math.max(rank - 1, 0), 4);
     const styleCfg = [
@@ -851,21 +903,21 @@ window.renderSection5 = function (mountEl, data, ctx) {
       rank: rank,
       name: row.name || s5Txt('Unknown Product', 'منتج غير معروف'),
       cat: 'SKU: ' + (row.sku || 'N/A'),
-      deliveries: Number(row.deliveredCount || 0),
-      placedCount: Number(row.placedCount || row.totalOrders || 0),
+      deliveries: deliveriesVal,
+      placedCount: placedCountVal,
       pieces: Number(row.totalPieces || 0),
       sharePct: 0,
-      revenue: Number(row.revenue || 0),
-      commission: Number(row.commission || 0),
-      deliveredCount: Number(row.deliveredCount || 0),
+      revenue: commissionVal,
+      commission: commissionVal,
+      deliveredCount: deliveriesVal,
       totalPieces: Number(row.totalPieces || 0),
-      failedCount: Number(row.failedCount || 0),
-      canceledCount: Number(row.canceledCount || 0),
-      confirmedCount: Number(row.confirmedCount || 0),
-      shippingCount: Number(row.shippingCount || 0),
-      processingCount: Number(row.processingCount || 0),
-      waitingCount: Number(row.waitingCount || 0),
-      pendingCount: Number(row.pendingCount || 0),
+      failedCount: failedCountVal,
+      canceledCount: canceledCountVal,
+      confirmedCount: confirmedCountVal,
+      shippingCount: shippingCountVal,
+      processingCount: processingCountVal,
+      waitingCount: waitingCountVal,
+      pendingCount: pendingCountVal,
       statusTotalCount: Number(row.statusTotalCount || row.totalOrderCount || row.placedCount || row.totalOrders || 0),
       netOrderCount: Number(row.netOrderCount || 0),
       confirmationStatusCount: Number(row.confirmationStatusCount || row.confirmedCount || 0),
@@ -874,15 +926,15 @@ window.renderSection5 = function (mountEl, data, ctx) {
       confirmationPct: roundTo(row.confirmationPct, 1),
       cancelPct: roundTo(row.cancelPct, 1),
       pendingPct: roundTo(row.pendingPct, 1),
-      ndrPct: roundTo(row.ndrPct, 1),
-      drRate: roundTo(row.drRate || row.deliveryPct, 1),
-      deliveryPct: roundTo(row.deliveryPct || row.ndrPct, 1),
+      ndrPct: roundTo(ndrPctVal, 1),
+      drRate: drRateVal,
+      deliveryPct: deliveryPctVal,
       scalingScore: Number(row.scalingScore || 0),
       allocatedAdSpend: roundTo(row.allocatedAdSpend || row.adSpend, 2),
       cpa: roundTo(row.cpa, 2),
       averageProfit: roundTo(row.averageProfit, 2),
-      breakEvenCpa: roundTo(row.breakEvenCpa, 2),
-      profitLoss: roundTo(row.profitLoss || row.netProfit, 2),
+      breakEvenCpa: roundTo(breakEvenCpaVal, 2),
+      profitLoss: roundTo(profitLossVal, 2),
       cityBreakdown: [],
       piecesBreakdown: [],
       quantityCityBreakdown: [],
@@ -892,12 +944,17 @@ window.renderSection5 = function (mountEl, data, ctx) {
   }
 
   function backendProductParams() {
+    var currency = selectedCurrency();
+    var egpRate = Number(productFinancialSettings.egpRate) || 52;
+    console.log('[DIAGNOSTIC][S5] Generating backendProductParams. Selected currency:', currency, 'EGP rate:', egpRate);
     return {
       page: currentPage,
       pageSize: PAGE_SIZE,
       sortBy: sortState.field || 'deliveredCount',
       sortDir: sortState.dir || 'desc',
       refreshRevision: backendProductsRefreshRevision,
+      productFinancialCurrency: currency,
+      productFinancialEgpRate: egpRate,
       filters: {
         search: filterState.search || '',
         statusKey: filterState.statusKey || 'all'
@@ -957,7 +1014,17 @@ window.renderSection5 = function (mountEl, data, ctx) {
         const detail = result.details[key] || {};
         backendProductDetailsCache.set(key, detail);
         const product = PRODUCT_BY_KEY[key];
-        if (product) Object.assign(product, detail);
+        if (product) {
+          Object.assign(product, detail);
+          // Invalidate any cached panel HTML that was built before details arrived
+          // (stale cache would show "No data" for cityBreakdown / piecesBreakdown).
+          if (detailPanelCache && detailPanelCache.size) {
+            const stalePrefix = String(product.key || product.sku || product.name || key) + '|';
+            detailPanelCache.forEach(function (_v, cacheKey) {
+              if (String(cacheKey).startsWith(stalePrefix)) detailPanelCache.delete(cacheKey);
+            });
+          }
+        }
       });
       return result.details || {};
     }).catch(function () { return {}; });
@@ -1350,27 +1417,36 @@ window.renderSection5 = function (mountEl, data, ctx) {
   }
 
   function detailPanelContent(p) {
-    return `<div style="display:flex;gap:20px;flex-wrap:wrap">
-      <div style="flex:1 1 100%;min-width:220px">
-        ${window.renderProductAiAdvisor ? window.renderProductAiAdvisor(p) : ''}
-      </div>
-      <div style="flex:1;min-width:220px">
-        <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.4);margin-bottom:12px;text-align:right">${s5Txt("Order Funnel", "مسار الطلبات")}</div>
-        ${funnelHTML(p)}
-      </div>
-      <div style="flex:1;min-width:160px">
-        <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.4);margin-bottom:12px;text-align:right">${s5Txt("Top Cities", "أبرز المدن")}</div>
-        ${citiesHTML(p)}
-      </div>
-      <div style="flex:1;min-width:120px">
-        <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.4);margin-bottom:12px;text-align:right">${s5Txt("Quantity Distribution", "توزيع الكميات")}</div>
-        ${piecesBreakdownHTML(p)}
-      </div>
-      <div style="flex:1 1 100%;min-width:220px">
-        <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.4);margin-bottom:12px;text-align:right">${s5Txt("Top Cities by Quantity", "أبرز المدن حسب الكمية")}</div>
-        ${quantityCitiesHTML(p)}
-      </div>
-    </div>`;
+    var aiHtml = window.renderProductAiAdvisor ? window.renderProductAiAdvisor(p) : '';
+    var cardStyle = 'background:rgba(255,255,255,0.018);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px 16px;';
+    var labelStyle = 'font-size:10px;font-weight:800;color:rgba(255,255,255,0.35);letter-spacing:.5px;text-transform:uppercase;margin-bottom:10px;';
+    return (
+      '<div style="display:grid;gap:12px;">' +
+        /* AI Advisor — full width */
+        (aiHtml ? '<div style="' + cardStyle + '">' + aiHtml + '</div>' : '') +
+        /* Row 1: Funnel | Top Cities */
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+          '<div style="' + cardStyle + '">' +
+            '<div style="' + labelStyle + '">' + s5Txt('Order Funnel', 'مسار الطلبات') + '</div>' +
+            funnelHTML(p) +
+          '</div>' +
+          '<div style="' + cardStyle + '">' +
+            '<div style="' + labelStyle + '">' + s5Txt('Top Cities', 'أبرز المدن') + '</div>' +
+            citiesHTML(p) +
+          '</div>' +
+        '</div>' +
+        /* Row 2: Quantity Distribution — single card, constrained width */
+        '<div style="' + cardStyle + 'max-width:100%">' +
+          '<div style="' + labelStyle + '">' + s5Txt('Quantity Distribution', 'توزيع الكميات') + '</div>' +
+          piecesBreakdownHTML(p) +
+        '</div>' +
+        /* Row 3: Top Cities by Quantity — full width */
+        '<div style="' + cardStyle + '">' +
+          '<div style="' + labelStyle + '">' + s5Txt('Top Cities by Quantity', 'أبرز المدن حسب الكمية') + '</div>' +
+          quantityCitiesHTML(p) +
+        '</div>' +
+      '</div>'
+    );
   }
 
   function cachedDetailPanelContent(product) {
@@ -1411,7 +1487,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
     });
   }
 
-  const DIV = '<div class="s5-col-divider" style="width:1px;align-self:stretch;background:rgba(255,255,255,0.05)"></div>';
+  const DIV = '<div class="s5-col-divider" style="width:1px;min-width:1px;flex:0 0 1px;align-self:stretch;background:rgba(255,255,255,0.05)"></div>';
 
   // ── Product row HTML ──────────────────────────────────────────────────────
   // Taager dashboard/status/NDR migration:
@@ -1470,128 +1546,128 @@ window.renderSection5 = function (mountEl, data, ctx) {
       ${DIV}
 
       <!-- Col 2: Total Orders -->
-      <div class="s5-cell s5-cell-orders" style="flex:0 0 64px;text-align:center;padding:0 5px">
+      <div class="s5-cell s5-cell-orders" style="flex:0 0 64px;min-width:64px;text-align:center;padding:0 5px">
         <div id="s5-placed-${i}" class="s5-number-fit" title="${attr(productNumber(displayOrderCount, 0))}" style="font-size:${compact?'15px':'17px'};font-weight:900;color:rgba(255,255,255,0.8)">${placedText}</div>
       </div>
       ${DIV}
 
       <!-- Col 2b: Net Orders (excludes canceled-by-you) -->
-      <div class="s5-cell s5-cell-net-orders" style="flex:0 0 64px;text-align:center;padding:0 5px">
+      <div class="s5-cell s5-cell-net-orders" style="flex:0 0 64px;min-width:64px;text-align:center;padding:0 5px">
         <div class="s5-number-fit" title="${attr(productNumber(displayNetOrderCount, 0))}" style="font-size:${compact?'15px':'17px'};font-weight:900;color:#38bdf8">${netOrderText}</div>
       </div>
       ${DIV}
 
       <!-- Col 3: Quantity -->
-      <div class="s5-cell s5-cell-pieces" style="flex:0 0 68px;text-align:center;padding:0 5px">
+      <div class="s5-cell s5-cell-pieces" style="flex:0 0 68px;min-width:68px;text-align:center;padding:0 5px">
         <div class="s5-number-fit" title="${attr(productNumber(p.totalPieces || 0, 0))}" style="font-size:${compact?'14px':'16px'};font-weight:800;color:#3b82f6">${totalPiecesText}</div>
       </div>
       ${DIV}
 
       <!-- Col 4: Failed Orders raw count -->
-      <div class="s5-cell s5-cell-failed" style="flex:0 0 64px;text-align:center;padding:0 5px">
+      <div class="s5-cell s5-cell-failed" style="flex:0 0 64px;min-width:64px;text-align:center;padding:0 5px">
         <div class="s5-number-fit" title="${attr(productNumber(p.failedCount || 0, 0))}" style="font-size:${compact?'14px':'16px'};font-weight:800;color:#f97316">${failedText}</div>
       </div>
       ${DIV}
 
       <!-- Col 5: Canceled Orders raw count -->
-      <div class="s5-cell s5-cell-canceled-raw" style="flex:0 0 68px;text-align:center;padding:0 5px">
+      <div class="s5-cell s5-cell-canceled-raw" style="flex:0 0 68px;min-width:68px;text-align:center;padding:0 5px">
         <div class="s5-number-fit" title="${attr(productNumber(p.canceledCount || 0, 0))}" style="font-size:${compact?'14px':'16px'};font-weight:800;color:#ef4444">${canceledText}</div>
       </div>
       ${DIV}
 
       <!-- Col 5b: Confirmed Orders count -->
-      <div class="s5-cell s5-cell-confirmed-count" style="flex:0 0 64px;text-align:center;padding:0 5px">
+      <div class="s5-cell s5-cell-confirmed-count" style="flex:0 0 64px;min-width:64px;text-align:center;padding:0 5px">
         <div class="s5-number-fit" title="${attr(productNumber(displayConfirmedCount, 0))}" style="font-size:${compact?'14px':'16px'};font-weight:800;color:#3b82f6">${confirmedText}</div>
       </div>
       ${DIV}
 
       <!-- Col 6: Confirmation % -->
-      <div class="s5-cell s5-cell-confirmation" style="flex:0 0 ${compact?'66px':'70px'};padding:0 5px">
+      <div class="s5-cell s5-cell-confirmation" style="flex:0 0 ${compact?'66px':'70px'};min-width:${compact?'66px':'70px'};padding:0 5px">
         ${rateBadgeHTML(p.confirmationPct, 'confirmation')}
       </div>
       ${DIV}
 
       <!-- Col 7: Cancel % -->
-      <div class="s5-cell s5-cell-cancel" style="flex:0 0 ${compact?'66px':'70px'};padding:0 5px">
+      <div class="s5-cell s5-cell-cancel" style="flex:0 0 ${compact?'66px':'70px'};min-width:${compact?'66px':'70px'};padding:0 5px">
         ${rateBadgeHTML(p.cancelPct, 'cancel')}
       </div>
       ${DIV}
 
       <!-- Col 8: Pending % -->
-      <div class="s5-cell s5-cell-pending" style="flex:0 0 ${compact?'66px':'70px'};padding:0 5px">
+      <div class="s5-cell s5-cell-pending" style="flex:0 0 ${compact?'66px':'70px'};min-width:${compact?'66px':'70px'};padding:0 5px">
         ${rateBadgeHTML(p.pendingPct, 'pending')}
       </div>
       ${DIV}
 
       <!-- Col 9: NDR % -->
-      <div class="s5-cell s5-cell-ndr" style="flex:0 0 ${compact?'64px':'66px'};padding:0 5px">
+      <div class="s5-cell s5-cell-ndr" style="flex:0 0 ${compact?'64px':'66px'};min-width:${compact?'64px':'66px'};padding:0 5px">
         ${noDeliveryRate ? zeroRate : rateBadgeHTML(p.ndrPct, 'ndr')}
       </div>
       ${DIV}
 
       <!-- Col 10: Delivery % -->
-      <div class="s5-cell s5-cell-delivery" style="flex:0 0 ${compact?'66px':'70px'};padding:0 5px">
+      <div class="s5-cell s5-cell-delivery" style="flex:0 0 ${compact?'66px':'70px'};min-width:${compact?'66px':'70px'};padding:0 5px">
         ${noDeliveryRate ? zeroRate : rateBadgeHTML(p.drRate, 'delivery')}
       </div>
       ${DIV}
 
       <!-- Col 11: Highlighted outcome count -->
-      <div class="s5-cell s5-cell-delivery-count" style="flex:0 0 ${compact?'64px':'66px'};text-align:center;padding:0 5px">
+      <div class="s5-cell s5-cell-delivery-count" style="flex:0 0 ${compact?'64px':'66px'};min-width:${compact?'64px':'66px'};text-align:center;padding:0 5px">
         <div id="s5-del-${i}" class="s5-number-fit" title="${attr(productNumber(hlCount, 0))}" style="font-size:${compact?'15px':'17px'};font-weight:900;color:${
           filterState.statusKey === 'shipping' ? '#14b8a6' :
           filterState.statusKey === 'failed' ? '#f97316' :
           filterState.statusKey === 'canceled' ? '#ef4444' :
           filterState.statusKey === 'processing' ? '#3b82f6' : '#14b8a6'
-        }">${hlCountText}</div>
+        }">${hlCountText}${(!filterState.statusKey || filterState.statusKey === 'delivered' || filterState.statusKey === 'deliveries') ? window.supposedBadgeHtml('delivered') : ''}</div>
       </div>
       ${DIV}
 
       <!-- Col 11: Average Profit -->
-      <div class="s5-cell s5-cell-average-profit" title="${attr(s5Txt('Average profit per delivered order', 'متوسط الربح لكل طلب مسلم'))}" style="flex:0 0 80px;text-align:center;padding:0 5px">
+      <div class="s5-cell s5-cell-average-profit" title="${attr(s5Txt('Average profit per delivered order', 'متوسط الربح لكل طلب مسلم'))}" style="flex:0 0 80px;min-width:80px;text-align:center;padding:0 5px">
         <div class="s5-number-fit" data-financial-value="averageProfit" title="${attr(productMoney(p.averageProfit || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:900;color:#38bdf8;white-space:nowrap">${averageProfitText}</div>
         <div data-financial-currency="averageProfit" style="font-size:9px;color:rgba(56,189,248,0.55);font-weight:700;margin-top:2px">${selectedCurrency()}</div>
       </div>
       ${DIV}
 
       <!-- Col 12: Allocated Ad Spend -->
-      <div class="s5-cell s5-cell-ad-spend" title="${attr(p5Txt('adSpendHelp'))}" style="flex:0 0 80px;text-align:center;padding:0 5px">
+      <div class="s5-cell s5-cell-ad-spend" title="${attr(p5Txt('adSpendHelp'))}" style="flex:0 0 80px;min-width:80px;text-align:center;padding:0 5px">
         <div class="s5-number-fit" data-financial-value="allocatedAdSpend" title="${attr(productMoney(p.allocatedAdSpend || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:800;color:#60a5fa;white-space:nowrap">${adSpendText}</div>
         <div data-financial-currency="allocatedAdSpend" style="font-size:9px;color:rgba(96,165,250,0.55);font-weight:700;margin-top:2px">${selectedCurrency()}</div>
       </div>
       ${DIV}
 
       <!-- Col 13: CPA -->
-      <div class="s5-cell s5-cell-cpa" title="${attr(p5Txt('cpaHelp'))}" style="flex:0 0 68px;text-align:center;padding:0 5px">
+      <div class="s5-cell s5-cell-cpa" title="${attr(p5Txt('cpaHelp'))}" style="flex:0 0 68px;min-width:68px;text-align:center;padding:0 5px">
         <div class="s5-number-fit" data-financial-value="cpa" title="${attr(productMoney(p.cpa || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:800;color:#a78bfa;white-space:nowrap">${cpaText}</div>
         <div data-financial-currency="cpa" style="font-size:9px;color:rgba(167,139,250,0.55);font-weight:700;margin-top:2px">${selectedCurrency()}</div>
       </div>
       ${DIV}
 
       <!-- Col 14: Break-even CPA -->
-      <div class="s5-cell s5-cell-breakeven" title="${attr(p5Txt('breakEvenHelp'))}" style="flex:0 0 76px;text-align:center;padding:0 5px">
+      <div class="s5-cell s5-cell-breakeven" title="${attr(p5Txt('breakEvenHelp'))}" style="flex:0 0 76px;min-width:76px;text-align:center;padding:0 5px">
         <div class="s5-number-fit" data-financial-value="breakEvenCpa" title="${attr(productMoney(p.breakEvenCpa || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:900;color:${(Number(p.cpa)||0) > (Number(p.breakEvenCpa)||0) ? '#ef4444' : '#f59e0b'};white-space:nowrap">${breakEvenText}</div>
         <div data-financial-currency="breakEvenCpa" style="font-size:9px;color:rgba(245,158,11,0.55);font-weight:700;margin-top:2px">${selectedCurrency()}</div>
       </div>
       ${DIV}
 
       <!-- Col 15: P&L -->
-      <div class="s5-cell s5-cell-pnl" title="${attr(p5Txt('pnlHelp'))}" style="flex:0 0 76px;text-align:center;padding:0 5px">
-        <div class="s5-number-fit" data-financial-value="profitLoss" title="${attr(productMoney(p.profitLoss || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:900;color:${p.profitLoss >= 0 ? '#00e676' : '#ef4444'};white-space:nowrap">${pnlText}</div>
+      <div class="s5-cell s5-cell-pnl" title="${attr(p5Txt('pnlHelp'))}" style="flex:0 0 76px;min-width:76px;text-align:center;padding:0 5px">
+        <div class="s5-number-fit" data-financial-value="profitLoss" title="${attr(productMoney(p.profitLoss || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:900;color:${p.profitLoss >= 0 ? '#00e676' : '#ef4444'};white-space:nowrap">${pnlText}${window.supposedBadgeHtml('profit')}</div>
         <div data-financial-currency="profitLoss" style="font-size:9px;color:${p.profitLoss >= 0 ? 'rgba(0,230,118,0.55)' : 'rgba(239,68,68,0.55)'};font-weight:700;margin-top:2px">${selectedCurrency()}</div>
       </div>
       ${DIV}
 
       <!-- Col 16: Taager profit (commission key retained for compatibility) -->
-      <div class="s5-cell s5-cell-commission" style="flex:0 0 80px;text-align:center;padding:0 5px">
+      <div class="s5-cell s5-cell-commission" style="flex:0 0 80px;min-width:80px;text-align:center;padding:0 5px">
         <div style="font-size:${compact?'16px':'18px'};font-weight:900;color:${p.accent || '#f59e0b'};letter-spacing:-0.5px">
-          <span id="s5-rev-${i}" class="s5-number-fit" data-financial-value="revenue" title="${attr(productMoney(revenueInFinancialCurrency) + (selectedCurrency() !== activeCurrency ? ' | Native: ' + productNumber(p.revenue || 0, 0) + ' ' + activeCurrency : ''))}">${revenueText}</span>
+          <span id="s5-rev-${i}" class="s5-number-fit" data-financial-value="revenue" title="${attr(productMoney(revenueInFinancialCurrency) + (selectedCurrency() !== activeCurrency ? ' | Native: ' + productNumber(p.revenue || 0, 0) + ' ' + activeCurrency : ''))}">${revenueText}${window.supposedBadgeHtml('revenue')}</span>
         </div>
         <div data-financial-currency="revenue" style="font-size:9px;color:rgba(255,255,255,0.35);font-weight:600;margin-top:2px">${selectedCurrency()}</div>
       </div>
 
       <!-- Actions cell -->
-      <div class="s5-cell s5-cell-actions" style="width:72px;height:100%;min-height:${minH};flex-shrink:0;display:grid;grid-template-columns:repeat(2, 26px);grid-auto-rows:26px;align-content:center;justify-content:center;column-gap:5px;row-gap:9px;
-                  background:transparent;position:sticky;right:0;z-index:2;border-left:1px solid var(--dash-border-soft, rgba(255,255,255,0.08));
+      <div class="s5-cell s5-cell-actions" style="width:72px;min-width:72px;height:100%;min-height:${minH};flex-shrink:0;display:grid;grid-template-columns:repeat(2, 26px);grid-auto-rows:26px;align-content:center;justify-content:center;column-gap:5px;row-gap:9px;
+                  background-color:#080b12;background-image:${hs.bg.includes('linear-gradient') ? hs.bg : 'none'};position:sticky;right:0;z-index:2;border-left:1px solid var(--dash-border-soft, rgba(255,255,255,0.08));
                   padding:4px;box-sizing:border-box;">
         
         <!-- T-22: Show on map button -->
@@ -1652,8 +1728,16 @@ window.renderSection5 = function (mountEl, data, ctx) {
     const isActive = sortState.field === field;
     const arrow    = isActive ? (sortState.dir === 'desc' ? '↓' : '↑') : '↕';
     const arrowColor = isActive ? '#f59e0b' : 'rgba(255,255,255,0.2)';
+    
+    // Auto-generate min-width from flexStyle to support robust max-content container calculation
+    let minWidthStyle = '';
+    const match = flexStyle.match(/flex:\s*0\s+0\s+(\d+)px?/);
+    if (match) {
+      minWidthStyle = `;min-width:${match[1]}px`;
+    }
+    
     return `<button class="s5-sort-col" data-field="${field}"
-        style="${flexStyle};background:none;border:none;color:rgba(255,255,255,0.35);
+        style="${flexStyle}${minWidthStyle};background:none;border:none;color:rgba(255,255,255,0.35);
                font-size:10px;font-weight:700;cursor:pointer;
                display:flex;align-items:center;justify-content:center;gap:4px;
                font-family:inherit;padding:0;width:100%;text-align:center">
@@ -1904,12 +1988,6 @@ window.renderSection5 = function (mountEl, data, ctx) {
         </div>
 
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
-          <div style="display:flex;align-items:center;gap:6px;padding:4px 7px;border-radius:10px;border:1px solid rgba(96,165,250,0.18);background:rgba(96,165,250,0.06);"
-               title="${s5Txt('Products financial columns use the shared calculator currency.', 'الأعمدة المالية للمنتجات تستخدم عملة الحاسبة المشتركة.')}">
-            <span style="font-size:10px;color:rgba(255,255,255,0.42);font-weight:800;white-space:nowrap;text-transform:uppercase;letter-spacing:0.4px">${s5Txt('Currency', 'العملة')}</span>
-            <div id="s5-currency-select" style="width:88px;min-width:88px"></div>
-          </div>
-
           <button id="s5-compare-open" data-tooltip="${s5Txt('Compare Products', 'مقارنة المنتجات')}"
             style="height:34px;padding:0 12px;border-radius:9px;border:1px solid rgba(245,158,11,0.28);
                    background:rgba(245,158,11,0.10);color:#fbbf24;display:flex;align-items:center;
@@ -2031,6 +2109,13 @@ window.renderSection5 = function (mountEl, data, ctx) {
         --s5-row-num-size-strong: 16px;
         --s5-name-size: 13px;
         --s5-sku-size: 10px;
+      }
+      #page-dashboard .dash-shell:not(.dash-size-sm):not(.dash-size-xs) .s5-metrics-track {
+        min-width: 1427px !important;
+        width: max-content !important;
+      }
+      #page-dashboard .dash-shell:not(.dash-size-sm):not(.dash-size-xs) .s5-product-row {
+        max-width: none !important;
       }
       .s5-number-fit {
         display: inline-block;
@@ -2275,6 +2360,9 @@ window.renderSection5 = function (mountEl, data, ctx) {
         .s5-compare-divider-line { width:100% !important; height:1px !important; }
       }
       @media (max-width: 1366px) {
+        #page-dashboard .dash-shell:not(.dash-size-sm):not(.dash-size-xs) .s5-metrics-track {
+          min-width: 1381px !important;
+        }
         .s5-root {
           --s5-row-num-size: 12px;
           --s5-row-num-size-strong: 14px;
@@ -2330,24 +2418,26 @@ window.renderSection5 = function (mountEl, data, ctx) {
         .s5-cell-identity div[style*="font-size:11px"] {
           font-size: var(--s5-sku-size) !important;
         }
-        .s5-cell-orders { flex-basis: 60px !important; }
-        .s5-cell-pieces { flex-basis: 62px !important; }
-        .s5-cell-failed { flex-basis: 62px !important; }
-        .s5-cell-canceled-raw { flex-basis: 62px !important; }
+        .s5-cell-orders { flex-basis: 60px !important; min-width: 60px !important; }
+        .s5-cell-net-orders { flex-basis: 60px !important; min-width: 60px !important; }
+        .s5-cell-pieces { flex-basis: 62px !important; min-width: 62px !important; }
+        .s5-cell-failed { flex-basis: 62px !important; min-width: 62px !important; }
+        .s5-cell-canceled-raw { flex-basis: 62px !important; min-width: 62px !important; }
         .s5-cell-confirmation,
         .s5-cell-cancel,
         .s5-cell-pending,
-        .s5-cell-delivery { flex-basis: 66px !important; }
+        .s5-cell-delivery { flex-basis: 66px !important; min-width: 66px !important; }
         .s5-cell-ndr,
-        .s5-cell-delivery-count { flex-basis: 64px !important; }
-        .s5-cell-average-profit { flex-basis: 72px !important; }
-        .s5-cell-ad-spend { flex-basis: 70px !important; }
-        .s5-cell-cpa { flex-basis: 64px !important; }
-        .s5-cell-breakeven { flex-basis: 68px !important; }
-        .s5-cell-pnl { flex-basis: 68px !important; }
-        .s5-cell-commission { flex-basis: 70px !important; }
+        .s5-cell-delivery-count { flex-basis: 64px !important; min-width: 64px !important; }
+        .s5-cell-average-profit { flex-basis: 72px !important; min-width: 72px !important; }
+        .s5-cell-ad-spend { flex-basis: 70px !important; min-width: 70px !important; }
+        .s5-cell-cpa { flex-basis: 64px !important; min-width: 64px !important; }
+        .s5-cell-breakeven { flex-basis: 68px !important; min-width: 68px !important; }
+        .s5-cell-pnl { flex-basis: 68px !important; min-width: 68px !important; }
+        .s5-cell-commission { flex-basis: 70px !important; min-width: 70px !important; }
         .s5-cell-actions {
           width: 68px !important;
+          min-width: 68px !important;
           grid-template-columns: repeat(2, 24px) !important;
           grid-auto-rows: 24px !important;
           column-gap: 4px !important;
@@ -2378,26 +2468,28 @@ window.renderSection5 = function (mountEl, data, ctx) {
           font-size: 10px !important;
           gap: 3px !important;
         }
-        .s5-header-cols .s5-sort-col[data-field="netOrderCount"] { flex-basis: 60px !important; }
-        .s5-header-cols .s5-sort-col[data-field="totalPieces"] { flex-basis: 62px !important; }
-        .s5-header-cols .s5-sort-col[data-field="failedCount"] { flex-basis: 62px !important; }
-        .s5-header-cols .s5-sort-col[data-field="canceledCount"] { flex-basis: 62px !important; }
+        .s5-header-cols .s5-sort-col[data-field="placedCount"],
+        .s5-header-cols .s5-sort-col[data-field="netOrderCount"] { flex-basis: 60px !important; min-width: 60px !important; }
+        .s5-header-cols .s5-sort-col[data-field="totalPieces"] { flex-basis: 62px !important; min-width: 62px !important; }
+        .s5-header-cols .s5-sort-col[data-field="failedCount"] { flex-basis: 62px !important; min-width: 62px !important; }
+        .s5-header-cols .s5-sort-col[data-field="canceledCount"] { flex-basis: 62px !important; min-width: 62px !important; }
         .s5-header-cols .s5-sort-col[data-field="confirmationPct"],
         .s5-header-cols .s5-sort-col[data-field="cancelPct"],
         .s5-header-cols .s5-sort-col[data-field="pendingPct"],
-        .s5-header-cols .s5-sort-col[data-field="drRate"] { flex-basis: 66px !important; }
+        .s5-header-cols .s5-sort-col[data-field="drRate"] { flex-basis: 66px !important; min-width: 66px !important; }
         .s5-header-cols .s5-sort-col[data-field="ndrPct"],
         .s5-header-cols .s5-sort-col[data-field="deliveredCount"],
         .s5-header-cols .s5-sort-col[data-field="shippingCount"],
-        .s5-header-cols .s5-sort-col[data-field="processingCount"] { flex-basis: 64px !important; }
-        .s5-header-cols .s5-sort-col[data-field="averageProfit"] { flex-basis: 72px !important; }
-        .s5-header-cols .s5-sort-col[data-field="allocatedAdSpend"] { flex-basis: 70px !important; }
-        .s5-header-cols .s5-sort-col[data-field="cpa"] { flex-basis: 64px !important; }
-        .s5-header-cols .s5-sort-col[data-field="breakEvenCpa"] { flex-basis: 68px !important; }
-        .s5-header-cols .s5-sort-col[data-field="profitLoss"] { flex-basis: 68px !important; }
-        .s5-header-cols .s5-sort-col[data-field="commission"] { flex-basis: 70px !important; }
+        .s5-header-cols .s5-sort-col[data-field="processingCount"] { flex-basis: 64px !important; min-width: 64px !important; }
+        .s5-header-cols .s5-sort-col[data-field="averageProfit"] { flex-basis: 72px !important; min-width: 72px !important; }
+        .s5-header-cols .s5-sort-col[data-field="allocatedAdSpend"] { flex-basis: 70px !important; min-width: 70px !important; }
+        .s5-header-cols .s5-sort-col[data-field="cpa"] { flex-basis: 64px !important; min-width: 64px !important; }
+        .s5-header-cols .s5-sort-col[data-field="breakEvenCpa"] { flex-basis: 68px !important; min-width: 68px !important; }
+        .s5-header-cols .s5-sort-col[data-field="profitLoss"] { flex-basis: 68px !important; min-width: 68px !important; }
+        .s5-header-cols .s5-sort-col[data-field="commission"] { flex-basis: 70px !important; min-width: 70px !important; }
         .s5-header-cols > div:last-child {
           width: 68px !important;
+          min-width: 68px !important;
           flex: 0 0 68px !important;
           font-size: 9px !important;
         }
@@ -2420,9 +2512,6 @@ window.renderSection5 = function (mountEl, data, ctx) {
         }
         .s5-stat-card {
           min-width: 0;
-        }
-        .s5-metrics-track {
-          min-width: 1180px;
         }
       }
     </style>
@@ -2467,7 +2556,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
       <!-- Scroll wrapper -->
       <div id="s5-scroll-wrapper" style="flex:0 0 auto;overflow-x:auto;overflow-y:visible;min-height:0;width:100%">
-        <div style="padding:0 28px 22px">
+        <div style="padding:0 28px 22px;width:max-content;min-width:100%;box-sizing:border-box">
           ${columnHeadersHTML()}
           <div id="s5-rows">
             ${initialPageProducts.map((p, i) => productRowHTML(p, i)).join('')}
@@ -2617,6 +2706,13 @@ window.renderSection5 = function (mountEl, data, ctx) {
         return '<option value="' + attr(opt.value) + '"' + (opt.value === current ? ' selected' : '') + '>' + esc(opt.label) + '</option>';
       }).join('') +
       '</select>';
+    var nativeSel = wrap.querySelector('#s5-currency-native');
+    if (nativeSel) {
+      nativeSel.addEventListener('change', function (e) {
+        e.stopPropagation();
+        setProductCurrency(this.value);
+      });
+    }
   }
 
   function refreshProductControls() {
@@ -3840,16 +3936,16 @@ window.renderSection5 = function (mountEl, data, ctx) {
       if (!p) return '';
       var geoD = window.dashboardGeoData;
       var gpm  = geoD && geoD.geo && geoD.geo.geoProductMap;
-      var prodKey = p.legacyKey || p.sku || p.key || p.name || '';
+      // geoProductMap keys are lowercase (aggregator normalizes them) — match that.
+      var prodKey = (p.legacyKey || p.sku || p.key || p.name || '').toLowerCase();
 
-      /* City breakdown from geoProductMap */
+      /* City breakdown — prefer geoProductMap (richer data), fall back to cityBreakdown */
       var cityRows = '';
       var cityPaginationHtml = '';
       if (gpm) {
         var cityEntries = [];
         Object.keys(gpm).forEach(function (cityName) {
           var cell = gpm[cityName] && gpm[cityName][prodKey];
-          // Show cities with created orders or delivered events in the selected attribution mode.
           if (cell && ((cell.orders || 0) > 0 || (cell.delivered || 0) > 0)) {
             var cellNdr = (cell.orders || 0) > 0 ? (cell.delivered || 0) / (cell.orders || 0) * 100 : 0;
             cellNdr = isNaN(cellNdr) ? 0 : cellNdr;
@@ -3866,7 +3962,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         var startIndex = (currentModalCityPage - 1) * MODAL_CITY_PAGE_SIZE;
         var pageEntries = cityEntries.slice(startIndex, startIndex + MODAL_CITY_PAGE_SIZE);
 
-        pageEntries.forEach(function (c, i) {
+        pageEntries.forEach(function (c) {
           var barW = Math.min(100, Math.round(c.orders / (cityEntries[0] && cityEntries[0].orders || 1) * 100));
           cityRows += '<div style="display:grid;grid-template-columns:1fr 60px 60px 70px;gap:8px;align-items:center;' +
             'padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);margin-bottom:4px;">' +
@@ -3894,8 +3990,9 @@ window.renderSection5 = function (mountEl, data, ctx) {
           }) + '</div>';
         }
       }
+      // Fallback to cityBreakdown returned by backend product-details query
       if (!cityRows && Array.isArray(p.cityBreakdown) && p.cityBreakdown.length) {
-        p.cityBreakdown.slice(0, 5).forEach(function (c) {
+        p.cityBreakdown.slice(0, 8).forEach(function (c) {
           var orders = Number(c.count || c.orders || 0);
           var cityNdr = Number(c.ndr || 0);
           cityRows += '<div style="display:grid;grid-template-columns:1fr 60px 60px 70px;gap:8px;align-items:center;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);margin-bottom:4px;">' +
@@ -3905,6 +4002,56 @@ window.renderSection5 = function (mountEl, data, ctx) {
             '<div style="text-align:center">' + sb(c.scalingScore || 0, 'scale') + '</div>' +
           '</div>';
         });
+      }
+
+      /* Pieces breakdown (Quantity Distribution) */
+      var piecesHtml = '';
+      if (Array.isArray(p.piecesBreakdown) && p.piecesBreakdown.length) {
+        var totalPieces = p.piecesBreakdown.reduce(function (s, x) { return s + (Number(x.count) || 0); }, 0) || 1;
+        var maxPiece = p.piecesBreakdown.reduce(function (m, x) { return Math.max(m, Number(x.count) || 0); }, 0) || 1;
+        piecesHtml = p.piecesBreakdown.map(function (item) {
+          var c = Number(item.count || 0);
+          var d = Number(item.delivered || 0);
+          var ndrV = Number(item.ndr || (c > 0 ? (d / c * 100) : 0));
+          var barW = Math.round(c / maxPiece * 100);
+          var pct2 = c > 0 ? (c / totalPieces * 100).toFixed(1) + '%' : '-';
+          return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">' +
+            '<span style="min-width:24px;font-size:13px;font-weight:900;color:#f59e0b;text-align:center">' + esc(item.qty) + 'x</span>' +
+            '<div style="flex:1">' +
+              '<div style="height:5px;background:rgba(255,255,255,0.07);border-radius:5px;overflow:hidden">' +
+                '<div style="height:100%;width:' + barW + '%;background:linear-gradient(90deg,#a855f7,#14b8a6);border-radius:5px"></div>' +
+              '</div>' +
+            '</div>' +
+            '<span style="min-width:36px;text-align:right;font-size:11px;font-weight:700;color:rgba(255,255,255,0.65)">' + num(c) + '</span>' +
+            '<span style="min-width:38px;text-align:right;font-size:11px;color:rgba(255,255,255,0.35)">' + pct2 + '</span>' +
+            '<span style="min-width:44px;text-align:right;font-size:11px;color:' + ndrColor(ndrV) + '">' + pct(ndrV) + '</span>' +
+          '</div>';
+        }).join('');
+      } else if (p._backendProduct) {
+        piecesHtml = '<div style="color:rgba(255,255,255,0.25);font-size:12px;font-style:italic;padding:8px 0">' +
+          s5Txt('Loading details\u2026', 'جار التحميل\u2026') + '</div>';
+      }
+
+      /* Quantity × City breakdown */
+      var qtyCityHtml = '';
+      if (Array.isArray(p.quantityCityBreakdown) && p.quantityCityBreakdown.length) {
+        qtyCityHtml = p.quantityCityBreakdown.slice(0, 4).map(function (item) {
+          var topCities = (item.cities || []).slice(0, 3).map(function (c) {
+            return '<div style="display:flex;justify-content:space-between;align-items:center;' +
+              'padding:3px 6px;border-radius:5px;background:rgba(255,255,255,0.02);margin-bottom:2px;">' +
+              '<span style="font-size:11px;color:rgba(255,255,255,0.7)">' + esc(c.name) + '</span>' +
+              '<span style="font-size:11px;font-weight:700;color:#f59e0b">' + num(c.count || c.statusTotalCount) + '</span>' +
+            '</div>';
+          }).join('');
+          return '<div style="padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.025);' +
+            'border:1px solid rgba(255,255,255,0.05);margin-bottom:8px;">' +
+            '<div style="font-size:12px;font-weight:900;color:#f59e0b;margin-bottom:6px">' + esc(item.qty) + 'x</div>' +
+            topCities +
+          '</div>';
+        }).join('');
+      } else if (p._backendProduct) {
+        qtyCityHtml = '<div style="color:rgba(255,255,255,0.25);font-size:12px;font-style:italic;padding:8px 0">' +
+          s5Txt('Loading details\u2026', 'جار التحميل\u2026') + '</div>';
       }
 
       /* Funnel bars */
@@ -3919,7 +4066,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
       ];
 
       var _fIsLight = document.documentElement.getAttribute('data-theme')==='light';
-      var funnelHTML = funnel.map(function (f) {
+      var funnelRows = funnel.map(function (f) {
         var barW = Math.round((f.count / (f.base || rawTotal)) * 100);
         return '<div style="margin-bottom:8px">' +
           '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">' +
@@ -3938,9 +4085,13 @@ window.renderSection5 = function (mountEl, data, ctx) {
       var cnfVal = typeof p.confirmationPct === 'number' ? p.confirmationPct : (p.confirmation || 0);
       var pendingVal = typeof p.pendingPct === 'number' ? p.pendingPct : 0;
 
+      var cityLoadingPlaceholder = p._backendProduct && !cityRows
+        ? '<div style="color:rgba(255,255,255,0.25);font-size:12px;font-style:italic;padding:8px 0">' +
+          s5Txt('Loading city data\u2026', 'جار تحميل بيانات المدن\u2026') + '</div>'
+        : '<div style="color:rgba(255,255,255,0.25);font-size:12px;padding:20px 0">' + s5Txt('No geographical data available', 'لا توجد بيانات جغرافية متاحة') + '</div>';
+
       return '<div style="background:#0c1121;border:1px solid rgba(255,255,255,0.1);border-radius:22px;' +
-        'width:min(860px,96vw);max-height:88vh;overflow-y:auto;position:relative;' +
-        '">' +
+        'width:min(1040px,96vw);max-height:90vh;overflow-y:auto;position:relative;">' +
 
         /* Header */
         '<div style="padding:24px 28px 20px;border-bottom:1px solid rgba(255,255,255,0.07);' +
@@ -3963,10 +4114,11 @@ window.renderSection5 = function (mountEl, data, ctx) {
         '</div>' +
 
         /* KPI bar */
-        '<div class="s5-modal-kpi-grid" style="padding:20px 28px;display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;' +
+        '<div class="s5-modal-kpi-grid" style="padding:20px 28px;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;' +
           'border-bottom:1px solid rgba(255,255,255,0.06);">' +
           [
             { label: s5Txt('Total Orders', 'إجمالي الطلبات'), value: num(rawTotal),          color: '#a855f7', badge: null },
+            { label: s5Txt('NDR', 'NDR'),                      value: pct(ndrVal),          color: ndrColor(ndrVal), badge: null },
             { label: s5Txt('Delivery Rate', 'معدل التسليم'),   value: pct(drVal),          color: drColor(drVal), badge: null },
             { label: s5Txt('Cancel Rate', 'معدل الإلغاء'),   value: pct(cancelVal),      color: '#ef4444', badge: null },
             { label: s5Txt('Confirm Rate', 'التأكيد'),        value: pct(cnfVal),         color: '#14b8a6', badge: null },
@@ -3984,28 +4136,59 @@ window.renderSection5 = function (mountEl, data, ctx) {
           }).join('') +
         '</div>' +
 
-        /* Body: funnel + city table */
-        '<div style="padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:24px;">' +
+        /* Body: strict 2×2 grid — Funnel | Cities / Quantity Distribution | Qty×City */
+        '<div style="padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:20px;">' +
 
           /* Funnel */
-          '<div>' +
-            '<div style="font-size:12px;font-weight:800;color:rgba(255,255,255,0.45);margin-bottom:14px;">' + s5Txt("Order Funnel", "مسار الطلبات") + '</div>' +
-            funnelHTML +
+          '<div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;padding:16px 18px;">' +
+            '<div style="font-size:12px;font-weight:800;color:rgba(255,255,255,0.45);margin-bottom:14px;display:flex;align-items:center;gap:6px;">' +
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 3H2l8 9.46V19l4 2V12.46L22 3z"/></svg>' +
+              s5Txt('Order Funnel', 'مسار الطلبات') +
+            '</div>' +
+            funnelRows +
           '</div>' +
 
           /* City breakdown */
-          '<div>' +
-            '<div style="font-size:12px;font-weight:800;color:rgba(255,255,255,0.45);margin-bottom:14px;">' + s5Txt("City Performance", "أداء المدن") + '</div>' +
+          '<div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;padding:16px 18px;">' +
+            '<div style="font-size:12px;font-weight:800;color:rgba(255,255,255,0.45);margin-bottom:14px;display:flex;align-items:center;gap:6px;">' +
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>' +
+              s5Txt('City Performance', 'أداء المدن') +
+            '</div>' +
             (cityRows
               ? '<div style="font-size:10px;color:rgba(255,255,255,0.3);display:grid;grid-template-columns:1fr 60px 60px 70px;gap:8px;padding:0 10px;margin-bottom:6px;">' +
                   '<span>' + s5Txt('City', 'المدينة') + '</span><span style="text-align:center">' + s5Txt('Orders', 'طلبات') + '</span><span style="text-align:center">NDR</span><span style="text-align:center">' + s5Txt('Scale', 'توسع') + '</span>' +
                 '</div>' + cityRows + cityPaginationHtml
-              : '<div style="color:rgba(255,255,255,0.25);font-size:12px;padding:20px 0">' + s5Txt('No geographical data available', 'لا توجد بيانات جغرافية متاحة') + '</div>') +
+              : cityLoadingPlaceholder) +
+          '</div>' +
+
+          /* Quantity Distribution */
+          '<div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;padding:16px 18px;">' +
+            '<div style="font-size:12px;font-weight:800;color:rgba(255,255,255,0.45);margin-bottom:14px;display:flex;align-items:center;gap:6px;">' +
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="6" height="18"/><rect x="9" y="8" width="6" height="13"/><rect x="16" y="13" width="6" height="8"/></svg>' +
+              s5Txt('Quantity Distribution', 'توزيع الكميات') +
+            '</div>' +
+            (piecesHtml
+              ? '<div style="font-size:9px;color:rgba(255,255,255,0.25);display:flex;justify-content:flex-end;gap:10px;margin-bottom:5px;">' +
+                  '<span>' + s5Txt('Count', 'عدد') + '</span><span>%</span><span>NDR</span>' +
+                '</div>' + piecesHtml
+              : '<div style="color:rgba(255,255,255,0.25);font-size:12px;padding:12px 0">' + s5Txt('No quantity data', 'لا توجد بيانات كميات') + '</div>') +
+          '</div>' +
+
+          /* Top Cities by Quantity */
+          '<div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;padding:16px 18px;">' +
+            '<div style="font-size:12px;font-weight:800;color:rgba(255,255,255,0.45);margin-bottom:14px;display:flex;align-items:center;gap:6px;">' +
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' +
+              s5Txt('Top Cities by Quantity', 'أبرز المدن حسب الكمية') +
+            '</div>' +
+            (qtyCityHtml
+              ? qtyCityHtml
+              : '<div style="color:rgba(255,255,255,0.25);font-size:12px;padding:12px 0">' + s5Txt('No data', 'لا توجد بيانات') + '</div>') +
           '</div>' +
 
         '</div>' +
       '</div>';
     }
+
 
     function refreshModal() {
       var p = PRODUCT_BY_KEY[currentModalProductKey] || null;

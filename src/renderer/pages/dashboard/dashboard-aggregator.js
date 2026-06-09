@@ -523,15 +523,25 @@
       drPct: 0
     };
 
+    var totalPlacedCommission = 0;
+    var ndrBase = 0;
+    var ndrDelivered = 0;
+
     rows.forEach(function (row) {
       var inCreatedPeriod = isRowCreatedInPeriod(row, period);
       var exactBucket = exactStatusBucket(row);
       var netEligible = !isNdrCanceledBucket(exactBucket);
       var isDeliveredInPeriod = isDeliveredRowInPeriod(row, period, mode || 'actual');
-      // Compatibility field name: dashboard sections still call this commission,
-      // but Taager data routes order profit minus tax profit through the shared helper.
       var commissionVal = rowCommissionValue(row);
       var priceVal = rowTotalPrice(row);
+
+      var ndrPeriodForRow = mode === 'expected' ? activeNdrPeriod(mode) : period;
+      var inNdrCohortPeriod = isRowCreatedInPeriod(row, ndrPeriodForRow);
+      var inSelectedNdrBase = netEligible && inNdrCohortPeriod;
+      var isDeliveredInNdrCohort = exactBucket === 'delivered' && inNdrCohortPeriod;
+
+      if (inSelectedNdrBase) ndrBase++;
+      if (isDeliveredInNdrCohort && netEligible) ndrDelivered++;
 
       if ((inCreatedPeriod || isDeliveredInPeriod) && hasMissingTotalPrice(row)) {
         var priceLookupInfo = totalPriceLookup[amountLookupKey(row)];
@@ -546,6 +556,7 @@
       if (inCreatedPeriod && netEligible) {
         summary.totalOrders++;
         summary.totalSales += priceVal;
+        totalPlacedCommission += commissionVal;
         if (!isConfirmedBaseExcludedBucket(exactBucket)) summary.confirmedCount++;
       }
 
@@ -559,6 +570,15 @@
         summary.incomingCommission += commissionVal;
       }
     });
+
+    if (mode === 'expected') {
+      var expectedNdrRate = ndrBase > 0 ? (ndrDelivered / ndrBase) : 0;
+      summary.deliveredCount = Math.round(summary.totalOrders * expectedNdrRate);
+      summary.earnedCommission = totalPlacedCommission * expectedNdrRate;
+      summary.totalDeliveredSales = summary.totalSales * expectedNdrRate;
+      summary.incomingCommission = 0;
+      summary.lostCommission = totalPlacedCommission * (1 - expectedNdrRate);
+    }
 
     summary.overallAov = summary.totalOrders > 0
       ? parseFloat((summary.totalSales / summary.totalOrders).toFixed(2))
@@ -1018,7 +1038,7 @@
   }
 
   function emptyDayBucket() {
-    return { earned: 0, incoming: 0, lost: 0, orders: 0, codCollected: 0, codDue: 0 };
+    return { earned: 0, incoming: 0, lost: 0, orders: 0, codCollected: 0, codDue: 0, placedCommission: 0 };
   }
 
   function emptyDailyStats(period, snapshotMonth) {
@@ -1145,7 +1165,7 @@
         : snapshot;
       var netPeriodRows = orderLevelRows(periodRows, false);
       var netSnapshotRows = orderLevelRows(snapshot, false);
-      return {
+      return Object.assign({}, sourceAccount, {
         id: id,
         value: id,
         label: label,
@@ -1158,7 +1178,7 @@
         rawOrderCount: netSnapshotRows.length,
         snapshotMonth: snap.snapshotMonth || '',
         lastUpdatedAt: snap.staticUploadTimestamp || snap.autoFetchTimestamp || snap.manualFetchTimestamp || snap.botSnapshotTimestamp || null
-      };
+      });
     });
   }
 
@@ -1342,7 +1362,14 @@
         ? window.TaagerCountry.currency(activeCountry)
         : 'SAR';
       var rateSnapshot = currencySnapshot();
-      var reportingCurrency = activeCountry === 'mixed' ? reportingCurrencyPreference() : nativeActiveCurrency;
+      var storedPref = '';
+      try { storedPref = localStorage.getItem('taager_dashboard_reporting_currency') || ''; } catch (_) {}
+      if (storedPref && window.TaagerCurrency && typeof window.TaagerCurrency.cleanCurrency === 'function') {
+        storedPref = window.TaagerCurrency.cleanCurrency(storedPref, '');
+      }
+      var reportingCurrency = (storedPref && ['SAR', 'USD', 'EGP', 'AED', 'IQD', 'OMR'].indexOf(String(storedPref).toUpperCase()) !== -1)
+        ? String(storedPref).toUpperCase()
+        : nativeActiveCurrency;
       var activeCurrency = reportingCurrency;
       var countryGroups = {};
       rows.forEach(function (row) {
@@ -1454,7 +1481,7 @@
     var ndrDeliveredOrders = 0;
     var deliveredCount = 0, shippingCount = 0, failedCount = 0, canceledByYouCount = 0;
     var pendingCount = 0, confirmedCount = 0, processingCount = 0, waitingCount = 0;
-    var earnedCommission = 0, incomingCommission = 0, lostCommission = 0;
+    var earnedCommission = 0, incomingCommission = 0, lostCommission = 0, totalPlacedCommission = 0;
     var collected = 0, gapSar = 0, totalDue = 0;
     var incomingCodSar = 0, lostCodSar = 0, confirmedBaseCodSar = 0;
     var drBaseOrders = 0, drDeliveredOrders = 0;
@@ -1603,6 +1630,7 @@
 
       if (inCreatedPeriod && rowIsNetOrder) {
         totalSales += priceVal;
+        totalPlacedCommission += commissionVal;
       }
       if (isDeliveredInPeriod && rowIsNetOrder) {
         totalDeliveredSales += priceVal;
@@ -1659,6 +1687,11 @@
         dayKeys.sort();
       }
       if (dateKey) {
+        if (inCreatedPeriod && rowIsNetOrder) {
+          if (addOnce(dailyOrderSet, dateKey + ':placedCommission:' + orderKey)) {
+            dailyStats[dateKey].placedCommission += commissionVal;
+          }
+        }
         if (isDeliveredInPeriod && rowIsNetOrder) {
           if (addOnce(dailyOrderSet, dateKey + ':delivered:' + orderKey)) dailyStats[dateKey].orders++;
           if (addOnce(dailyOrderSet, dateKey + ':earned:' + orderKey)) dailyStats[dateKey].earned += commissionVal;
@@ -1692,7 +1725,7 @@
             deliveredOrders: 0, ndrDeliveredOrders: 0, drBaseOrders: 0, drDeliveredOrders: 0,
             canceledCount: 0, shippingCount: 0, confirmedCount: 0, processingCount: 0,
             statusTotalCount: 0, confirmationStatusCount: 0, cancelStatusCount: 0, pendingStatusCount: 0,
-            earnedCommission: 0, incomingCommission: 0, lostCommission: 0,
+            earnedCommission: 0, incomingCommission: 0, lostCommission: 0, totalPlacedCommission: 0,
             totalRevenue: 0,
             prepaidCount: 0, codCount: 0,
             prepaidDeliveredCount: 0, codDeliveredCount: 0,
@@ -1728,6 +1761,7 @@
         }
         if (inCreatedPeriod && rowIsNetOrder) {
           cs.totalRevenue += priceVal;
+          cs.totalPlacedCommission += commissionVal;
         }
         if (inSelectedNdrBase && addOnce(cityOrderSet, 'ndr:' + cityOrderKey)) {
           cs.ndrBaseOrders++;
@@ -1788,13 +1822,13 @@
         }
 
         var cityProductName = window.TaagerStatus ? window.TaagerStatus.productName(row) : (row.products || row.productName || row.product || '');
-        var cityProductKey = row.sku || cityProductName;
+        var cityProductKey = (row.sku || cityProductName || '').toLowerCase();
         if (cityProductKey) {
           if (!cs.productMap[cityProductKey]) {
             cs.productMap[cityProductKey] = {
               sku: row.sku || '',
               name: cityProductName || row.sku || raw('منتج غير معروف'),
-              orders: 0, delivered: 0, canceled: 0, commission: 0, revenue: 0,
+              orders: 0, delivered: 0, canceled: 0, commission: 0, revenue: 0, totalPlacedCommission: 0,
               activeOrders: 0, ndrBaseOrders: 0, confirmed: 0,
               statusTotalCount: 0, confirmationStatusCount: 0, cancelStatusCount: 0, pendingStatusCount: 0,
               prepaidCount: 0, codCount: 0,
@@ -1825,6 +1859,7 @@
           }
           if (inCreatedPeriod && rowIsNetOrder) {
             cp.revenue += priceVal;
+            cp.totalPlacedCommission += commissionVal;
           }
           if (inSelectedNdrBase && addOnce(productOrderSet, 'cityProductNdr:' + cpOrderKey)) {
             cp.ndrBaseOrders++;
@@ -1859,7 +1894,7 @@
       }
 
       var productName = window.TaagerStatus ? window.TaagerStatus.productName(row) : (row.products || row.productName || row.product || '');
-      var productKey = row.sku || productName;
+      var productKey = (row.sku || productName || '').toLowerCase();
       if (productKey) {
         var campaignProductKey = [
           String(row.accountId || meta.activeAccountId || ''),
@@ -1890,7 +1925,9 @@
             processingCount: 0,
             waitingCount: 0,
             commission: 0,
-            deliveredSales: 0
+            deliveredSales: 0,
+            totalPlacedSales: 0,
+            totalPlacedCommission: 0
           };
         }
         var campaignProduct = campaignProductStats[campaignProductKey];
@@ -1910,6 +1947,8 @@
         }
         if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'campaignPlaced:' + campaignProductOrderKey)) {
           campaignProduct.placedCount++;
+          campaignProduct.totalPlacedSales += priceVal;
+          campaignProduct.totalPlacedCommission += commissionVal;
           if (rowInBusinessConfirmedBase) campaignProduct.confirmedCount++;
           if (isLostBucket(exactBucket)) {
             campaignProduct.failedCount++;
@@ -1938,7 +1977,7 @@
           productStats[productKey] = {
             sku: row.sku || '',
             name: productName || row.sku || raw('منتج غير معروف'),
-            qty: 0, deliveredQty: 0, revenue: 0, commission: 0, deliveredSales: 0,
+            qty: 0, deliveredQty: 0, revenue: 0, commission: 0, deliveredSales: 0, totalPlacedCommission: 0,
             deliveredCount: 0, ndrDeliveredCount: 0, placedCount: 0, totalOrderCount: 0,
             ndrBaseCount: 0,
             statusTotalCount: 0, confirmationStatusCount: 0, cancelStatusCount: 0, pendingStatusCount: 0,
@@ -1985,6 +2024,7 @@
         if (inCreatedPeriod && rowIsNetOrder) {
           productStats[productKey].qty += rowQty;
           productStats[productKey].revenue += priceVal;
+          productStats[productKey].totalPlacedCommission += commissionVal;
         }
         if (inSelectedNdrBase && addOnce(productOrderSet, 'ndr:' + productOrderKey)) {
           productStats[productKey].ndrBaseCount++;
@@ -2011,7 +2051,7 @@
             productStats[productKey].cityMap[cityKey] = {
               name: cityName || cityKey,
               country: rowCountry,
-              orders: 0, delivered: 0, ndrDelivered: 0, canceled: 0, commission: 0, revenue: 0, ndrBaseOrders: 0, confirmed: 0,
+              orders: 0, delivered: 0, ndrDelivered: 0, canceled: 0, commission: 0, revenue: 0, ndrBaseOrders: 0, confirmed: 0, totalPlacedCommission: 0,
               statusTotalCount: 0, confirmationStatusCount: 0, cancelStatusCount: 0, pendingStatusCount: 0,
               prepaidCount: 0, codCount: 0,
               prepaidDelivered: 0, prepaidCanceled: 0,
@@ -2036,6 +2076,7 @@
           }
           if (inCreatedPeriod && ndrEligible) {
             pcm.revenue += priceVal;
+            pcm.totalPlacedCommission += commissionVal;
           }
           if (inSelectedNdrBase && addOnce(productOrderSet, 'productCityNdr:' + pcmOrderKey)) {
             pcm.ndrBaseOrders++;
@@ -2128,6 +2169,86 @@
         }
       }
     });
+
+    if (meta.deliveredDateMode === 'expected') {
+      var globalExpectedNdrRate = ndrBaseOrders > 0 ? (ndrDeliveredOrders / ndrBaseOrders) : 0;
+      
+      // Override global counts
+      deliveredCount = Math.round(placedCount * globalExpectedNdrRate);
+      earnedCommission = totalPlacedCommission * globalExpectedNdrRate;
+      totalDeliveredSales = totalSales * globalExpectedNdrRate;
+      ndrDeliveredOrders = Math.round(ndrBaseOrders * globalExpectedNdrRate);
+      drDeliveredOrders = ndrDeliveredOrders;
+      
+      // Override dailyStats
+      dayKeys.forEach(function (key) {
+        var stat = dailyStats[key];
+        stat.earned = stat.placedCommission * globalExpectedNdrRate;
+      });
+      
+      // Override cityStats
+      Object.keys(cityStats).forEach(function (cityKey) {
+        var cs = cityStats[cityKey];
+        var cityExpectedNdrRate = cs.ndrBaseOrders > 0 ? (cs.ndrDeliveredOrders / cs.ndrBaseOrders) : globalExpectedNdrRate;
+        
+        cs.deliveredOrders = Math.round(cs.count * cityExpectedNdrRate);
+        cs.ndrDeliveredOrders = Math.round(cs.ndrBaseOrders * cityExpectedNdrRate);
+        cs.drDeliveredOrders = cs.ndrDeliveredOrders;
+        cs.earnedCommission = cs.totalPlacedCommission * cityExpectedNdrRate;
+        cs.collected = cs.due = cs.totalRevenue * cityExpectedNdrRate;
+        cs.gap = 0;
+        
+        // Product map in city
+        Object.keys(cs.productMap).forEach(function (cpKey) {
+          var cp = cs.productMap[cpKey];
+          var prod = productStats[cpKey];
+          var prodExpectedNdrRate = (prod && prod.ndrBaseCount > 0) ? (prod.ndrDeliveredCount / prod.ndrBaseCount) : cityExpectedNdrRate;
+          
+          cp.delivered = Math.round(cp.orders * prodExpectedNdrRate);
+          cp.commission = cp.totalPlacedCommission * prodExpectedNdrRate;
+        });
+      });
+      
+      // Override productStats
+      Object.keys(productStats).forEach(function (prodKey) {
+        var p = productStats[prodKey];
+        var prodExpectedNdrRate = p.ndrBaseCount > 0 ? (p.ndrDeliveredCount / p.ndrBaseCount) : globalExpectedNdrRate;
+        
+        p.actualDeliveredCount = p.deliveredCount;
+        p.actualCommission = p.commission;
+        p.actualDeliveredQty = p.deliveredQty;
+        p.actualDeliveredSales = p.deliveredSales;
+        p.actualNdrDeliveredCount = p.ndrDeliveredCount;
+
+        p.deliveredCount = Math.round(p.placedCount * prodExpectedNdrRate);
+        p.ndrDeliveredCount = Math.round(p.ndrBaseCount * prodExpectedNdrRate);
+        p.commission = p.totalPlacedCommission * prodExpectedNdrRate;
+        p.deliveredSales = p.revenue * prodExpectedNdrRate;
+        p.deliveredQty = Math.round(p.qty * prodExpectedNdrRate);
+        
+        // City map in product
+        Object.keys(p.cityMap).forEach(function (pcmKey) {
+          var pcm = p.cityMap[pcmKey];
+          var pcmExpectedNdrRate = pcm.ndrBaseOrders > 0 ? (pcm.delivered / pcm.ndrBaseOrders) : prodExpectedNdrRate;
+          
+          pcm.delivered = Math.round(pcm.orders * pcmExpectedNdrRate);
+          pcm.ndrDelivered = Math.round(pcm.ndrBaseOrders * pcmExpectedNdrRate);
+          pcm.commission = pcm.totalPlacedCommission * pcmExpectedNdrRate;
+          pcm.revenue = pcm.revenue * pcmExpectedNdrRate;
+        });
+      });
+      
+      // Override campaignProductStats
+      Object.keys(campaignProductStats).forEach(function (cpKey) {
+        var cp = campaignProductStats[cpKey];
+        var cpExpectedNdrRate = cp.ndrBaseCount > 0 ? (cp.ndrDeliveredCount / cp.ndrBaseCount) : globalExpectedNdrRate;
+        
+        cp.deliveredCount = Math.round(cp.placedCount * cpExpectedNdrRate);
+        cp.ndrDeliveredCount = Math.round(cp.ndrBaseCount * cpExpectedNdrRate);
+        cp.commission = cp.totalPlacedCommission * cpExpectedNdrRate;
+        cp.deliveredSales = cp.totalPlacedSales * cpExpectedNdrRate;
+      });
+    }
 
 
     var earnedSpark = [], incomingSpark = [], lostSpark = [], ordersSpark = [], gapSpark = [];
@@ -2474,6 +2595,10 @@
         deliveredSales: p.deliveredSales,
         deliveredAov: productDeliveredAov,
         deliveredCount: p.deliveredCount,
+        actualDeliveredCount: p.actualDeliveredCount !== undefined ? p.actualDeliveredCount : p.deliveredCount,
+        actualCommission: p.actualCommission !== undefined ? p.actualCommission : p.commission,
+        actualDeliveredQty: p.actualDeliveredQty !== undefined ? p.actualDeliveredQty : p.deliveredQty,
+        actualDeliveredSales: p.actualDeliveredSales !== undefined ? p.actualDeliveredSales : p.deliveredSales,
         ndrBaseOrders: productNdrBase,
         deliveryRate: p.placedCount > 0 ? parseFloat(((p.deliveredCount / p.placedCount) * 100).toFixed(1)) : 0,
         drRate: activeTotal > 0 ? parseFloat(((p.deliveredCount / activeTotal) * 100).toFixed(1)) : 0,
@@ -2499,9 +2624,9 @@
         piecesBreakdown:  piecesBreakdown,
         quantityCityBreakdown: quantityCityBreakdown
       };
-    // FIX: sort descending — highest deliveredCount first; commission as tiebreaker (b - a = desc)
+    // FIX: sort descending — highest deliveredCount first; commission as tiebreaker (b - a = desc); key as alphabetical tie-breaker
     }).sort(function (a, b) {
-      return (b.deliveredCount - a.deliveredCount) || (b.commission - a.commission);
+      return (b.deliveredCount - a.deliveredCount) || (b.commission - a.commission) || String(a.key || '').localeCompare(String(b.key || ''));
     });
 
     // DEBUG: verify all counters are correct for top 3 products
@@ -2550,7 +2675,7 @@
         drPct: confirmed > 0 ? parseFloat((ndrDelivered / confirmed * 100).toFixed(1)) : 0
       });
     }).sort(function (a, b) {
-      return (b.placedCount - a.placedCount) || (b.commission - a.commission);
+      return (b.placedCount - a.placedCount) || (b.commission - a.commission) || String(a.key || '').localeCompare(String(b.key || ''));
     });
 
     function generatePeriodData(daysBack, field) {

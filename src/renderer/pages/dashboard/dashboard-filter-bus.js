@@ -400,6 +400,9 @@
       if (changed) notifyRoiSettings(next, accountId);
       return Object.assign({}, next);
     },
+    notify: function (accountId) {
+      notifyRoiSettings(this.get(accountId || '__all__'), accountId || '__all__');
+    },
     subscribe: function (fn) {
       if (typeof fn === 'function' && _roiListeners.indexOf(fn) === -1) _roiListeners.push(fn);
     },
@@ -667,7 +670,7 @@
     var campaignBreakdown = [];
     var summary = activeStatuses.length ? {
       adSpend: 0,
-      currency: dashboardAccountCurrency(accountId),
+      currency: (activeStatuses[0].summary && activeStatuses[0].summary.currency) || dashboardAccountCurrency(accountId),
       egpRate: 52,
       impressions: 0,
       clicks: 0,
@@ -697,8 +700,12 @@
       if (status.lastSyncAt && (!latestSyncAt || new Date(status.lastSyncAt) > new Date(latestSyncAt))) {
         latestSyncAt = status.lastSyncAt;
       }
+      if (summary) {
+        console.log('[DIAGNOSTIC][FilterBus] Checking platform status:', status.platform, 'connected:', status.status, 'hasSummary:', !!status.summary, 'manualOverride:', status.manualOverride);
+      }
       if (!summary || !(status.status === 'connected' && status.summary && !status.manualOverride)) return;
       var source = status.summary || {};
+      console.log('[DIAGNOSTIC][FilterBus] Accumulating adSpend from', status.platform, ':', source.adSpend, 'sourceCurrency:', source.currency, 'summary.currency:', summary.currency);
       summary.adSpend += Number(source.adSpend || 0);
       summary.impressions += Number(source.impressions || 0);
       summary.clicks += Number(source.clicks || 0);
@@ -927,6 +934,13 @@
         })).then(function () { return selfAll.get(id); });
       }
       platform = normalizeMarketingPlatform(platform);
+      if (id !== '__all__' && !(range && Array.isArray(range.sourceAccounts))) {
+        var currentStatus = this.get(id, platform);
+        var sourceAccounts = (currentStatus && currentStatus.selectedSourceAccounts || []).map(function (acc) {
+          return { id: acc.id, currency: acc.currency };
+        });
+        range = Object.assign({}, range || {}, { sourceAccounts: sourceAccounts });
+      }
       range = Object.assign({ mode: 'incremental' }, range || {});
       if (!window.api || typeof window.api.syncMarketingData !== 'function') {
         return Promise.resolve(this.set({ ok: false, error: 'SYNC_UNAVAILABLE', platform: platform }, id, platform));
@@ -951,10 +965,14 @@
               self.set(response.accountStatuses[accountKey], accountKey, platform);
             });
           }
-          return self.set(response && response.ok ? response : Object.assign({}, response || {}, {
+          var next = self.set(response && response.ok ? response : Object.assign({}, response || {}, {
             ok: false,
             error: response && response.error ? response.error : 'SYNC_FAILED'
           }), id, platform);
+          if (response && response.ok && window.DashboardRoiState && typeof window.DashboardRoiState.notify === 'function') {
+            window.DashboardRoiState.notify(id);
+          }
+          return next;
         }).catch(function (error) {
           console.error('[Marketing][Store] sync_all failed', error);
           if (_marketingSyncRequests[requestKey] !== requestSeq) return self.get(id, platform);
@@ -964,10 +982,14 @@
       return window.api.syncMarketingData(id, platform, range || {}).then(function (response) {
         console.info('[Marketing][Store] sync response', response);
         if (_marketingSyncRequests[requestKey] !== requestSeq) return self.get(id, platform);
-        return self.set(response && response.ok ? response : Object.assign({}, response || {}, {
+        var next = self.set(response && response.ok ? response : Object.assign({}, response || {}, {
           ok: false,
           error: response && response.error ? response.error : 'SYNC_FAILED'
         }), id, platform);
+        if (response && response.ok && window.DashboardRoiState && typeof window.DashboardRoiState.notify === 'function') {
+          window.DashboardRoiState.notify(id);
+        }
+        return next;
       }).catch(function (error) {
         console.error('[Marketing][Store] sync failed', error);
         if (_marketingSyncRequests[requestKey] !== requestSeq) return self.get(id, platform);

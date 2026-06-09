@@ -2768,6 +2768,7 @@ ipcMain.handle("get-dashboard-query-flags", async () => ({
   orders: process.env.TAAGER_DASHBOARD_QUERY_ORDERS === "1",
   products: process.env.TAAGER_DASHBOARD_QUERY_PRODUCTS === "1",
   campaigns: process.env.TAAGER_DASHBOARD_QUERY_CAMPAIGNS === "1",
+  cities: process.env.TAAGER_DASHBOARD_QUERY_CITIES === "1" || process.env.TAAGER_DASHBOARD_QUERY_PRODUCTS === "1",
   lazyMarketing: process.env.TAAGER_DASHBOARD_LAZY_MARKETING !== "0",
   incrementalMarketing: process.env.TAAGER_MARKETING_INCREMENTAL_SYNC === "1",
 }));
@@ -3983,4 +3984,3 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
   mainWindow.webContents.send("bot-run-complete");
   const allOk = results.every(r => r.success);
   return { success: allOk, multiAccount: true, results };
-});

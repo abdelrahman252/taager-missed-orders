@@ -126,12 +126,12 @@
     table.style.cssText = 'width:100%;min-width:750px;display:flex;flex-direction:column;gap:8px;';
     
     // Header
-    table.innerHTML += '<div style="display:grid;grid-template-columns:2.5fr 1fr 1fr 1.25fr 1.25fr;gap:10px;padding:0 12px 8px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:11px;font-weight:700;color:rgba(255,255,255,0.4);flex-shrink:0">' +
-      '<div>' + sTx('Product', 'المنتج') + '</div><div style="text-align:center">' + sTx('Orders', 'الطلبات') + '</div><div style="text-align:center">' + sTx('Delivery', 'التسليم') + '</div><div style="text-align:center">' + sTx('Best City (NDR)', 'أفضل مدينة (NDR)') + '</div><div style="text-align:center">' + sTx('Worst City (NDR)', 'أسوأ مدينة (NDR)') + '</div>' +
+    table.innerHTML += '<div style="display:grid;grid-template-columns:2.5fr 0.8fr 0.8fr 1fr 1.25fr 1.25fr;gap:10px;padding:0 12px 8px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:11px;font-weight:700;color:rgba(255,255,255,0.4);flex-shrink:0">' +
+      '<div>' + sTx('Product', 'المنتج') + '</div><div style="text-align:center">' + sTx('Orders', 'الطلبات') + '</div><div style="text-align:center;color:#00e676">' + sTx('Net Orders', 'صافي الطلبات') + '</div><div style="text-align:center">' + sTx('Delivery', 'التسليم') + '</div><div style="text-align:center">' + sTx('Best City (NDR)', 'أفضل مدينة (NDR)') + '</div><div style="text-align:center">' + sTx('Worst City (NDR)', 'أسوأ مدينة (NDR)') + '</div>' +
     '</div>';
 
     pageProducts.forEach(function(p) {
-      var productKey = p.sku || p.name;
+      var productKey = (p.sku || p.name || '').toLowerCase();
       var validCities = [];
       Object.keys(geoMap).forEach(function(cityName) {
         if (provFilter) {
@@ -140,7 +140,7 @@
         }
         var cell = geoMap[cityName][productKey];
         if (cell && cell.orders > 0) {
-          validCities.push({ name: cityName, ndr: cell.ndr, dr: cell.dr, orders: cell.orders });
+          validCities.push({ name: cityName, ndr: cell.ndr, dr: cell.dr, orders: cell.orders, delivered: cell.delivered || 0 });
         }
       });
       
@@ -190,14 +190,19 @@
         '</div>';
       }
 
+      /* Net Orders = delivered orders for this product */
+      var netOrders = p.deliveredCount || 0;
+      var netColor = window.dashboardRateColor ? window.dashboardRateColor(overallDr) : drColor;
+
       var rowEl = document.createElement('div');
-      rowEl.style.cssText = 'display:grid;grid-template-columns:2.5fr 1fr 1fr 1.25fr 1.25fr;gap:10px;align-items:center;padding:12px;background:rgba(255,255,255,0.02);border-radius:8px;border:1px solid rgba(255,255,255,0.03);transition:background 0.2s;flex-shrink:0';
+      rowEl.style.cssText = 'display:grid;grid-template-columns:2.5fr 0.8fr 0.8fr 1fr 1.25fr 1.25fr;gap:10px;align-items:center;padding:12px;background:rgba(255,255,255,0.02);border-radius:8px;border:1px solid rgba(255,255,255,0.03);transition:background 0.2s;flex-shrink:0';
       rowEl.onmouseenter = function() { this.style.background = 'rgba(255,255,255,0.04)'; };
       rowEl.onmouseleave = function() { this.style.background = 'rgba(255,255,255,0.02)'; };
       
       rowEl.innerHTML = 
         '<div style="display:flex;flex-direction:column;overflow:hidden">' + nameHtml + skuHtml + '</div>' +
         '<div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.6);text-align:center">' + (p.placedCount || 0).toLocaleString('en-US') + '</div>' +
+        '<div style="font-size:12px;font-weight:800;color:' + netColor + ';text-align:center">' + netOrders.toLocaleString('en-US') + '</div>' +
         '<div style="text-align:center">' + drBadge + '</div>' +
         '<div style="text-align:center">' + cityBadge(bestCity) + '</div>' +
         '<div style="text-align:center">' + cityBadge(worstCity) + '</div>';

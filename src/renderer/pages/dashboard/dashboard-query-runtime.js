@@ -17,6 +17,7 @@
         orders: false,
         products: false,
         campaigns: false,
+        cities: false,
         lazyMarketing: true
       }, result || {});
       return resolvedFlags;
@@ -28,6 +29,12 @@
     var period = window.DashboardPeriodState && typeof window.DashboardPeriodState.get === "function"
       ? window.DashboardPeriodState.get()
       : {};
+    var deliveredDateMode = window.DashboardDeliveredDateState && typeof window.DashboardDeliveredDateState.get === "function"
+      ? (window.DashboardDeliveredDateState.get() === "expected" ? "expected" : "actual")
+      : (meta.deliveredDateMode === "expected" ? "expected" : "actual");
+    var ndrPeriod = deliveredDateMode === "expected" && window.DashboardExpectedNdrRangeState && typeof window.DashboardExpectedNdrRangeState.get === "function"
+      ? window.DashboardExpectedNdrRangeState.get()
+      : (meta.ndrPeriod || period || {});
     var activeId = String(meta.activeAccountId || (window.getActiveAccountId ? window.getActiveAccountId() : "__all__") || "__all__");
     var accountIds = activeId === "__all__"
       ? (meta.accountOptions || window.dashboardAccountsList || []).filter(function (account) {
@@ -38,6 +45,9 @@
       accountIds: accountIds,
       dateFrom: period.dateFrom || period.from || "",
       dateTo: period.dateTo || period.to || "",
+      deliveredDateMode: deliveredDateMode,
+      ndrDateFrom: ndrPeriod.dateFrom || ndrPeriod.from || "",
+      ndrDateTo: ndrPeriod.dateTo || ndrPeriod.to || "",
       reportingCurrency: meta.reportingCurrency || meta.activeCurrency || window.dashboardActiveCurrency || "SAR",
       exchangeRates: Object.assign({}, meta.exchangeRates || {}),
       exchangeRatesUpdatedAt: meta.exchangeRatesUpdatedAt || "",

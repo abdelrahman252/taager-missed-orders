@@ -90,6 +90,7 @@
     var dashVersion = 0;
     var marketingStatusLoads = {};
     var marketingSectionRefreshes = {};
+    var activeMarketingSyncPromise = null;
 
     function esc(value) {
       if (window.TaagerUI && typeof window.TaagerUI.esc === 'function') return window.TaagerUI.esc(value);
@@ -212,7 +213,12 @@
         }
 
         dashData._loading = true;
-        ensureMarketingStatusLoaded(dashData).then(function () {
+        var marketingPromise = activeMarketingSyncPromise || Promise.resolve();
+        Promise.all([
+          ensureMarketingStatusLoaded(dashData).catch(function () { return null; }),
+          marketingPromise
+        ]).then(function () {
+          if (activeMarketingSyncPromise === marketingPromise) activeMarketingSyncPromise = null;
           dashData._loading = false;
           if (!shellMount.isConnected) {
             if (readyResolve) readyResolve(dashData);
@@ -227,23 +233,40 @@
             window.refreshDashboardShell(shellMount, dashData);
           }
           if (readyResolve) readyResolve(dashData);
-        }, function () {
-          dashData._loading = false;
-          window.dashboardGeoData = dashData;
-          if (typeof window.refreshDashboardShell === 'function') {
-            window.refreshDashboardShell(shellMount, dashData);
-          }
-          if (readyResolve) readyResolve(dashData);
         });
       });
       return readyPromise;
     }
 
+    function triggerMarketingSync() {
+      var period = window.DashboardPeriodState ? window.DashboardPeriodState.get() : {};
+      var activeId = window.getActiveAccountId ? window.getActiveAccountId() : '__all__';
+      var roi = window.DashboardRoiState ? window.DashboardRoiState.get(activeId, {}) : {};
+      var syncPayload = {
+        dateFrom: period.from || period.dateFrom || period.start || '',
+        dateTo: period.to || period.dateTo || period.end || '',
+        targetCurrency: roi.currency || window.dashboardActiveCurrency || 'SAR',
+        egpRate: roi.egpRate || 52,
+        mode: 'incremental'
+      };
+      if (window.DashboardMarketingState && typeof window.DashboardMarketingState.sync === 'function') {
+        console.log('[Marketing] Triggering background sync on dashboard settings change for account:', activeId, syncPayload);
+        activeMarketingSyncPromise = window.DashboardMarketingState.sync(activeId, syncPayload).catch(function(e) {
+          console.warn('[Marketing] Dashboard auto-sync failed:', e);
+          return null;
+        });
+        return activeMarketingSyncPromise;
+      }
+      return Promise.resolve();
+    }
+
     function handlePeriodChange() {
+      triggerMarketingSync();
       runAggregator(true);
     }
 
     function handleDeliveredDateModeChange() {
+      triggerMarketingSync();
       runAggregator(true);
     }
 
@@ -254,7 +277,15 @@
       },
       onPeriodChange: handlePeriodChange,
       onDeliveredDateModeChange: handleDeliveredDateModeChange,
-      onReportingCurrencyChange: function () {
+      onReportingCurrencyChange: function (value) {
+        var activeId = window.getActiveAccountId ? window.getActiveAccountId() : '__all__';
+        if (value && window.DashboardRoiState && typeof window.DashboardRoiState.set === 'function') {
+          var currentRoi = window.DashboardRoiState.get(activeId, {});
+          if (currentRoi.currency !== value) {
+            window.DashboardRoiState.set({ currency: value }, activeId, currentRoi);
+          }
+        }
+        triggerMarketingSync();
         runAggregator(true);
       },
       onStaticUpdateComplete: function () {
@@ -266,7 +297,12 @@
         var refreshKey = marketingAccountId + '|' + sectionId;
         if (marketingSectionRefreshes[refreshKey]) return;
         marketingSectionRefreshes[refreshKey] = true;
-        ensureMarketingStatusLoaded(dashData).then(function () {
+        var marketingPromise = activeMarketingSyncPromise || Promise.resolve();
+        Promise.all([
+          ensureMarketingStatusLoaded(dashData).catch(function () { return null; }),
+          marketingPromise
+        ]).then(function () {
+          if (activeMarketingSyncPromise === marketingPromise) activeMarketingSyncPromise = null;
           if (!shellMount.isConnected || shellMount._dashboardActiveSection !== sectionId) return;
           if (sectionHandlesMarketingState(sectionId)) return;
           dashData._version = ++dashVersion;

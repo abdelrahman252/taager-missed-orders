@@ -32,12 +32,14 @@
   var campaignDecisionTipSeq = 0;
 
   function campaignIntelCacheKey(data, accountId, platform, syncStamp, reportingCurrency, egpRate) {
+    var expectedMode = window.isExpectedNdrMode && window.isExpectedNdrMode() ? "expected" : "actual";
     return [
       accountId || "__all__",
       platform || "all",
       syncStamp || "",
       reportingCurrency || "SAR",
-      egpRate || ""
+      egpRate || "",
+      expectedMode
     ].join("|");
   }
 
@@ -249,7 +251,7 @@
   function card(label, value, sub, iconName, tone, valueState) {
     return '<div class="campaign-kpi campaign-kpi-' + esc(tone || "neutral") + (valueState ? " campaign-value-state-" + esc(valueState) : "") + '">' +
       '<div class="campaign-kpi-top"><span class="campaign-kpi-icon">' + icon(iconName || "pulse") + '</span><span>' + esc(label) + '</span></div>' +
-      '<strong class="' + (valueState ? "campaign-financial-" + esc(valueState) : "") + '">' + esc(value) + '</strong>' +
+      '<strong class="' + (valueState ? "campaign-financial-" + esc(valueState) : "") + '">' + esc(value) + window.supposedBadgeHtml(label) + '</strong>' +
       (sub ? '<em>' + esc(sub) + '</em>' : '') +
     '</div>';
   }
@@ -547,15 +549,15 @@
         '<td class="campaign-num">' + money(group.spend, currency) + '</td>' +
         '<td class="campaign-num"><strong>' + fmt(group.clicks) + '</strong><small>' + fmt(group.campaignCount) + ' campaigns</small></td>' +
         '<td class="campaign-num"><strong>' + fmt(group.taagerOrders) + '</strong><small>' + conversionLabel + ' conversion · ' + fmt(trafficViewCount) + ' ' + trafficViewLabel + '</small></td>' +
-        '<td class="campaign-num"><strong>' + fmt(group.taagerDelivered) + '</strong><small>' + deliveredConversionLabel + ' delivered conversion</small></td>' +
+        '<td class="campaign-num"><strong>' + fmt(group.taagerDelivered) + window.supposedBadgeHtml('delivered') + '</strong><small>' + deliveredConversionLabel + ' delivered conversion</small></td>' +
         '<td class="campaign-num">' + esc(Number(group.taagerNdrPct || 0).toFixed(1)) + '%</td>' +
         '<td class="campaign-num">' + cpaLabel + '</td>' +
-        '<td class="campaign-num">' + deliveredCpaLabel + '</td>' +
+        '<td class="campaign-num">' + deliveredCpaLabel + window.supposedBadgeHtml('delivered') + '</td>' +
         '<td class="campaign-num">' + money(group.breakEvenCpa, currency) + '</td>' +
-        '<td class="campaign-num">' + money(group.taagerProfit, currency) + '</td>' +
+        '<td class="campaign-num">' + money(group.taagerProfit, currency) + window.supposedBadgeHtml('profit') + '</td>' +
         '<td class="campaign-num">' + money(group.avgDeliveredProfit, currency) + '</td>' +
-        '<td class="campaign-num campaign-financial-cell"><strong class="campaign-financial-' + netState + '">' + signedMoney(group.netProfit, currency) + '</strong><small class="campaign-financial-' + roiState + '">' + percent(group.roiPct) + ' ROI</small></td>' +
-        '<td class="campaign-num"><strong>' + roas(group.profitRoas) + '</strong><small>' + money(totalSales, currency) + ' total sales · ' + roas(totalSalesRoas) + ' sales ROAS</small></td>' +
+        '<td class="campaign-num campaign-financial-cell campaign-financial-cell-' + netState + '"><strong class="campaign-financial-' + netState + '">' + signedMoney(group.netProfit, currency) + window.supposedBadgeHtml('profit') + '</strong><small class="campaign-financial-' + roiState + '">' + percent(group.roiPct) + ' ROI</small></td>' +
+        '<td class="campaign-num"><strong>' + roas(group.profitRoas) + window.supposedBadgeHtml('roas') + '</strong><small>' + money(totalSales, currency) + window.supposedBadgeHtml('sales') + ' total sales · ' + roas(totalSalesRoas) + ' sales ROAS</small></td>' +
         '<td class="campaign-decision-cell"><button type="button" class="campaign-decision ' + esc(group.decision) + '" data-tooltip-template="' + esc(templateId) + '" aria-label="' + esc(decisionAria) + '">' + esc(displayDecision) + '</button>' +
         renderDecisionTooltip(group, periodLabel, currency, templateId) + '</td>' +
       '</tr>';
@@ -645,7 +647,57 @@
     };
   }
 
-  function backendCampaignIntel(result) {
+  function backendCampaignIntel(result, data) {
+    var productRows = result.productRows || [];
+    var isExpectedMode = window.isExpectedNdrMode && window.isExpectedNdrMode();
+    
+    if (isExpectedMode) {
+      var globalExpectedNdrRate = (data && data.overview && data.overview.deliveryRate != null) ? (data.overview.deliveryRate / 100) : 0.35;
+      
+      var totalSpend = 0;
+      var totalOrders = 0;
+      var totalDelivered = 0;
+      var totalProfit = 0;
+      
+      productRows.forEach(function (group) {
+        var productInList = data && data.products && data.products.rankedList && data.products.rankedList.find(function (p) {
+          return String(p.sku || '').toLowerCase() === String(group.sku || '').toLowerCase();
+        });
+        var expectedNdrRate = productInList ? (productInList.ndrPct / 100) : globalExpectedNdrRate;
+        
+        var oldDelivered = group.taagerDelivered;
+        group.taagerDelivered = Math.round(group.taagerOrders * expectedNdrRate);
+        group.taagerNdrPct = expectedNdrRate * 100;
+        
+        var avgDeliveredProfit = oldDelivered > 0 ? (group.taagerProfit / oldDelivered) : (group.avgDeliveredProfit || 0);
+        group.taagerProfit = group.taagerDelivered * avgDeliveredProfit;
+        group.netProfit = group.taagerProfit - (group.spend || 0);
+        group.roiPct = (group.spend > 0) ? (group.netProfit / group.spend * 100) : 0;
+        group.profitRoas = (group.spend > 0) ? (group.taagerProfit / group.spend) : 0;
+        group.deliveredCpa = (group.taagerDelivered > 0) ? ((group.spend || 0) / group.taagerDelivered) : 0;
+        
+        var oldSales = group.totalSales != null ? group.totalSales : (group.deliveredSales || 0);
+        group.totalSales = oldSales * (oldDelivered > 0 ? (group.taagerDelivered / oldDelivered) : expectedNdrRate);
+        group.deliveredSales = group.totalSales;
+        group.totalSalesRoas = (group.spend > 0) ? (group.totalSales / group.spend) : 0;
+        
+        totalSpend += (group.spend || 0);
+        totalOrders += (group.taagerOrders || 0);
+        totalDelivered += group.taagerDelivered;
+        totalProfit += group.taagerProfit;
+      });
+      
+      if (result.totals) {
+        result.totals.taagerDelivered = totalDelivered;
+        result.totals.taagerProfit = totalProfit;
+        result.totals.netProfit = totalProfit - (result.totals.spend || totalSpend);
+        result.totals.roiPct = (result.totals.spend || totalSpend) > 0 ? (result.totals.netProfit / (result.totals.spend || totalSpend) * 100) : 0;
+        result.totals.profitRoas = (result.totals.spend || totalSpend) > 0 ? (result.totals.taagerProfit / (result.totals.spend || totalSpend)) : 0;
+        result.totals.deliveredCpa = totalDelivered > 0 ? ((result.totals.spend || totalSpend) / totalDelivered) : 0;
+        result.totals.taagerNdrPct = totalOrders > 0 ? (totalDelivered / totalOrders * 100) : (globalExpectedNdrRate * 100);
+      }
+    }
+
     return {
       _backend: true,
       currency: result.currency,
@@ -658,7 +710,7 @@
       decisionCounts: result.decisionCounts || {},
       creativeSummary: result.creativeSummary || {},
       allCampaigns: result.campaignRows || [],
-      allProductGroups: result.productRows || [],
+      allProductGroups: productRows,
       campaignPagination: result.campaignPagination || {},
       productPagination: result.productPagination || {}
     };
@@ -678,7 +730,7 @@
         return false;
       }
       mount._campaignBackendActive = true;
-      mount._campaignIntel = backendCampaignIntel(result);
+      mount._campaignIntel = backendCampaignIntel(result, data);
       if (fullRender) renderMainCampaignsUI(mount, data, ctx, state, mount._campaignIntel);
       else updateCampaignsUIOnly(mount, data, ctx, state, mount._campaignIntel, { backendReady: true });
       return true;
@@ -1008,7 +1060,7 @@
         '<div class="campaign-panel campaign-panel-health"><h3>Spend Match Health</h3>' + renderSpendMatchHealth(intel) + '</div>' +
         '<div class="campaign-panel campaign-panel-signals"><h3>Media Buying Signals</h3>' + renderMediaBuyingSignals(intel) + '</div>' +
       '</div>' +
-      '<div class="campaign-panel wide"><div class="campaign-panel-title"><div><h3>Product Actions</h3><span>SKU-confirmed products only, using Taager business results. Financial columns use the shared calculator/product currency.</span></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end"><div style="display:flex;align-items:center;gap:6px;padding:4px 7px;border-radius:10px;border:1px solid rgba(96,165,250,0.18);background:rgba(96,165,250,0.06);" title="Product Actions use the same shared calculator currency as Products and calculators. Raw campaign rows stay in the ad account currency."><span style="font-size:10px;color:rgba(255,255,255,0.42);font-weight:800;white-space:nowrap;text-transform:uppercase;letter-spacing:0.4px">Currency</span><div data-campaign-product-currency style="width:88px;min-width:88px"></div></div><button type="button" class="campaign-ai-chip" data-campaign-ai-review>' + icon("sparkles") + 'Analyze actions</button></div></div>' +
+      '<div class="campaign-panel wide"><div class="campaign-panel-title"><div><h3>Product Actions</h3><span>SKU-confirmed products only, using Taager business results. Financial columns use the shared calculator/product currency.</span></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="campaign-ai-chip" data-campaign-ai-review>' + icon("sparkles") + 'Analyze actions</button></div></div>' +
         '<div class="campaign-controls">' +
           '<label class="campaign-search"><span>' + icon("search") + '</span><input type="search" data-product-search placeholder="Search product or SKU" value="' + esc(state.productSearch || "") + '" /></label>' +
         '</div>' +
@@ -1182,12 +1234,14 @@
     var egpRate = Number(roiSettings.egpRate || data.roi && data.roi.egpRate || 52) || 52;
     var sharedCacheKey = campaignIntelCacheKey(data, accountId, selectedPlatform, syncStamp, reportingCurrency, egpRate);
     
+    var expectedMode = window.isExpectedNdrMode && window.isExpectedNdrMode();
     var cacheHit = (
       mount._cachedPlatform === selectedPlatform &&
       mount._cachedAccountId === accountId &&
       mount._cachedSyncStamp === syncStamp &&
       mount._cachedReportingCurrency === reportingCurrency &&
       mount._cachedEgpRate === egpRate &&
+      mount._cachedExpectedNdrMode === expectedMode &&
       mount._cachedIntel
     );
     
@@ -1222,6 +1276,7 @@
     mount._cachedSyncStamp = syncStamp;
     mount._cachedReportingCurrency = reportingCurrency;
     mount._cachedEgpRate = egpRate;
+    mount._cachedExpectedNdrMode = expectedMode;
     mount._cachedIntel = intel;
     mount._campaignIntel = intel;
 
@@ -1311,6 +1366,17 @@
       });
       if (mount.parentNode) mount._campaignRoiObserver.observe(mount.parentNode, { childList: true });
     }
+
+    return function cleanupCampaigns() {
+      if (mount._campaignRoiListener && window.DashboardRoiState) {
+        window.DashboardRoiState.unsubscribe(mount._campaignRoiListener);
+        mount._campaignRoiListener = null;
+      }
+      if (mount._campaignRoiObserver) {
+        mount._campaignRoiObserver.disconnect();
+        mount._campaignRoiObserver = null;
+      }
+    };
   }
 
   window.renderSectionCampaigns = renderSectionCampaigns;

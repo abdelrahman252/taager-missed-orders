@@ -149,8 +149,6 @@
     return '<div id="dash-global-topbar" class="dash-global-topbar" dir="' + (isRtl() ? 'rtl' : 'ltr') + '">' +
       '<div class="dash-topbar-cluster">' +
         '<div class="dashboard-account-select-wrap" id="dashboard-account-select-wrap" aria-label="' + tr('shell.account') + '" style="min-width:0;max-width:360px;"></div>' +
-        '<div id="dashboard-reporting-currency-wrap" class="dashboard-period-select-wrap" aria-label="Reporting currency" hidden></div>' +
-        '<span id="dashboard-reporting-currency-note" class="dash-topbar-field-label" hidden></span>' +
         '<div class="dashboard-rates-control">' +
           '<button type="button" id="dashboard-rates-btn" class="dash-rates-btn" title="Exchange rates" data-tooltip="Exchange rates">' +
             '<span>Rates</span><strong id="dashboard-rates-note">defaults</strong>' +
@@ -184,11 +182,13 @@
         '<span id="dashboard-section-title">' + title + '</span>' +
         '<span class="dash-title-dot"></span>' +
       '</div>' +
-      '<div class="dash-topbar-cluster dash-chip">' +
-        '<button type="button" id="dashboard-tour-btn" class="taager-tour-quick-guide" title="' + tr('tour.common.quickGuide') + '" data-tooltip="' + tr('tour.common.quickGuide') + '"><span class="taager-tour-guide-mark">?</span><span>' + tr('tour.common.quickGuide') + '</span></button>' +
-        '<span class="dash-live-dot"></span>' +
-        '<span class="dash-last-update-label">' + tr('shell.lastUpdate') + '</span>' +
-        '<span id="dashboard-last-updated" data-tooltip="' + tr('shell.lastUpdate') + '" class="dash-last-updated">--</span>' +
+      '<div class="dash-topbar-cluster" style="display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:nowrap;flex-shrink:0;">' +
+        '<div id="dashboard-reporting-currency-wrap" class="dashboard-period-select-wrap" aria-label="Reporting currency" style="min-width:96px;max-width:120px;margin:0;"></div>' +
+        '<div class="dash-update-status-wrap" style="display:inline-flex;flex-direction:column;justify-content:center;gap:2px;font-size:10px;line-height:1.2;text-align:right;margin:0;margin-inline-start:6px;vertical-align:middle;flex-shrink:0;">' +
+          '<span class="dash-last-update-label" style="color:var(--dash-text-faint, #64748b);font-weight:700;">' + tr('shell.lastUpdate') + '</span>' +
+          '<span id="dashboard-last-updated" class="dash-last-updated" style="color:var(--dash-text, #fff);font-weight:800;">--</span>' +
+        '</div>' +
+        '<button type="button" id="dashboard-tour-btn" class="taager-tour-quick-guide" style="width:34px;height:34px;min-width:34px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--dash-text, #fff) !important;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);cursor:pointer;margin:0;flex-shrink:0;" title="' + tr('tour.common.quickGuide') + '" data-tooltip="' + tr('tour.common.quickGuide') + '"><span class="taager-tour-guide-mark" style="color:var(--dash-text, #fff) !important;font-size:16px;font-weight:800;line-height:1;display:inline-block;">?</span></button>' +
       '</div>' +
     '</div>';
   }
@@ -683,30 +683,21 @@
     var wrap = shellEl.querySelector('#dashboard-account-select-wrap');
     var periodWrap = shellEl.querySelector('#dashboard-period-select-wrap');
     var reportingCurrencyWrap = shellEl.querySelector('#dashboard-reporting-currency-wrap');
-    var reportingCurrencyNote = shellEl.querySelector('#dashboard-reporting-currency-note');
     var deliveredDateWrap = shellEl.querySelector('#dashboard-delivered-date-select-wrap');
     bindRatesControl(shellEl, opts);
     if (reportingCurrencyWrap && window.renderCustomSelect) {
-      reportingCurrencyWrap.hidden = !meta.isMixedCountry;
-      if (reportingCurrencyNote) {
-        reportingCurrencyNote.hidden = !meta.isMixedCountry;
-        reportingCurrencyNote.textContent = meta.isMixedCountry
-          ? (meta.reportingCurrency || 'SAR') + ' · ' + (meta.exchangeRateSource || 'defaults')
-          : '';
-      }
-      if (meta.isMixedCountry) {
-        var reportingOptions = ['SAR', 'USD', 'EGP', 'AED', 'IQD', 'OMR'].map(function (currency) {
-          return { value: currency, label: currency };
-        });
-        var reportingKey = (meta.reportingCurrency || 'SAR') + '|' + (meta.exchangeRateSource || '');
-        if (shellEl._topbarReportingCurrencyKey !== reportingKey) {
-          shellEl._topbarReportingCurrencyKey = reportingKey;
-          window.renderCustomSelect(reportingCurrencyWrap, reportingOptions, meta.reportingCurrency || 'SAR', function (value) {
-            shellEl._topbarReportingCurrencyKey = null;
-            if (window.setDashboardReportingCurrency) window.setDashboardReportingCurrency(value);
-            if (typeof opts.onReportingCurrencyChange === 'function') opts.onReportingCurrencyChange(value);
-          }, { maxHeight: '220px', ariaLabel: 'Reporting currency' });
-        }
+      reportingCurrencyWrap.hidden = false;
+      var reportingOptions = ['SAR', 'USD', 'EGP', 'AED', 'IQD', 'OMR'].map(function (currency) {
+        return { value: currency, label: currency };
+      });
+      var reportingKey = (meta.reportingCurrency || 'SAR') + '|' + (meta.exchangeRateSource || '');
+      if (shellEl._topbarReportingCurrencyKey !== reportingKey) {
+        shellEl._topbarReportingCurrencyKey = reportingKey;
+        window.renderCustomSelect(reportingCurrencyWrap, reportingOptions, meta.reportingCurrency || 'SAR', function (value) {
+          shellEl._topbarReportingCurrencyKey = null;
+          if (window.setDashboardReportingCurrency) window.setDashboardReportingCurrency(value);
+          if (typeof opts.onReportingCurrencyChange === 'function') opts.onReportingCurrencyChange(value);
+        }, { maxHeight: '220px', ariaLabel: 'Reporting currency' });
       }
     }
     if (periodWrap && window.renderCustomSelect && window.DashboardPeriodState) {
@@ -1189,7 +1180,10 @@
       var slice = key ? (data[key] || null) : data;
       ctx.data = data;
       ctx.sectionId = sectionId;
-      fn(pane, slice, ctx);
+      var cleanup = fn(pane, slice, ctx);
+      if (typeof cleanup === 'function') {
+        pane._dashboardSectionCleanup = cleanup;
+      }
       pane._dashboardRenderKey = renderKey;
       if (window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.observe === 'function') {
         window.DashboardQueryRuntime.observe(sectionId, data);

@@ -116,7 +116,7 @@
     return '<div style="background:'+(_il()?'linear-gradient(145deg,rgba(0,0,0,0.03),rgba(0,0,0,0.01))':'linear-gradient(145deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01))')+';border:1px solid '+(_il()?'rgba(0,0,0,0.09)':'rgba(255,255,255,0.06)')+';' +
       'border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;box-shadow:0 4px 12px rgba(0,0,0,0.1);transition:transform 0.2s">' +
       '<div style="display:flex;align-items:center;gap:6px;font-size:10px;color:'+(_il()?'rgba(30,10,60,0.5)':'rgba(255,255,255,0.45)')+';font-weight:700">' + iconHtml + label + '</div>' +
-      '<div style="font-size:16px;font-weight:900;color:' + accent + ';line-height:1">' + valueHTML + '</div>' +
+      '<div style="font-size:16px;font-weight:900;color:' + accent + ';line-height:1">' + valueHTML + window.supposedBadgeHtml(label) + '</div>' +
     '</div>';
   }
 
@@ -279,7 +279,7 @@
         '</div>' +
         /* col 4 — Taager profit */
         '<div style="font-size:10.5px;font-weight:700;color:#00e676;text-align:center;white-space:nowrap;" title="' + esc(sar(e.commission)) + '">' +
-          commStr + '<span style="font-size:7.5px;opacity:0.55;margin-left:1px">' + (window.dashboardActiveCurrency || 'SAR') + '</span>' +
+          commStr + '<span style="font-size:7.5px;opacity:0.55;margin-left:1px">' + (window.dashboardActiveCurrency || 'SAR') + '</span>' + window.supposedBadgeHtml('profit') +
         '</div>' +
         /* col 5 — risk badge */
         '<div style="display:flex;justify-content:center;align-items:center;overflow:hidden;min-width:0;">' +

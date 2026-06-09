@@ -170,7 +170,7 @@ function paginate(rows, page, pageSize) {
 function productKey(row, accountId) {
   const sku = rowSku(row);
   const country = keyText(row.taagerCountry || row.country || "unknown");
-  return sku ? accountId + "|" + country + "|" + sku : accountId + "|" + country + "|" + rowName(row);
+  return sku ? accountId + "|" + country + "|" + sku.toLowerCase() : accountId + "|" + country + "|" + keyText(rowName(row));
 }
 
 function countryCurrency(row, fallback) {
@@ -182,6 +182,10 @@ function countryCurrency(row, fallback) {
   if (country === "om" || country.includes("oman")) return "OMR";
   if (country === "sa" || country.includes("saudi")) return "SAR";
   return currency(row.currency || row.orderCurrency || fallback || "SAR");
+}
+
+function isCustomerCancelBucket(bucket) {
+  return ["customer_refused_confirmation", "on_hold", "out_of_stock"].includes(bucket);
 }
 
 function buildProducts(orderRows, reportingCurrency, egpRate, orderCurrency, ratesOverride) {
@@ -198,6 +202,8 @@ function buildProducts(orderRows, reportingCurrency, egpRate, orderCurrency, rat
         orders: 0,
         delivered: 0,
         canceled: 0,
+        cancelStatusCount: 0,
+        statusTotalCount: 0,
         profit: 0,
         totalSales: 0,
         deliveredSales: 0,
@@ -216,8 +222,10 @@ function buildProducts(orderRows, reportingCurrency, egpRate, orderCurrency, rat
       if (bucket !== "canceled_by_you") product.cities[city].orders++;
       if (bucket === "delivered") product.cities[city].delivered++;
     }
-    if (bucket !== "canceled_by_you") product.orders++;
     if (bucket !== "canceled_by_you") {
+      product.orders++;
+      product.statusTotalCount++;
+      if (isCustomerCancelBucket(bucket)) product.cancelStatusCount++;
       const sourceCurrency = countryCurrency(row, orderCurrency || reportingCurrency);
       product.totalSales += convert(rowSales(row), sourceCurrency, reportingCurrency, egpRate, ratesOverride);
     }
@@ -233,9 +241,9 @@ function buildProducts(orderRows, reportingCurrency, egpRate, orderCurrency, rat
     const clean = { ...product };
     delete clean.seen;
     clean.ndrPct = clean.orders ? round(clean.delivered / clean.orders * 100, 1) : 0;
-    clean.cancelPct = clean.orders ? round(clean.canceled / clean.orders * 100, 1) : 0;
-    clean.avgDeliveredProfit = clean.delivered ? clean.profit / clean.delivered : 0;
-    clean.breakEvenCpa = clean.avgDeliveredProfit * clean.ndrPct / 100;
+    clean.cancelPct = clean.statusTotalCount ? round(clean.cancelStatusCount / clean.statusTotalCount * 100, 1) : 0;
+    clean.avgDeliveredProfit = clean.delivered ? round(clean.profit / clean.delivered) : 0;
+    clean.breakEvenCpa = round(clean.avgDeliveredProfit * clean.ndrPct / 100);
     clean.topCities = Object.values(clean.cities).map((city) => ({
       ...city,
       ndrPct: city.orders ? round(city.delivered / city.orders * 100, 1) : 0,
@@ -248,15 +256,15 @@ function buildProducts(orderRows, reportingCurrency, egpRate, orderCurrency, rat
 function normalizeProducts(productRows, reportingCurrency, egpRate, orderCurrency, ratesOverride) {
   return (Array.isArray(productRows) ? productRows : []).map((row) => {
     const sourceCurrency = currency(row.currency || orderCurrency || reportingCurrency);
-    const profit = convert(row.commission ?? row.taagerProfit ?? row.profit ?? 0, sourceCurrency, reportingCurrency, egpRate, ratesOverride);
-    const deliveredSales = convert(row.deliveredSales ?? row.sales ?? 0, sourceCurrency, reportingCurrency, egpRate, ratesOverride);
-    const totalSales = convert(row.totalSales ?? row.revenue ?? row.sales ?? row.deliveredSales ?? 0, sourceCurrency, reportingCurrency, egpRate, ratesOverride);
+    const profit = round(convert(row.commission ?? row.taagerProfit ?? row.profit ?? 0, sourceCurrency, reportingCurrency, egpRate, ratesOverride));
+    const deliveredSales = round(convert(row.deliveredSales ?? row.sales ?? 0, sourceCurrency, reportingCurrency, egpRate, ratesOverride));
+    const totalSales = round(convert(row.totalSales ?? row.revenue ?? row.sales ?? row.deliveredSales ?? 0, sourceCurrency, reportingCurrency, egpRate, ratesOverride));
     const orders = number(row.placedCount ?? row.orders);
     const delivered = number(row.deliveredCount ?? row.units ?? row.delivered);
     const ndrPct = number(row.ndrPct ?? row.deliveryRate ?? row.deliveryPct);
-    const avgDeliveredProfit = delivered ? profit / delivered : 0;
+    const avgDeliveredProfit = delivered ? round(profit / delivered) : 0;
     return {
-      id: text(row.key || row.id || productKey(row, row.accountId || row.dashboardAccountId)),
+      id: text(row.key || row.id || productKey(row, row.accountId || row.dashboardAccountId)).toLowerCase(),
       accountId: text(row.accountId || row.dashboardAccountId),
       country: keyText(row.country || row.taagerCountry || "unknown"),
       product: rowName(row),
@@ -270,7 +278,7 @@ function normalizeProducts(productRows, reportingCurrency, egpRate, orderCurrenc
       ndrPct,
       cancelPct: number(row.cancelPct),
       avgDeliveredProfit,
-      breakEvenCpa: avgDeliveredProfit * ndrPct / 100,
+      breakEvenCpa: round(avgDeliveredProfit * ndrPct / 100),
       topCities: Array.isArray(row.cityBreakdown) ? row.cityBreakdown.slice(0, 4).map((city) => ({
         city: text(city.name || city.city),
         orders: number(city.count || city.orders),
@@ -280,17 +288,38 @@ function normalizeProducts(productRows, reportingCurrency, egpRate, orderCurrenc
   });
 }
 
+function productSkus(skuString) {
+  const raw = text(skuString);
+  const list = [];
+  raw.split(/[\s,]+/).forEach((part) => {
+    const clean = keyText(part);
+    if (!clean || clean === "n a" || clean === "na") return;
+    if (clean.length >= 2 && !list.includes(clean)) {
+      list.push(clean);
+    }
+  });
+  return list;
+}
+
 function exactSkuMatch(campaign, products) {
   const campaignText = " " + keyText(campaignName(campaign)) + " ";
   const accountId = text(campaign.dashboardAccountId || campaign.accountId);
   const country = keyText(campaign.country || "");
   let match = null;
+  let bestSkuLength = 0;
   products.forEach((product) => {
-    if (accountId && product.accountId !== accountId) return;
-    if (country && product.country !== country) return;
-    const sku = keyText(product.sku);
-    if (!sku || campaignText.indexOf(" " + sku + " ") === -1) return;
-    if (!match || sku.length > keyText(match.sku).length) match = product;
+    if (accountId && product.accountId && product.accountId !== accountId) return;
+    const prodCountry = product.country && product.country !== "unknown" ? product.country : "";
+    if (!accountId && country && prodCountry && prodCountry !== country) return;
+    const skus = productSkus(product.sku);
+    skus.forEach((sku) => {
+      if (campaignText.indexOf(" " + sku + " ") !== -1) {
+        if (!match || sku.length > bestSkuLength) {
+          match = product;
+          bestSkuLength = sku.length;
+        }
+      }
+    });
   });
   return match;
 }

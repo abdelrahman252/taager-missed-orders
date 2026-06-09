@@ -347,17 +347,19 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
       var count = Number(city.count || 0);
       var pct = Number(city.ndrPct !== undefined ? city.ndrPct : city.pct || 0);
-      // drPct: prefer pre-computed, else compute from raw counters
-      var drPct =
-        city.drPct && city.drPct > 0
-          ? Number(city.drPct)
-          : city.drBaseOrders > 0
-            ? Math.round((city.deliveredOrders / city.drBaseOrders) * 1000) / 10
-            : 0;
       var due = Number(city.due || 0);
       var gap = Number(city.gap || 0);
       var deliveredOrders = Number(city.deliveredOrders || count * (pct / 100));
       var activeOrders = Number(city.drBaseOrders || count);
+      // drPct: prefer pre-computed, else compute from raw counters
+      var drPct =
+        window.isExpectedNdrMode && window.isExpectedNdrMode()
+          ? (activeOrders > 0 ? Math.round((deliveredOrders / activeOrders) * 1000) / 10 : 0)
+          : (city.drPct && city.drPct > 0
+            ? Number(city.drPct)
+            : city.drBaseOrders > 0
+              ? Math.round((city.deliveredOrders / city.drBaseOrders) * 1000) / 10
+              : 0);
       var avgDeliveryDays =
         city.avgDeliveryDays != null ? Number(city.avgDeliveryDays) : null;
       var deliveryDurationOrders = Number(city.deliveryDurationOrders || 0);
@@ -481,12 +483,14 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     TOTAL_ACTIVE_ORDERS > 0
       ? Math.round((TOTAL_DELIVERED / TOTAL_ACTIVE_ORDERS) * 1000) / 10
       : 0;
-  var BEST_CITY = ALL_CITIES.slice().sort(function (a, b) {
+  /* Filter to cities with meaningful order volume to avoid 0%-or-100% outliers */
+  var ELIGIBLE_CITIES = ALL_CITIES.filter(function(c) { return c.orders >= 10; });
+  var BEST_CITY = ELIGIBLE_CITIES.slice().sort(function (a, b) {
     return b.deliveryRate - a.deliveryRate;
-  })[0] || { name: "—", deliveryRate: 0 };
-  var WATCH_CITY = ALL_CITIES.slice().sort(function (a, b) {
+  })[0] || ALL_CITIES[0] || { name: '—', deliveryRate: 0 };
+  var WATCH_CITY = ELIGIBLE_CITIES.slice().sort(function (a, b) {
     return a.deliveryRate - b.deliveryRate;
-  })[0] || { name: "—", deliveryRate: 0 };
+  })[0] || ALL_CITIES[ALL_CITIES.length - 1] || { name: '—', deliveryRate: 0 };
 
   var SAUDI_PATH =
     "M43.493,151.359L43.014,151.359L41.644,149.933L40.89,148.872L40.068,148.177L36.438,146.749L35.89,145.833L36.507,144.917L36.849,145.833L37.534,146.346L40.548,147.664L43.904,150.445L44.521,150.701ZM140.274,328.281L141.712,328.384L141.096,327.729L140.959,327.418L141.644,326.521L143.699,328.419L143.63,330.625L143.493,331.142L142.945,330.659L142.534,330.211L142.397,329.694L141.849,329.143L139.795,329.487L138.562,328.901L136.712,327.004L136.233,325.659L136.986,325.383L137.808,324.727L138.288,323.657L137.808,322.552L138.904,322.724L139.521,323.864L139.589,326.452L139.795,327.004L139.452,327.591ZM330.342,282.681L325.822,283.31L321.507,283.938L316.644,284.637L310.753,285.474L306.164,286.103L299.452,287.08L293.425,287.917L287.808,288.719L282.123,289.521L277.329,290.218L274.452,291.019L271.096,292.726L265.89,295.407L260.616,298.12L257.945,299.511L255.068,303.124L253.63,304.929L250.959,308.225L248.973,310.721L246.644,313.665L245.616,316.33L244.041,320.375L242.671,321.412L240.411,322.724L238.356,323.657L235.137,323.553L233.356,321.032L231.37,318.405L230.411,317.333L229.589,317.264L226.37,317.609L222.466,318.024L217.945,317.575L212.671,317.056L207.74,316.606L205.274,316.26L202.055,314.53L201.233,314.184L200.342,314.115L196.575,314.045L192.74,314.011L188.904,314.565L185.274,314.357L181.507,314.669L180.137,315.326L178.699,315.291L177.74,315.88L176.986,316.157L175.959,315.638L174.795,315.776L173.082,315.326L171.918,314.219L170.89,313.215L169.795,312.66L168.562,312.349L167.466,312.314L166.096,312.938L165.274,313.526L163.151,315.465L163.082,316.157L164.041,317.298L163.699,317.851L162.466,318.543L162.123,320.375L161.918,321.377L161.712,323.76L162.26,325.659L163.014,326.349L163.082,327.177L162.671,328.798L161.507,329.281L160.685,330.832L160.137,331.555L159.247,332.382L155.685,335.103L155.479,333.519L154.384,331.176L154.315,329.487L153.767,327.832L152.808,326.556L151.027,325.245L150.822,323.415L149.521,321.619L147.808,320.168L146.781,317.506L146.096,313.942L141.507,309.265L135.753,304.964L133.973,302.499L131.096,297.529L129.658,293.597L125.822,289.067L125.685,287.324L125.068,285.195L124.178,282.821L123.699,280.934L119.795,272.711L118.562,271.414L117.466,269.556L117.192,268.153L116.849,267.381L114.178,266.012L111.575,262.534L103.973,257.011L100.205,256.483L97.26,254.511L95.068,251.902L92.74,247.455L88.63,242.649L85.205,235.779L86.301,233.26L86.233,231.521L85.137,228.537L83.973,226.262L83.151,224.092L83.836,220.958L84.041,217.464L84.726,215.608L85.205,213.573L84.589,209.462L83.425,207.279L83.562,205.81L82.26,205.094L81.164,203.481L82.26,203.517L80.274,201.293L79.521,200.073L78.767,197.057L77.808,194.756L74.726,189.5L73.219,186.292L69.863,182.176L66.233,179.103L63.973,177.729L62.877,176.462L60.959,176.389L58.904,174.578L57.466,174.542L55.685,174.252L53.562,170.735L51.781,167.467L48.767,163.177L49.521,162.048L50.411,160.227L50,157.858L49.521,156.253L48.219,153.296L43.836,145.906L42.671,144.844L40.822,143.597L39.726,140.368L39.178,137.502L36.164,136.105L31.096,125.711L28.082,122.052L26.918,119.609L23.493,115.569L21.849,111.523L18.356,107.804L15.342,101.358L10.753,94.856L8.767,93.733L4.041,93.284L1.986,92.797L0.137,94.219L0,92.422L1.301,89.911L3.082,84.655L3.493,80.027L6.37,66.276L10.411,66.958L13.767,67.564L18.63,68.435L23.699,69.306L26.644,69.836L27.603,69.609L31.712,66.239L35.411,63.167L37.603,59.445L39.726,55.793L40.685,55.031L43.973,54.384L49.178,53.279L54.315,52.211L54.658,51.868L55.89,48.929L57.397,45.221L57.74,44.838L58.082,44.456L61.781,42.35L63.973,41.085L60.822,37.363L57.808,33.828L54.452,29.862L51.644,26.777L47.329,22.141L44.589,19.083L49.452,17.65L54.726,16.099L60.068,14.508L66.507,12.605L71.507,11.128L79.041,8.91L82.671,7.82L83.356,7.548L86.164,4.897L90.411,5.638L96.781,6.768L102.945,7.82L109.452,9.066L111.575,10.117L117.808,13.848L121.918,16.293L126.644,19.161L132.603,22.683L136.644,25.117L141.918,28.243L145.959,31.788L151.164,36.288L156.781,41.2L161.438,45.03L167.877,50.265L174.247,55.412L180.411,60.471L185.411,64.495L191.644,69.571L192.192,69.76L198.493,70.327L207.055,71.122L215.616,71.878L223.356,72.596L226.712,71.878L230.342,72.331L235.274,72.974L238.219,73.389L243.836,74.182L245.548,77.503L246.164,79.801L246.712,82.06L248.356,84.091L252.192,84.054L255.548,84.016L259.726,83.941L263.082,83.903L264.11,85.933L264.589,87.96L266.575,92.759L269.384,96.502L270,97.847L270.479,99.902L270,100.686L269.795,101.544L271.849,103.595L275.342,105.31L276.644,105.757L278.151,106.539L276.986,107.693L279.041,110.445L281.37,113.194L283.904,113.825L287.329,118.016L292.397,120.719L295.548,124.27L295.274,124.344L294.315,123.974L293.219,123.494L292.877,123.937L292.877,125.416L293.219,127.151L294.795,128.664L296.233,129.734L296.781,131.798L295.616,136.215L295.274,136.179L294.521,135.811L293.699,135.737L293.288,135.995L294.247,139.156L295.137,141.579L296.301,143.487L297.26,146.309L298.014,147.481L301.37,150.482L302.329,152.967L303.288,157.603L305.342,160.154L306.507,162.157L308.014,163.832L308.973,166.123L310.342,167.903L311.096,168.339L312.123,168.52L313.493,168.52L315.068,168.085L316.781,167.649L318.151,168.52L319.521,168.411L319.658,169.247L318.767,170.372L317.603,173.201L319.247,173.672L320.753,173.89L321.918,174.361L322.534,174.361L322.534,174.94L322.603,177.656L323.014,178.669L323.699,179.574L324.726,180.947L325.753,182.321L326.849,183.693L327.877,185.029L328.904,186.4L330,187.77L331.027,189.104L332.055,190.473L333.082,191.841L334.178,193.209L335.205,194.54L336.233,195.907L337.329,197.272L338.356,198.637L339.384,199.966L340.411,201.329L341.301,202.441L342.877,202.657L343.425,202.728L344.863,202.908L347.055,203.23L350,203.589L353.425,204.055L357.26,204.556L361.37,205.094L365.616,205.667L369.863,206.24L373.904,206.777L377.74,207.279L381.233,207.744L384.11,208.138L386.37,208.424L387.808,208.603L388.288,208.675L389.795,208.889L390.068,208.818L391.37,207.171L392.74,209.498L393.904,211.429L395.479,214.109L397.192,216.929L398.836,219.604L400,221.635L399.384,223.7L398.699,225.978L398.014,228.218L397.26,230.491L396.575,232.764L395.89,235.034L395.205,237.303L394.521,239.534L393.767,241.8L393.082,244.063L392.397,246.325L391.712,248.55L391.027,250.809L390.342,253.066L389.589,255.321L388.904,257.54L388.219,259.792L387.397,262.499L385.342,263.202L382.123,264.361L378.836,265.52L375.548,266.679L372.26,267.872L368.973,269.03L365.753,270.187L362.466,271.344L359.178,272.501L355.89,273.657L352.603,274.812L349.384,275.968L346.096,277.123L342.808,278.277L339.521,279.431L336.301,280.585L333.014,281.738ZM37.671,144.404L37.466,144.697L36.644,143.927L36.712,142.313L37.397,141.396L37.329,142.643L37.671,143.927Z";
@@ -1323,7 +1327,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         "</div>" +
         /* Delivered orders */
         '<div class="sc-lb-delivered-cell" style="color:rgba(255,255,255,0.55);font-size:12px;font-weight:600;text-align:center">' +
-        deliveredDisplay +
+        deliveredDisplay + window.supposedBadgeHtml('delivered') +
         "</div>" +
         '<div class="sc-lb-confirmed-cell" style="color:#3b82f6;font-size:12px;font-weight:700;text-align:center">' +
         confirmedVal.toLocaleString("en-US") +
@@ -1364,7 +1368,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         '<div class="sc-lb-commission-cell" style="text-align:center;">' +
         (commDisplay
           ? '<span style="font-size:11px;font-weight:700;color:#a855f7">' +
-            commDisplay +
+            commDisplay + window.supposedBadgeHtml('commission') +
             "</span>"
           : '<span style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.18)">—</span>') +
         "</div>" +
@@ -2803,6 +2807,13 @@ window.renderSectionCities = function (mountEl, data, ctx) {
                 "%</span>"
               : '<span style="font-size:11px;font-weight:800;color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:6px;">&mdash;</span>';
           }
+          /* Restore delivered cell to city total */
+          var deliveredCellR = row.querySelector('.sc-lb-delivered-cell');
+          if (deliveredCellR) {
+            var delivRaw0 = row.dataset.delivered;
+            deliveredCellR.textContent = (delivRaw0 !== '' && delivRaw0 !== undefined)
+              ? parseInt(delivRaw0, 10).toLocaleString('en-US') : '—';
+          }
           row.style.display = "grid";
           row.style.opacity = "1";
           return;
@@ -2876,6 +2887,16 @@ window.renderSectionCities = function (mountEl, data, ctx) {
               ndr.toFixed(1) +
               "%</span>"
             : '<span style="font-size:11px;font-weight:800;color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:6px;">&mdash;</span>';
+        }
+
+        /* Delivered cell — update to product-specific delivered count */
+        var deliveredCell = row.querySelector('.sc-lb-delivered-cell');
+        if (deliveredCell && cell) {
+          var prodDelivered = cell.delivered != null ? Math.round(cell.delivered) : null;
+          if (prodDelivered == null && cell.ndr != null && prodOrders > 0) {
+            prodDelivered = Math.round(prodOrders * cell.ndr);
+          }
+          deliveredCell.textContent = prodDelivered != null ? prodDelivered.toLocaleString('en-US') : '—';
         }
       });
     }
@@ -3159,9 +3180,11 @@ window.renderSectionCities = function (mountEl, data, ctx) {
             ? "0 2px 10px rgba(124,58,237,0.4)"
             : "none";
         });
+        /* Restore leaderboard values to city totals before re-filtering */
+        applyProductView(null);
         updateSelection();
         if (window.DashboardFilterBus) window.DashboardFilterBus.reset();
-        applyPaymentView("all");
+        applyPaymentView('all');
         applyFilters();
       });
     }

@@ -1144,6 +1144,16 @@
       });
     }
 
+    var listener = function (status) {
+      if (ctx && ctx.sectionId && ctx.sectionId !== 'marketing') return;
+      if (String(status.accountId) !== String(selectedAccountId)) return;
+      log('store:notified_update', { platform: status.platform, loading: status.loading });
+      render();
+    };
+    if (store && typeof store.subscribe === 'function') {
+      store.subscribe(listener);
+    }
+
     log('section:mounted', { accountId: selectedAccountId, allMode: allMode, shownAccounts: shownAccounts.length });
     window.addEventListener('focus', refreshAfterAuthorizationFocus);
     render();
@@ -1152,6 +1162,9 @@
     return function cleanupMarketingConnections() {
       window.removeEventListener('focus', refreshAfterAuthorizationFocus);
       stopAutoRefresh('cleanup');
+      if (store && typeof store.unsubscribe === 'function') {
+        store.unsubscribe(listener);
+      }
     };
   };
 })();

@@ -44,7 +44,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   function p9Num(v) { return Number(v || 0).toLocaleString(isAr ? 'ar-EG-u-nu-latn' : 'en-US'); }
 
   var simulations = pd.map(function (p) {
-    var orders    = p.placedCount || p.totalPieces || 1;
+    var orders    = p.netOrderCount !== undefined ? p.netOrderCount : (p.placedCount || p.totalPieces || 1);
     var delivered = p.deliveredCount || p.units || 0;
     var realNdr   = orders > 0 ? (delivered / orders) : 0;
     var realComm  = delivered > 0 ? (p.commission / delivered) : 0;
@@ -717,14 +717,14 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
           '<div style="font-size:10px;font-weight:700;color:' + (s.syncedAdSpend ? '#2dd4bf' : '#f59e0b') + ';margin-top:3px;">' + matchMethodLabel(s) + '</div>' +
         '</td>' +
         '<td style="padding:12px 16px;color:rgba(255,255,255,0.6);">' + p9Num(s.realOrders) + '</td>' +
-        '<td style="padding:12px 16px;color:rgba(255,255,255,0.6);">' + p9Num(s.realDelivered) + '</td>' +
-        '<td style="padding:12px 16px;color:rgba(255,255,255,0.6);">' + formatPct(s.realNdr) + '</td>' +
+        '<td style="padding:12px 16px;color:rgba(255,255,255,0.6);">' + p9Num(s.realDelivered) + window.supposedBadgeHtml('delivered') + '</td>' +
+        '<td style="padding:12px 16px;color:rgba(255,255,255,0.6);">' + formatPct(s.realNdr) + window.supposedBadgeHtml('dr') + '</td>' +
         '<td style="padding:12px 16px;">' +
           '<input type="text" inputmode="numeric" class="s9-spend-input" data-idx="' + absoluteIdx + '" value="' + displaySpend + '" placeholder="0" ' +
             spendLocked + ' style="width:80px;padding:6px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#fff;text-align:center;font-family:inherit;">' +
         '</td>' +
         '<td class="s9-profit-cell ' + pClass + '" style="padding:12px 16px;font-weight:700;text-align:left;color:' + netProfitColor + ' !important;" dir="ltr">' +
-          '<span class="s9-profit-value ' + pClass + '" style="color:' + netProfitColor + ' !important;-webkit-text-fill-color:' + netProfitColor + ' !important;">' + formatMoney(realNetProfit) + '</span>' +
+          '<span class="s9-profit-value ' + pClass + '" style="color:' + netProfitColor + ' !important;-webkit-text-fill-color:' + netProfitColor + ' !important;">' + formatMoney(realNetProfit) + window.supposedBadgeHtml('profit') + '</span>' +
         '</td>' +
       '</tr>';
     }).join('');
@@ -841,21 +841,21 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         ) +
         _kpiMiniTip(
           p9Txt('Delivered', 'تم تسليمها'),
-          p9Num(Math.round(c.deliveredOrders)), '#00e676', '✅',
+          p9Num(Math.round(c.deliveredOrders)) + window.supposedBadgeHtml('delivered'), '#00e676', '✅',
           p9Txt('Delivered Orders', 'الطلبات المسلمة'),
           p9Txt('Orders successfully delivered to customers, based on simulated NDR.', 'الطلبات التي وصلت للعميل بناءً على نسبة التسليم المحاكاة.'),
           'delivered = totalOrders * NDR'
         ) +
         _kpiMiniTip(
           p9Txt('Net Delivery Rate', 'نسبة التسليم NDR'),
-          Math.round(s.ndr * 100) + '%', (window.dashboardRateColor ? window.dashboardRateColor(s.ndr, { scale: 'ratio' }) : (s.ndr >= 0.40 ? '#22d3ee' : s.ndr >= 0.30 ? '#00e676' : s.ndr >= 0.20 ? '#f59e0b' : '#ef4444')), '📊',
+          Math.round(s.ndr * 100) + '%' + window.supposedBadgeHtml('dr'), (window.dashboardRateColor ? window.dashboardRateColor(s.ndr, { scale: 'ratio' }) : (s.ndr >= 0.40 ? '#22d3ee' : s.ndr >= 0.30 ? '#00e676' : s.ndr >= 0.20 ? '#f59e0b' : '#ef4444')), '📊',
           p9Txt('Net Delivery Rate (NDR)', 'نسبة التسليم (NDR)'),
           p9Txt('Percentage of orders successfully delivered. Healthy baseline starts at 30%, with top tier at 40%+.', 'النسبة المئوية للطلبات التي تم تسليمها. المعيار الصحي يبدأ من 30%، وأعلى مستوى من 40% فأكثر.'),
           'NDR = deliveredOrders / totalOrders * 100'
         ) +
         _kpiMiniTip(
           p9Txt('Average Profit', 'متوسط الربح'),
-          formatMoney(s.realCommission, true), '#3b82f6', '💵',
+          formatMoney(s.realCommission, true) + window.supposedBadgeHtml('profit'), '#3b82f6', '💵',
           p9Txt('Average Profit', 'متوسط الربح'),
           p9Txt('Average profit per delivered order for this selected product.', 'متوسط الربح لكل طلب مسلم لهذا المنتج المحدد.'),
           'averageProfit = productProfitAfterTax / deliveredOrders'
@@ -995,13 +995,13 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         // Net Profit
         '<div class="s7-card">' +
           '<div style="font-size:11px;color:#00e676;font-weight:700;display:flex;align-items:center;gap:4px;">' + p9Txt('Net Profit', 'صافي الربح') + ' ' + _tip('🪙', p9Txt('Net Profit', 'الربح الصافي'), p9Txt('Net profit after deducting ad spend from revenue.', 'الربح بعد خصم الإنفاق من الإيراد.'), 'netProfit = revenue - adSpend') + '</div>' +
-          '<div class="s9-kpi-netprofit ' + npClass + '" style="font-size:17px;font-weight:900;color:' + npColor + ' !important;" dir="ltr">' + formatMoney(c.netProfit) + '</div>' +
+          '<div class="s9-kpi-netprofit ' + npClass + '" style="font-size:17px;font-weight:900;color:' + npColor + ' !important;" dir="ltr">' + formatMoney(c.netProfit) + window.supposedBadgeHtml('profit') + '</div>' +
           '<div style="font-size:10px;color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;">' + viewCurrency + '</div>' +
         '</div>' +
         // Revenue
         '<div class="s7-card">' +
           '<div style="font-size:11px;color:#3b82f6;font-weight:700;display:flex;align-items:center;gap:4px;">' + p9Txt('Revenue', 'الإيرادات') + ' ' + _tip('💰', p9Txt('Expected Revenue', 'الإيرادات المتوقعة'), p9Txt('Expected revenue from delivered orders × average profit per delivered order.', 'الدخل المتوقع من الطلبات المسلمة × متوسط الربح لكل طلب مسلم.'), 'revenue = deliveredOrders * averageProfitPerDeliveredOrder') + '</div>' +
-          '<div style="font-size:17px;font-weight:900;color:#fff;" dir="ltr">' + formatMoney(c.revenue) + '</div>' +
+          '<div style="font-size:17px;font-weight:900;color:#fff;" dir="ltr">' + formatMoney(c.revenue) + window.supposedBadgeHtml('revenue') + '</div>' +
           '<div style="font-size:10px;color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;">' + viewCurrency + '</div>' +
         '</div>' +
         // CPA
@@ -1013,13 +1013,13 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         // Break-even CPA
         '<div class="s7-card">' +
           '<div style="font-size:11px;color:#f59e0b;font-weight:700;display:flex;align-items:center;gap:4px;">' + p9Txt('Break-even CPA', 'تكلفة التعادل') + ' ' + _tip('⚖️', p9Txt('Break-even CPA', 'تكلفة الاكتساب عند التعادل'), p9Txt('Maximum CPA before this product starts losing money. It equals average profit per delivered order multiplied by NDR.', 'أعلى تكلفة اكتساب قبل أن يبدأ هذا المنتج بالخسارة. يساوي متوسط الربح لكل طلب مسلم مضروبا في نسبة التسليم الصافي.'), 'Break-even CPA = averageProfitPerDeliveredOrder * NDR') + '</div>' +
-          '<div class="s9-kpi-breakeven" style="font-size:17px;font-weight:900;color:' + (c.cpa > c.breakEvenCpa ? '#ef4444' : '#f59e0b') + ';" dir="ltr">' + formatMoney(c.breakEvenCpa, false, 2) + '</div>' +
+          '<div class="s9-kpi-breakeven" style="font-size:17px;font-weight:900;color:' + (c.cpa > c.breakEvenCpa ? '#ef4444' : '#f59e0b') + ';" dir="ltr">' + formatMoney(c.breakEvenCpa, false, 2) + window.supposedBadgeHtml('breakeven') + '</div>' +
           '<div style="font-size:10px;color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;">' + viewCurrency + '</div>' +
         '</div>' +
         // Delivered Orders
         '<div class="s7-card">' +
           '<div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;display:flex;align-items:center;gap:4px;">' + p9Txt('Delivered', 'مسلمة') + ' ' + _tip('✅', p9Txt('Delivered Orders', 'الطلبات المسلمة'), p9Txt('Number of orders delivered based on simulated NDR.', 'عدد الطلبات المسلمة بناءً على نسبة التسليم المحاكاة.'), 'delivered = totalOrders * NDR') + '</div>' +
-          '<div style="font-size:17px;font-weight:900;color:#fff;">' + p9Num(Math.round(c.deliveredOrders)) + '</div>' +
+          '<div style="font-size:17px;font-weight:900;color:#fff;">' + p9Num(Math.round(c.deliveredOrders)) + window.supposedBadgeHtml('delivered') + '</div>' +
           '<div style="font-size:10px;color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;">' + p9Txt('orders', 'طلب') + '</div>' +
         '</div>' +
       '</div>';
@@ -1234,24 +1234,24 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       // Net Profit — update text AND color (class + inline important)
       var npEl = cards[0].querySelector('.s9-kpi-netprofit');
       if (npEl) {
-        npEl.textContent = formatMoney(c.netProfit);
+        npEl.innerHTML = formatMoney(c.netProfit) + window.supposedBadgeHtml('profit');
         applyProfitColor(npEl, c.netProfit);
       }
       // Revenue
       var revEl = cards[1].querySelector('div:nth-child(2)');
-      if (revEl) revEl.textContent = formatMoney(c.revenue);
+      if (revEl) revEl.innerHTML = formatMoney(c.revenue) + window.supposedBadgeHtml('revenue');
       // CPA
       var cpaEl = cards[2].querySelector('div:nth-child(2)');
       if (cpaEl) cpaEl.textContent = formatMoney(c.cpa, false, 2);
       // Break-even CPA
       var beEl = cards[3].querySelector('.s9-kpi-breakeven');
       if (beEl) {
-        beEl.textContent = formatMoney(c.breakEvenCpa, false, 2);
+        beEl.innerHTML = formatMoney(c.breakEvenCpa, false, 2) + window.supposedBadgeHtml('breakeven');
         beEl.style.color = c.cpa > c.breakEvenCpa ? '#ef4444' : '#f59e0b';
       }
       // Delivered
       var delEl = cards[4].querySelector('div:nth-child(2)');
-      if (delEl) delEl.textContent = p9Num(Math.round(c.deliveredOrders));
+      if (delEl) delEl.innerHTML = p9Num(Math.round(c.deliveredOrders)) + window.supposedBadgeHtml('delivered');
     }
 
     // Metric mini-cards (4-grid above gauge)
@@ -1259,9 +1259,9 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     if (simPanel) {
       var metricVals = simPanel.querySelectorAll('.s9-metric-val');
       if (metricVals[0]) metricVals[0].textContent = p9Num(c.totalOrders);
-      if (metricVals[1]) metricVals[1].textContent = p9Num(Math.round(c.deliveredOrders));
-      if (metricVals[2]) metricVals[2].textContent = Math.round(s.ndr * 100) + '%';
-      if (metricVals[3]) metricVals[3].textContent = toDisplay(s.avgCommission).toFixed(2) + ' ' + viewCurrency;
+      if (metricVals[1]) metricVals[1].innerHTML = p9Num(Math.round(c.deliveredOrders)) + window.supposedBadgeHtml('delivered');
+      if (metricVals[2]) metricVals[2].innerHTML = Math.round(s.ndr * 100) + '%' + window.supposedBadgeHtml('dr');
+      if (metricVals[3]) metricVals[3].innerHTML = toDisplay(s.avgCommission).toFixed(2) + ' ' + viewCurrency + window.supposedBadgeHtml('profit');
       if (metricVals[4]) metricVals[4].textContent = formatPct(s.realConfirmationRate);
       if (metricVals[5]) metricVals[5].textContent = formatPct(s.realDr);
     }
@@ -1294,7 +1294,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
           profitCell.textContent = '';
           profitCell.appendChild(profitValue);
         }
-        profitValue.textContent = formatMoney(realNetProfit);
+        profitValue.innerHTML = formatMoney(realNetProfit) + window.supposedBadgeHtml('profit');
         applyProfitColor(profitCell, realNetProfit);
       }
     });
