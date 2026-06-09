@@ -296,7 +296,26 @@
         var marketingAccountId = String(dashData && dashData.meta && dashData.meta.activeAccountId || '__all__');
         var refreshKey = marketingAccountId + '|' + sectionId;
         if (marketingSectionRefreshes[refreshKey]) return;
+
+        // If the aggregator is not loaded yet, do NOT register or trigger refresh yet.
+        // We will be called again once the aggregator completes and renders the shell.
+        if (!dashData || !dashData._loaded) return;
+
+        var store = window.DashboardMarketingState;
+        var currentStatus = store && typeof store.get === 'function' ? store.get(marketingAccountId) : null;
+
+        // Check if marketing data is already loaded and no background sync is running.
+        var isAlreadyLoaded = currentStatus && (currentStatus.summary || currentStatus.status !== 'disconnected' || currentStatus.error || currentStatus.offline || currentStatus.reconnectRequired);
+        var isSyncing = !!activeMarketingSyncPromise;
+
         marketingSectionRefreshes[refreshKey] = true;
+
+        // If it is already loaded and not syncing, we don't need to refresh the shell,
+        // because the shell was just rendered with the fully loaded data!
+        if (isAlreadyLoaded && !isSyncing) {
+          return;
+        }
+
         var marketingPromise = activeMarketingSyncPromise || Promise.resolve();
         Promise.all([
           ensureMarketingStatusLoaded(dashData).catch(function () { return null; }),

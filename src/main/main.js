@@ -1454,12 +1454,7 @@ app.whenReady().then(() => {
   }
 });
 app.on("before-quit", () => { app.isQuitting = true; });
-app.on("will-quit", (event) => {
-  if (app.__sentryFlushed) return;
-  event.preventDefault();
-  app.__sentryFlushed = true;
-  monitoring.flushMainMonitoring(2000).finally(() => app.quit());
-});
+
 app.on("window-all-closed", () => {});
 
 autoUpdater.on("checking-for-update", () => {
