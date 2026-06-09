@@ -10,6 +10,11 @@ window.renderSetup = function (onComplete, initialStep) {
   const t = window._t;
   const el = document.getElementById("page-setup");
 
+  let readyResolve;
+  window._setupInitialReady = new Promise((resolve) => {
+    readyResolve = resolve;
+  });
+
   let accounts    = [];
   let maxAccounts = 1;
   let editingId   = null;
@@ -34,30 +39,39 @@ window.renderSetup = function (onComplete, initialStep) {
   let selectedIds = [];
 
   async function loadAccounts() {
-    const creds = await window.api.getCredentials();
-    accounts    = creds.accounts || [];
-    maxAccounts = creds.maxAccounts || 1;
+    try {
+      const creds = await window.api.getCredentials();
+      accounts    = creds.accounts || [];
+      maxAccounts = creds.maxAccounts || 1;
 
-    if (!accounts.length && creds.easyEmail) {
-      accounts = [{
-        id: "account_1",
-        label: buildLabel(1),
-        easyEmail: creds.easyEmail,
-        easyStore: creds.easyStore || "",
-        taagerEmail: creds.taagerEmail || "",
-        taagerCountry: creds.taagerCountry || "sa",
-        taagerLoginMethod: creds.taagerLoginMethod || "email",
-        taagerEmail: creds.taagerEmail || creds.taagerEmail || "",
-        taagerPhone: creds.taagerPhone || "",
-        taagerCountry: creds.taagerCountry || creds.taagerCountry || "sa",
-        taagerAffiliateCode: creds.taagerAffiliateCode || "",
-        locked: true,
-      }];
+      if (!accounts.length && creds.easyEmail) {
+        accounts = [{
+          id: "account_1",
+          label: buildLabel(1),
+          easyEmail: creds.easyEmail,
+          easyStore: creds.easyStore || "",
+          taagerEmail: creds.taagerEmail || "",
+          taagerCountry: creds.taagerCountry || "sa",
+          taagerLoginMethod: creds.taagerLoginMethod || "email",
+          taagerEmail: creds.taagerEmail || creds.taagerEmail || "",
+          taagerPhone: creds.taagerPhone || "",
+          taagerCountry: creds.taagerCountry || creds.taagerCountry || "sa",
+          taagerAffiliateCode: creds.taagerAffiliateCode || "",
+          locked: true,
+        }];
+      }
+
+      // Default: nothing selected — user picks on the Run step
+      selectedIds = [];
+      renderShell();
+    } catch (err) {
+      console.error("Error loading accounts in setup:", err);
+    } finally {
+      if (readyResolve) {
+        readyResolve();
+        readyResolve = null;
+      }
     }
-
-    // Default: nothing selected — user picks on the Run step
-    selectedIds = [];
-    renderShell();
   }
 
   // ── Label builder: "{CustomerName} 1", "{CustomerName} 2", etc. ──

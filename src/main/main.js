@@ -1918,14 +1918,20 @@ function getLocalCredentialsSnapshot() {
   };
 }
 
-ipcMain.handle("get-startup-state", async () => ({
-  settings: {
-    theme: store.get("theme", "dark"),
-    lang:  store.get("lang",  "ar"),
-  },
-  license: await _checkLicenseImpl(false),
-  credentials: getLocalCredentialsSnapshot(),
-}));
+ipcMain.handle("get-startup-state", async () => {
+  const license = await _checkLicenseImpl(false);
+  const credentials = getLocalCredentialsSnapshot();
+  _credCache = credentials;
+  _credCacheAt = Date.now();
+  return {
+    settings: {
+      theme: store.get("theme", "dark"),
+      lang:  store.get("lang",  "ar"),
+    },
+    license,
+    credentials,
+  };
+});
 
 ipcMain.handle("get-credentials", async () => {
   // Serve from cache if fresh

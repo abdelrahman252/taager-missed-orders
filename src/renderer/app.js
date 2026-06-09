@@ -2115,12 +2115,24 @@ function setPreloaderCopy(title, body) {
 
 function dismissPreloaderWhenReady(pageId) {
   if (_preloaderDismissed) return;
-  const dashboardReady = pageId === "page-dashboard" && window._dashboardInitialReady;
-  if (!dashboardReady || typeof dashboardReady.then !== "function") {
-    dismissPreloader();
+
+  if (pageId === "page-dashboard") {
+    const dashboardReady = window._dashboardInitialReady;
+    if (dashboardReady && typeof dashboardReady.then === "function") {
+      dashboardReady.then(() => dismissPreloader()).catch(() => dismissPreloader());
+    }
     return;
   }
-  dashboardReady.then(() => dismissPreloader()).catch(() => dismissPreloader());
+
+  if (pageId === "page-setup") {
+    const setupReady = window._setupInitialReady;
+    if (setupReady && typeof setupReady.then === "function") {
+      setupReady.then(() => dismissPreloader()).catch(() => dismissPreloader());
+    }
+    return;
+  }
+
+  dismissPreloader();
 }
 
 let _activePageId = null;
