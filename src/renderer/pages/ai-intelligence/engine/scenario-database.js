@@ -146,7 +146,7 @@
     {
       category: "calculators",
       intent: "CALCULATOR_SIMULATION",
-      mode: "gemini",
+      mode: "local",
       messages: [
         "What CPA do I need to break even?",
         "What happens if delivery improves?",
@@ -160,7 +160,7 @@
     {
       category: "local-only",
       intent: "RANKING_QUERY",
-      mode: "gemini",
+      mode: "local",
       messages: [
         "Top cities",
         "Highest CPA products",

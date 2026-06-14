@@ -47,38 +47,27 @@ window.renderSection1 = function (mountEl, data, ctx) {
   }
   var defaultCurrency = (data && data.meta && data.meta.activeCurrency) || window.dashboardActiveCurrency || 'SAR';
 
-  /* ── Fallback data (mock shape) so the section renders during development ── */
+  /* ── Safe empty data so missing slices never look like real business results ── */
   var d = data || {
-    earnedCommission:   { value: 31150, delta: 78.0,  unit: defaultCurrency },
-    incomingCommission: { value: 24631, delta: 146.4,   unit: defaultCurrency },
-    lostCommission:     { value: 100963,  delta: -61.5,  unit: defaultCurrency },
-    totalOrders:        { value: 4500,  delta: -49.3,  unit: 'Orders' },
+    earnedCommission:   { value: 0, delta: 0, unit: defaultCurrency },
+    incomingCommission: { value: 0, delta: 0, unit: defaultCurrency },
+    lostCommission:     { value: 0, delta: 0, unit: defaultCurrency },
+    totalOrders:        { value: 0, rawValue: 0, delta: 0, unit: 'Orders' },
     sparklines: {
-      earned:   [15000, 18000, 22000, 26000, 28000, 30000, 31150],
-      incoming: [10000, 12000, 15000, 18000, 20000, 22000, 24631],
-      lost:     [40000, 50000, 60000, 75000, 85000, 95000, 100963 ],
-      orders:   [2000,  2500,  3000,  3500,  4000,  4200,  4500 ],
+      earned:   [0],
+      incoming: [0],
+      lost:     [0],
+      orders:   [0],
     },
     health: {
-      earned:   { pct: 19.9, sar: 31150 },
-      incoming: { pct: 15.7, sar: 24631 },
-      lost:     { pct: 64.4, sar: 100963  },
+      earned:   { pct: 0, sar: 0 },
+      incoming: { pct: 0, sar: 0 },
+      lost:     { pct: 0, sar: 0 },
     },
-    insights: [
-      { text: 'Lost Taager profit is high due to order cancellations. Focus on product quality and descriptions.', type: 'warning' }
-    ],
-    lostBreakdown: [
-      { label: 'Customer Cancel', pct: 45, color: '#ef4444' },
-      { label: 'Out of Stock', pct: 30, color: '#f59e0b' },
-      { label: 'Delivery Failed', pct: 15, color: '#3b82f6' },
-      { label: 'Returned', pct: 10, color: '#a855f7' }
-    ],
-    topContributors: [
-      { name: 'Riyadh', value: 12500, unit: defaultCurrency },
-      { name: 'Jeddah', value: 8300, unit: defaultCurrency },
-      { name: 'Dammam', value: 5400, unit: defaultCurrency }
-    ],
-    goal: { current: 31150, target: 50000 }
+    insights: [],
+    lostBreakdown: [],
+    topContributors: [],
+    goal: { current: 0, target: 0 }
   };
 
   /* ── KPI card definitions (RTL array order: index 0 = visual RIGHT) ─────── */
@@ -91,8 +80,6 @@ window.renderSection1 = function (mountEl, data, ctx) {
     { label: s1Txt('Incoming Profit After Tax', 'الربح القادم بعد الضريبة'),    value: d.incomingCommission.value,  unit: d.incomingCommission.unit,  delta: d.incomingCommission.delta,  color: 'orange', spark: d.sparklines.incoming,  iconType: 'orange', tooltip: s1Txt('Incoming Profit After Tax = sum(order profit - tax profit) for active non-delivered orders.', 'الربح القادم بعد الضريبة = مجموع (ربح الطلب - ربح الضريبة) للطلبات النشطة غير المسلمة.') },
     { label: s1Txt('Lost Profit After Tax', 'الربح الضائع بعد الضريبة'),   value: d.lostCommission.value,      unit: d.lostCommission.unit,      delta: d.lostCommission.delta,      color: 'red',    spark: d.sparklines.lost,      iconType: 'red', tooltip: s1Txt('Lost Profit After Tax = sum(order profit - tax profit) for failed, canceled, and lost orders.', 'الربح الضائع بعد الضريبة = مجموع (ربح الطلب - ربح الضريبة) للطلبات الفاشلة والملغاة.') },
     { label: s1Txt('Total / Net Orders', 'إجمالي / صافي الطلبات'), value: netTotalOrders, displayValue: totalOrdersDisplay, staticDisplay: true, unit: s1Txt('orders', 'طلب'), delta: d.totalOrders.delta, color: 'blue', spark: d.sparklines.orders, iconType: 'blue', tooltip: tx('kpi.orders.tooltip', 'Total / Net Orders = raw orders / orders after excluding Canceled by you. Business metrics use net orders.') },
-    { label: s1Txt('Confirmation Rate', 'نسبة التأكيد'), value: d.confirmationRate ? d.confirmationRate.value : (((window.dashboardGeoData || {}).pipeline || {}).metrics || {}).confirmationRate || 0, unit: '%', delta: d.confirmationRate ? d.confirmationRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.confirmationRate.tooltip', 'Confirmation Rate = progressed statuses / all orders. Confirmation + cancel + pending = 100%.') },
-    { label: s1Txt('DR Rate', 'نسبة DR'), value: d.drRate ? d.drRate.value : (((window.dashboardGeoData || {}).pipeline || {}).metrics || {}).drPct || 0, unit: '%', delta: d.drRate ? d.drRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.drRate.tooltip', 'DR = delivered orders / confirmed orders.') },
   ];
 
   var activeAccId = (window.getActiveAccountId ? window.getActiveAccountId() : '__all__') || '__all__';
@@ -147,6 +134,8 @@ window.renderSection1 = function (mountEl, data, ctx) {
     { label: s1Txt('Average Order Value (AOV)', 'متوسط قيمة الطلب (AOV)'), value: d.overallAov ? d.overallAov.value : 0, unit: nativeCurrency, delta: d.overallAov ? d.overallAov.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.overallAov.tooltip', 'متوسط قيمة الطلب الإجمالي ويحسب بقسمة إجمالي المبيعات على إجمالي الطلبات.') },
     { label: s1Txt('Net Total Delivered Sales', 'صافي مبيعات الطلبات المسلمة'), value: d.totalDeliveredSales ? d.totalDeliveredSales.value : 0, unit: nativeCurrency, delta: d.totalDeliveredSales ? d.totalDeliveredSales.delta : 0, color: 'green', spark: [], iconType: 'green', tooltip: tx('kpi.totalDeliveredSales.tooltip', 'Net total delivered sales = sum of prices for delivered net orders only, excluding Canceled by you.') },
     { label: s1Txt('Average Order Value (Delivered)', 'متوسط قيمة الطلب المسلم'), value: d.deliveredAov ? d.deliveredAov.value : 0, unit: nativeCurrency, delta: d.deliveredAov ? d.deliveredAov.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.deliveredAov.tooltip', 'Delivered AOV = net delivered sales / delivered orders.') },
+    { label: s1Txt('Confirmation Rate', 'نسبة التأكيد'), value: d.confirmationRate ? d.confirmationRate.value : (((window.dashboardGeoData || {}).pipeline || {}).metrics || {}).confirmationRate || 0, unit: '%', delta: d.confirmationRate ? d.confirmationRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.confirmationRate.tooltip', 'Confirmation Rate = progressed statuses / all orders. Confirmation + cancel + pending = 100%.') },
+    { label: s1Txt('DR Rate', 'نسبة DR'), value: d.drRate ? d.drRate.value : (((window.dashboardGeoData || {}).pipeline || {}).metrics || {}).drPct || 0, unit: '%', delta: d.drRate ? d.drRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.drRate.tooltip', 'DR = delivered orders / confirmed orders.') },
     { label: s1Txt('NDR Rate', 'نسبة NDR'), value: d.ndrRate ? d.ndrRate.value : (((window.dashboardGeoData || {}).pipeline || {}).metrics || {}).deliveryRate || 0, unit: '%', delta: d.ndrRate ? d.ndrRate.delta : 0, color: 'orange', spark: [], iconType: 'orange', tooltip: tx('kpi.ndrRate.tooltip', 'NDR = delivered orders / net placed orders.') },
     { label: s1Txt('Net ROAS', 'العائد الصافي على الإعلان'), value: netRoasUnavailable ? 0 : netRoas.toFixed(2), displayValue: netRoasUnavailable ? '—' : netRoas.toFixed(2), unit: 'x', delta: netRoasDelta, hideDelta: netRoasUnavailable, color: 'purple', spark: [], iconType: 'purple', tooltip: tx('kpi.netRoas.tooltip', s1Txt('Net ROAS = delivered sales divided by ad spend. It uses only successfully delivered order revenue, so pending, canceled, and returned orders do not inflate ad performance.', 'العائد الصافي على الإعلان = مبيعات الطلبات المسلمة مقسومة على الإنفاق الإعلاني. يستخدم مبيعات الطلبات المسلمة فقط حتى لا ترفع الطلبات المعلقة أو الملغاة أو المرتجعة نتيجة الإعلان.')) }
   ];
@@ -154,6 +143,9 @@ window.renderSection1 = function (mountEl, data, ctx) {
   /* ── Health bar data ─────────────────────────────────────────────────────── */
   // Taager dashboard/status/NDR migration:
   // Health bars display Taager profit buckets, while legacy data keys stay stable.
+  // Keep Performance Overview balanced as two rows of six cards.
+  cards = cards.concat(newCards.splice(0, 2));
+
   var barSegments = [
     { pct: d.health.earned.pct,   color: '#00e676', label: s1Txt('Earned', 'ربح محقق'),  sar: d.health.earned.sar   },
     { pct: d.health.incoming.pct, color: '#f59e0b', label: s1Txt('Incoming', 'ربح قادم'),  sar: d.health.incoming.sar },
@@ -204,7 +196,7 @@ window.renderSection1 = function (mountEl, data, ctx) {
       return idx === pts.length - 1 || idx === Math.floor((pts.length - 1) / 2) || idx === Math.floor((pts.length - 1) * 0.75);
     }).map(function (p) {
       return '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="5" fill="#fff" stroke="#3b82f6" stroke-width="2" style="filter:drop-shadow(0 0 6px #3b82f6)"/>';
-    }).join('');
+    }).join('') || '<div style="font-size:13px;color:rgba(255,255,255,0.55);font-weight:600;line-height:1.6;">' + s1Txt('No city performance data is available for this range.', 'لا توجد بيانات أداء للمدن في هذه الفترة.') + '</div>';
     return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:140px;display:block;margin-top:20px;overflow:visible;">' +
       '<defs><linearGradient id="trendGradS1" x1="0" y1="0" x2="0" y2="1">' +
         '<stop offset="0%" stop-color="#3b82f6" stop-opacity="0.25"/>' +
@@ -304,19 +296,19 @@ window.renderSection1 = function (mountEl, data, ctx) {
     if (context && context.localSummary && context.localSummary.message) return context.localSummary.message;
     if (d.insights && d.insights[0] && d.insights[0].text) return d.insights[0].text;
     var lostPct = d.health && d.health.lost ? Number(d.health.lost.pct || 0) : 0;
-    if (lostPct >= 45) return 'Lost Taager profit is high. Ask AI to identify the products and cities causing the most leakage.';
-    return 'Taager profit health is stable. Ask AI for the next best growth move from this dashboard snapshot.';
+    if (lostPct >= 45) return s1Txt('Lost profit is high. Ask AI to identify the products and cities causing the most leakage.', 'الربح الضائع مرتفع. اطلب من الذكاء تحليل المنتجات والمدن التي تسبب أكبر تسريب.');
+    return s1Txt('No unusual overview signal is available yet. Update the dashboard to generate live insights.', 'لا توجد إشارة غير معتادة في النظرة العامة حتى الآن. حدّث لوحة التحكم لتوليد رؤى مباشرة.');
   }
 
   /* ── Build KPI card row HTML ─────────────────────────────────────────────── */
   var cardsHtml = cards.map(function (c, i) {
-    return '<div class="fade-up" style="flex:1 1 210px;min-width:190px;animation-delay:' + (i * 100) + 'ms;">' +
+    return '<div class="fade-up" style="flex:1 1 calc((100% - 70px) / 6);min-width:170px;animation-delay:' + (i * 100) + 'ms;">' +
       window.kpiCard({ label: c.label, value: c.value, displayValue: c.displayValue, staticDisplay: c.staticDisplay, unit: c.unit, delta: c.delta, hideDelta: c.hideDelta, color: c.color, sparklineData: c.spark, iconType: c.iconType, tooltip: c.tooltip }) +
       '</div>';
   }).join('');
 
   var newCardsHtml = newCards.map(function (c, i) {
-    return '<div class="fade-up" style="flex:1 1 210px;min-width:190px;animation-delay:' + ((i + 6) * 100) + 'ms;">' +
+    return '<div class="fade-up" style="flex:1 1 calc((100% - 70px) / 6);min-width:170px;animation-delay:' + ((i + 6) * 100) + 'ms;">' +
       window.kpiCard({ label: c.label, value: c.value, displayValue: c.displayValue, staticDisplay: c.staticDisplay, unit: c.unit, delta: c.delta, hideDelta: c.hideDelta, color: c.color, sparklineData: c.spark, iconType: c.iconType, tooltip: c.tooltip }) +
       '</div>';
   }).join('');
@@ -391,7 +383,7 @@ window.renderSection1 = function (mountEl, data, ctx) {
 
   var trendWidgetHtml = '<div style="background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:24px;display:flex;flex-direction:column;flex:1;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
-      '<div style="font-size:16px;font-weight:800;color:#fff;">Profits & Orders Trend</div>' +
+      '<div style="font-size:16px;font-weight:800;color:#fff;">' + s1Txt('Profits & Orders Trend', 'اتجاه الأرباح والطلبات') + '</div>' +
       '<div id="s1-trend-select" class="s1-select-wrap" style="width:138px;"></div>' +
     '</div>' +
     '<div id="s1-trend-chart">' + trendSvg + '</div>' +
@@ -403,13 +395,13 @@ window.renderSection1 = function (mountEl, data, ctx) {
     '<div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;background:#3b82f6;filter:blur(50px);opacity:0.25;border-radius:50%;"></div>' +
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;z-index:2;direction:ltr;">' +
       '<span style="color:#a855f7;font-size:20px;filter:drop-shadow(0 0 6px rgba(168,85,247,0.5));">✦</span>' +
-      '<span style="font-size:16px;font-weight:800;color:#fff;">AI Insights</span>' +
+      '<span style="font-size:16px;font-weight:800;color:#fff;">' + s1Txt('AI Insights', 'رؤى الذكاء') + '</span>' +
     '</div>' +
     '<div style="font-size:13px;color:rgba(255,255,255,0.75);line-height:1.7;z-index:2;flex:1;font-weight:500;direction:ltr;">' +
       insightText +
     '</div>' +
     '<div style="margin-top:16px;z-index:2;direction:ltr;">' +
-      '<button id="s1-ask-ai-btn" type="button" style="background:rgba(59,130,246,0.15);color:#3b82f6;border:1px solid rgba(59,130,246,0.3);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;transition:all 0.2s ease;height:30px;min-height:30px;" onmouseover="this.style.background=\'rgba(59,130,246,0.25)\'" onmouseout="this.style.background=\'rgba(59,130,246,0.15)\'">Ask AI</button>' +
+      '<button id="s1-ask-ai-btn" type="button" style="background:rgba(59,130,246,0.15);color:#3b82f6;border:1px solid rgba(59,130,246,0.3);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;transition:all 0.2s ease;height:30px;min-height:30px;" onmouseover="this.style.background=\'rgba(59,130,246,0.25)\'" onmouseout="this.style.background=\'rgba(59,130,246,0.15)\'">' + s1Txt('Ask AI', 'اسأل الذكاء') + '</button>' +
     '</div>' +
   '</div>';
 
@@ -422,13 +414,8 @@ window.renderSection1 = function (mountEl, data, ctx) {
     '<circle cx="50" cy="50" r="40" fill="none" stroke="#a855f7" stroke-width="12" stroke-dasharray="25 251" stroke-dashoffset="-226"/>' +
   '</svg>';
 
-  var lostArr = lostBreakdownFromData() || [
-    { label: 'Customer Cancel', pct: 45, color: '#ef4444' },
-    { label: 'Out of Stock', pct: 30, color: '#f59e0b' },
-    { label: 'Delivery Failed', pct: 15, color: '#3b82f6' },
-    { label: 'Returned', pct: 10, color: '#a855f7' }
-  ];
-  var breakdownListHtml = lostArr.map(function(item) {
+  var lostArr = lostBreakdownFromData() || [];
+  var breakdownListHtml = lostArr.length ? lostArr.map(function(item) {
     return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">' +
       '<div style="display:flex;align-items:center;gap:10px;">' +
         '<div style="width:10px;height:10px;border-radius:50%;background:' + item.color + ';box-shadow:0 0 8px ' + item.color + '88;"></div>' +
@@ -436,28 +423,24 @@ window.renderSection1 = function (mountEl, data, ctx) {
       '</div>' +
       '<div style="font-size:14px;font-weight:800;color:#fff;">' + item.pct + '%</div>' +
     '</div>';
-  }).join('');
+  }).join('') : '<div style="font-size:13px;color:rgba(255,255,255,0.55);font-weight:600;line-height:1.6;">' + s1Txt('No lost-profit breakdown is available for this range.', 'لا يوجد تحليل للربح الضائع في هذه الفترة.') + '</div>';
 
   var lostWidgetHtml = '<div style="background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:24px;display:flex;align-items:center;gap:32px;height:100%;direction:ltr;">' +
     '<div style="position:relative;flex-shrink:0;">' +
       donutSvg +
       '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;">' +
-        '<div style="font-size:11px;color:rgba(255,255,255,0.4);font-weight:600;">Lost</div>' +
+        '<div style="font-size:11px;color:rgba(255,255,255,0.4);font-weight:600;">' + s1Txt('Lost', 'ضائع') + '</div>' +
       '</div>' +
     '</div>' +
     '<div style="flex:1;">' +
-      '<div style="font-size:16px;font-weight:800;color:#fff;margin-bottom:16px;">Lost Profit Analysis</div>' +
+      '<div style="font-size:16px;font-weight:800;color:#fff;margin-bottom:16px;">' + s1Txt('Lost Profit Analysis', 'تحليل الربح الضائع') + '</div>' +
       breakdownListHtml +
     '</div>' +
   '</div>';
 
   /* ── Top Contributors ────────────────────────────────────────────────────── */
-  var topArr = topCities(cityMetric) || [
-    { name: 'Riyadh', value: 12500, unit: nativeCurrency },
-    { name: 'Jeddah', value: 8300, unit: nativeCurrency },
-    { name: 'Dammam', value: 5400, unit: nativeCurrency }
-  ];
-  var topListHtml = topArr.map(function(item, index) {
+  var topArr = topCities(cityMetric) || [];
+  var topListHtml = topArr.length ? topArr.map(function(item, index) {
     var colors = ['#00e676', '#f59e0b', '#3b82f6'];
     var c = colors[index] || '#fff';
     return '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:rgba(255,255,255,0.02);border-radius:10px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.02);">' +
@@ -467,11 +450,11 @@ window.renderSection1 = function (mountEl, data, ctx) {
       '</div>' +
       '<div style="font-size:14px;font-weight:800;color:' + c + ';font-family:\'DM Mono\', monospace;">' + fmt(item.value) + ' <span style="font-size:11px;font-weight:700;">' + item.unit + '</span></div>' +
     '</div>';
-  }).join('');
+  }).join('') : '<div style="font-size:13px;color:rgba(255,255,255,0.55);font-weight:600;line-height:1.6;">' + s1Txt('No city performance data is available for this range.', 'لا توجد بيانات أداء للمدن في هذه الفترة.') + '</div>';
 
   var topWidgetHtml = '<div style="background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:24px;height:100%;direction:ltr;">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">' +
-      '<div style="font-size:16px;font-weight:800;color:#fff;">Top Performing Cities</div>' +
+      '<div style="font-size:16px;font-weight:800;color:#fff;">' + s1Txt('Top Performing Cities', 'أفضل المدن أداءً') + '</div>' +
       '<div id="s1-city-select" class="s1-select-wrap" style="width:132px;"></div>' +
     '</div>' +
     '<div id="s1-city-list">' + topListHtml + '</div>' +
@@ -614,15 +597,15 @@ window.renderSection1 = function (mountEl, data, ctx) {
                   '</div>' +
 
                   /* Legend Grid (Responsive & non-overlapping) */
-                  '<div style="display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;margin-top:14px;">' +
+                  '<div class="health-legend-grid" style="display:flex;flex-wrap:wrap;gap:12px 18px;justify-content:space-between;margin-top:14px;">' +
                     barSegments.map(function (s) {
-                      return '<div style="display:flex;align-items:center;gap:8px;min-width:120px;flex:1;">' +
+                      return '<div class="health-legend-item" style="display:flex;align-items:center;gap:8px;min-width:112px;flex:1;">' +
                         '<div style="width:12px;height:12px;border-radius:3px;background:' + s.color + ';box-shadow:0 0 6px ' + s.color + '88;flex-shrink:0;"></div>' +
                         '<div style="display:flex;flex-direction:column;">' +
-                          '<span style="font-size:12px;color:rgba(255,255,255,0.5);font-weight:500;">' + s.label + '</span>' +
-                          '<span style="font-size:15px;font-weight:800;color:#fff;font-family:\'DM Mono\', monospace;margin-top:2px;white-space:nowrap;">' +
+                          '<span class="health-legend-label" style="font-size:12px;color:rgba(255,255,255,0.5);font-weight:500;">' + s.label + '</span>' +
+                          '<span class="health-legend-value" style="font-size:11px;font-weight:700;color:#fff;font-family:\'DM Mono\', monospace;margin-top:2px;white-space:nowrap;line-height:1.2;">' +
                             fmt(s.sar) +
-                            ' <span style="font-size:12px;font-weight:700;color:' + s.color + ';margin-left:6px;">(' + s.pct + '%)</span>' +
+                            ' <span class="health-legend-pct" style="font-size:9.5px;font-weight:700;color:' + s.color + ';margin-left:4px;">(' + s.pct + '%)</span>' +
                           '</span>' +
                         '</div>' +
                       '</div>';
@@ -725,21 +708,21 @@ window.renderSection1 = function (mountEl, data, ctx) {
         trendPeriod = value;
         var chart = mountEl.querySelector('#s1-trend-chart');
         if (chart) chart.innerHTML = trendSvgFor(value);
-      }, { ariaLabel: 'Trend period' });
+      }, { ariaLabel: s1Txt('Trend period', 'فترة الاتجاه') });
     }
     var cityWrap = mountEl.querySelector('#s1-city-select');
     if (cityWrap) {
       dropdown(cityWrap, [
-        { value: 'commission', label: 'Profit After Tax' },
-        { value: 'orders', label: 'Orders' },
-        { value: 'delivery', label: 'Delivered' },
-        { value: 'lost', label: 'Lost' }
+        { value: 'commission', label: s1Txt('Profit After Tax', 'الربح بعد الضريبة') },
+        { value: 'orders', label: s1Txt('Orders', 'الطلبات') },
+        { value: 'delivery', label: s1Txt('Delivered', 'المسلمة') },
+        { value: 'lost', label: s1Txt('Lost', 'الضائع') }
       ], cityMetric, function (value) {
         mountEl._s1CityMetric = value;
         cityMetric = value;
         var list = mountEl.querySelector('#s1-city-list');
         if (list) list.innerHTML = cityListHtml(value);
-      }, { ariaLabel: 'City metric' });
+      }, { ariaLabel: s1Txt('City metric', 'مؤشر المدن') });
     }
   }
 

@@ -30,6 +30,8 @@
   var campaignAiRequestSeq = 0;
   var campaignIntelCache = new Map();
   var campaignDecisionTipSeq = 0;
+  var campaignProductNameSource = null;
+  var campaignCurrentProductNames = {};
 
   function campaignIntelCacheKey(data, accountId, platform, syncStamp, reportingCurrency, egpRate) {
     var expectedMode = window.isExpectedNdrMode && window.isExpectedNdrMode() ? "expected" : "actual";
@@ -57,6 +59,25 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
+  }
+
+  function campaignProductName(sku, fallback) {
+    var key = String(sku || "").trim();
+    var source = window.dashboardGeoData && window.dashboardGeoData.products || null;
+    if (source !== campaignProductNameSource) {
+      campaignProductNameSource = source;
+      campaignCurrentProductNames = {};
+      var currentProducts = source && Array.isArray(source.rankedList) ? source.rankedList : [];
+      currentProducts.forEach(function (product) {
+        var productSku = String(product && product.sku || "").trim().toLowerCase();
+        if (productSku) campaignCurrentProductNames[productSku] = String(product.name || "").trim();
+      });
+    }
+    var saved = window.TaagerProductNames && key && typeof window.TaagerProductNames.get === "function"
+      ? window.TaagerProductNames.get(key)
+      : "";
+    var current = key ? campaignCurrentProductNames[key.toLowerCase()] : "";
+    return String(saved || current || fallback || key || "Unknown product").trim();
   }
 
   function fmt(value) {
@@ -161,11 +182,14 @@
     var next = normalizeCampaignCurrency(currency, current);
     if (next === current) return;
     mount._cachedIntel = null;
+    mount._campaignCurrencyChanging = true;
     if (window.DashboardRoiState && typeof window.DashboardRoiState.set === "function") {
       window.DashboardRoiState.set({ currency: next }, accountId, data && data.roi || {});
+      setTimeout(function () { if (mount) mount._campaignCurrencyChanging = false; }, 0);
       return;
     }
     if (data) data.roi = Object.assign({}, data.roi || {}, { currency: next });
+    mount._campaignCurrencyChanging = false;
     refreshCampaignCurrencyUIOnly(mount, data, ctx);
   }
 
@@ -260,11 +284,11 @@
     return card("Spend", money(intel.totals.spend, intel.currency), "Spent campaigns in this period", "wallet", "spend") +
       card("Matched spend", percent(intel.totals.matchedSpendPct), money(intel.totals.matchedSpend, intel.currency) + " exact SKU", "shieldHalved", "matched") +
       card("Unmatched spend", percent(intel.totals.unmatchedSpendPct), money(intel.totals.unmatchedSpend, intel.currency) + " needs SKU", "circleXmark", "unmatched") +
-      card("Taager orders", fmt(intel.totals.taagerOrders), "From SKU-confirmed products", "package", "orders") +
-      card("Taager CPA", intel.totals.taagerOrders > 0 ? money(intel.totals.taagerCpa, intel.currency) : "No Taager orders", "Spend / Taager orders", "calculator", "cpa", financialState(intel.totals.taagerCpa, intel.totals.taagerOrders > 0)) +
-      card("Net profit", signedMoney(intel.totals.netProfit, intel.currency), "Taager profit after tax - spend", "moneyBill", "profit", financialState(intel.totals.netProfit, true)) +
-      card("ROI", percent(intel.totals.roiPct), "Net profit / spend", "trendingUp", "roi", financialState(intel.totals.roiPct, intel.totals.matchedSpend > 0)) +
-      card("Profit ROAS", roas(intel.totals.profitRoas), "Taager profit after tax / spend", "pulse", "roas");
+      card("Matched net orders", fmt(intel.totals.taagerOrders), "Unique net orders from SKU-matched products", "package", "orders") +
+      card("Matched CPA", intel.totals.taagerOrders > 0 ? money(intel.totals.taagerCpa, intel.currency) : "No matched net orders", "Matched spend / unique net orders", "calculator", "cpa", financialState(intel.totals.taagerCpa, intel.totals.taagerOrders > 0)) +
+      card("Matched net profit", signedMoney(intel.totals.netProfit, intel.currency), "Matched Taager profit after tax - matched spend", "moneyBill", "profit", financialState(intel.totals.netProfit, true)) +
+      card("Matched ROI", percent(intel.totals.roiPct), "Matched net profit / matched spend", "trendingUp", "roi", financialState(intel.totals.roiPct, intel.totals.matchedSpend > 0)) +
+      card("Matched profit ROAS", roas(intel.totals.profitRoas), "Matched Taager profit after tax / matched spend", "pulse", "roas");
   }
 
   function sortValue(row, key) {
@@ -350,23 +374,23 @@
   function headerTip(mode, key, label) {
     var tips = {
       products: {
-        product: "Taager product matched only by an exact SKU in the campaign name. Account and country boundaries are preserved.",
-        spend: "SKU-matched campaign spend converted into the shared calculator/product currency. Only exact SKU matches are included.",
-        clicks: "Clicks reported by the ad platform for SKU-matched campaigns.",
+        product: "Taager product matched by a complete SKU or a unique product-name fallback in the campaign name. Account and country boundaries are preserved.",
+        spend: "Attributed campaign spend converted into the shared calculator/product currency. Ambiguous campaigns are excluded.",
+        clicks: "Clicks reported by the ad platform for attributed campaigns.",
         taagerOrders: "Real conversions from Taager dashboard orders. Conversion rate = Taager orders / landing page views, or content views when landing page views are unavailable. N/A means the ad platform did not report a usable tracked-view denominator through Windsor.",
         taagerDelivered: "Delivered Taager orders. Delivered conversion rate uses the same tracked-view denominator and is N/A when that denominator is unavailable.",
         taagerNdrPct: "Net delivery rate from Taager order outcomes.",
-        taagerCpa: "Taager CPA = SKU-matched campaign spend / Taager orders.",
-        deliveredCpa: "Delivered CPA = SKU-matched campaign spend / delivered Taager orders.",
+        taagerCpa: "Taager CPA = attributed campaign spend / Taager orders.",
+        deliveredCpa: "Delivered CPA = attributed campaign spend / delivered Taager orders.",
         breakEvenCpa: "Break-even CPA = average delivered Taager profit after tax x NDR.",
         taagerProfit: "Earned Taager profit after tax from delivered orders for this account, country, and SKU.",
         avgDeliveredProfit: "Average profit = earned Taager profit after tax / delivered Taager orders.",
-        netProfit: "Net profit = Taager profit after tax - SKU-matched campaign spend. ROI = net profit / spend.",
+        netProfit: "Net profit = Taager profit after tax - attributed campaign spend. ROI = net profit / spend.",
         profitRoas: "Profit ROAS = Taager profit after tax / spend. The smaller line shows total sales and total sales ROAS.",
         decision: "Decision uses order sample, delivered sample, NDR, CPA safety, delivered CPA, and net profit."
       },
       campaigns: {
-        campaign: "Synced campaign name and campaign ID. Add the exact SKU to the campaign name for product attribution.",
+        campaign: "Synced campaign name and campaign ID. Complete SKUs may be separated or glued into the campaign name.",
         platform: "The ad platform that owns this campaign.",
         objective: "Campaign objective detected from synced fields and campaign naming.",
         status: "Current or effective campaign status reported by the ad platform.",
@@ -409,9 +433,9 @@
     var unmatchedPct = Math.max(0, Math.min(100, Number(totals.unmatchedSpendPct || 0)));
     var note = totals.spend > 0
       ? (unmatchedPct > 0
-        ? "Add the exact SKU to campaign names to move unmatched spend into Product Actions."
-        : "All spent campaigns are SKU-matched for product-level decisions.")
-      : "Sync spent campaigns to unlock SKU-based Product Actions.";
+        ? "Add a complete SKU or a distinctive product name to move unmatched spend into Product Actions."
+        : "All spent campaigns are attributed for product-level decisions.")
+      : "Sync spent campaigns to unlock Product Actions.";
     return '<div class="campaign-health-card">' +
       '<div class="campaign-health-top"><span>SKU match coverage</span><strong>' + percent(matchedPct) + '</strong></div>' +
       '<div class="campaign-match-bar" aria-label="SKU matched spend coverage">' +
@@ -429,6 +453,7 @@
   function renderMediaBuyingSignals(intel) {
     intel = intel || {};
     var groups = Array.isArray(intel.allProductGroups) ? intel.allProductGroups : [];
+    var totals = intel.totals || {};
     var counts = intel.decisionCounts || {};
     var scaleCount = intel._backend ? Number(counts.scale || 0) : groups.filter(function (group) { return group.decision === "scale"; }).length;
     var fixCount = intel._backend ? Number(counts.fix_first || 0) : groups.filter(function (group) { return group.decision === "fix_first"; }).length;
@@ -438,8 +463,12 @@
       '<div class="campaign-signal"><span>Fix first</span><strong>' + fmt(fixCount) + '</strong></div>' +
       '<div class="campaign-signal"><span>Watch / needs data</span><strong>' + fmt(watchCount) + '</strong></div>' +
       '<div class="campaign-signal"><span>Pause / reduce</span><strong>' + fmt(pauseCount) + '</strong></div>' +
-      '<div class="campaign-signal"><span>Creative refresh</span><strong>' + fmt((intel.creativeSummary && intel.creativeSummary.fatigueCandidates || []).length) + '</strong></div>' +
-      '<div class="campaign-note">Product Actions use spend and clicks only from exact-SKU campaigns. Orders, NDR, Taager profit, ROI, ROAS, and decisions come from Taager dashboard data.</div>';
+      '<div class="campaign-health-foot"><span>Separated SKU ' + fmt(totals.separatedSkuRows || 0) +
+      ' · Glued SKU ' + fmt(totals.gluedSkuRows || 0) +
+      ' · Name fallback ' + fmt(totals.nameRows || 0) +
+      ' · Ambiguous ' + fmt(totals.ambiguousRows || 0) +
+      '</span></div>' +
+      '<div class="campaign-note">Product Actions use spend and clicks only from unambiguous product attribution. Orders, NDR, Taager profit, ROI, ROAS, and decisions come from Taager dashboard data.</div>';
   }
 
   function decisionLabel(decision) {
@@ -519,18 +548,18 @@
       renderDecisionChecks(campaignPick("Needs attention", "يحتاج انتباها"), metadata.failedChecks, "failed", currency) +
       renderDecisionChecks(campaignPick("Context / warnings", "السياق / التحذيرات"), metadata.warnings, "warning", currency) +
       '<div class="campaign-decision-tip-next"><span>' + esc(campaignPick("Next action", "الإجراء التالي")) + '</span><strong>' + esc(decisionNextAction(group.decision)) + '</strong></div>' +
-      '<div class="campaign-decision-tip-foot"><span>' + esc(campaignPick("Product-level decision across exact-SKU matched campaigns.", "قرار على مستوى المنتج عبر الحملات المطابقة لرمز SKU بدقة.")) + '</span>' +
+      '<div class="campaign-decision-tip-foot"><span>' + esc(campaignPick("Product-level decision across unambiguously attributed campaigns.", "قرار على مستوى المنتج عبر الحملات المنسوبة بوضوح.")) + '</span>' +
       '<span>' + esc(periodLabel || campaignPick("Current synced period", "فترة المزامنة الحالية")) + '</span></div>' +
     '</div></template>';
   }
 
   function renderProductRows(groups, periodLabel) {
-    if (!groups.length) return '<tr><td colspan="14" class="campaign-empty">No SKU-confirmed product spend on this page.</td></tr>';
+    if (!groups.length) return '<tr><td colspan="14" class="campaign-empty">No confirmed product attribution on this page.</td></tr>';
     return groups.map(function (group) {
       var currency = group.currency || window.dashboardActiveCurrency || "SAR";
       var cpaLabel = group.taagerOrders > 0 ? money(group.taagerCpa, currency) : "No Taager orders";
       var deliveredCpaLabel = group.taagerDelivered > 0 ? money(group.deliveredCpa, currency) : "No delivered orders";
-      var productTitle = group.product || "";
+      var productTitle = campaignProductName(group.sku, group.product);
       var displayDecision = decisionLabel(group.decision);
       var netState = financialState(group.netProfit, true);
       var roiState = financialState(group.roiPct, group.spend > 0);
@@ -565,9 +594,13 @@
   }
 
   function renderCampaignRows(rows) {
-    if (!rows.length) return '<tr><td colspan="11" class="campaign-empty">No spent campaigns match the current filters.</td></tr>';
+    if (!rows.length) return '<tr><td colspan="9" class="campaign-empty">No spent campaigns match the current filters.</td></tr>';
     return rows.map(function (row) {
-      var matchText = row.attributionVerified ? row.product : (row.suggestedProduct ? "Needs SKU" : "Unmatched");
+      var matchedProductName = campaignProductName(row.productSku, row.product);
+      var isAmbiguousMatch = row.matchMethod === "ambiguous";
+      var matchText = row.attributionVerified
+        ? matchedProductName
+        : (isAmbiguousMatch ? "Ambiguous SKUs" : (row.suggestedProduct ? "Needs SKU" : "Unmatched"));
       var matchSub = row.attributionVerified
         ? ("SKU " + (row.productSku || ""))
         : (row.suggestedProduct ? compactText(row.suggestedProduct, 42) : "No Taager product attribution");
@@ -577,15 +610,13 @@
       return '<tr>' +
         '<td class="campaign-cell-name campaign-cell-campaign" title="' + esc(campaignTitle) + '"><strong>' + esc(compactText(campaignTitle, 48)) + '</strong><small>' + esc(row.campaignId || row.note || "") + '</small></td>' +
         '<td>' + esc(row.platform || "") + '</td>' +
-        '<td>' + esc(compactText(row.objective || "unknown", 18)) + '</td>' +
-        '<td>' + esc(compactText(row.status || "unknown", 14)) + '</td>' +
         '<td class="campaign-num"><strong>' + moneyInCurrency(rowSpend, rowCurrency) + '</strong><small>Ad account spend</small></td>' +
         '<td class="campaign-num">' + fmt(row.impressions) + '</td>' +
         '<td class="campaign-num">' + fmt(row.clicks) + '</td>' +
         '<td class="campaign-num">' + percent(row.ctrPct) + '</td>' +
         '<td class="campaign-num"><strong>' + moneyInCurrency(row.platformCpc, row.platformCpcCurrency || rowCurrency) + '</strong><small>Native CPC</small></td>' +
         '<td class="campaign-num">' + moneyInCurrency(row.platformCpm, rowCurrency) + '</td>' +
-        '<td class="campaign-cell-match" title="' + esc(row.product || row.suggestedProduct || "") + '"><strong>' + esc(matchText) + '</strong><small>' + esc(matchSub) + '</small></td>' +
+        '<td class="campaign-cell-match" title="' + esc(row.attributionVerified ? matchedProductName : (isAmbiguousMatch ? (row.candidateIds || []).join(", ") : (row.suggestedProduct || ""))) + '"><strong>' + esc(matchText) + '</strong><small>' + esc(matchSub) + '</small></td>' +
       '</tr>';
     }).join("");
   }
@@ -716,14 +747,79 @@
     };
   }
 
+  function clearScheduledCampaignUpdate(mount) {
+    if (!mount) return;
+    if (mount._campaignUpdateTimer) {
+      clearTimeout(mount._campaignUpdateTimer);
+      mount._campaignUpdateTimer = null;
+    }
+    if (mount._campaignUpdateFrame && window.cancelAnimationFrame) {
+      window.cancelAnimationFrame(mount._campaignUpdateFrame);
+      mount._campaignUpdateFrame = null;
+    }
+  }
+
+  function markCampaignRowsBusy(mount, options) {
+    if (!mount) return;
+    options = options || {};
+    var selectors = [];
+    if (options.products !== false) selectors.push(".campaign-table-products");
+    if (options.campaigns !== false) selectors.push(".campaign-table-campaigns");
+    selectors.forEach(function (selector) {
+      var table = mount.querySelector(selector);
+      if (table) table.setAttribute("aria-busy", "true");
+    });
+  }
+
+  function clearCampaignRowsBusy(mount) {
+    if (!mount) return;
+    mount.querySelectorAll(".campaign-table-products,.campaign-table-campaigns").forEach(function (table) {
+      table.removeAttribute("aria-busy");
+    });
+  }
+
+  function scheduleCampaignsUIUpdate(mount, data, ctx, state, intel, options) {
+    options = options || {};
+    clearScheduledCampaignUpdate(mount);
+    var delay = options.delay == null ? 0 : Number(options.delay) || 0;
+    var backendRefresh = intel && intel._backend && !options.backendReady;
+    if (backendRefresh) {
+      markCampaignRowsBusy(mount, options.busy);
+      mount._campaignUpdateTimer = setTimeout(function () {
+        mount._campaignUpdateTimer = null;
+        if (!mount.isConnected) return;
+        requestBackendCampaigns(mount, data, ctx, state, !!options.fullRender);
+      }, delay);
+      return;
+    }
+    var run = function () {
+      mount._campaignUpdateFrame = null;
+      if (!mount.isConnected) return;
+      updateCampaignsUIOnly(mount, data, ctx, state, intel, options);
+    };
+    if (delay > 0) {
+      mount._campaignUpdateTimer = setTimeout(function () {
+        mount._campaignUpdateTimer = null;
+        if (window.requestAnimationFrame) mount._campaignUpdateFrame = window.requestAnimationFrame(run);
+        else run();
+      }, delay);
+    } else if (window.requestAnimationFrame) {
+      mount._campaignUpdateFrame = window.requestAnimationFrame(run);
+    } else {
+      run();
+    }
+  }
+
   function requestBackendCampaigns(mount, data, ctx, state, fullRender) {
     if (!mount._campaignBackendEnabled || !window.DashboardQueryRuntime || typeof window.DashboardQueryRuntime.query !== "function") {
       return Promise.resolve(false);
     }
+    clearScheduledCampaignUpdate(mount);
     var requestId = Number(mount._campaignBackendRequest || 0) + 1;
     mount._campaignBackendRequest = requestId;
     return window.DashboardQueryRuntime.query("campaign-overview", backendCampaignParams(mount, data, state), data).then(function (result) {
       if (requestId !== mount._campaignBackendRequest || !mount.isConnected) return false;
+      clearCampaignRowsBusy(mount);
       if (!result || !result.ok) {
         mount._campaignBackendActive = false;
         if (mount._campaignLegacyIntel) renderMainCampaignsUI(mount, data, ctx, state, mount._campaignLegacyIntel);
@@ -735,6 +831,7 @@
       else updateCampaignsUIOnly(mount, data, ctx, state, mount._campaignIntel, { backendReady: true });
       return true;
     }).catch(function (error) {
+      clearCampaignRowsBusy(mount);
       mount._campaignBackendActive = false;
       console.warn("[Campaigns] backend query failed; using legacy data", error && error.message ? error.message : error);
       if (mount._campaignLegacyIntel && mount.isConnected) renderMainCampaignsUI(mount, data, ctx, state, mount._campaignLegacyIntel);
@@ -747,9 +844,10 @@
   function updateCampaignsUIOnly(mount, data, ctx, state, intel, options) {
     options = options || {};
     if (intel && intel._backend && !options.backendReady) {
-      requestBackendCampaigns(mount, data, ctx, state);
+      scheduleCampaignsUIUpdate(mount, data, ctx, state, intel, options);
       return;
     }
+    clearCampaignRowsBusy(mount);
     var allCampaigns = Array.isArray(intel.allCampaigns) ? intel.allCampaigns : [];
     var allProducts = Array.isArray(intel.allProductGroups) ? intel.allProductGroups : (intel.topProductGroups || []);
     var campaignPage;
@@ -1056,11 +1154,7 @@
         '<div class="campaign-tabs">' + platformButtons + '</div>' +
       '</div>' +
       '<div class="campaign-kpis">' + renderCampaignKpis(intel) + '</div>' +
-      '<div class="campaign-grid">' +
-        '<div class="campaign-panel campaign-panel-health"><h3>Spend Match Health</h3>' + renderSpendMatchHealth(intel) + '</div>' +
-        '<div class="campaign-panel campaign-panel-signals"><h3>Media Buying Signals</h3>' + renderMediaBuyingSignals(intel) + '</div>' +
-      '</div>' +
-      '<div class="campaign-panel wide"><div class="campaign-panel-title"><div><h3>Product Actions</h3><span>SKU-confirmed products only, using Taager business results. Financial columns use the shared calculator/product currency.</span></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="campaign-ai-chip" data-campaign-ai-review>' + icon("sparkles") + 'Analyze actions</button></div></div>' +
+      '<div class="campaign-panel wide"><div class="campaign-panel-title"><div><h3>Product Actions</h3><span>Unambiguously attributed products only, using Taager business results. Financial columns use the shared calculator/product currency.</span></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="campaign-ai-chip" data-campaign-ai-review>' + icon("sparkles") + 'Analyze actions</button></div></div>' +
         '<div class="campaign-controls">' +
           '<label class="campaign-search"><span>' + icon("search") + '</span><input type="search" data-product-search placeholder="Search product or SKU" value="' + esc(state.productSearch || "") + '" /></label>' +
         '</div>' +
@@ -1090,20 +1184,17 @@
             '<option value="matched"' + (state.matchFilter === "matched" ? " selected" : "") + '>Matched</option>' +
             '<option value="unmatched"' + (state.matchFilter === "unmatched" ? " selected" : "") + '>Unmatched</option>' +
           '</select></label>' +
-          '<label class="campaign-field"><span>Objective</span><select data-campaign-objective-filter>' + objectiveOptions(intel.objectives && intel.objectives.length ? intel.objectives.map(function (objective) { return { objective: objective }; }) : allCampaigns, state.objectiveFilter) + '</select></label>' +
         '</div>' +
         '<div class="campaign-table-scroll"><table class="campaign-table campaign-table-campaigns"><thead><tr>' +
           sortableTh("Campaign", "campaign", state, "campaigns") +
           sortableTh("Platform", "platform", state, "campaigns") +
-          sortableTh("Objective", "objective", state, "campaigns") +
-          sortableTh("Status", "status", state, "campaigns") +
           sortableTh("Spend", "spend", state, "campaigns") +
           sortableTh("Impr.", "impressions", state, "campaigns") +
           sortableTh("Clicks", "clicks", state, "campaigns") +
           sortableTh("CTR", "ctrPct", state, "campaigns") +
           sortableTh("CPC", "platformCpc", state, "campaigns") +
           sortableTh("CPM", "platformCpm", state, "campaigns") +
-          sortableTh("Match", "product", state, "campaigns") +
+          sortableTh("Matched product", "product", state, "campaigns") +
         '</tr></thead><tbody></tbody></table></div>' +
         '<div class="campaign-pager-container" data-pager-prefix="campaigns"></div>' +
       '</div>' +
@@ -1148,7 +1239,7 @@
             currentState.sortKey = key;
             currentState.campaignPage = 1;
           }
-          updateCampaignsUIOnly(mount, delegated.data, delegated.ctx, currentState, delegated.activeIntel());
+          scheduleCampaignsUIUpdate(mount, delegated.data, delegated.ctx, currentState, delegated.activeIntel(), { busy: mode === "products" ? { products: true, campaigns: false } : { products: false, campaigns: true } });
           return;
         }
 
@@ -1160,7 +1251,11 @@
           else if (pageButton.classList.contains("campaign-campaigns-page")) currentState.campaignPage = Number(pageButton.getAttribute("data-page")) || 1;
           else if (pageButton.classList.contains("campaign-campaigns-prev")) currentState.campaignPage = Math.max(1, currentState.campaignPage - 1);
           else if (pageButton.classList.contains("campaign-campaigns-next")) currentState.campaignPage += 1;
-          updateCampaignsUIOnly(mount, delegated.data, delegated.ctx, currentState, delegated.activeIntel());
+          scheduleCampaignsUIUpdate(mount, delegated.data, delegated.ctx, currentState, delegated.activeIntel(), {
+            busy: (pageButton.classList.contains("campaign-products-page") || pageButton.classList.contains("campaign-products-prev") || pageButton.classList.contains("campaign-products-next"))
+              ? { products: true, campaigns: false }
+              : { products: false, campaigns: true }
+          });
           return;
         }
 
@@ -1183,13 +1278,14 @@
         if (target.matches("[data-campaign-search]")) {
           delegated.state.search = target.value || "";
           delegated.state.campaignPage = 1;
+          scheduleCampaignsUIUpdate(mount, delegated.data, delegated.ctx, delegated.state, delegated.activeIntel(), { delay: 160, busy: { products: false, campaigns: true } });
         } else if (target.matches("[data-product-search]")) {
           delegated.state.productSearch = target.value || "";
           delegated.state.productPage = 1;
+          scheduleCampaignsUIUpdate(mount, delegated.data, delegated.ctx, delegated.state, delegated.activeIntel(), { delay: 160, busy: { products: true, campaigns: false } });
         } else {
           return;
         }
-        updateCampaignsUIOnly(mount, delegated.data, delegated.ctx, delegated.state, delegated.activeIntel());
       });
 
       mount.addEventListener("change", function (event) {
@@ -1203,16 +1299,13 @@
         } else if (target.matches("[data-campaign-match-filter]")) {
           delegated.state.matchFilter = target.value || "all";
           delegated.state.campaignPage = 1;
-        } else if (target.matches("[data-campaign-objective-filter]")) {
-          delegated.state.objectiveFilter = target.value || "all";
-          delegated.state.campaignPage = 1;
         } else if (target.matches(".campaign-currency-native")) {
           setCampaignProductCurrency(mount, delegated.data, delegated.ctx, target.value);
           return;
         } else {
           return;
         }
-        updateCampaignsUIOnly(mount, delegated.data, delegated.ctx, delegated.state, delegated.activeIntel());
+        scheduleCampaignsUIUpdate(mount, delegated.data, delegated.ctx, delegated.state, delegated.activeIntel(), { busy: { products: true, campaigns: true } });
       });
     }
     bindCampaignCurrencySelect(mount, data, ctx);
@@ -1386,7 +1479,7 @@
       window.DashboardQueryRuntime.flags().then(function (flags) {
         mount._campaignBackendEnabled = !!(flags && flags.campaigns);
         if (mount._campaignBackendEnabled && mount.isConnected !== false) {
-          requestBackendCampaigns(mount, data, ctx, state, true);
+          scheduleCampaignsUIUpdate(mount, data, ctx, state, mount._campaignIntel || mount._campaignLegacyIntel || intel, { fullRender: true, busy: { products: true, campaigns: true } });
         }
       });
     }
@@ -1422,6 +1515,7 @@
     }
 
     return function cleanupCampaigns() {
+      clearScheduledCampaignUpdate(mount);
       if (mount._campaignRoiListener && window.DashboardRoiState) {
         window.DashboardRoiState.unsubscribe(mount._campaignRoiListener);
         mount._campaignRoiListener = null;

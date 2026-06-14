@@ -1,0 +1,88 @@
+#page-dashboard .s9-dashboard-pagination {
+  margin-top: 0;
+}
+
+#page-dashboard .s9-dashboard-pagination .dash-pagination-spacer,
+#page-dashboard .s9-dashboard-pagination .dash-pagination-info {
+  display: none;
+}
+#page-dashboard .s9-profit-cell.s9-profit-negative,
+#page-dashboard .s9-profit-value.s9-profit-negative {
+  color: #ef4444 !important;
+  -webkit-text-fill-color: #ef4444 !important;
+}
+[data-theme="light"] #page-dashboard .s9-profit-cell.s9-profit-positive,
+[data-theme="light"] #page-dashboard .s9-profit-value.s9-profit-positive {
+  color: #10b981 !important;
+  -webkit-text-fill-color: #10b981 !important;
+}
+[data-theme="dark"] #page-dashboard .s9-profit-cell.s9-profit-positive,
+[data-theme="dark"] #page-dashboard .s9-profit-value.s9-profit-positive,
+#page-dashboard .s9-profit-cell.s9-profit-positive,
+#page-dashboard .s9-profit-value.s9-profit-positive {
+  color: #00e676 !important;
+  -webkit-text-fill-color: #00e676 !important;
+}
+[data-theme="light"] #page-dashboard .s9-profit-cell.s9-profit-zero,
+[data-theme="light"] #page-dashboard .s9-profit-value.s9-profit-zero {
+  color: #6b7280 !important;
+  -webkit-text-fill-color: #6b7280 !important;
+}
+[data-theme="dark"] #page-dashboard .s9-profit-cell.s9-profit-zero,
+[data-theme="dark"] #page-dashboard .s9-profit-value.s9-profit-zero,
+#page-dashboard .s9-profit-cell.s9-profit-zero,
+#page-dashboard .s9-profit-value.s9-profit-zero {
+  color: rgba(255,255,255,0.6) !important;
+  -webkit-text-fill-color: rgba(255,255,255,0.6) !important;
+}
+
+[data-theme="light"] #page-dashboard .s9-root {
+  background: var(--dash-bg) !important;
+  color: var(--dash-text) !important;
+}
+
+[data-theme="light"] #page-dashboard .s9-table-container {
+  border-left-color: var(--dash-border-soft) !important;
+  background: var(--dash-bg) !important;
+}
+
+[data-theme="light"] #page-dashboard .s9-sim-container {
+  background: var(--dash-surface) !important;
+  border-color: var(--dash-border-soft) !important;
+  color: var(--dash-text) !important;
+}
+
+[data-theme="light"] #page-dashboard .s9-clear-sort,
+[data-theme="light"] #page-dashboard .s9-platform-tab,
+[data-theme="light"] #page-dashboard .s9-page-prev,
+[data-theme="light"] #page-dashboard .s9-page-next {
+  color: var(--dash-text-muted) !important;
+  border-color: var(--dash-border-soft) !important;
+}
+
+[data-theme="light"] #page-dashboard .s9-platform-tab:hover,
+[data-theme="light"] #page-dashboard .s9-platform-tab.is-active,
+[data-theme="light"] #page-dashboard .s9-sort-btn:hover,
+[data-theme="light"] #page-dashboard .s9-sort-btn.is-active {
+  color: #1d4ed8 !important;
+}
+
+[data-theme="light"] #page-dashboard .s9-spend-input {
+  background: var(--dash-input-bg) !important;
+  border-color: var(--dash-border) !important;
+  color: var(--dash-text) !important;
+  color-scheme: light !important;
+}
+
+/* Small laptop stabilization: 11-13 inch screens keep density readable without card collisions. */
+@media (max-width: 1399px) {
+
+  #page-dashboard .s9-table-container > div:first-child {
+    padding: 12px 14px !important;
+  }
+
+  #page-dashboard .s9-platform-tabs {
+    gap: 6px !important;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }}

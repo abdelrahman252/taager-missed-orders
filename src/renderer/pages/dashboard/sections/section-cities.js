@@ -12,10 +12,38 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   if (mountEl._citiesFilterBusObserver) {
     mountEl._citiesFilterBusObserver.disconnect();
   }
+  if (mountEl._citiesLeaderboardResizeHandler) {
+    window.removeEventListener("resize", mountEl._citiesLeaderboardResizeHandler);
+  }
+  if (mountEl._citiesLeaderboardResizeTimer) {
+    window.clearTimeout(mountEl._citiesLeaderboardResizeTimer);
+    mountEl._citiesLeaderboardResizeTimer = null;
+  }
+  if (mountEl._citiesSecondaryIdleHandle != null) {
+    if (window.cancelIdleCallback) window.cancelIdleCallback(mountEl._citiesSecondaryIdleHandle);
+    else window.clearTimeout(mountEl._citiesSecondaryIdleHandle);
+    mountEl._citiesSecondaryIdleHandle = null;
+  }
+  if (Array.isArray(mountEl._citiesDocumentClickHandlers)) {
+    mountEl._citiesDocumentClickHandlers.forEach(function (handler) {
+      document.removeEventListener("click", handler);
+    });
+  }
+  mountEl._citiesDocumentClickHandlers = [];
 
-  // Generate unique render token for this mount call
-  var renderToken = Date.now() + Math.random();
-  mountEl._citiesRenderToken = renderToken;
+  function whenCitiesIdle(callback, timeout) {
+    if (window.requestIdleCallback) {
+      return window.requestIdleCallback(callback, { timeout: timeout || 800 });
+    }
+    return window.setTimeout(callback, 80);
+  }
+
+  function cancelCitiesIdle(handle) {
+    if (handle == null) return;
+    if (window.cancelIdleCallback) window.cancelIdleCallback(handle);
+    else window.clearTimeout(handle);
+  }
+  var citiesSearchTimer = null;
 
   // Track query state for this account/period key
   var currentQueryKey = (data && data.meta && data.meta.activeAccountId || "__all__") + "|" +
@@ -23,6 +51,76 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   if (mountEl._citiesQueryKey !== currentQueryKey) {
     mountEl._citiesQueryKey = currentQueryKey;
     mountEl._citiesQueryDone = false;
+    mountEl._citiesQueryPending = null;
+  }
+
+  function applyCitiesQueryResult(result) {
+    if (!result || !result.ok || !Array.isArray(result.cities) || !window.dashboardGeoData) return;
+    var existingCityStats = window.dashboardGeoData.geo && window.dashboardGeoData.geo.cityStats;
+    if (result.cities.length === 0 && existingCityStats && Object.keys(existingCityStats).length > 0) {
+      return;
+    }
+
+    window.dashboardGeoData.cod = window.dashboardGeoData.cod || {};
+    window.dashboardGeoData.cod.cities = result.cities;
+
+    var cityStats = {};
+    result.cities.forEach(function (city) {
+      cityStats[city.name] = city;
+    });
+    window.dashboardGeoData.geo = window.dashboardGeoData.geo || {};
+
+    var rebuiltGeo = window.buildGeoProductMap ? window.buildGeoProductMap(
+      cityStats,
+      window.dashboardGeoData.geo.productStats || {},
+      window.dashboardGeoData.geo.kpis || {},
+      window.dashboardGeoData.meta || {}
+    ) : null;
+
+    window.dashboardGeoData.geo.cityStats = cityStats;
+    if (rebuiltGeo) {
+      window.dashboardGeoData.geo.geoProductMap = rebuiltGeo.geoProductMap;
+      window.dashboardGeoData.geo.provinceMap = rebuiltGeo.provinceMap;
+      window.dashboardGeoData.geo.prepaidIntelligence = rebuiltGeo.prepaidIntelligence;
+    }
+  }
+
+  function showCitiesQueryLoader() {
+    mountEl.innerHTML =
+      '<div class="dash-scroll" style="flex:1;display:flex;align-items:center;justify-content:center;background:#080b12;color:#fff;">' +
+        '<div style="display:flex;align-items:center;gap:12px;padding:16px 20px;border-radius:14px;background:#0b1120;border:1px solid rgba(168,85,247,0.22);color:rgba(255,255,255,0.72);font-size:13px;font-weight:800;">' +
+          '<span style="width:18px;height:18px;border:2px solid rgba(168,85,247,0.2);border-top-color:#a855f7;border-radius:50%;animation:dashSpin 0.7s linear infinite;"></span>' +
+          '<span>Updating city analysis...</span>' +
+        '</div>' +
+      '</div>';
+  }
+
+  // Wait for the query-backed snapshot before the first real paint. Rendering
+  // the legacy snapshot first caused a visible second full-section refresh.
+  if (!mountEl._citiesQueryDone &&
+      window.DashboardQueryRuntime &&
+      typeof window.DashboardQueryRuntime.flags === "function") {
+    showCitiesQueryLoader();
+
+    if (!mountEl._citiesQueryPending) {
+      mountEl._citiesQueryPending = window.DashboardQueryRuntime.flags().then(function (flags) {
+        if (!flags || !flags.cities) return null;
+        return window.DashboardQueryRuntime.query("cities", {}, data);
+      }).then(function (result) {
+        applyCitiesQueryResult(result);
+      }).catch(function (err) {
+        console.error("[Cities] Async query failed:", err);
+      }).then(function () {
+        if (mountEl._citiesQueryKey !== currentQueryKey) return;
+        mountEl._citiesQueryDone = true;
+        mountEl._citiesQueryPending = null;
+        if (!mountEl.isConnected || !ctx || ctx.sectionId !== "cities") return;
+        var cleanup = window.renderSectionCities(mountEl, data, ctx);
+        if (typeof cleanup === "function") mountEl._dashboardSectionCleanup = cleanup;
+      });
+    }
+
+    return function () {};
   }
 
   // =======================================================================
@@ -327,6 +425,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         totalDue: 0,
         totalGap: 0,
         totalActiveOrders: 0,
+        totalConfirmed: 0,
         totalDeliveryDays: 0,
         deliveryDurationOrders: 0,
       };
@@ -355,6 +454,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         totalDue: 0,
         totalGap: 0,
         totalActiveOrders: 0,
+        totalConfirmed: 0,
         totalDeliveryDays: 0,
         deliveryDurationOrders: 0,
       };
@@ -365,12 +465,19 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       var provId = city.provinceId || "other";
       var pDef = provGroups[provId] || provGroups["other"];
 
-      var count = Number(city.count || 0);
+      var count = window.DashboardOrderMetrics
+        ? window.DashboardOrderMetrics.netOrders(city)
+        : Number(city.netOrderCount != null ? city.netOrderCount : city.count || 0);
       var pct = Number(city.ndrPct !== undefined ? city.ndrPct : city.pct || 0);
       var due = Number(city.due || 0);
       var gap = Number(city.gap || 0);
       var deliveredOrders = Number(city.deliveredOrders || count * (pct / 100));
       var activeOrders = Number(city.drBaseOrders || count);
+      var confirmedOrders = Number(
+        city.confirmedCount != null && city.confirmedCount !== ""
+          ? city.confirmedCount
+          : activeOrders,
+      );
       // drPct: prefer pre-computed, else compute from raw counters
       var drPct =
         window.isExpectedNdrMode && window.isExpectedNdrMode()
@@ -397,6 +504,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         activeOrders: activeOrders,
         deliveryRate: pct,
         drRate: drPct,
+        confirmedCount: confirmedOrders,
         codRate: pct,
         returnRate: due > 0 ? Math.round((gap / due) * 1000) / 10 : 0,
         avgDeliveryDays: avgDeliveryDays,
@@ -408,6 +516,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       pDef.totalOrders += count;
       pDef.totalDelivered += deliveredOrders;
       pDef.totalActiveOrders += activeOrders;
+      pDef.totalConfirmed += confirmedOrders;
       pDef.totalDue += due;
       pDef.totalGap += gap;
       if (avgDeliveryDays != null && deliveryDurationOrders > 0) {
@@ -434,6 +543,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
           orders: p.totalOrders,
           deliveryRate: Math.round(dRate * 10) / 10,
           drRate: Math.round(activeRate * 10) / 10,
+          confirmedCount: p.totalConfirmed,
           codRate: Math.round(dRate * 10) / 10,
           returnRate: Math.round(rRate * 10) / 10,
           avgDays:
@@ -468,6 +578,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         activeOrders: c.activeOrders,
         deliveryRate: c.deliveryRate,
         drRate: c.drRate,
+        confirmedCount: c.confirmedCount,
         codRate: c.codRate,
         returnRate: c.returnRate,
         avgDeliveryDays: c.avgDeliveryDays,
@@ -494,6 +605,9 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   }, 0);
   var TOTAL_DELIVERED = ALL_CITIES.reduce(function (sum, city) {
     return sum + (city.deliveryRate / 100) * city.orders;
+  }, 0);
+  var TOTAL_CONFIRMED = ALL_CITIES.reduce(function (sum, city) {
+    return sum + (city.confirmedCount || 0);
   }, 0);
   var DELIVERY_RATE =
     TOTAL_ORDERS > 0
@@ -526,6 +640,10 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
       award:
         '<circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>',
+      checkCircle:
+        '<path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/>',
+      clipboardCheck:
+        '<path d="M9 14l2 2 4-4"/><path d="M9 2h6a2 2 0 0 1 2 2v1h1a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1V4a2 2 0 0 1 2-2z"/><path d="M9 5h6"/>',
       alertTriangle:
         '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
       mapPin:
@@ -552,6 +670,12 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
   function rateColor(rate) {
     return window.dashboardRateColor ? window.dashboardRateColor(rate) : (rate >= 40 ? "#22d3ee" : rate >= 30 ? "#00e676" : rate >= 20 ? "#f59e0b" : "#ef4444");
+  }
+
+  function formatPercent(value, decimals) {
+    var n = Number(value);
+    if (!isFinite(n)) n = 0;
+    return n.toFixed(decimals == null ? 2 : decimals);
   }
 
   function shortProvName(name) {
@@ -581,17 +705,23 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     var selProduct = mountEl._citiesSelectedProduct || (window.DashboardFilterBus && window.DashboardFilterBus.getState().selectedProduct) || "";
     var productOpts =
       '<option value="">' + s6Txt("Product: All", "المنتج: الكل") + "</option>";
+    var hasSelectedProductOption = !selProduct;
     if (geoD && geoD.products && geoD.products.rankedList) {
-      geoD.products.rankedList.slice(0, 20).forEach(function (p) {
-        var k = p.key || p.name || "";
+      geoD.products.rankedList.forEach(function (p) {
+        var k = p.key || p.sku || p.name || "";
         var lbl = p.name || p.key || "";
         if (p.sku && p.sku !== p.name) {
           lbl = p.name + " (" + p.sku + ")";
         }
         var sel = k === selProduct ? ' selected' : '';
+        if (k === selProduct) hasSelectedProductOption = true;
         productOpts +=
           '<option value="' + esc(k) + '"' + sel + '>' + esc(lbl) + "</option>";
       });
+    }
+    if (selProduct && !hasSelectedProductOption) {
+      productOpts +=
+        '<option value="' + esc(selProduct) + '" selected>' + esc(selProduct) + "</option>";
     }
 
     var selBg = isAr
@@ -677,9 +807,9 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       dirStr +
       '" />' +
       "</div>" +
-      '<button id="sc-fb-reset" style="padding:7px 12px;border-radius:9px;border:1px solid rgba(255,255,255,0.1);' +
-      "background:transparent;color:rgba(255,255,255,0.38);font-size:11px;font-weight:700;" +
-      'cursor:pointer;font-family:inherit;transition:all 0.18s;white-space:nowrap;">↺ ' +
+      '<button id="sc-fb-reset" class="sc-reset-btn" type="button" data-active="false" aria-label="' +
+      s6Txt("Reset city analysis filters", "إعادة ضبط فلاتر تحليل المدن") +
+      '" title="' + s6Txt("Reset city analysis filters", "إعادة ضبط فلاتر تحليل المدن") + '">↺ ' +
       s6Txt("Reset", "إعادة ضبط") +
       "</button>" +
       '<button id="sc-fb-exclude-export" style="padding:7px 12px;border-radius:9px;border:1px solid rgba(168,85,247,0.3);' +
@@ -697,7 +827,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       {
         icon: "package",
         color: "#a855f7",
-        label: s6Txt("Total Orders", "إجمالي الطلبات"),
+        label: s6Txt("Net Orders", "صافي الطلبات"),
         value: TOTAL_ORDERS.toLocaleString("en-US"),
         trend: "+4.2%",
         trendUp: true,
@@ -706,7 +836,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         icon: "trendingUp",
         color: "#14b8a6",
         label: s6Txt("NDR (Total)", "NDR (إجمالي)"),
-        value: DELIVERY_RATE + "%",
+        value: formatPercent(DELIVERY_RATE) + "%",
         trend: "+2.1%",
         trendUp: true,
       },
@@ -714,7 +844,23 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         icon: "trendingUp",
         color: "#7c3aed",
         label: s6Txt("DR (Active)", "DR (النشطة)"),
-        value: ACTIVE_DR + "%",
+        value: formatPercent(ACTIVE_DR) + "%",
+        trend: null,
+        trendUp: true,
+      },
+      {
+        icon: "checkCircle",
+        color: "#22d3ee",
+        label: s6Txt("Delivered Orders", "الطلبات المسلمة"),
+        value: Math.round(TOTAL_DELIVERED).toLocaleString("en-US"),
+        trend: null,
+        trendUp: true,
+      },
+      {
+        icon: "clipboardCheck",
+        color: "#3b82f6",
+        label: s6Txt("Confirmed Orders", "الطلبات المؤكدة"),
+        value: Math.round(TOTAL_CONFIRMED).toLocaleString("en-US"),
         trend: null,
         trendUp: true,
       },
@@ -724,7 +870,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         label: s6Txt("Best Delivery City", "أفضل مدينة تسليماً"),
         value: BEST_CITY.name,
         sub:
-          BEST_CITY.deliveryRate + "%" + s6Txt(" delivery rate", " معدل تسليم"),
+          formatPercent(BEST_CITY.deliveryRate) + "%" + s6Txt(" delivery rate", " معدل تسليم"),
         trend: null,
       },
       {
@@ -733,7 +879,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         label: s6Txt("Needs Attention", "تحتاج متابعة"),
         value: WATCH_CITY.name,
         sub:
-          WATCH_CITY.deliveryRate +
+          formatPercent(WATCH_CITY.deliveryRate) +
           "%" +
           s6Txt(" delivery rate", " معدل تسليم"),
         trend: null,
@@ -960,7 +1106,9 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
     var cityDots = ALL_CITIES.map(function (c) {
       var orderRatio = MAX_ORDERS > 0 ? Math.max(0, Math.min(1, c.orders / MAX_ORDERS)) : 0;
-      var r = (mapProfile.dotBase || 4) + Math.sqrt(orderRatio) * (mapProfile.dotRange || 8.5);
+      var hasActivity = Number(c.orders || 0) > 0;
+      var dotColor = hasActivity ? c.color : "#64748b";
+      var r = hasActivity ? (mapProfile.dotBase || 4) + Math.sqrt(orderRatio) * (mapProfile.dotRange || 8.5) : 2.4;
       r = Math.min(mapProfile.dotMax || 13, r);
       var haloScale = mapProfile.haloScale || 2.45;
       return (
@@ -977,7 +1125,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         '" data-cy="' +
         c.y +
         '" data-color="' +
-        c.color +
+        dotColor +
         '"' +
         ' style="cursor:pointer;transition:opacity 0.3s">' +
         '<circle cx="' +
@@ -988,7 +1136,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         r * haloScale +
         '"' +
         ' fill="' +
-        c.color +
+        dotColor +
         '" opacity="0.13" pointer-events="none"/>' +
         '<circle cx="' +
         c.x +
@@ -998,7 +1146,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         r +
         '"' +
         ' fill="' +
-        c.color +
+        dotColor +
         '" stroke="rgba(255,255,255,0.65)" stroke-width="1"' +
         ' class="sc-dot-inner" pointer-events="none"' +
         ' data-name="' +
@@ -1018,9 +1166,9 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         '" data-cy="' +
         c.y +
         '" data-default-color="' +
-        c.color +
+        dotColor +
         '" data-color="' +
-        c.color +
+        dotColor +
         '"/>' +
         '<circle cx="' +
         c.x +
@@ -1170,7 +1318,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   // ── Leaderboard HTML ────────────────────────────────────────────────────────
   // T-07: Added NDR% column (5th col) with red/amber/green coloring
   // Taager dashboard/status/NDR migration:
-  // earnedCommission is a compatibility key for Taager profit = order profit - tax profit.
+  // earnedCommission is retained as a compatibility alias for Earned Profit After Tax.
   function leaderboardHTML() {
     // Pull extended city data from aggregator geo output if available
     var geoData =
@@ -1191,10 +1339,13 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       var ndrVal;
       if (typeof cs.ndrPct === "number") {
         ndrVal = cs.ndrPct;
-      } else if (cs.count !== undefined && cs.deliveredOrders !== undefined) {
+      } else if ((cs.netOrderCount !== undefined || cs.count !== undefined) && cs.deliveredOrders !== undefined) {
+        var csNetOrders = window.DashboardOrderMetrics
+          ? window.DashboardOrderMetrics.netOrders(cs)
+          : Number(cs.netOrderCount != null ? cs.netOrderCount : cs.count || 0);
         ndrVal =
-          (cs.count || 0) > 0
-            ? Math.round(((cs.deliveredOrders || 0) / (cs.count || 0)) * 1000) /
+          csNetOrders > 0
+            ? Math.round(((cs.deliveredOrders || 0) / csNetOrders) * 1000) /
               10
             : 0;
       } else {
@@ -1211,8 +1362,10 @@ window.renderSectionCities = function (mountEl, data, ctx) {
           : rateColor(ndrVal);
       var ndrDisplay = ndrVal === null ? "—" : ndrVal.toFixed(1) + "%";
 
-      // T-16: Taager profit from aggregator cityStats
-      var commVal = cs.earnedCommission || 0;
+      // Sum of Profit After Tax for unique delivered orders in the selected period.
+      var commVal = cs.earnedProfitAfterTax != null
+        ? cs.earnedProfitAfterTax
+        : cs.earnedCommission || 0;
       var commDisplay =
         commVal > 0
           ? commVal >= 1000
@@ -1391,7 +1544,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         '<div class="sc-lb-ndr-cell" style="text-align:center;">' +
         ndrBadge(rowTotalNdr) +
         "</div>" +
-        /* Taager profit */
+        /* Earned Profit After Tax */
         '<div class="sc-lb-commission-cell" style="text-align:center;">' +
         (commDisplay
           ? '<span style="font-size:11px;font-weight:700;color:#a855f7">' +
@@ -1455,7 +1608,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       s6Txt("Confirmed", "مؤكد") +
       "</div>" +
       '<div style="text-align:center" class="cool-tooltip" data-tooltip="' +
-      s6Txt("Confirmation rate: confirmed orders divided by total orders", "نسبة التأكيد: الطلبات المؤكدة مقسومة على إجمالي الطلبات") +
+      s6Txt("Confirmation rate: confirmed orders divided by net orders", "نسبة التأكيد: الطلبات المؤكدة مقسومة على صافي الطلبات") +
       '">CR</div>' +
       '<div class="cool-tooltip" data-tooltip="' +
       s6Txt(
@@ -1472,16 +1625,16 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       ) +
       '">NDR%</div>' +
       '<div style="text-align:center" class="cool-tooltip" data-tooltip="' +
-      // Taager dashboard/status/NDR migration:
-      // City leaderboard keeps the commission key as Taager profit = order profit - tax profit.
-      s6Txt("Total earned Taager Profit After Tax", "إجمالي ربح تاجر المحقق بعد الضريبة") +
+      // The commission DOM key remains for compatibility with existing sort code.
+      s6Txt("Sum of Profit After Tax for delivered orders", "مجموع الربح بعد الضريبة للطلبات المسلمة") +
       '">' +
-      s6Txt("Taager Profit After Tax", "ربح تاجر بعد الضريبة") +
+      s6Txt("Earned Profit After Tax", "الربح المحقق بعد الضريبة") +
       "</div>" +
       "</div>" +
       '<div id="sc-lb-body" class="dash-scroll" style="overflow-y:auto;flex:1;min-height:0;">' +
       rows +
       "</div>" +
+      '<div id="sc-lb-pagination" style="margin-top:10px;"></div>' +
       '<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.05);' +
       'display:flex;gap:12px;justify-content:flex-end">' +
       ["#22d3ee,NDR &gt;=40%", "#00e676,NDR 30-40%", "#f59e0b,NDR 20-30%", "#ef4444,NDR &lt;20%"]
@@ -1549,7 +1702,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         p.orders.toLocaleString("en-US") +
         "</div>" +
         '<div style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.4);margin-top:6px">' +
-        s6Txt("Total Orders · ", "إجمالي الطلبات · ") +
+        s6Txt("Net Orders · ", "صافي الطلبات · ") +
         p.cities.length +
         s6Txt(" cities", " مدن") +
         "</div>" +
@@ -1567,7 +1720,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         '<span style="font-size:14px;font-weight:800;color:' +
         p.color +
         '">' +
-        p.deliveryRate +
+        formatPercent(p.deliveryRate) +
         "%</span>" +
         "</div>" +
         '<div style="height:4px;border-radius:9999px;background:rgba(148,163,184,0.22);overflow:hidden;margin-bottom:12px">' +
@@ -1591,7 +1744,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         '<span style="font-size:14px;font-weight:800;color:' +
         p.color +
         '">' +
-        p.drRate +
+        formatPercent(p.drRate) +
         "%</span>" +
         "</div>" +
         '<div style="height:4px;border-radius:9999px;background:rgba(148,163,184,0.22);overflow:hidden">' +
@@ -1614,7 +1767,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         '">' +
         '<div style="font-size:11px;color:rgba(255,255,255,0.35);font-weight:600;margin-bottom:4px;text-align:center;width:100%;">COD</div>' +
         '<div style="font-size:14px;font-weight:800;color:#06b6d4;text-align:center;width:100%;">' +
-        p.codRate +
+        formatPercent(p.codRate) +
         "%</div>" +
         "</div>" +
         '<div style="display:flex;flex-direction:column;align-items:center;text-align:center;" class="cool-tooltip" data-tooltip="' +
@@ -1624,7 +1777,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         s6Txt("Returns", "مرتجعات") +
         "</div>" +
         '<div style="font-size:14px;font-weight:800;color:#ef4444;text-align:center;width:100%;">' +
-        p.returnRate +
+        formatPercent(p.returnRate) +
         "%</div>" +
         "</div>" +
         '<div style="display:flex;flex-direction:column;align-items:center;text-align:center;" class="cool-tooltip" data-tooltip="' +
@@ -1721,8 +1874,8 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     alignStr +
     ';animation-delay:80ms">' +
     s6Txt(
-      "14 cities in 5 administrative regions",
-      "14 مدينة في 5 مناطق إدارية",
+      ALL_CITIES.length + " cities in " + PROVINCES.length + " administrative regions",
+      ALL_CITIES.length + " مدينة في " + PROVINCES.length + " مناطق إدارية",
     ) +
     "</p>" +
     "</div>" +
@@ -1798,6 +1951,9 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         ' <span style="color:rgba(255,255,255,0.3);font-weight:600;font-size:13px">(' +
         visibleCount +
         ")</span>";
+    }
+    if (typeof renderCityLeaderboardPage === "function") {
+      renderCityLeaderboardPage({ preservePage: true });
     }
 
     /* province cards active state */
@@ -1893,7 +2049,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         ttInfo.textContent =
           Number(el.dataset.orders).toLocaleString("en-US") +
           " طلب · " +
-          el.dataset.rate +
+          formatPercent(el.dataset.rate) +
           "%";
         ttInfo.style.color = el.dataset.color || "#fff";
       }
@@ -1959,6 +2115,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
   /* ── T-15: Heatmap mode pills ─────────────────────────────────────────────── */
   var currentHeatMode = mountEl._citiesHeatMode !== undefined ? mountEl._citiesHeatMode : "default";
+  var refreshResetButtonState = function () {};
 
   function hexInterpolate(low, high, t) {
     /* Interpolate between two 6-char hex colors (no #) */
@@ -1990,6 +2147,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
   function applyHeatMode(mode) {
     currentHeatMode = mode;
+    refreshResetButtonState();
     var dots = mountEl.querySelectorAll(".sc-dot-inner");
 
     if (mode === "default") {
@@ -2005,6 +2163,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     /* Collect values for normalization */
     var vals = [];
     dots.forEach(function (el) {
+      if (Number(el.dataset.orders || 0) <= 0) return;
       vals.push(
         mode === "ndr"
           ? parseFloat(el.dataset.ndr || 0)
@@ -2017,8 +2176,15 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
     /* Phase 5: use rAF for smooth GPU transition */
     requestAnimationFrame(function () {
-      dots.forEach(function (el, idx) {
-        var v = vals[idx];
+      var activeIndex = 0;
+      dots.forEach(function (el) {
+        if (Number(el.dataset.orders || 0) <= 0) {
+          el.setAttribute("fill", "#64748b");
+          el.style.filter = "none";
+          return;
+        }
+        var v = vals[activeIndex];
+        activeIndex++;
         var t = (v - minVal) / range;
         var color;
         if (mode === "ndr") {
@@ -2136,6 +2302,223 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
   var leaderboardSortState = { key: "", dir: "desc" };
 
+  function responsiveCityLeaderboardPageSize() {
+    var dashboardShell = mountEl.closest(".dashboard-shell") || mountEl.closest("#page-dashboard");
+    var width = dashboardShell && dashboardShell.clientWidth
+      ? dashboardShell.clientWidth
+      : window.innerWidth || 1180;
+    var height = window.innerHeight || 800;
+    var pageSize = width < 760 ? 5 : width < 960 ? 7 : width < 1180 ? 8 : 10;
+
+    if (height < 700) pageSize = Math.min(pageSize, 6);
+    else if (height >= 900) pageSize += 2;
+    if (height >= 1100) pageSize += 2;
+
+    return Math.max(5, Math.min(14, pageSize));
+  }
+
+  function cityLeaderboardPageWindow() {
+    var dashboardShell = mountEl.closest(".dashboard-shell") || mountEl.closest("#page-dashboard");
+    var width = dashboardShell && dashboardShell.clientWidth
+      ? dashboardShell.clientWidth
+      : window.innerWidth || 1180;
+    return width < 760 ? 1 : 2;
+  }
+
+  var CITY_LEADERBOARD_PAGE_SIZE = responsiveCityLeaderboardPageSize();
+  var leaderboardPaginationState = mountEl._citiesLeaderboardPagination || {
+    page: mountEl._citiesLeaderboardPage || 1,
+    pageSize: CITY_LEADERBOARD_PAGE_SIZE,
+  };
+  leaderboardPaginationState.pageSize = CITY_LEADERBOARD_PAGE_SIZE;
+  mountEl._citiesLeaderboardPagination = leaderboardPaginationState;
+
+  function cityLeaderboardTitleLabel(total) {
+    var sel = selectedProvince;
+    var label = sel
+        ? (
+          PROVINCES.find(function (p) {
+            return p.id === sel;
+          }) || {}
+        ).name || s6Txt("Region Cities", "\u0645\u062f\u0646 \u0627\u0644\u0645\u0646\u0637\u0642\u0629")
+      : s6Txt("City Leaderboard", "\u062a\u0631\u062a\u064a\u0628 \u0627\u0644\u0645\u062f\u0646");
+    return (
+      label +
+      ' <span style="color:rgba(255,255,255,0.3);font-weight:600;font-size:13px">(' +
+      total +
+      ")</span>"
+    );
+  }
+
+  function cityLeaderboardInfoText(startItem, endItem, total) {
+    var isAr = window.dashboardI18n
+      ? window.dashboardI18n.currentLocale === "ar"
+      : false;
+    var ofText = isAr ? " \u0645\u0646 " : " of ";
+    var itemLabel = isAr ? "\u0645\u062f\u0646" : "cities";
+    return startItem + " - " + endItem + ofText + total + " " + itemLabel;
+  }
+
+  function renderCityLeaderboardFallbackPagination(currentPage, totalPages) {
+    if (totalPages <= 1) return "";
+    var html =
+      '<div style="display:flex;justify-content:center;align-items:center;gap:6px;padding-top:10px;">';
+    html +=
+      '<button type="button" class="sc-lb-page-btn sc-lb-page-btn-prev" data-page="' +
+      (currentPage - 1) +
+      '"' +
+      (currentPage <= 1 ? " disabled" : "") +
+      ">&lt;</button>";
+    for (var p = 1; p <= totalPages; p++) {
+      html +=
+        '<button type="button" class="sc-lb-page-btn' +
+        (p === currentPage ? " active" : "") +
+        '" data-page="' +
+        p +
+        '">' +
+        p +
+        "</button>";
+    }
+    html +=
+      '<button type="button" class="sc-lb-page-btn sc-lb-page-btn-next" data-page="' +
+      (currentPage + 1) +
+      '"' +
+      (currentPage >= totalPages ? " disabled" : "") +
+      ">&gt;</button>";
+    html += "</div>";
+    return html;
+  }
+
+  function bindCityLeaderboardPagination(totalPages) {
+    var paginationEl = mountEl.querySelector("#sc-lb-pagination");
+    if (!paginationEl) return;
+    var goToPage = function (page) {
+      var nextPage = Math.min(totalPages, Math.max(1, Number(page) || 1));
+      leaderboardPaginationState.page = nextPage;
+      mountEl._citiesLeaderboardPage = nextPage;
+      renderCityLeaderboardPage({ preservePage: true });
+    };
+
+    if (window.bindDashboardPagination) {
+      window.bindDashboardPagination(paginationEl, {
+        pageButtonSelector: ".sc-lb-page-btn[data-page]",
+        prevSelector: ".sc-lb-page-btn-prev",
+        nextSelector: ".sc-lb-page-btn-next",
+        onPage: goToPage,
+        onPrev: function () {
+          goToPage(leaderboardPaginationState.page - 1);
+        },
+        onNext: function () {
+          goToPage(leaderboardPaginationState.page + 1);
+        },
+      });
+      return;
+    }
+
+    paginationEl.querySelectorAll(".sc-lb-page-btn[data-page]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (btn.disabled) return;
+        goToPage(parseInt(btn.dataset.page, 10));
+      });
+    });
+  }
+
+  function renderCityLeaderboardPage(opts) {
+    opts = opts || {};
+    var lbBody = mountEl.querySelector("#sc-lb-body");
+    if (!lbBody) return;
+
+    var rows = Array.from(lbBody.querySelectorAll(".sc-lb-row"));
+    var matchedRows = rows.filter(function (row) {
+      return row.dataset.lbFilterMatch !== "0";
+    });
+    var total = matchedRows.length;
+    var pageSize = leaderboardPaginationState.pageSize || CITY_LEADERBOARD_PAGE_SIZE;
+    var totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+    if (opts.resetPage || !opts.preservePage) {
+      leaderboardPaginationState.page = 1;
+    }
+    leaderboardPaginationState.page = Math.min(
+      totalPages,
+      Math.max(1, Number(leaderboardPaginationState.page) || 1),
+    );
+    mountEl._citiesLeaderboardPage = leaderboardPaginationState.page;
+
+    var currentPage = leaderboardPaginationState.page;
+    var start = (currentPage - 1) * pageSize;
+    var end = start + pageSize;
+    var visibleRows = matchedRows.slice(start, end);
+
+    rows.forEach(function (row) {
+      row.style.display = "none";
+    });
+
+    matchedRows.forEach(function (row, idx) {
+      var rank = row.querySelector(".sc-lb-rank");
+      if (rank) rank.textContent = idx + 1;
+    });
+
+    visibleRows.forEach(function (row) {
+      row.style.display = "grid";
+      row.dataset.vsHidden = "";
+      row.style.opacity = "1";
+      row.style.transform = "none";
+    });
+
+    var titleEl = mountEl.querySelector("#sc-lb-title");
+    if (titleEl) titleEl.innerHTML = cityLeaderboardTitleLabel(total);
+
+    var paginationEl = mountEl.querySelector("#sc-lb-pagination");
+    if (!paginationEl) return;
+    if (total <= pageSize) {
+      paginationEl.innerHTML = "";
+      return;
+    }
+
+    var startItem = total ? start + 1 : 0;
+    var endItem = Math.min(end, total);
+    if (window.renderDashboardPagination) {
+      paginationEl.innerHTML = window.renderDashboardPagination({
+        currentPage: currentPage,
+        totalPages: totalPages,
+        pageButtonClass: "sc-lb-page-btn",
+        prevClass: "sc-lb-page-btn-prev",
+        nextClass: "sc-lb-page-btn-next",
+        className: "dash-pagination-compact sc-lb-dashboard-pagination",
+        pageWindow: cityLeaderboardPageWindow(),
+        infoText: cityLeaderboardInfoText(startItem, endItem, total),
+      });
+    } else {
+      paginationEl.innerHTML = renderCityLeaderboardFallbackPagination(
+        currentPage,
+        totalPages,
+      );
+    }
+    bindCityLeaderboardPagination(totalPages);
+  }
+
+  (function bindResponsiveCityLeaderboardPagination() {
+    var resizeHandler = function () {
+      window.clearTimeout(mountEl._citiesLeaderboardResizeTimer);
+      mountEl._citiesLeaderboardResizeTimer = window.setTimeout(function () {
+        mountEl._citiesLeaderboardResizeTimer = null;
+        var previousPageSize = leaderboardPaginationState.pageSize || CITY_LEADERBOARD_PAGE_SIZE;
+        var nextPageSize = responsiveCityLeaderboardPageSize();
+        if (nextPageSize === previousPageSize) return;
+
+        var firstVisibleIndex =
+          (Math.max(1, Number(leaderboardPaginationState.page) || 1) - 1) *
+          previousPageSize;
+        leaderboardPaginationState.pageSize = nextPageSize;
+        leaderboardPaginationState.page = Math.floor(firstVisibleIndex / nextPageSize) + 1;
+        renderCityLeaderboardPage({ preservePage: true });
+      }, 120);
+    };
+    mountEl._citiesLeaderboardResizeHandler = resizeHandler;
+    window.addEventListener("resize", resizeHandler);
+  })();
+
   function parseLeaderboardNumber(value) {
     var raw = String(value == null ? "" : value).trim();
     if (!raw || raw === "-" || raw === "—") return -Infinity;
@@ -2204,12 +2587,11 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         return diff || (a.dataset.city || "").localeCompare(b.dataset.city || "");
       })
       .forEach(function (row, idx) {
-        var rank = row.querySelector(".sc-lb-rank");
-        if (rank) rank.textContent = idx + 1;
         lbBody.appendChild(row);
       });
 
     refreshLeaderboardSortIndicators();
+    renderCityLeaderboardPage({ resetPage: true });
   }
 
   (function initLeaderboardSorting() {
@@ -2245,6 +2627,24 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       });
     });
     refreshLeaderboardSortIndicators();
+    renderCityLeaderboardPage({ preservePage: true });
+    var pendingAiSort = window._pendingDashboardAiCitySort;
+    if (pendingAiSort) {
+      window._pendingDashboardAiCitySort = null;
+      var metricMap = {
+        ndr: "ndr",
+        orders: "orders",
+        earnedProfitAfterTax: "commission",
+        commission: "commission",
+        cpa: "commission",
+        riskScore: "ndr",
+        scalingScore: "ndr"
+      };
+      var pendingKey = metricMap[pendingAiSort.metric] || "commission";
+      leaderboardSortState.key = pendingAiSort.direction === "asc" ? pendingKey : "";
+      leaderboardSortState.dir = pendingAiSort.direction === "asc" ? "desc" : "asc";
+      sortLeaderboardRows(pendingKey);
+    }
   })();
 
   /* Phase 5: Smooth map province fill animation on heatmap change */
@@ -2259,17 +2659,6 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     var fbProduct = mountEl.querySelector("#sc-fb-product");
     var fbSearch = mountEl.querySelector("#sc-fb-search");
     var fbReset = mountEl.querySelector("#sc-fb-reset");
-    console.log("[Cities][wireFilterBar] fbProduct found:", !!fbProduct);
-    if (fbProduct) {
-      var opts = Array.from(fbProduct.options).map(function (o) {
-        return o.value;
-      });
-      console.log(
-        "[Cities][wireFilterBar] fbProduct options (" + opts.length + "):",
-        opts.slice(0, 10),
-      );
-    }
-
     function enhanceSelect(selectEl, activeColor, withSearch) {
       if (!selectEl) return;
       selectEl.style.display = "none";
@@ -2485,11 +2874,13 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         }
       };
 
-      document.addEventListener("click", function () {
+      function onCustomSelectDocumentClick() {
         menu.style.display = "none";
         chevron.style.transform = "rotate(0deg)";
         container.style.zIndex = "100";
-      });
+      }
+      document.addEventListener("click", onCustomSelectDocumentClick);
+      mountEl._citiesDocumentClickHandlers.push(onCustomSelectDocumentClick);
 
       container.appendChild(btn);
       container.appendChild(menu);
@@ -2635,9 +3026,10 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
       var geoData = window.dashboardGeoData;
       var geoMap = geoData && geoData.geo && geoData.geo.geoProductMap;
+      var geoKeys = productVal && geoMap ? Object.keys(geoMap) : null;
 
       /* ── DEBUG: product filter diagnostics ──────────────────────────────── */
-      if (productVal) {
+      if (false && productVal) {
         console.log(
           "[Cities][applyFilters] productVal:",
           JSON.stringify(productVal),
@@ -2718,7 +3110,6 @@ window.renderSectionCities = function (mountEl, data, ctx) {
             var cityEntry = geoMap[city];
             if (!cityEntry && city) {
               var lowerCity = city.toLowerCase();
-              var geoKeys = Object.keys(geoMap);
               for (var ki = 0; ki < geoKeys.length; ki++) {
                 if (geoKeys[ki].toLowerCase().indexOf(lowerCity) !== -1) {
                   cityEntry = geoMap[geoKeys[ki]];
@@ -2738,7 +3129,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         var payOk = true; /* Pills switch displayed values, not row visibility */
 
         var show = provOk && searchOk && prodOk && payOk;
-        el.style.display = show ? "grid" : "none";
+        el.dataset.lbFilterMatch = show ? "1" : "0";
         if (show) {
           el.dataset.vsHidden = "";
           el.style.opacity = "1";
@@ -2749,7 +3140,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         }
       });
 
-      if (productVal) {
+      if (false && productVal) {
         console.log(
           "[Cities][applyFilters] result — shown:",
           shownCount,
@@ -2786,12 +3177,15 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         if (provVal !== undefined) patch.selectedProvince = provVal || null;
         window.DashboardFilterBus.setState(patch);
       }
+      renderCityLeaderboardPage({ resetPage: true });
+      refreshResetButtonState();
     }
 
     /* applyProductView: rewrite leaderboard values for selected product */
     function applyProductView(productKey) {
       var geoData = window.dashboardGeoData;
       var geoMap = geoData && geoData.geo && geoData.geo.geoProductMap;
+      var geoKeys = productKey && geoMap ? Object.keys(geoMap) : null;
 
       mountEl.querySelectorAll(".sc-lb-row").forEach(function (row) {
         var cityName = row.dataset.city || "";
@@ -2854,10 +3248,9 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         var cityEntry = geoMap[cityName];
         if (!cityEntry && cityName) {
           var lc = cityName.toLowerCase();
-          var gk = Object.keys(geoMap);
-          for (var ki = 0; ki < gk.length; ki++) {
-            if (gk[ki].toLowerCase().indexOf(lc) !== -1) {
-              cityEntry = geoMap[gk[ki]];
+          for (var ki = 0; geoKeys && ki < geoKeys.length; ki++) {
+            if (geoKeys[ki].toLowerCase().indexOf(lc) !== -1) {
+              cityEntry = geoMap[geoKeys[ki]];
               break;
             }
           }
@@ -2935,7 +3328,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     syncLeaderboardProductFilter = function (state) {
       var productKey =
         state && state.selectedProduct ? state.selectedProduct : "";
-      console.log(
+      if (false) console.log(
         "[Cities][syncLeaderboardProductFilter] called — productKey:",
         JSON.stringify(productKey),
         "| fbProduct exists:",
@@ -2944,12 +3337,12 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       var changed = fbProduct && fbProduct.value !== productKey;
       if (changed) {
         fbProduct.value = productKey;
-        console.log(
+        if (false) console.log(
           "[Cities][syncLeaderboardProductFilter] fbProduct.value set to:",
           JSON.stringify(fbProduct.value),
         );
         /* Verify the setter actually updated — the option must exist in the <select> */
-        if (fbProduct.value !== productKey) {
+        if (false && fbProduct.value !== productKey) {
           console.warn(
             "[Cities][syncLeaderboardProductFilter] VALUE MISMATCH after set! fbProduct.value=",
             JSON.stringify(fbProduct.value),
@@ -3027,7 +3420,11 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     if (fbSearch) {
       fbSearch.addEventListener("input", function () {
         mountEl._citiesSearchValue = fbSearch.value; // Save state!
-        applyFilters();
+        if (citiesSearchTimer) window.clearTimeout(citiesSearchTimer);
+        citiesSearchTimer = window.setTimeout(function () {
+          citiesSearchTimer = null;
+          if (mountEl.isConnected) applyFilters();
+        }, 120);
       });
       fbSearch.addEventListener("focus", function () {
         fbSearch.style.borderColor = "#7c3aed";
@@ -3135,14 +3532,24 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
     /* Reset button */
     if (fbReset) {
-      fbReset.addEventListener("mouseover", function () {
-        fbReset.style.borderColor = "#7c3aed";
-        fbReset.style.color = "#a855f7";
-      });
-      fbReset.addEventListener("mouseout", function () {
-        fbReset.style.borderColor = "rgba(255,255,255,0.1)";
-        fbReset.style.color = "rgba(255,255,255,0.38)";
-      });
+    refreshResetButtonState = function () {
+      var busState = window.DashboardFilterBus && window.DashboardFilterBus.getState
+        ? window.DashboardFilterBus.getState()
+        : {};
+      var active = !!(
+        (fbProvince && fbProvince.value) ||
+        (fbProduct && fbProduct.value) ||
+        (fbSearch && fbSearch.value.trim()) ||
+        (busState.paymentFilter && busState.paymentFilter !== "all") ||
+        currentHeatMode !== "default"
+      );
+      fbReset.dataset.active = active ? "true" : "false";
+      fbReset.title = active
+        ? s6Txt("Reset active city analysis filters", "إعادة ضبط فلاتر تحليل المدن النشطة")
+        : s6Txt("No active city analysis filters", "لا توجد فلاتر نشطة لتحليل المدن");
+    };
+    refreshResetButtonState();
+
     var fbExcludeBtn = mountEl.querySelector("#sc-fb-exclude-export");
     if (fbExcludeBtn) {
       fbExcludeBtn.addEventListener("mouseover", function () {
@@ -3162,8 +3569,11 @@ window.renderSectionCities = function (mountEl, data, ctx) {
           var ndrVal;
           if (typeof cs.ndrPct === "number") {
             ndrVal = cs.ndrPct;
-          } else if (cs.count !== undefined && cs.deliveredOrders !== undefined) {
-            ndrVal = (cs.count || 0) > 0 ? ((cs.deliveredOrders || 0) / cs.count) * 100 : 0;
+          } else if ((cs.netOrderCount !== undefined || cs.count !== undefined) && cs.deliveredOrders !== undefined) {
+            var cityNetOrders = window.DashboardOrderMetrics
+              ? window.DashboardOrderMetrics.netOrders(cs)
+              : Number(cs.netOrderCount != null ? cs.netOrderCount : cs.count || 0);
+            ndrVal = cityNetOrders > 0 ? ((cs.deliveredOrders || 0) / cityNetOrders) * 100 : 0;
           } else {
             ndrVal = typeof c.ndrPct === "number" ? c.ndrPct : typeof c.returnRate === "number" ? c.returnRate : c.deliveryRate;
           }
@@ -3262,20 +3672,27 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   })();
 
   /* Phase 5: Mount Product × City Matrix */
-  var matrixMount = mountEl.querySelector("#sc-product-matrix-mount");
-  if (matrixMount && typeof window.renderProductMatrix === "function") {
-    window.renderProductMatrix(
-      matrixMount,
-      window.dashboardGeoData,
-      window.DashboardFilterBus,
-    );
+  function mountCitiesSecondaryWidgets() {
+    if (!mountEl.isConnected || mountEl._citiesSecondaryMounted) return;
+    mountEl._citiesSecondaryMounted = true;
+
+    var matrixMount = mountEl.querySelector("#sc-product-matrix-mount");
+    if (matrixMount && typeof window.renderProductMatrix === "function") {
+      window.renderProductMatrix(
+        matrixMount,
+        window.dashboardGeoData,
+        window.DashboardFilterBus,
+      );
+    }
+
+    var insightMount = mountEl.querySelector("#sc-insight-strip-mount");
+    if (insightMount && typeof window.renderInsightStrip === "function") {
+      window.renderInsightStrip(insightMount, window.dashboardGeoData);
+    }
   }
 
-  /* T-20: Mount insight strip below province cards */
-  var insightMount = mountEl.querySelector("#sc-insight-strip-mount");
-  if (insightMount && typeof window.renderInsightStrip === "function") {
-    window.renderInsightStrip(insightMount, window.dashboardGeoData);
-  }
+  mountEl._citiesSecondaryMounted = false;
+  mountEl._citiesSecondaryIdleHandle = whenCitiesIdle(mountCitiesSecondaryWidgets, 1000);
 
   /* ── T-22: Product Focus Mode ────────────────────────────────────────────── */
 
@@ -3395,7 +3812,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
   function _onFilterBusChange(state) {
     var fp = state.selectedProduct || null;
-    console.log(
+    if (false) console.log(
       "[Cities][_onFilterBusChange] state.selectedProduct:",
       JSON.stringify(fp),
       "| _prevFocusProduct:",
@@ -3465,68 +3882,6 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     });
   }
 
-  /* ── Async Query Trigger ──────────────────────────────────────────────────── */
-  if (window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.flags === "function") {
-    window.DashboardQueryRuntime.flags().then(function (flags) {
-      var citiesEnabled = !!(flags && flags.cities);
-      if (!citiesEnabled) return;
-      if (!mountEl.isConnected || mountEl._citiesRenderToken !== renderToken) return;
-      if (mountEl._citiesQueryDone) return;
-
-      var badge = mountEl.querySelector("#cities-updating-badge");
-      if (badge) {
-        badge.style.opacity = "1";
-      }
-
-      window.DashboardQueryRuntime.query("cities", {}, data).then(function (result) {
-        if (!mountEl.isConnected || mountEl._citiesRenderToken !== renderToken) return;
-        if (result && result.ok && Array.isArray(result.cities)) {
-          // Rebuild global cache:
-          if (window.dashboardGeoData) {
-            window.dashboardGeoData.cod = window.dashboardGeoData.cod || {};
-            window.dashboardGeoData.cod.cities = result.cities;
-            
-            // Build cityStats map:
-            var cityStats = {};
-            result.cities.forEach(function (c) {
-              cityStats[c.name] = c;
-            });
-            window.dashboardGeoData.geo = window.dashboardGeoData.geo || {};
-            
-            // Call buildGeoProductMap:
-            var rebuiltGeo = window.buildGeoProductMap ? window.buildGeoProductMap(
-              cityStats,
-              window.dashboardGeoData.geo.productStats || {},
-              window.dashboardGeoData.geo.kpis || {},
-              window.dashboardGeoData.meta || {}
-            ) : null;
-            
-            window.dashboardGeoData.geo.cityStats = cityStats;
-            if (rebuiltGeo) {
-              window.dashboardGeoData.geo.geoProductMap = rebuiltGeo.geoProductMap;
-              window.dashboardGeoData.geo.provinceMap = rebuiltGeo.provinceMap;
-              window.dashboardGeoData.geo.prepaidIntelligence = rebuiltGeo.prepaidIntelligence;
-            }
-          }
-          
-          mountEl._citiesQueryDone = true;
-          // Trigger recursive re-render:
-          window.renderSectionCities(mountEl, data, ctx);
-        } else {
-          // Query finished/failed:
-          if (badge) {
-            badge.style.opacity = "0";
-          }
-        }
-      }).catch(function (err) {
-        console.error("[Cities] Async query failed:", err);
-        if (badge) {
-          badge.style.opacity = "0";
-        }
-      });
-    });
-  }
-
   /* Return cleanup function */
   return function () {
     if (window.DashboardFilterBus && mountEl._onCitiesFilterBusChange) {
@@ -3534,6 +3889,25 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     }
     if (mountEl._citiesFilterBusObserver) {
       mountEl._citiesFilterBusObserver.disconnect();
+    }
+    cancelCitiesIdle(mountEl._citiesSecondaryIdleHandle);
+    mountEl._citiesSecondaryIdleHandle = null;
+    if (citiesSearchTimer) {
+      window.clearTimeout(citiesSearchTimer);
+      citiesSearchTimer = null;
+    }
+    if (mountEl._citiesLeaderboardResizeHandler) {
+      window.removeEventListener("resize", mountEl._citiesLeaderboardResizeHandler);
+    }
+    if (mountEl._citiesLeaderboardResizeTimer) {
+      window.clearTimeout(mountEl._citiesLeaderboardResizeTimer);
+      mountEl._citiesLeaderboardResizeTimer = null;
+    }
+    if (Array.isArray(mountEl._citiesDocumentClickHandlers)) {
+      mountEl._citiesDocumentClickHandlers.forEach(function (handler) {
+        document.removeEventListener("click", handler);
+      });
+      mountEl._citiesDocumentClickHandlers = [];
     }
   };
 };

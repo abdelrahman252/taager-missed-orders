@@ -2,8 +2,11 @@
 admin-panel/
 countries/
 supabase/
-scripts/
 old taager src/
+
+# Generated QA reports
+scripts/ai-qa-*-report.json
+scripts/ai-qa-*-report.html
 
 # Dependency directories
 node_modules/
@@ -31,6 +34,10 @@ tmp/
 *.exe
 *.dmg
 *.crdownload
+*.bak
+*_patched
+*.orig
+*.tmp
 data.txt
 data - Copy.txt
 /*.png

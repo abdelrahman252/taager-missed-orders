@@ -25,11 +25,11 @@ window.renderSection5 = function (mountEl, data, ctx) {
     if (window.dashboardI18n && window.dashboardI18n.clean) return window.dashboardI18n.clean(value);
     return String(value == null ? '' : value)
       .replace(/-|-/g, '-')
-      .replace(/...|.../g, '...')
-      .replace(/â†“|↓/g, '↓')
-      .replace(/â†‘|↑/g, '↑')
-      .replace(/â†•|↕/g, '↕')
-      .replace(/âœ•|x/g, '×');
+      .replace(/\u2026/g, '...')
+      .replace(/\u2193/g, '↓')
+      .replace(/\u2191/g, '↑')
+      .replace(/\u2195/g, '↕')
+      .replace(/x/g, '×');
   }
   function tx(key) {
     var str = window.dashboardI18n ? window.dashboardI18n.t(key) : key;
@@ -78,55 +78,29 @@ window.renderSection5 = function (mountEl, data, ctx) {
     return escData(value).replace(/`/g, '&#96;');
   }
 
+  function productDisplayName(sku, fallback) {
+    var key = String(sku || '').trim();
+    var saved = window.TaagerProductNames && key && typeof window.TaagerProductNames.get === 'function'
+      ? window.TaagerProductNames.get(key)
+      : '';
+    return String(saved || fallback || key || s5Txt('Unknown Product', 'منتج غير معروف')).trim();
+  }
+
   // ── data defaults ────────────────────────────────────────────────────────
   const pd = (data && data.products) ? data.products : null;
   const activeCurrency = data && data.meta && data.meta.activeCurrency || window.dashboardActiveCurrency || 'SAR';
 
-  const PRODUCTS_DEFAULT = [
-    {
-      rank: 1, name: 'كريم التفتيح المكثف', cat: 'SKU: N/A',
-      deliveries: 34, sharePct: 36.2, revenue: 1428, delta: 18.4,
-      spark: [700,850,950,1050,1180,1300,1428], sparkColor: '#00e676', accent: '#fbbf24',
-      placedCount: 94, commission: 1428, deliveredCount: 34,
-      totalPieces: 94, failedCount: 5, canceledCount: 20, confirmedCount: 10, shippingCount: 8, processingCount: 4,
-      confirmationPct: 59.6, cancelPct: 21.3, ndrPct: 37.0, deliveryPct: 36.2,
-      cityBreakdown: [{name:'الرياض',count:40},{name:'جدة',count:28},{name:'الدمام',count:16}],
-      piecesBreakdown: [{qty:'1',count:60,delivered:20,ndr:33.3},{qty:'2',count:24,delivered:10,ndr:41.7},{qty:'3',count:10,delivered:4,ndr:40}],
-    },
-    {
-      rank: 2, name: 'سيروم الكولاجين', cat: 'SKU: N/A',
-      deliveries: 22, sharePct: 23.4, revenue: 924, delta: 15.7,
-      spark: [500,590,660,730,800,870,924], sparkColor: '#a855f7', accent: '#a855f7',
-      placedCount: 60, commission: 924, deliveredCount: 22,
-      totalPieces: 60, failedCount: 7, canceledCount: 25, confirmedCount: 5, shippingCount: 4, processingCount: 3,
-      confirmationPct: 56.7, cancelPct: 41.7, ndrPct: 53.2, deliveryPct: 36.7,
-      cityBreakdown: [{name:'الرياض',count:24},{name:'مكة',count:18},{name:'المدينة',count:10}],
-      piecesBreakdown: [{qty:'1',count:48,delivered:18,ndr:37.5},{qty:'2',count:12,delivered:4,ndr:33.3}],
-    },
-    {
-      rank: 3, name: 'مجموعة العناية بالبشرة', cat: 'SKU: N/A',
-      deliveries: 19, sharePct: 20.2, revenue: 798, delta: 12.1,
-      spark: [600,660,700,730,755,775,798], sparkColor: '#14b8a6', accent: '#14b8a6',
-      placedCount: 50, commission: 798, deliveredCount: 19,
-      totalPieces: 50, failedCount: 3, canceledCount: 12, confirmedCount: 6, shippingCount: 5, processingCount: 4,
-      confirmationPct: 68.0, cancelPct: 24.0, ndrPct: 38.7, deliveryPct: 38.0,
-      cityBreakdown: [{name:'جدة',count:20},{name:'الرياض',count:16},{name:'الطائف',count:8}],
-      piecesBreakdown: [{qty:'1',count:35,delivered:14,ndr:40},{qty:'2',count:12,delivered:4,ndr:33.3},{qty:'3',count:3,delivered:1,ndr:33.3}],
-    },
-  ];
+  const PRODUCTS_DEFAULT = [];
 
   const STAT_CARDS_DEFAULT = [
     { label: s5Txt('Total Products Sold', 'إجمالي المنتجات المباعة'),    value: 0, unit: s5Txt('unique products', 'منتج مختلف'),  color: '#a855f7', iconType: 'grid'   },
     { label: s5Txt('Total Orders', 'إجمالي الطلبات المُسجلة'),    value: 0, unit: s5Txt('orders', 'طلب'),          color: '#14b8a6', iconType: 'box'    },
     { label: s5Txt('Total Pieces Sold', 'إجمالي القطع المُباعة'),       value: 0, unit: s5Txt('pieces', 'قطعة'),         color: '#3b82f6', iconType: 'pieces' },
     { label: s5Txt('Total Earned Taager Profit After Tax', 'إجمالي ربح تاجر المحقق بعد الضريبة'),      value: 0, unit: activeCurrency,          color: '#f59e0b', iconType: 'coins'  },
-    { label: s5Txt('Products generating 80% of Taager Profit After Tax', 'منتجات تحقق 80% من ربح تاجر بعد الضريبة'), value: 1, unit: s5Txt('products only', 'منتجات فقط'),  color: '#ef4444', iconType: 'pie'    },
+    { label: s5Txt('Products generating 80% of Taager Profit After Tax', 'منتجات تحقق 80% من ربح تاجر بعد الضريبة'), value: 0, unit: s5Txt('products only', 'منتجات فقط'),  color: '#ef4444', iconType: 'pie'    },
   ];
 
-  const INSIGHTS_DEFAULT = [
-    { emoji: '🏆', bg: 'rgba(0,230,118,0.12)',  border: 'rgba(0,230,118,0.28)', iconGlow: '#00e676', label: s5Txt('Best Taager Profit After Tax Performance', 'أفضل أداء ربح تاجر بعد الضريبة'), value: '-', detail: 'جاري التحميل...', detailColor: '#fbbf24' },
-    { emoji: '📊', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.28)', iconGlow: '#3b82f6', label: s5Txt('Highest Taager Profit After Tax Concentration', 'أعلى تركيز ربح تاجر بعد الضريبة'),   value: s5Txt('Top 3 products', 'أول 3 منتجات'), detail: '-', detailColor: '#3b82f6' },
-  ];
+  const INSIGHTS_DEFAULT = [];
 
   let PRODUCTS_RAW = PRODUCTS_DEFAULT;
   let STAT_CARDS   = STAT_CARDS_DEFAULT;
@@ -512,68 +486,46 @@ window.renderSection5 = function (mountEl, data, ctx) {
     if (!sharedCache && typeof WeakMap === 'function') {
       sharedCache = window._dashboardProductCampaignAssignments = new WeakMap();
     }
-    var cacheKey = PRODUCTS_RAW.map(function (product) {
-      return validSku(product) + ':' + String(product.name || '');
-    }).join('|') + '|' + String(window.dashboardActiveCurrency || 'SAR') + '|' + String(productFinancialSettings.egpRate || '');
+    var attribution = window.TaagerProductAttribution;
+    if (!attribution) return {};
+    var overrides = window.TaagerProductNames && typeof window.TaagerProductNames.all === 'function'
+      ? window.TaagerProductNames.all()
+      : {};
+    var stableKey = PRODUCTS_RAW.map(function (product) {
+      return String(product.sku || '') + ':' + String(product.name || '');
+    }).join('|');
+    var cacheKey = [
+      attribution.VERSION,
+      stableKey,
+      JSON.stringify(overrides),
+      String(window.dashboardActiveCurrency || 'SAR'),
+      String(productFinancialSettings.egpRate || '')
+    ].join('|');
     var rowCache = sharedCache && sharedCache.get(campaignRows);
     if (rowCache && rowCache.key === cacheKey) return rowCache.value;
 
-    var productMatchKeys = PRODUCTS_RAW.map(function (product, idx) {
-      var tokens = productTokens(product.name || '');
-      return { idx: idx, sku: validSku(product), tokens: tokens, phrases: productPhrases(tokens) };
+    var productIndex = attribution.createProductIndex(PRODUCTS_RAW, {
+      productNameOverrides: overrides
     });
-    var tokenOwners = {};
-    var phraseOwners = {};
-    productMatchKeys.forEach(function (product) {
-      product.tokens.forEach(function (token) {
-        tokenOwners[token] = (tokenOwners[token] || 0) + 1;
-      });
-      product.phrases.forEach(function (phrase) {
-        phraseOwners[phrase] = (phraseOwners[phrase] || 0) + 1;
-      });
-    });
-    function nameMatchScore(campaignText, product) {
-      var hits = product.tokens.filter(function (token) { return hasTerm(campaignText, token); });
-      var phraseHits = product.phrases.filter(function (phrase) { return hasTerm(campaignText, phrase); });
-      var uniqueWordHit = hits.some(function (token) { return token.length >= 4 && tokenOwners[token] === 1; });
-      var uniquePhraseHit = phraseHits.some(function (phrase) { return phraseOwners[phrase] === 1; });
-      if (hits.length < Math.min(2, product.tokens.length) && !uniqueWordHit && !uniquePhraseHit) return 0;
-      var score = hits.reduce(function (total, token) {
-        return total + token.length + (tokenOwners[token] === 1 ? 6 : 0);
-      }, 0);
-      return score + phraseHits.reduce(function (total, phrase) {
-        return total + phrase.length + (phraseOwners[phrase] === 1 ? 12 : 0);
-      }, 0);
-    }
     var assignments = {};
     (campaignRows || []).forEach(function (row) {
-      var campaignText = textKey(row && row.campaign || '');
-      if (!campaignText) return;
-      var skuCandidates = productMatchKeys.filter(function (product) {
-        return product.sku && hasTerm(campaignText, product.sku);
-      }).sort(function (a, b) { return b.sku.length - a.sku.length; });
-      var best = skuCandidates.length ? { idx: skuCandidates[0].idx, method: 'sku' } : null;
-      if (!best) {
-        var nameCandidates = productMatchKeys.map(function (product) {
-          return { idx: product.idx, score: nameMatchScore(campaignText, product) };
-        }).filter(function (candidate) { return candidate.score > 0; })
-          .sort(function (a, b) { return b.score - a.score; });
-        if (nameCandidates.length && (!nameCandidates[1] || nameCandidates[0].score > nameCandidates[1].score)) {
-          best = { idx: nameCandidates[0].idx, method: 'name' };
-        }
-      }
-      if (!best) return;
-      if (!assignments[best.idx]) assignments[best.idx] = { spendSar: 0, methods: {}, rowCount: 0 };
-      assignments[best.idx].spendSar += campaignSpendToSar(row);
-      assignments[best.idx].methods[best.method] = true;
-      assignments[best.idx].rowCount++;
+      var result = attribution.matchCampaign(row, productIndex);
+      if (result.status !== 'matched' || result.productIndex < 0) return;
+      var idx = result.productIndex;
+      if (!assignments[idx]) assignments[idx] = { spendSar: 0, methods: {}, details: {}, rowCount: 0 };
+      assignments[idx].spendSar += campaignSpendToSar(row);
+      assignments[idx].methods[result.method] = true;
+      assignments[idx].details[result.matchDetail] = true;
+      assignments[idx].rowCount++;
     });
     if (sharedCache) sharedCache.set(campaignRows, { key: cacheKey, value: assignments });
     return assignments;
   }
 
   function applyProductFinancials() {
-    var totalPlaced = PRODUCTS_RAW.reduce(function (sum, p) { return sum + (Number(p.placedCount) || 0); }, 0);
+    var totalPlaced = PRODUCTS_RAW.reduce(function (sum, p) {
+      return sum + (window.DashboardOrderMetrics ? window.DashboardOrderMetrics.netOrders(p) : (Number(p.netOrderCount) || Number(p.placedCount) || 0));
+    }, 0);
     var budget = Math.max(0, Number(productFinancialSettings.adSpend) || 0);
     var marketingSummary = productMarketingState && productMarketingState.summary || null;
     var campaignRows = marketingSummary && Array.isArray(marketingSummary.campaignBreakdown)
@@ -582,12 +534,15 @@ window.renderSection5 = function (mountEl, data, ctx) {
     var hasSyncedProductSpend = !!(campaignRows && campaignRows.length);
     var campaignAssignments = hasSyncedProductSpend ? buildCampaignAssignments(campaignRows) : {};
     PRODUCTS_RAW.forEach(function (p, idx) {
-      var placed = Number(p.placedCount) || 0;
+      var placed = window.DashboardOrderMetrics
+        ? window.DashboardOrderMetrics.netOrders(p)
+        : (Number(p.netOrderCount) || Number(p.placedCount) || 0);
       var synced = campaignAssignments[idx];
       p.syncedAdSpend = !!synced;
       p.syncMatchMethod = synced
         ? (synced.methods.sku && synced.methods.name ? 'sku+name' : (synced.methods.sku ? 'sku' : 'name'))
         : '';
+      p.syncMatchDetail = synced ? Object.keys(synced.details || {}).join(',') : '';
       p.syncMatchedRows = synced ? synced.rowCount : 0;
       p.allocatedAdSpend = hasSyncedProductSpend
         ? (synced ? sarToSelectedCurrency(Number(synced.spendSar.toFixed(2))) : 0)
@@ -595,7 +550,9 @@ window.renderSection5 = function (mountEl, data, ctx) {
       p.cpa = placed > 0 ? p.allocatedAdSpend / placed : 0;
       var delivered = p.actualDeliveredCount !== undefined ? p.actualDeliveredCount : (Number(p.deliveredCount) || 0);
       var commissionVal = p.actualCommission !== undefined ? p.actualCommission : (Number(p.commission) || 0);
-      var avgCommissionSar = delivered > 0 ? (Number(commissionVal) || 0) / delivered : 0;
+      var avgCommissionSar = window.DashboardOrderMetrics
+        ? window.DashboardOrderMetrics.averageProfit(p)
+        : (delivered > 0 ? (Number(commissionVal) || 0) / delivered : 0);
       p.averageProfit = sarToSelectedCurrency(avgCommissionSar);
       var breakEvenSar = avgCommissionSar * ((Number(p.ndrPct) || 0) / 100);
       p.breakEvenCpa = sarToSelectedCurrency(breakEvenSar);
@@ -644,8 +601,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
       const productKey = p.key || p.sku || p.name || `product-${idx}`;
 
       return {
-        key: productKey, sku: p.sku || '', rank, name: p.name || 'منتج غير معروف', cat: `SKU: ${p.sku || 'N/A'}`,
-        deliveries: units, placedCount: p.totalOrderCount || p.placedCount || 0, pieces: p.pieces || p.qty || 0,
+        key: productKey, sku: p.sku || '', rank, name: productDisplayName(p.sku, p.name), cat: `SKU: ${p.sku || 'N/A'}`,
+        deliveries: units, placedCount: p.netOrderCount != null ? p.netOrderCount : (p.placedCount || 0), pieces: p.pieces || p.qty || 0,
         sharePct, revenue: commission, delta: Number(p.delta || 0), spark, ...styleCfg,
         commission, deliveredCount: units,
         actualDeliveredCount: p.actualDeliveredCount,
@@ -658,8 +615,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
         confirmedCount:  p.confirmedCount  || 0,
         shippingCount:   p.shippingCount   || 0,
         processingCount: p.processingCount || 0,
-        statusTotalCount: p.statusTotalCount || p.totalOrderCount || p.placedCount || 0,
-        netOrderCount: p.netOrderCount || 0,
+        statusTotalCount: p.statusTotalCount || p.netOrderCount || p.placedCount || 0,
+        netOrderCount: p.netOrderCount != null ? p.netOrderCount : (p.placedCount || 0),
         confirmationStatusCount: p.confirmationStatusCount || p.confirmedCount || 0,
         cancelStatusCount: p.cancelStatusCount || p.canceledCount || 0,
         pendingStatusCount: p.pendingStatusCount || p.pendingCount || 0,
@@ -669,6 +626,12 @@ window.renderSection5 = function (mountEl, data, ctx) {
         pendingPct:      p.pendingPct      || 0,
         ndrPct:          p.ndrPct          || 0,
         drRate:          p.drRate          || 0,
+        ndrBaseOrders: p.ndrBaseOrders || 0,
+        ndrDeliveredOrders: p.ndrDeliveredOrders || 0,
+        drBaseOrders: p.drBaseOrders || 0,
+        drDeliveredOrders: p.drDeliveredOrders || 0,
+        rateMode: p.rateMode || 'actual',
+        rateSource: p.rateSource || 'product',
         scalingScore:    p.scalingScore    || Math.round((commission * (p.drRate || 0)) / 100),
         deliveryPct:     p.deliveryPct     || p.deliveryRate || 0,
         cityBreakdown:   p.cityBreakdown   || [],
@@ -716,15 +679,31 @@ window.renderSection5 = function (mountEl, data, ctx) {
   function buildInsights(products) {
     if (!products || !products.length) return [];
     const insights = [];
+    const SI = window.TaagerSmartInsights;
+    const T = SI && SI.thresholds ? SI.thresholds() : { insightMinSample: 15, scaleMinOrders: 50, scaleMinDelivered: 10, dangerNdrPct: 20, scaleDrPct: 40 };
+    const orderCount = (p) => Number(p.placedCount != null ? p.placedCount : p.orders != null ? p.orders : p.count || 0) || 0;
+    const deliveredCount = (p) => Number(p.deliveredCount != null ? p.deliveredCount : p.delivered != null ? p.delivered : p.units || 0) || 0;
+    const evidence = (label, n, d) => SI && SI.rateEvidence ? SI.rateEvidence(label, n, d) : (label + ' ' + n + '/' + d);
+    const qualified = products.filter((p) => orderCount(p) >= T.insightMinSample);
+    const scaleQualified = products.filter((p) => orderCount(p) >= T.scaleMinOrders && deliveredCount(p) >= T.scaleMinDelivered);
 
-    const worstCancel = products.reduce((prev, cur) => cur.cancelPct > prev.cancelPct ? cur : prev, products[0]);
+    if (!qualified.length) {
+      const largest = products.reduce((prev, cur) => orderCount(cur) > orderCount(prev) ? cur : prev, products[0]);
+      insights.push({ emoji:'i' , bg:'rgba(59,130,246,0.12)', border:'rgba(59,130,246,0.28)', iconGlow:'#3b82f6',
+        label:s5Txt('Needs More Product Data', 'يحتاج بيانات منتجات أكثر'), value: largest.name,
+        detail: s5Txt('Largest sample ', 'أكبر عينة ') + orderCount(largest) + ' / ' + T.insightMinSample + s5Txt(' orders - no best/scale claim yet', ' طلب - لا توجد توصية أفضل/توسع بعد'),
+        detailColor:'#3b82f6', trust:'Measured', confidence:'limited' });
+      return insights;
+    }
+
+    const worstCancel = qualified.reduce((prev, cur) => cur.cancelPct > prev.cancelPct ? cur : prev, qualified[0]);
     if (worstCancel && worstCancel.cancelPct >= 40) {
       insights.push({ emoji:'!' , bg:'rgba(239,68,68,0.12)', border:'rgba(239,68,68,0.28)', iconGlow:'#ef4444',
         label:s5Txt('Warning: High Cancel Rate', 'تحذير: نسبة إلغاء عالية'), value: worstCancel.name,
         detail: worstCancel.cancelPct + s5Txt('% canceled - consider pausing', '٪ إلغاء - فكر في إيقافه مؤقتاً'), detailColor:'#ef4444' });
     }
 
-    const bestDelivery = products.reduce((prev, cur) => (cur.drRate || 0) > (prev.drRate || 0) ? cur : prev, products[0]);
+    const bestDelivery = qualified.reduce((prev, cur) => (cur.drRate || 0) > (prev.drRate || 0) ? cur : prev, qualified[0]);
     if (bestDelivery) {
       const bestDeliveryColor = window.dashboardRateColor ? window.dashboardRateColor(bestDelivery.drRate || 0) : ((bestDelivery.drRate || 0) >= 40 ? '#22d3ee' : (bestDelivery.drRate || 0) >= 30 ? '#00e676' : (bestDelivery.drRate || 0) >= 20 ? '#f59e0b' : '#ef4444');
       insights.push({ emoji:'★' , bg:bestDeliveryColor + '1f', border:bestDeliveryColor + '47', iconGlow:bestDeliveryColor,
@@ -732,19 +711,27 @@ window.renderSection5 = function (mountEl, data, ctx) {
         detail: (bestDelivery.drRate || 0) + s5Txt('% delivered - scalable', '٪ تسليم - قابل للتوسع'), detailColor:bestDeliveryColor });
     }
 
-    const worstNdr = products.reduce((prev, cur) => cur.ndrPct < prev.ndrPct ? cur : prev, products[0]);
-    if (worstNdr && worstNdr.ndrPct < 20) {
+    const worstNdr = qualified.reduce((prev, cur) => cur.ndrPct < prev.ndrPct ? cur : prev, qualified[0]);
+    if (worstNdr && worstNdr.ndrPct < T.dangerNdrPct) {
       insights.push({ emoji:'!' , bg:'rgba(239,68,68,0.12)', border:'rgba(239,68,68,0.28)', iconGlow:'#ef4444',
         label:s5Txt('Potential Shipping Issue', 'مشكلة شحن محتملة'), value: worstNdr.name,
         detail: 'NDR ' + worstNdr.ndrPct + s5Txt('% - check responsible company', '٪ - تحقق من الشركة المسؤولة'), detailColor:'#ef4444' });
     }
 
-    const bestScale = products.reduce((prev, cur) => {
+    if (!scaleQualified.length) {
+      insights.push({ emoji:'i' , bg:'rgba(59,130,246,0.12)', border:'rgba(59,130,246,0.28)', iconGlow:'#3b82f6',
+        label:s5Txt('No Scale-Ready Product Yet', 'لا يوجد منتج جاهز للتوسع بعد'), value: s5Txt('Needs stronger sample', 'يحتاج عينة أقوى'),
+        detail: T.scaleMinOrders + s5Txt(' orders and ', ' طلب و ') + T.scaleMinDelivered + s5Txt(' delivered orders required before scale claims.', ' طلبات مسلمة مطلوبة قبل توصيات التوسع.'),
+        detailColor:'#3b82f6', trust:'Measured', confidence:'limited' });
+      return insights;
+    }
+
+    const bestScale = scaleQualified.reduce((prev, cur) => {
       const scoreA = (cur.commission * (cur.drRate || 0)) / 100;
       const scoreB = (prev.commission * (prev.drRate || 0)) / 100;
       return scoreA > scoreB ? cur : prev;
-    }, products[0]);
-    if (bestScale) {
+    }, scaleQualified[0]);
+    if (bestScale && (bestScale.drRate || 0) >= T.scaleDrPct) {
       insights.push({ emoji:'★' , bg:'rgba(245,158,11,0.12)', border:'rgba(245,158,11,0.28)', iconGlow:'#f59e0b',
         label:s5Txt('Best Product for Scaling', 'أفضل منتج للتوسع'), value: bestScale.name,
         // Taager dashboard/status/NDR migration: commission is a compatibility key for Taager profit.
@@ -753,7 +740,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
     }
 
     if (insights.length === 0) {
-      const topComm = products.reduce((prev, cur) => cur.revenue > prev.revenue ? cur : prev, products[0]);
+      const topComm = qualified.reduce((prev, cur) => cur.revenue > prev.revenue ? cur : prev, qualified[0]);
       insights.push({ emoji:'★' , bg:bestDeliveryColor + '1f', border:bestDeliveryColor + '47', iconGlow:bestDeliveryColor,
         label:s5Txt('Best Taager Profit After Tax Performance', 'أفضل أداء ربح تاجر بعد الضريبة'), value: topComm.name,
         detail: productNumber(commissionInCurrency(topComm.revenue || 0), 0) + ' ' + selectedCurrency(), detailColor:'#fbbf24' });
@@ -769,6 +756,12 @@ window.renderSection5 = function (mountEl, data, ctx) {
   let listCache = null;
   let detailPanelCache = new Map();
   let _sortMenuCleanup = null;
+  addProductCleanup(function () {
+    if (_sortMenuCleanup) {
+      _sortMenuCleanup();
+      _sortMenuCleanup = null;
+    }
+  });
   let backendProductsEnabled = false;
   let backendProductsActive = false;
   let backendProductsLoading = false;
@@ -776,6 +769,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
   let backendProductsTotal = 0;
   let backendProductsTotalPages = 1;
   let backendProductsQueryKey = '';
+  let backendProductsPendingKey = '';
+  let backendProductsPendingPromise = null;
   let backendProductsRequest = 0;
   let backendProductsRefreshRevision = 0;
   let backendProductDetailsCache = new Map();
@@ -790,6 +785,67 @@ window.renderSection5 = function (mountEl, data, ctx) {
     { key:'processing', label: s5Txt('Processing', 'قيد المعالجة'),   color:'#3b82f6'  },
   ];
 
+  function s5SearchKey(value) {
+    return String(value == null ? '' : value)
+      .toLowerCase()
+      .replace(/[\u064B-\u065F\u0670]/g, '')
+      .replace(/[أإآٱ]/g, 'ا')
+      .replace(/ى/g, 'ي')
+      .replace(/ة/g, 'ه')
+      .replace(/[^a-z0-9\u0600-\u06ff]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function productSearchKey(product) {
+    if (!product) return '';
+    var source = [
+      product.name,
+      product.displayName,
+      product.productName,
+      product.sku,
+      product.key,
+      product.id,
+      product.cat,
+      product.category
+    ].join(' ');
+    var key = s5SearchKey(source);
+    product._s5SearchKey = key;
+    return key;
+  }
+
+  function productValue(product, field) {
+    if (!product || !field) return 0;
+    var value = product[field];
+    if (value == null && field === 'commission') value = product.revenue;
+    if (value == null && field === 'deliveredCount') value = product.deliveries;
+    var numeric = Number(value);
+    return isFinite(numeric) ? numeric : 0;
+  }
+
+  function productsDataSignature() {
+    var first = PRODUCTS_RAW[0] || {};
+    var last = PRODUCTS_RAW[PRODUCTS_RAW.length - 1] || {};
+    var totals = PRODUCTS_RAW.reduce(function (acc, product) {
+      acc.orders += productValue(product, 'placedCount');
+      acc.delivered += productValue(product, 'deliveredCount');
+      acc.failed += productValue(product, 'failedCount');
+      acc.canceled += productValue(product, 'canceledCount');
+      acc.commission += Math.round(productValue(product, 'commission') * 100);
+      return acc;
+    }, { orders: 0, delivered: 0, failed: 0, canceled: 0, commission: 0 });
+    return [
+      PRODUCTS_RAW.length,
+      first.key || first.sku || first.name || '',
+      last.key || last.sku || last.name || '',
+      totals.orders,
+      totals.delivered,
+      totals.failed,
+      totals.canceled,
+      totals.commission
+    ].join('~');
+  }
+
   // ── FIX 1: applyFilters - NEVER re-assigns rank ───────────────────────────
   function applyFilters() {
     const marketingSyncStamp = productMarketingState && (
@@ -797,8 +853,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
       productMarketingState.summary && productMarketingState.summary.lastSyncAt
     ) || '';
     const cacheKey = [
-      PRODUCTS_RAW.length,
-      filterState.search,
+      productsDataSignature(),
+      s5SearchKey(filterState.search),
       filterState.statusKey,
       sortState.field,
       sortState.dir,
@@ -811,8 +867,10 @@ window.renderSection5 = function (mountEl, data, ctx) {
     let list = PRODUCTS_RAW.slice();
 
     if (filterState.search) {
-      const q = filterState.search.toLowerCase();
-      list = list.filter(p => p.name.toLowerCase().includes(q) || (p.cat && p.cat.toLowerCase().includes(q)));
+      const q = s5SearchKey(filterState.search);
+      list = list.filter(function (p) {
+        return !q || productSearchKey(p).indexOf(q) !== -1;
+      });
     }
 
     if (filterState.statusKey !== 'all') {
@@ -828,16 +886,17 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
     list.sort((a, b) => {
       if (sortState.field === 'default') {
-        return (a.rank || 0) - (b.rank || 0);
+        const dir = sortState.dir === 'desc' ? -1 : 1;
+        return dir * ((a.rank || 0) - (b.rank || 0));
       }
       const dir = sortState.dir === 'desc' ? 1 : -1;
-      const primary = dir * ((b[sortState.field] || 0) - (a[sortState.field] || 0));
+      const primary = dir * (productValue(b, sortState.field) - productValue(a, sortState.field));
       if (primary !== 0) return primary;
-      const byPlaced = (b.placedCount || 0) - (a.placedCount || 0);
+      const byPlaced = productValue(b, 'placedCount') - productValue(a, 'placedCount');
       if (byPlaced !== 0) return byPlaced;
-      const byCanceled = (b.canceledCount || 0) - (a.canceledCount || 0);
+      const byCanceled = productValue(b, 'canceledCount') - productValue(a, 'canceledCount');
       if (byCanceled !== 0) return byCanceled;
-      return (b.commission || 0) - (a.commission || 0);
+      return productValue(b, 'commission') - productValue(a, 'commission');
     });
 
     // FIX 1: preserve the original rank from PRODUCTS_RAW - do NOT re-number
@@ -850,31 +909,26 @@ window.renderSection5 = function (mountEl, data, ctx) {
   let currentPage = 1;
   let quantityCityPageByProduct = {};
 
+  function quantityCityPageStateKey(p, scope) {
+    return String(scope || 'detail') + '|' + productKeyForState(p);
+  }
+
   function backendProductRow(row) {
+    if (!row) return {};
     function roundTo(value, digits) {
       const n = Number(value || 0);
       const factor = Math.pow(10, digits == null ? 2 : digits);
       return isFinite(n) ? Math.round(n * factor) / factor : 0;
     }
-    var expectedNdrRate = null;
-    if (window.isExpectedNdrMode && window.isExpectedNdrMode()) {
-      var globalExpectedNdrRate = (data && data.overview && data.overview.deliveryRate != null) ? (data.overview.deliveryRate / 100) : 0.35;
-      if (row.ndrPct != null) {
-        expectedNdrRate = row.ndrPct / 100;
-      } else {
-        var productInList = data && data.products && data.products.rankedList && data.products.rankedList.find(function (p) {
-          return String(p.sku || '').toLowerCase() === String(row.sku || '').toLowerCase();
-        });
-        expectedNdrRate = productInList ? (productInList.ndrPct / 100) : globalExpectedNdrRate;
-      }
-    }
-
-    const placedCountVal = Number(row.placedCount || row.totalOrders || 0);
-    const deliveriesVal = expectedNdrRate !== null ? Math.round(placedCountVal * expectedNdrRate) : Number(row.deliveredCount || 0);
-    const commissionVal = expectedNdrRate !== null ? (deliveriesVal * Number(row.averageProfit || 0)) : Number(row.commission || 0);
-    const breakEvenCpaVal = expectedNdrRate !== null ? (Number(row.averageProfit || 0) * expectedNdrRate) : Number(row.breakEvenCpa || 0);
-    const profitLossVal = expectedNdrRate !== null ? (commissionVal - Number(row.allocatedAdSpend || row.adSpend || 0)) : Number(row.profitLoss || row.netProfit || 0);
-    const ndrPctVal = expectedNdrRate !== null ? (expectedNdrRate * 100) : Number(row.ndrPct || 0);
+    const placedCountVal = window.DashboardOrderMetrics
+      ? window.DashboardOrderMetrics.netOrders(row)
+      : Number(row.netOrderCount || row.placedCount || 0);
+    const totalOrderCountVal = Number(row.totalOrderCount != null ? row.totalOrderCount : row.totalOrders || placedCountVal);
+    const deliveriesVal = Number(row.deliveredCount || 0);
+    const commissionVal = Number(row.commission || 0);
+    const breakEvenCpaVal = Number(row.breakEvenCpa || 0);
+    const profitLossVal = Number(row.profitLoss || row.netProfit || 0);
+    const ndrPctVal = Number(row.ndrPct || 0);
 
     const failedCountVal = Number(row.failedCount || 0);
     const canceledCountVal = Number(row.canceledCount || 0);
@@ -884,12 +938,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
     const waitingCountVal = Number(row.waitingCount || 0);
     const pendingCountVal = Number(row.pendingCount || 0);
 
-    const drRateVal = expectedNdrRate !== null
-      ? roundTo(confirmedCountVal > 0 ? (deliveriesVal / confirmedCountVal * 100) : 0, 1)
-      : roundTo(row.drRate || 0, 1);
-    const deliveryPctVal = expectedNdrRate !== null
-      ? roundTo(placedCountVal > 0 ? (deliveriesVal / placedCountVal * 100) : 0, 1)
-      : roundTo(row.deliveryPct || 0, 1);
+    const drRateVal = roundTo(row.drRate || 0, 1);
+    const deliveryPctVal = roundTo(row.deliveryPct || 0, 1);
 
     const rank = Number(row.rank || 0);
     const rankIdx = Math.min(Math.max(rank - 1, 0), 4);
@@ -905,15 +955,18 @@ window.renderSection5 = function (mountEl, data, ctx) {
       legacyKey: row.legacyKey || row.sku || row.name,
       sku: row.sku || '',
       rank: rank,
-      name: row.name || s5Txt('Unknown Product', 'منتج غير معروف'),
+      name: productDisplayName(row.sku, row.name),
       cat: 'SKU: ' + (row.sku || 'N/A'),
       deliveries: deliveriesVal,
       placedCount: placedCountVal,
+      totalOrderCount: totalOrderCountVal,
       pieces: Number(row.totalPieces || 0),
       sharePct: 0,
       revenue: commissionVal,
       commission: commissionVal,
       deliveredCount: deliveriesVal,
+      actualDeliveredCount: Number(row.actualDeliveredCount != null ? row.actualDeliveredCount : deliveriesVal),
+      actualCommission: Number(row.actualCommission != null ? row.actualCommission : commissionVal),
       totalPieces: Number(row.totalPieces || 0),
       failedCount: failedCountVal,
       canceledCount: canceledCountVal,
@@ -922,8 +975,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
       processingCount: processingCountVal,
       waitingCount: waitingCountVal,
       pendingCount: pendingCountVal,
-      statusTotalCount: Number(row.statusTotalCount || row.totalOrderCount || row.placedCount || row.totalOrders || 0),
-      netOrderCount: Number(row.netOrderCount || 0),
+      statusTotalCount: Number(row.statusTotalCount != null ? row.statusTotalCount : placedCountVal),
+      netOrderCount: placedCountVal,
       confirmationStatusCount: Number(row.confirmationStatusCount || row.confirmedCount || 0),
       cancelStatusCount: Number(row.cancelStatusCount || row.canceledCount || 0),
       pendingStatusCount: Number(row.pendingStatusCount || row.pendingCount || 0),
@@ -933,6 +986,12 @@ window.renderSection5 = function (mountEl, data, ctx) {
       ndrPct: roundTo(ndrPctVal, 1),
       drRate: drRateVal,
       deliveryPct: deliveryPctVal,
+      ndrBaseOrders: Number(row.ndrBaseOrders || 0),
+      ndrDeliveredOrders: Number(row.ndrDeliveredOrders || 0),
+      drBaseOrders: Number(row.drBaseOrders || 0),
+      drDeliveredOrders: Number(row.drDeliveredOrders || 0),
+      rateMode: row.rateMode || 'actual',
+      rateSource: row.rateSource || 'product',
       scalingScore: Number(row.scalingScore || 0),
       allocatedAdSpend: roundTo(row.allocatedAdSpend || row.adSpend, 2),
       cpa: roundTo(row.cpa, 2),
@@ -954,7 +1013,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
     return {
       page: currentPage,
       pageSize: PAGE_SIZE,
-      sortBy: sortState.field || 'deliveredCount',
+      sortBy: sortState.field === 'default' ? 'rank' : (sortState.field || 'deliveredCount'),
       sortDir: sortState.dir || 'desc',
       refreshRevision: backendProductsRefreshRevision,
       productFinancialCurrency: currency,
@@ -973,11 +1032,16 @@ window.renderSection5 = function (mountEl, data, ctx) {
     const params = backendProductParams();
     const key = JSON.stringify(params);
     if (!force && backendProductsActive && backendProductsQueryKey === key) return Promise.resolve(true);
+    if (!force && backendProductsPendingPromise && backendProductsPendingKey === key) return backendProductsPendingPromise;
     const requestId = ++backendProductsRequest;
+    backendProductsPendingKey = key;
     backendProductsLoading = true;
-    return window.DashboardQueryRuntime.query('products', params, data).then(function (result) {
+    backendProductsPendingPromise = window.DashboardQueryRuntime.query('products', params, data).then(function (result) {
       if (requestId !== backendProductsRequest || !mountEl.isConnected || mountEl._s5RenderToken !== renderToken) return false;
       backendProductsLoading = false;
+      backendProductsPendingPromise = null;
+      backendProductsPendingKey = '';
+      if (result && result.stale) return backendProductsActive;
       if (!result || !result.ok) {
         backendProductsActive = false;
         return false;
@@ -995,10 +1059,13 @@ window.renderSection5 = function (mountEl, data, ctx) {
       return true;
     }).catch(function (error) {
       backendProductsLoading = false;
+      backendProductsPendingPromise = null;
+      backendProductsPendingKey = '';
       backendProductsActive = false;
       console.warn('[Products] backend query failed; using legacy data', error && error.message ? error.message : error);
       return false;
     });
+    return backendProductsPendingPromise;
   }
 
   function loadBackendProductDetails(productKeys) {
@@ -1007,21 +1074,14 @@ window.renderSection5 = function (mountEl, data, ctx) {
     }
     const keys = (productKeys || []).filter(Boolean);
     const missing = keys.filter(function (key) { return !backendProductDetailsCache.has(key); });
-    if (!missing.length) {
-      const cached = {};
-      keys.forEach(function (key) { cached[key] = backendProductDetailsCache.get(key); });
-      return Promise.resolve(cached);
-    }
-    return window.DashboardQueryRuntime.query('product-details', { productKeys: missing }, data).then(function (result) {
-      if (!result || !result.ok) return {};
-      Object.keys(result.details || {}).forEach(function (key) {
-        const detail = result.details[key] || {};
-        backendProductDetailsCache.set(key, detail);
+
+    function applyDetails(targetKeys, detailsMap) {
+      targetKeys.forEach(function (key) {
+        const detail = detailsMap[key] || {};
         const product = PRODUCT_BY_KEY[key];
         if (product) {
           Object.assign(product, detail);
           // Invalidate any cached panel HTML that was built before details arrived
-          // (stale cache would show "No data" for cityBreakdown / piecesBreakdown).
           if (detailPanelCache && detailPanelCache.size) {
             const stalePrefix = String(product.key || product.sku || product.name || key) + '|';
             detailPanelCache.forEach(function (_v, cacheKey) {
@@ -1030,7 +1090,26 @@ window.renderSection5 = function (mountEl, data, ctx) {
           }
         }
       });
-      return result.details || {};
+    }
+
+    if (!missing.length) {
+      const cached = {};
+      keys.forEach(function (key) { cached[key] = backendProductDetailsCache.get(key); });
+      applyDetails(keys, cached);
+      return Promise.resolve(cached);
+    }
+    return window.DashboardQueryRuntime.query('product-details', { productKeys: missing }, data).then(function (result) {
+      if (!result || !result.ok) return {};
+      const newDetails = result.details || {};
+      Object.keys(newDetails).forEach(function (key) {
+        backendProductDetailsCache.set(key, newDetails[key] || {});
+      });
+      const allDetails = {};
+      keys.forEach(function (key) {
+        allDetails[key] = backendProductDetailsCache.get(key) || {};
+      });
+      applyDetails(keys, allDetails);
+      return allDetails;
     }).catch(function () { return {}; });
   }
 
@@ -1075,6 +1154,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
     if (!backendProductsEnabled) return false;
     backendProductsRefreshRevision += 1;
     backendProductsQueryKey = '';
+    backendProductsPendingKey = '';
+    backendProductsPendingPromise = null;
     backendProductDetailsCache.clear();
     requestBackendProductPage(force !== false).then(function (ok) {
       if (ok && mountEl.isConnected && mountEl._s5RenderToken === renderToken) {
@@ -1100,7 +1181,9 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
   // ── Health row styling ────────────────────────────────────────────────────
   function healthRowStyle(p) {
-    const totalOrders = p.placedCount || p.statusTotalCount || p.totalOrderCount || 0;
+    const totalOrders = window.DashboardOrderMetrics
+      ? window.DashboardOrderMetrics.netOrders(p)
+      : (p.netOrderCount || p.placedCount || p.statusTotalCount || 0);
     if (totalOrders === 0) {
       return { border: 'rgba(255,255,255,0.05)', shadow: 'none', bg: 'rgba(255,255,255,0.012)', opacity: '0.45' };
     }
@@ -1217,7 +1300,16 @@ window.renderSection5 = function (mountEl, data, ctx) {
     return index;
   }
 
+  function analysisPlaceholderHTML(label, loading) {
+    return `<div class="${loading ? 's5-analysis-loading' : 's5-analysis-empty'}" style="color:rgba(255,255,255,0.3);font-size:12px;font-style:${loading ? 'italic' : 'normal'};padding:8px 0">${label}</div>`;
+  }
+
   function citiesHTML(p) {
+    if (!p || !p.cityBreakdown || !p.cityBreakdown.length) {
+      return p && p._backendProduct
+        ? analysisPlaceholderHTML(s5Txt('Loading city data...', 'جار تحميل بيانات المدن...'), true)
+        : analysisPlaceholderHTML(s5Txt('No data', 'لا توجد بيانات'), false);
+    }
     if (!p.cityBreakdown || !p.cityBreakdown.length) return `<div style="color:rgba(255,255,255,0.3);font-size:12px">${s5Txt('No data', 'لا توجد بيانات')}</div>`;
     const topCities = p.cityBreakdown.slice(0, 5);
     const maxCount = topCities[0].count;
@@ -1281,7 +1373,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
       const barPct = Math.round((c.count / maxCount) * 100);
       const colors = ['#f59e0b','#a855f7','#14b8a6'];
       const color  = colors[i] || '#8892a4';
-      const stats  = _getCityStats(c.name);
+      const stats  = _getCityStats(c);
       const confirmedDisplay = stats ? stats.confirmed.toLocaleString('en-US') : '-';
       const crVal = stats ? stats.confirmationRate : null;
       const crText = crVal === null ? '-' : crVal.toFixed(1) + '%';
@@ -1314,6 +1406,11 @@ window.renderSection5 = function (mountEl, data, ctx) {
   }
 
   function piecesBreakdownHTML(p) {
+    if (!p || !p.piecesBreakdown || !p.piecesBreakdown.length) {
+      return p && p._backendProduct
+        ? analysisPlaceholderHTML(s5Txt('Loading quantity data...', 'جار تحميل بيانات الكميات...'), true)
+        : analysisPlaceholderHTML(s5Txt('No quantity data', 'لا توجد بيانات كميات'), false);
+    }
     if (!p.piecesBreakdown || !p.piecesBreakdown.length) return '';
     const total = p.piecesBreakdown.reduce((s, x) => s + x.count, 0) || 1;
     const maxCount = p.piecesBreakdown.reduce((max, x) => Math.max(max, Number(x.count) || 0), 0) || 1;
@@ -1364,15 +1461,21 @@ window.renderSection5 = function (mountEl, data, ctx) {
     return String((p && (p.key || p.sku || p.name)) || '');
   }
 
-  function quantityCitiesHTML(p) {
+  function quantityCitiesHTML(p, options) {
+    options = options || {};
+    if (!p || !p.quantityCityBreakdown || !p.quantityCityBreakdown.length) {
+      return p && p._backendProduct
+        ? analysisPlaceholderHTML(s5Txt('Loading quantity-city data...', 'جار تحميل بيانات المدن حسب الكمية...'), true)
+        : analysisPlaceholderHTML(s5Txt('No data', 'لا توجد بيانات'), false);
+    }
     if (!p.quantityCityBreakdown || !p.quantityCityBreakdown.length) {
       return `<div style="color:rgba(255,255,255,0.3);font-size:12px">${s5Txt('No data', 'لا توجد بيانات')}</div>`;
     }
 
-    const PAGE_SIZE_QTY_CITIES = 4;
+    const PAGE_SIZE_QTY_CITIES = options.pageSize || 4;
     const totalItems = p.quantityCityBreakdown.length;
     const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE_QTY_CITIES));
-    const stateKey = productKeyForState(p);
+    const stateKey = quantityCityPageStateKey(p, options.scope || 'detail');
     const currentQtyPage = Math.min(
       totalPages,
       Math.max(1, Number(quantityCityPageByProduct[stateKey] || 1) || 1)
@@ -1380,6 +1483,9 @@ window.renderSection5 = function (mountEl, data, ctx) {
     quantityCityPageByProduct[stateKey] = currentQtyPage;
     const startIndex = (currentQtyPage - 1) * PAGE_SIZE_QTY_CITIES;
     const pageItems = p.quantityCityBreakdown.slice(startIndex, startIndex + PAGE_SIZE_QTY_CITIES);
+    const pageButtonClass = options.pageButtonClass || 's5-qty-city-page-btn';
+    const prevClass = options.prevClass || 's5-qty-city-prev';
+    const nextClass = options.nextClass || 's5-qty-city-next';
     const paginationHtml = totalPages > 1 && window.renderDashboardPagination
       ? `<div class="s5-qty-city-pagination-wrap" style="margin-top:10px;">${window.renderDashboardPagination({
           currentPage: currentQtyPage,
@@ -1388,14 +1494,15 @@ window.renderSection5 = function (mountEl, data, ctx) {
           startItem: startIndex + 1,
           endItem: Math.min(startIndex + PAGE_SIZE_QTY_CITIES, totalItems),
           itemLabel: s5Txt('quantity groups', 'مجموعات كمية'),
-          pageButtonClass: 's5-qty-city-page-btn',
-          prevClass: 's5-qty-city-prev',
-          nextClass: 's5-qty-city-next',
-          className: 's5-qty-city-pagination'
+          pageButtonClass: pageButtonClass,
+          prevClass: prevClass,
+          nextClass: nextClass,
+          className: options.className || 's5-qty-city-pagination'
         })}</div>`
       : '';
 
-    return `<div class="s5-qty-city-grid" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+    const gridClassName = 's5-qty-city-grid' + (options.gridClassName ? ' ' + options.gridClassName : '');
+    return `<div class="${gridClassName}" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
       ${pageItems.map(item => {
         const cities = (item.cities || []).slice(0, 5);
         const maxCount = cities.length ? cities[0].count : 1;
@@ -1490,7 +1597,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
   function cachedDetailPanelContent(product) {
     var stateKey = productKeyForState(product);
-    var key = stateKey + '|' + selectedCurrency() + '|' + filterState.statusKey + '|' + (quantityCityPageByProduct[stateKey] || 1);
+    var qtyStateKey = quantityCityPageStateKey(product, 'detail');
+    var key = stateKey + '|' + selectedCurrency() + '|' + filterState.statusKey + '|' + (quantityCityPageByProduct[qtyStateKey] || 1);
     if (detailPanelCache.has(key)) return detailPanelCache.get(key);
     var html = detailPanelContent(product);
     detailPanelCache.set(key, html);
@@ -1506,7 +1614,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
   function bindQuantityCityPagination(panel, product) {
     if (!panel || !product || !window.bindDashboardPagination) return;
-    var key = productKeyForState(product);
+    var key = quantityCityPageStateKey(product, 'detail');
     window.bindDashboardPagination(panel, {
       pageButtonSelector: '.s5-qty-city-page-btn',
       prevSelector: '.s5-qty-city-prev',
@@ -1908,7 +2016,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
     { value: 'scalingScore',    label: s5Txt('Scale Index', 'مؤشر التوسع'), icon: '*' },
     { value: 'cancelPct',       label: s5Txt('Cancellation Rate', 'نسبة الإلغاء'),   icon: '❌' },
     { value: 'pendingPct',      label: s5Txt('Pending Rate', 'نسبة قيد الانتظار'), icon: '...' },
-    { value: 'netOrderCount', label: s5Txt('Total Orders', 'إجمالي الطلبات'), icon: '📋' },
+    { value: 'netOrderCount', label: s5Txt('Net Orders', 'صافي الطلبات'), icon: '📋' },
     { value: 'totalPieces',     label: s5Txt('Quantity', 'القطع'), icon: 'BOX' },
     { value: 'confirmationPct', label: s5Txt('Confirmation Rate', 'نسبة التأكيد'),   icon: '☑️' },
     { value: 'failedCount',     label: p5Txt('failedOrders'), icon: '!' },
@@ -2278,14 +2386,22 @@ window.renderSection5 = function (mountEl, data, ctx) {
       .s5-qty-city-grid {
         grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
       }
+      .s5-modal-analysis-wide {
+        grid-column: 1 / -1 !important;
+      }
+      .s5-qty-city-grid.s5-modal-qty-city-grid {
+        grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)) !important;
+      }
       .s5-quick-analysis-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
       }
       @media (max-width: 1180px) {
         .s5-qty-city-grid, .s5-quick-analysis-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+        .s5-qty-city-grid.s5-modal-qty-city-grid { grid-template-columns: 1fr !important; }
       }
       @media (max-width: 760px) {
         .s5-qty-city-grid, .s5-quick-analysis-grid { grid-template-columns: 1fr !important; }
+        .s5-modal-analysis-grid { grid-template-columns: 1fr !important; padding: 16px !important; }
       }
 
       #s5-search:focus {
@@ -2605,7 +2721,15 @@ window.renderSection5 = function (mountEl, data, ctx) {
         <div style="padding:0 28px 22px;width:max-content;min-width:100%;box-sizing:border-box">
           ${columnHeadersHTML()}
           <div id="s5-rows">
-            ${initialPageProducts.map((p, i) => productRowHTML(p, i)).join('')}
+            ${initialPageProducts.length ? initialPageProducts.map((p, i) => productRowHTML(p, i)).join('') : `
+              <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;margin-bottom:12px;">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" style="margin-bottom:16px;">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <div style="font-size:16px;font-weight:800;color:rgba(255,255,255,0.6);margin-bottom:8px;">${s5Txt('No products available yet', 'لا توجد منتجات متاحة بعد')}</div>
+                <div style="font-size:12px;color:rgba(255,255,255,0.3);">${s5Txt('Update the dashboard to load real product performance for this account and range.', 'حدّث لوحة التحكم لتحميل أداء المنتجات الحقيقي لهذا الحساب وهذه الفترة.')}</div>
+              </div>`}
           </div>
           <div id="s5-pagination-wrap">${paginationHTML(initialProductList)}</div>
 
@@ -2661,7 +2785,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         if (filterBarEl && !options.keepFilterBar) {
           const list = currentList();
           filterBarEl.outerHTML = filterBarHTML(list);
-          refreshProductControls();
+          bindFilterBar();
         }
 
         requestBackendProductPage(false).then(function (ok) {
@@ -2679,6 +2803,9 @@ window.renderSection5 = function (mountEl, data, ctx) {
     }
     const token = ++pageRenderToken;
     const list = currentList();
+    const pageCount = totalProductPages(list);
+    if (currentPage > pageCount) currentPage = pageCount;
+    if (currentPage < 1) currentPage = 1;
     const visibleProducts = pagedProducts(list);
 
     // Re-render filter bar so pills and dropdown show correct active state
@@ -2687,7 +2814,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
       // Clean up any previous sort-menu document listener before blowing away the DOM
       if (_sortMenuCleanup) { _sortMenuCleanup(); _sortMenuCleanup = null; }
       filterBarEl.outerHTML = filterBarHTML(list);
-      refreshProductControls();
+      bindFilterBar();
     } else if (options.keepFilterBar) {
       // Patch pills and sort controls in-place without rebuilding the filter bar
       _refreshFilterBarInPlace(list);
@@ -2706,7 +2833,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
             <div style="font-size:16px;font-weight:800;color:rgba(255,255,255,0.6);margin-bottom:8px;">${s5Txt('No products match the filter', 'لا توجد منتجات تطابق الفلتر')}</div>
-            <div style="font-size:12px;color:rgba(255,255,255,0.3);">جرب تغيير خيارات التصفية أو البحث لعرض النتائج.</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.3);">${s5Txt('Try changing the filters or search to show results.', 'جرب تغيير خيارات التصفية أو البحث لعرض النتائج.')}</div>
           </div>`;
       } else {
         rowsEl.innerHTML = visibleProducts.map((p, i) => productRowHTML(p, i)).join('');
@@ -3002,7 +3129,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
   }
 
 
-  refreshProductControls();
+  bindFilterBar();
 
   // ── Expand buttons ────────────────────────────────────────────────────────
   // Lightweight skeleton shown while quick-analysis content renders in next rAF
@@ -3100,6 +3227,59 @@ window.renderSection5 = function (mountEl, data, ctx) {
     _s5SelectedProductKey = null;
   }
 
+  function resolveCitiesProductFilterKey(product, fallbackKey) {
+    var candidates = [
+      fallbackKey,
+      product && product.key,
+      product && product.sku,
+      product && product.legacyKey,
+      product && product.name
+    ].filter(Boolean).map(function (value) {
+      return String(value).trim().toLowerCase();
+    });
+    var normalizedCandidates = candidates.map(textKey).filter(Boolean);
+
+    function candidateMatch(value) {
+      value = String(value || '').trim().toLowerCase();
+      if (!value) return false;
+      if (candidates.indexOf(value) !== -1) return true;
+      var normalized = textKey(value);
+      return normalized && normalizedCandidates.some(function (candidate) {
+        return candidate === normalized ||
+          (candidate.length >= 3 && normalized.length >= 3 &&
+            (candidate.indexOf(normalized) !== -1 || normalized.indexOf(candidate) !== -1));
+      });
+    }
+
+    var geoData = window.dashboardGeoData || {};
+    var geoMap = geoData.geo && geoData.geo.geoProductMap;
+    if (geoMap) {
+      var cities = Object.keys(geoMap);
+      for (var c = 0; c < cities.length; c++) {
+        var products = geoMap[cities[c]] || {};
+        var keys = Object.keys(products);
+        for (var k = 0; k < keys.length; k++) {
+          var cell = products[keys[k]];
+          if (candidateMatch(keys[k]) && cell && ((cell.orders || 0) > 0 || (cell.delivered || 0) > 0)) {
+            return keys[k];
+          }
+        }
+      }
+    }
+
+    var ranked = geoData.products && Array.isArray(geoData.products.rankedList)
+      ? geoData.products.rankedList
+      : [];
+    for (var i = 0; i < ranked.length; i++) {
+      var item = ranked[i] || {};
+      if ([item.key, item.sku, item.name].some(candidateMatch)) {
+        return item.key || item.sku || item.name || fallbackKey;
+      }
+    }
+
+    return fallbackKey || '';
+  }
+
   function _selectS5Row(productKey) {
     _clearS5Selection();
     _s5SelectedProductKey = productKey;
@@ -3119,7 +3299,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
     if (mountEl._s5DelegatedBound) return;
     mountEl._s5DelegatedBound = true;
 
-    mountEl.addEventListener('click', function (e) {
+    function handleDelegatedClick(e) {
       const target = e.target && e.target.closest ? e.target : null;
       if (!target) return;
 
@@ -3213,7 +3393,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         const row = panel && panel.previousElementSibling;
         const product = row && PRODUCT_BY_KEY[row.dataset.productKey];
         if (!panel || !product) return;
-        const key = productKeyForState(product);
+        const key = quantityCityPageStateKey(product, 'detail');
         if (qtyPage.classList.contains('s5-qty-city-page-btn')) quantityCityPageByProduct[key] = Number(qtyPage.dataset.page) || 1;
         else if (qtyPage.classList.contains('s5-qty-city-prev')) quantityCityPageByProduct[key] = Math.max(1, Number(quantityCityPageByProduct[key] || 1) - 1);
         else quantityCityPageByProduct[key] = Number(quantityCityPageByProduct[key] || 1) + 1;
@@ -3285,9 +3465,11 @@ window.renderSection5 = function (mountEl, data, ctx) {
       if (mapButton) {
         e.stopPropagation();
         const key = mapButton.dataset.productKey || productKey;
+        const product = PRODUCT_BY_KEY[key] || PRODUCT_BY_KEY[productKey] || null;
+        const cityProductKey = resolveCitiesProductFilterKey(product, key);
         if (window.DashboardFilterBus) {
           window.DashboardFilterBus.setState({
-            selectedProduct: key,
+            selectedProduct: cityProductKey,
             mapMode: window.DashboardFilterBus.MODES ? window.DashboardFilterBus.MODES.PRODUCT : 'product'
           });
         }
@@ -3325,15 +3507,26 @@ window.renderSection5 = function (mountEl, data, ctx) {
           });
         }
       }
-    });
+    }
 
-    mountEl.addEventListener('input', function (e) {
+    function handleDelegatedInput(e) {
       // Search is handled with debounce in bindFilterBar — skip duplicate here
       if (e.target.matches('#s5-search')) return;
-    });
+    }
 
-    mountEl.addEventListener('change', function (e) {
+    function handleDelegatedChange(e) {
       if (e.target.matches('#s5-currency-native')) setProductCurrency(e.target.value);
+    }
+
+    mountEl.addEventListener('click', handleDelegatedClick);
+    mountEl.addEventListener('input', handleDelegatedInput);
+    mountEl.addEventListener('change', handleDelegatedChange);
+
+    addProductCleanup(function () {
+      mountEl.removeEventListener('click', handleDelegatedClick);
+      mountEl.removeEventListener('input', handleDelegatedInput);
+      mountEl.removeEventListener('change', handleDelegatedChange);
+      mountEl._s5DelegatedBound = false;
     });
   }
   _bindProductRowClicks();
@@ -3384,17 +3577,28 @@ window.renderSection5 = function (mountEl, data, ctx) {
     const needle = aiTextKey(query);
     if (!needle) return '';
     if (PRODUCT_BY_KEY[query]) return query;
-    const exact = PRODUCTS_RAW.find(function (p) {
-      return [p.key, p.sku, p.name, p.cat].some(function (value) {
+    const normalizedNeedle = s5SearchKey(query);
+    const sourceMap = new Map();
+    PRODUCTS_RAW.concat(backendProductsRows || [], backendProductOptions || []).forEach(function (product) {
+      if (!product) return;
+      sourceMap.set(product.key || product.sku || product.name, product);
+    });
+    Object.keys(PRODUCT_BY_KEY).forEach(function (key) {
+      var product = PRODUCT_BY_KEY[key];
+      if (product) sourceMap.set(product.key || product.sku || product.name || key, product);
+    });
+    const source = Array.from(sourceMap.values());
+    const exact = source.find(function (p) {
+      return [p.key, p.sku, p.name, p.displayName, p.productName, p.cat].some(function (value) {
         return aiTextKey(value) === needle;
       });
     });
     if (exact) return exact.key || exact.sku || exact.name || '';
-    const partial = PRODUCTS_RAW.find(function (p) {
-      return [p.key, p.sku, p.name, p.cat].some(function (value) {
+    const partial = source.find(function (p) {
+      return [p.key, p.sku, p.name, p.displayName, p.productName, p.cat].some(function (value) {
         const haystack = aiTextKey(value);
         return haystack && (haystack.indexOf(needle) !== -1 || needle.indexOf(haystack) !== -1);
-      });
+      }) || (normalizedNeedle && productSearchKey(p).indexOf(normalizedNeedle) !== -1);
     });
     return partial ? (partial.key || partial.sku || partial.name || '') : '';
   }
@@ -3666,7 +3870,10 @@ window.renderSection5 = function (mountEl, data, ctx) {
         var name = pr.name || s5Txt('Unnamed', 'بدون اسم');
         var sku = pr.sku || '';
         var selected = String(stateKey) === key;
-        return '<div class="s5-cmp-dd-option' + (selected ? ' selected' : '') + '" data-key="' + attr(key) + '" data-search="' + attr(textKey(name + ' ' + sku)) + '" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;cursor:pointer;background:' + (selected ? sideColor + '18' : 'transparent') + ';border:1px solid ' + (selected ? sideColor + '44' : 'transparent') + ';margin-bottom:3px">' +
+        if (!pr._searchKey) {
+          pr._searchKey = textKey(name + ' ' + sku);
+        }
+        return '<div class="s5-cmp-dd-option' + (selected ? ' selected' : '') + '" data-key="' + attr(key) + '" data-search="' + attr(pr._searchKey) + '" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;cursor:pointer;background:' + (selected ? sideColor + '18' : 'transparent') + ';border:1px solid ' + (selected ? sideColor + '44' : 'transparent') + ';margin-bottom:3px">' +
           '<span style="min-width:0;flex:1"><span style="display:block;font-size:12px;font-weight:850;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(name) + '</span>' +
           (sku ? '<span style="display:block;font-size:10px;color:rgba(255,255,255,0.38);font-weight:700;margin-top:1px">SKU: ' + esc(sku) + '</span>' : '') + '</span>' +
           (selected ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="' + sideColor + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '') +
@@ -3934,7 +4141,6 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
     function pct(n, d) { return (+(n || 0)).toFixed(d != null ? d : 1) + '%'; }
     function num(n)     { return Math.round(n || 0).toLocaleString('en-US'); }
-    function sar(n)     { return productMoney(commissionInCurrency(n || 0)); }
     function sb(score, type) { return (window.scoreBadge ? window.scoreBadge(score, type) : '<span>' + score + '</span>'); }
 
     function ndrColor(v) { return window.dashboardRateColor ? window.dashboardRateColor(v) : (v >= 40 ? '#22d3ee' : v >= 30 ? '#00e676' : v >= 20 ? '#f59e0b' : '#ef4444'); }
@@ -3943,7 +4149,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
     function modalHTML(p) {
       if (!p) return '';
       var geoD = window.dashboardGeoData;
-      var gpm  = geoD && geoD.geo && geoD.geo.geoProductMap;
+      var gpm  = null;
       // geoProductMap keys are lowercase (aggregator normalizes them) — match that.
       var prodKey = (p.legacyKey || p.sku || p.key || p.name || '').toLowerCase();
 
@@ -4003,7 +4209,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         }
       }
       // Fallback to cityBreakdown returned by backend product-details query
-      if (!cityRows && Array.isArray(p.cityBreakdown) && p.cityBreakdown.length) {
+      if (false && !cityRows && Array.isArray(p.cityBreakdown) && p.cityBreakdown.length) {
         p.cityBreakdown.slice(0, 8).forEach(function (c) {
           var orders = Number(c.count || c.orders || 0);
           var cityNdr = Number(c.ndr || 0);
@@ -4018,7 +4224,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
       /* Pieces breakdown (Quantity Distribution) */
       var piecesHtml = '';
-      if (Array.isArray(p.piecesBreakdown) && p.piecesBreakdown.length) {
+      if (false && Array.isArray(p.piecesBreakdown) && p.piecesBreakdown.length) {
         var totalPieces = p.piecesBreakdown.reduce(function (s, x) { return s + (Number(x.count) || 0); }, 0) || 1;
         var maxPiece = p.piecesBreakdown.reduce(function (m, x) { return Math.max(m, Number(x.count) || 0); }, 0) || 1;
         piecesHtml = p.piecesBreakdown.map(function (item) {
@@ -4046,7 +4252,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
       /* Quantity × City breakdown */
       var qtyCityHtml = '';
-      if (Array.isArray(p.quantityCityBreakdown) && p.quantityCityBreakdown.length) {
+      if (false && Array.isArray(p.quantityCityBreakdown) && p.quantityCityBreakdown.length) {
         qtyCityHtml = p.quantityCityBreakdown.slice(0, 4).map(function (item) {
           var topCities = (item.cities || []).slice(0, 3).map(function (c) {
             return '<div style="display:flex;justify-content:space-between;align-items:center;' +
@@ -4148,8 +4354,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
           }).join('') +
         '</div>' +
 
-        /* Body: strict 2×2 grid — Funnel | Cities / Quantity Distribution | Qty×City */
-        '<div style="padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:20px;">' +
+        /* Body: Funnel | Cities / Quantity Distribution / Qty×City */
+        '<div class="s5-modal-analysis-grid" style="padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:20px;">' +
 
           /* Funnel */
           '<div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;padding:16px 18px;">' +
@@ -4157,20 +4363,16 @@ window.renderSection5 = function (mountEl, data, ctx) {
               '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 3H2l8 9.46V19l4 2V12.46L22 3z"/></svg>' +
               s5Txt('Order Funnel', 'مسار الطلبات') +
             '</div>' +
-            funnelRows +
+            funnelHTML(p) +
           '</div>' +
 
           /* City breakdown */
           '<div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;padding:16px 18px;">' +
             '<div style="font-size:12px;font-weight:800;color:rgba(255,255,255,0.45);margin-bottom:14px;display:flex;align-items:center;gap:6px;">' +
               '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>' +
-              s5Txt('City Performance', 'أداء المدن') +
+              s5Txt('Top Cities', 'أبرز المدن') +
             '</div>' +
-            (cityRows
-              ? '<div style="font-size:10px;color:rgba(255,255,255,0.3);display:grid;grid-template-columns:1fr 60px 60px 70px;gap:8px;padding:0 10px;margin-bottom:6px;">' +
-                  '<span>' + s5Txt('City', 'المدينة') + '</span><span style="text-align:center">' + s5Txt('Orders', 'طلبات') + '</span><span style="text-align:center">NDR</span><span style="text-align:center">' + s5Txt('Scale', 'توسع') + '</span>' +
-                '</div>' + cityRows + cityPaginationHtml
-              : cityLoadingPlaceholder) +
+            citiesHTML(p) +
           '</div>' +
 
           /* Quantity Distribution */
@@ -4179,22 +4381,23 @@ window.renderSection5 = function (mountEl, data, ctx) {
               '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="6" height="18"/><rect x="9" y="8" width="6" height="13"/><rect x="16" y="13" width="6" height="8"/></svg>' +
               s5Txt('Quantity Distribution', 'توزيع الكميات') +
             '</div>' +
-            (piecesHtml
-              ? '<div style="font-size:9px;color:rgba(255,255,255,0.25);display:flex;justify-content:flex-end;gap:10px;margin-bottom:5px;">' +
-                  '<span>' + s5Txt('Count', 'عدد') + '</span><span>%</span><span>NDR</span>' +
-                '</div>' + piecesHtml
-              : '<div style="color:rgba(255,255,255,0.25);font-size:12px;padding:12px 0">' + s5Txt('No quantity data', 'لا توجد بيانات كميات') + '</div>') +
+            piecesBreakdownHTML(p) +
           '</div>' +
 
           /* Top Cities by Quantity */
-          '<div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;padding:16px 18px;">' +
+          '<div class="s5-modal-analysis-wide" style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;padding:16px 18px;">' +
             '<div style="font-size:12px;font-weight:800;color:rgba(255,255,255,0.45);margin-bottom:14px;display:flex;align-items:center;gap:6px;">' +
               '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' +
               s5Txt('Top Cities by Quantity', 'أبرز المدن حسب الكمية') +
             '</div>' +
-            (qtyCityHtml
-              ? qtyCityHtml
-              : '<div style="color:rgba(255,255,255,0.25);font-size:12px;padding:12px 0">' + s5Txt('No data', 'لا توجد بيانات') + '</div>') +
+            quantityCitiesHTML(p, {
+              scope: 'modal',
+              pageButtonClass: 's5-modal-qty-city-page-btn',
+              prevClass: 's5-modal-qty-city-prev',
+              nextClass: 's5-modal-qty-city-next',
+              gridClassName: 's5-modal-qty-city-grid',
+              className: 'dash-pagination-compact s5-modal-qty-city-pagination'
+            }) +
           '</div>' +
 
         '</div>' +
@@ -4214,23 +4417,34 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
     function bindModalCityPagination() {
       if (window.bindDashboardPagination) {
+        var product = PRODUCT_BY_KEY[currentModalProductKey] || null;
+        var qtyStateKey = product ? quantityCityPageStateKey(product, 'modal') : '';
         window.bindDashboardPagination(modal, {
-          pageButtonSelector: '.s5-modal-city-page-btn',
-          prevSelector: '.s5-modal-city-prev',
-          nextSelector: '.s5-modal-city-next',
-          onPage: function (p) { currentModalCityPage = p; refreshModal(); },
-          onPrev: function () { currentModalCityPage--; refreshModal(); },
-          onNext: function () { currentModalCityPage++; refreshModal(); }
+          pageButtonSelector: '.s5-modal-qty-city-page-btn',
+          prevSelector: '.s5-modal-qty-city-prev',
+          nextSelector: '.s5-modal-qty-city-next',
+          onPage: function (page) {
+            if (qtyStateKey) quantityCityPageByProduct[qtyStateKey] = page;
+            refreshModal();
+          },
+          onPrev: function () {
+            if (qtyStateKey) quantityCityPageByProduct[qtyStateKey] = Math.max(1, Number(quantityCityPageByProduct[qtyStateKey] || 1) - 1);
+            refreshModal();
+          },
+          onNext: function () {
+            if (qtyStateKey) quantityCityPageByProduct[qtyStateKey] = Number(quantityCityPageByProduct[qtyStateKey] || 1) + 1;
+            refreshModal();
+          }
         });
       }
     }
 
     function openModal(productKey) {
       currentModalProductKey = productKey;
-      currentModalCityPage = 1;
 
       var p = PRODUCT_BY_KEY[productKey] || null;
       if (!p) return;
+      quantityCityPageByProduct[quantityCityPageStateKey(p, 'modal')] = 1;
 
       // Show the overlay immediately (feels instant) then paint content on next frame
       modal.style.display = 'flex';

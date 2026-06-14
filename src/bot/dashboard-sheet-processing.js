@@ -134,6 +134,24 @@ function normalizeSkuNameMap(value) {
   return map;
 }
 
+function applySkuNameCacheFallback(rows, cachedSkuNameMap = {}) {
+  const cachedNames = normalizeSkuNameMap(cachedSkuNameMap);
+  let cacheHits = 0;
+  const nextRows = (Array.isArray(rows) ? rows : []).map((row) => {
+    const next = { ...row };
+    const sku = String(next.sku || next.products || "").trim();
+    const name = cachedNames[sku] || "";
+    if (name && (!next.productName || next.productName === sku || next.productName === next.products)) {
+      next.productName = name;
+      cacheHits++;
+    } else if (!next.productName && sku) {
+      next.productName = sku;
+    }
+    return next;
+  });
+  return { rows: nextRows, cacheHits, cacheSkuNames: Object.keys(cachedNames).length };
+}
+
 function parseEasyOrdersEnrichment(buffer, nameDateFrom, nameDateTo, paymentDateFrom, paymentDateTo, country = "sa", cachedSkuNameMap = {}) {
   const rows = workbookRows(buffer, "Easy Orders");
   if (rows.length < 1) throw new Error("Easy Orders workbook is empty.");
@@ -327,6 +345,13 @@ function processDashboardSheets(options = {}) {
     enrichmentDiagnostics = { provider: "easyorders", status: "missing" };
     warnings.push("Easy Orders enrichment is enabled for this account, but no Easy Orders sheet was provided.");
   }
+
+  const cachedFallback = applySkuNameCacheFallback(rows, options.skuNameCache || {});
+  rows = cachedFallback.rows;
+  enrichmentDiagnostics = Object.assign({}, enrichmentDiagnostics, {
+    cacheSkuNames: Math.max(Number(enrichmentDiagnostics.cacheSkuNames || 0), cachedFallback.cacheSkuNames),
+    cacheHits: Number(enrichmentDiagnostics.cacheHits || 0) + cachedFallback.cacheHits,
+  });
 
   const country = String(options.country || "sa").trim().toLowerCase();
   rows = rows.map((row) => ({

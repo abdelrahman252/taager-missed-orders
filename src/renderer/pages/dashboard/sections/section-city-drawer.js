@@ -162,7 +162,9 @@
   function renderKpiGrid(cityData) {
     if (!cityData) return '<div style="padding:16px;color:'+(_il()?'rgba(30,10,60,0.4)':'rgba(255,255,255,0.3)')+';font-size:13px">' + tx('No data', 'لا توجد بيانات') + '</div>';
 
-    var orders      = cityData.count          || 0;
+    var orders      = window.DashboardOrderMetrics
+      ? window.DashboardOrderMetrics.netOrders(cityData)
+      : (cityData.netOrderCount != null ? cityData.netOrderCount : cityData.count || 0);
     var revenue     = cityData.totalRevenue   || cityData.due || 0;
     // drPct and ndrPct may not be pre-computed on the raw cityStats object.
     // Compute them on the fly from the raw counters when needed.
@@ -492,12 +494,24 @@
       var border = pc + '33';
       var align = sTx('left', 'right');
       var cardDir = sTx('ltr', 'rtl');
+      var helper = window.TaagerSmartInsights;
+      var trust = helper && helper.trustLabel ? helper.trustLabel(ins.trust || 'measured') : ((ins.trust === 'estimated') ? 'Estimated' : 'Measured');
+      var confidence = ins.confidence || (ins.metric && ins.metric.orders >= 30 ? 'strong' : (ins.metric && ins.metric.orders >= 15 ? 'developing' : 'limited'));
+      var evidence = Array.isArray(ins.evidence) ? ins.evidence.filter(Boolean) : [];
+      var evidenceHtml = evidence.length
+        ? '<div style="font-size:10px;font-weight:700;color:'+(_il()?'rgba(15,5,30,0.45)':'rgba(255,255,255,0.38)')+';line-height:1.5;margin-bottom:6px;text-align:' + align + ';">' + evidence.slice(0, 2).join(' · ') + '</div>'
+        : '';
       return '<div style="display:flex;gap:12px;padding:14px;border-radius:12px;margin-bottom:10px;' +
         'background:' + bg + ';border:1px solid ' + border + ';box-shadow:0 4px 12px rgba(0,0,0,0.1)">' +
         '<div style="font-size:18px;flex-shrink:0">' + insightIcon(ins.type) + '</div>' +
         '<div style="flex:1;min-width:0">' +
           '<div style="font-size:13px;font-weight:800;color:' + pc + ';margin-bottom:4px;text-align:' + align + ';">' + (ins.title || '') + '</div>' +
+          '<div style="display:flex;gap:6px;justify-content:' + (align === 'right' ? 'flex-end' : 'flex-start') + ';margin-bottom:6px;flex-wrap:wrap">' +
+            '<span style="font-size:9px;font-weight:800;text-transform:uppercase;color:' + pc + ';background:' + pc + '18;border:1px solid ' + pc + '33;border-radius:999px;padding:2px 7px;">' + trust + '</span>' +
+            '<span style="font-size:9px;font-weight:700;text-transform:uppercase;color:'+(_il()?'rgba(15,5,30,0.45)':'rgba(255,255,255,0.42)')+';background:'+(_il()?'rgba(15,5,30,0.04)':'rgba(255,255,255,0.035)')+';border:1px solid '+(_il()?'rgba(15,5,30,0.08)':'rgba(255,255,255,0.06)')+';border-radius:999px;padding:2px 7px;">' + confidence + '</span>' +
+          '</div>' +
           '<div style="font-size:11px;font-weight:600;color:'+(_il()?'rgba(15,5,30,0.7)':'rgba(255,255,255,0.7)')+';line-height:1.6;margin-bottom:6px;text-align:' + align + ';">' + (ins.body || '') + '</div>' +
+          evidenceHtml +
           (ins.recommendation ? '<div style="font-size:10px;font-weight:700;color:'+(_il()?'rgba(15,5,30,0.5)':'rgba(255,255,255,0.4)')+';display:flex;align-items:flex-start;gap:4px;justify-content:flex-start;direction:' + cardDir + ';"><span style="color:' + pc + '">↳</span>' + ins.recommendation + '</div>' : '') +
         '</div>' +
       '</div>';

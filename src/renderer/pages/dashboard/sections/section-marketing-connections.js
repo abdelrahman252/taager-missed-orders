@@ -2,8 +2,9 @@
   'use strict';
 
   function tr(key, fallback) {
-    if (window.DashboardI18n && typeof window.DashboardI18n.t === 'function') {
-      return window.DashboardI18n.t(key, fallback);
+    if (window.dashboardI18n && typeof window.dashboardI18n.t === 'function') {
+      var translated = window.dashboardI18n.t(key);
+      return translated === key ? (fallback || key) : translated;
     }
     return fallback || key;
   }
@@ -18,21 +19,30 @@
   }
 
   var LIVE_PLATFORMS = [
-    { id: 'tiktok', name: 'TikTok Ads', mark: 'TT', connectKey: 'marketing.connectTiktok', connectFallback: 'Connect TikTok' },
-    { id: 'snapchat', name: 'Snapchat Ads', mark: 'SC', markClass: 'snap', connectKey: 'marketing.connectSnapchat', connectFallback: 'Connect Snapchat' },
-    { id: 'facebook', name: 'Facebook Ads', mark: 'FB', markClass: 'meta', connectKey: 'marketing.connectFacebook', connectFallback: 'Connect Facebook' }
+    { id: 'tiktok', name: 'TikTok Ads', nameKey: 'marketing.tiktokAds', mark: 'TT', connectKey: 'marketing.connectTiktok', connectFallback: 'Connect TikTok' },
+    { id: 'snapchat', name: 'Snapchat Ads', nameKey: 'marketing.snapchatAds', mark: 'SC', markClass: 'snap', connectKey: 'marketing.connectSnapchat', connectFallback: 'Connect Snapchat' },
+    { id: 'facebook', name: 'Facebook Ads', nameKey: 'marketing.facebookAds', mark: 'FB', markClass: 'meta', connectKey: 'marketing.connectFacebook', connectFallback: 'Connect Facebook' }
   ];
 
   function platformLabel(platform) {
-    return platform === 'snapchat' ? 'Snapchat' : platform === 'facebook' ? 'Facebook' : 'TikTok';
+    var key = 'marketing.platformLabel.' + platform;
+    var fallback = platform === 'snapchat' ? 'Snapchat' : platform === 'facebook' ? 'Facebook' : 'TikTok';
+    return tr(key, fallback);
   }
 
   function formatError(error, platform, current) {
     var label = platformLabel(platform);
     if (!error) return '';
     var clean = String(error).trim();
+    var code = clean.toUpperCase();
+    if (code.indexOf('LICENSE_INVALID') !== -1 || code.indexOf('LICENSE_EXPIRED') !== -1 || code.indexOf('LICENSE_REQUIRED') !== -1) {
+      return tr('marketing.licenseInvalid', 'Marketing sync is unavailable because the app license needs attention. Check the license screen, then try again.');
+    }
     if (clean === 'supabase_function_timeout') {
       return tr('marketing.supabaseTimeout', 'Connection is slow. Please wait and try again later.');
+    }
+    if (clean === 'MARKETING_PROVIDER_CAPACITY_FULL') {
+      return tr('marketing.providerCapacityFull', 'Connection capacity is currently full. Please contact support to increase your connection limits.');
     }
     if (clean === 'WINDSOR_RECONNECT_REQUIRED') {
       return tr('marketing.reconnectRequiredBody', label + ' authorization has expired or was revoked. Reconnect ' + label + ', then sync again.').replace(/\{platform\}/g, label);
@@ -50,13 +60,17 @@
         .replace(/\{max\}/g, limit.max || 2)
         .replace(/\{selected\}/g, limit.used || limit.selected || '--');
     }
+    if (/^[A-Z0-9_:-]+$/.test(clean)) {
+      return tr('marketing.requestFailed', 'The marketing request failed.');
+    }
     return clean;
   }
 
   function formatDate(value) {
     if (!value) return tr('marketing.neverSynced', 'Not synced yet');
     try {
-      return new Date(value).toLocaleString();
+      var locale = window.dashboardI18n && typeof window.dashboardI18n.locale === 'function' ? window.dashboardI18n.locale() : undefined;
+      return new Date(value).toLocaleString(locale);
     } catch (error) {
       return value;
     }
@@ -66,7 +80,8 @@
     if (value == null || value === '') return '--';
     var number = Number(value);
     if (!Number.isFinite(number)) return '--';
-    return number.toLocaleString(undefined, {
+    var locale = window.dashboardI18n && typeof window.dashboardI18n.locale === 'function' ? window.dashboardI18n.locale() : undefined;
+    return number.toLocaleString(locale, {
       minimumFractionDigits: decimals || 0,
       maximumFractionDigits: decimals || 0
     });
@@ -251,8 +266,18 @@
     var awaitingAuthorizationPlatform = '';
     var debugEvents = [];
     var busyLabel = '';
+    var toastedPlatforms = {};
+    var mappingDisclosure = {};
+    var claimReleaseDisclosure = {};
+    var pendingMappingOpen = {};
+    var GUIDE_STORAGE_KEY = 'taager_marketing_guide_dismissed_v1';
+    var guideExpanded = true;
     var AUTO_REFRESH_DELAYS_MS = [3000, 5000, 10000, 15000, 20000];
     var AUTO_REFRESH_TIMEOUT_MS = 65000;
+
+    try {
+      guideExpanded = localStorage.getItem(GUIDE_STORAGE_KEY) !== '1';
+    } catch (_) {}
 
     function state(platform) {
       return store && typeof store.get === 'function'
@@ -262,7 +287,7 @@
 
     function log(event, data) {
       var entry = {
-        at: new Date().toLocaleTimeString(),
+        at: new Date().toLocaleTimeString("en-US"),
         event: event,
         data: data || {}
       };
@@ -337,7 +362,7 @@
     }
 
     function connectionGuideMarkup(platform) {
-      var label = platformLabel(platform);
+      var label = platform === 'all' ? tr('marketing.adPlatform', 'advertising platform') : platformLabel(platform);
       var steps = [
         tr('marketing.guideStepConnect', 'Click Connect.'),
         tr('marketing.guideStepContinue', 'In the connection window, click Continue.'),
@@ -348,6 +373,38 @@
       return '<section class="marketing-connection-guide">' +
         '<strong>' + escapeHtml(tr('marketing.guideTitle', 'How to connect')) + '</strong>' +
         '<ol>' + steps.map(function (step) { return '<li>' + escapeHtml(step) + '</li>'; }).join('') + '</ol>' +
+      '</section>';
+    }
+
+    function mappingDisclosureMarkup(platform, title, body, content) {
+      return '<details class="marketing-mapping-board marketing-mapping-disclosure" data-marketing-mapping-disclosure="' + escapeHtml(platform) + '"' +
+        (mappingDisclosure[platform] ? ' open' : '') + '>' +
+        '<summary><span><strong>' + escapeHtml(title) + '</strong><small>' + escapeHtml(body) + '</small></span><i aria-hidden="true">&#9662;</i></summary>' +
+        '<div class="marketing-mapping-disclosure-body">' + content + '</div>' +
+      '</details>';
+    }
+
+    function marketingGuideMarkup() {
+      if (!guideExpanded) {
+        return '<button class="marketing-guide-reopen" type="button" data-marketing-guide-open>' +
+          '<span aria-hidden="true">?</span>' + escapeHtml(tr('marketing.guideReopen', 'How does this work?')) +
+        '</button>';
+      }
+      return '<section class="marketing-account-guide" aria-labelledby="marketing-account-guide-title">' +
+        '<div class="marketing-account-guide-head">' +
+          '<div><p class="marketing-kicker">' + escapeHtml(tr('marketing.guideKicker', 'Quick guide')) + '</p>' +
+          '<h3 id="marketing-account-guide-title">' + escapeHtml(tr('marketing.accountGuideTitle', 'How marketing accounts work')) + '</h3>' +
+          '<p>' + escapeHtml(tr('marketing.accountGuideBody', 'Choose the action that matches what you want to do.')) + '</p></div>' +
+          '<button class="marketing-guide-dismiss" type="button" data-marketing-guide-dismiss aria-label="' + escapeHtml(tr('marketing.guideDismiss', 'Hide this guide')) + '">×</button>' +
+        '</div>' +
+        '<div class="marketing-guide-paths">' +
+          '<div><strong>1. ' + escapeHtml(tr('marketing.connectNewAccount', 'Connect new account')) + '</strong><span>' + escapeHtml(tr('marketing.connectNewHelp', 'Use this the first time you connect an advertising account.')) + '</span></div>' +
+          '<div><strong>2. ' + escapeHtml(tr('marketing.useExistingAccount', 'Use existing account')) + '</strong><span>' + escapeHtml(tr('marketing.useExistingHelp', 'Use an account connected before by entering its ad account ID.')) + '</span></div>' +
+          '<div><strong>3. ' + escapeHtml(tr('marketing.disconnectFreeSlot', 'Disconnect & free slot')) + '</strong><span>' + escapeHtml(tr('marketing.disconnectHelp', 'Stop using an assigned account here and free one connection slot.')) + '</span></div>' +
+        '</div>' +
+        '<details class="marketing-guide-walkthrough"><summary>' + escapeHtml(tr('marketing.connectionWalkthrough', 'Connection walkthrough')) + '</summary>' +
+          connectionGuideMarkup('all') +
+        '</details>' +
       '</section>';
     }
 
@@ -465,35 +522,39 @@
             return '<option value="' + escapeHtml(value) + '">' + escapeHtml(row.ownerLabel + ' - ' + row.sourceName + ' (' + row.sourceId + ')') + '</option>';
           }).join('') +
         '</select></label>' +
-        '<button class="marketing-secondary is-danger" type="button" data-marketing-release="' + escapeHtml(platform) + '">' + escapeHtml(tr('marketing.releaseAccount', 'Release account')) + '</button>';
+        '<button class="marketing-secondary is-danger" type="button" data-marketing-release="' + escapeHtml(platform) + '">' + escapeHtml(tr('marketing.disconnectFreeSlot', 'Disconnect & free slot')) + '</button>';
     }
 
     function claimReleaseMarkup(current, platform, allMode) {
       var label = platformLabel(platform);
-      return '<section class="marketing-mapping-board marketing-claim-source">' +
-        '<h4>' + escapeHtml(tr('marketing.claimReleaseTitle', 'Claim or release ' + label + ' ad account').replace(/\{platform\}/g, label)) + '</h4>' +
-        '<div class="marketing-claim-tabs">' +
-          '<input type="radio" id="marketing-claim-tab-' + escapeHtml(platform) + '" name="marketing-claim-tabs-' + escapeHtml(platform) + '" checked>' +
-          '<label for="marketing-claim-tab-' + escapeHtml(platform) + '">' + escapeHtml(tr('marketing.claimTab', 'Claim')) + '</label>' +
-          '<input type="radio" id="marketing-release-tab-' + escapeHtml(platform) + '" name="marketing-claim-tabs-' + escapeHtml(platform) + '">' +
-          '<label for="marketing-release-tab-' + escapeHtml(platform) + '">' + escapeHtml(tr('marketing.releaseTab', 'Release')) + '</label>' +
-          '<div class="marketing-claim-panel is-claim">' +
-            '<p>' + escapeHtml(allMode
-              ? tr('marketing.claimAllBody', 'Paste an existing ' + label + ' ad account ID to add it to this app, then map it to the right Taager account.').replace(/\{platform\}/g, label)
-              : tr('marketing.claimSingleBody', 'Paste an existing ' + label + ' ad account ID to connect it to this Taager account.').replace(/\{platform\}/g, label)) + '</p>' +
-            '<div class="marketing-account-map">' +
-              '<label><span>' + escapeHtml(tr('marketing.adAccountId', 'Ad account ID')) + '</span>' +
-                '<input type="text" data-marketing-claim-input="' + escapeHtml(platform) + '" placeholder="' + escapeHtml(tr('marketing.adAccountIdPlaceholder', 'Paste ad account ID')) + '">' +
-              '</label>' +
-              '<button class="marketing-secondary" type="button" data-marketing-claim="' + escapeHtml(platform) + '">' + escapeHtml(tr('marketing.claimAccount', 'Claim account')) + '</button>' +
+      return '<details class="marketing-mapping-board marketing-claim-source marketing-claim-disclosure" data-marketing-claim-disclosure="' + escapeHtml(platform) + '"' +
+        (claimReleaseDisclosure[platform] ? ' open' : '') + '>' +
+        '<summary><span><strong>' + escapeHtml(tr('marketing.claimReleaseTitle', 'Claim or release ' + label + ' ad account').replace(/\{platform\}/g, label)) + '</strong>' +
+          '<small>' + escapeHtml(tr('marketing.claimReleaseHint', 'Use an existing account or free a connection slot.')) + '</small></span><i aria-hidden="true">&#9662;</i></summary>' +
+        '<div class="marketing-claim-disclosure-body">' +
+          '<div class="marketing-claim-tabs">' +
+            '<input type="radio" id="marketing-claim-tab-' + escapeHtml(platform) + '" name="marketing-claim-tabs-' + escapeHtml(platform) + '" checked>' +
+            '<label for="marketing-claim-tab-' + escapeHtml(platform) + '">' + escapeHtml(tr('marketing.claimTab', 'Claim')) + '</label>' +
+            '<input type="radio" id="marketing-release-tab-' + escapeHtml(platform) + '" name="marketing-claim-tabs-' + escapeHtml(platform) + '">' +
+            '<label for="marketing-release-tab-' + escapeHtml(platform) + '">' + escapeHtml(tr('marketing.releaseTab', 'Release')) + '</label>' +
+            '<div class="marketing-claim-panel is-claim">' +
+              '<p>' + escapeHtml(allMode
+                ? tr('marketing.claimAllBody', 'Paste an existing ' + label + ' ad account ID to add it to this app, then map it to the right Taager account.').replace(/\{platform\}/g, label)
+                : tr('marketing.claimSingleBody', 'Paste an existing ' + label + ' ad account ID to connect it to this Taager account.').replace(/\{platform\}/g, label)) + '</p>' +
+              '<div class="marketing-account-map">' +
+                '<label><span>' + escapeHtml(tr('marketing.adAccountId', 'Ad account ID')) + '</span>' +
+                  '<input type="text" data-marketing-claim-input="' + escapeHtml(platform) + '" placeholder="' + escapeHtml(tr('marketing.adAccountIdPlaceholder', 'Paste ad account ID')) + '">' +
+                '</label>' +
+                '<button class="marketing-secondary marketing-claim-action" type="button" data-marketing-claim="' + escapeHtml(platform) + '">' + escapeHtml(tr('marketing.useExistingAccount', 'Use existing account')) + '</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="marketing-claim-panel is-release">' +
+              '<p>' + escapeHtml(tr('marketing.releaseBody', 'Release removes the assignment from this app and frees one slot.')) + '</p>' +
+              '<div class="marketing-account-map">' + releaseOptionsMarkup(current, platform, allMode) + '</div>' +
             '</div>' +
           '</div>' +
-          '<div class="marketing-claim-panel is-release">' +
-            '<p>' + escapeHtml(tr('marketing.releaseBody', 'Release removes the assignment from this app and frees one slot.')) + '</p>' +
-            '<div class="marketing-account-map">' + releaseOptionsMarkup(current, platform, allMode) + '</div>' +
-          '</div>' +
         '</div>' +
-      '</section>';
+      '</details>';
     }
 
     function unassignedMarkup(current, platform) {
@@ -519,7 +580,7 @@
           '<span>' + escapeHtml(tr('marketing.optionsAccounts', 'Selectable accounts')) + '</span><strong>' + escapeHtml(current.linkedAccountCount == null ? '--' : current.linkedAccountCount) + '</strong>' +
         '</div>' +
         (lookup.lookup ? '<p class="marketing-diagnostic-shape">' + escapeHtml(tr('marketing.optionsShape', 'Ad account lookup')) + ': ' + escapeHtml(JSON.stringify(lookup)) + '</p>' : '') +
-        (diagnostics.optionsError ? '<p class="marketing-diagnostic-error">' + escapeHtml(diagnostics.optionsError) + '</p>' : '') +
+        (diagnostics.optionsError ? '<p class="marketing-diagnostic-error">' + escapeHtml(formatError(diagnostics.optionsError, platform, current)) + '</p>' : '') +
         '<div class="marketing-debug-events">' + events + '</div>' +
       '</details>';
     }
@@ -532,6 +593,8 @@
       var connectionClass = current.status === 'connected' ? ' is-connected' : ' is-disconnected';
       var statusLabel = current.reconnectRequired
         ? tr('marketing.reconnectRequired', 'Reconnect required')
+        : current.status === 'pending'
+        ? tr('marketing.authorizationPending', 'Authorization pending')
         : current.status === 'connected'
         ? tr('marketing.connected', 'Connected')
         : tr('marketing.notConnected', 'Not connected');
@@ -550,37 +613,52 @@
         ? (Array.isArray(current.availableAccounts) ? current.availableAccounts : [])
         : (Array.isArray(current.mappedAccounts) && current.mappedAccounts.length ? current.mappedAccounts : current.linkedAccounts || []);
       var connectLabel = current.reconnectRequired
-        ? tr('marketing.reconnectRequired', 'Reconnect required')
+        ? tr('marketing.reconnectAccount', 'Reconnect account')
+        : current.status === 'pending'
+        ? tr('marketing.reconnectAccount', 'Reconnect account')
         : current.status === 'connected'
         ? tr('marketing.addAccount', 'Add account')
-        : tr(config.connectKey, config.connectFallback);
+        : tr('marketing.connectNewAccount', 'Connect new account');
       var canConnectNow = canConnect;
       var mappingContent = '';
 
       if (!allMode && currentMapping.length) {
         mappingContent =
-          '<section class="marketing-mapping-board">' +
-            '<h4>' + escapeHtml(tr('marketing.assignedTitle', 'Assigned ' + label + ' account').replace(/\{platform\}/g, label)) + '</h4>' +
-            '<p>' + escapeHtml(tr('marketing.assignedBody', 'This Taager account is linked only to the ' + label + ' account assigned to it.').replace(/\{platform\}/g, label)) + '</p>' +
-            mappingRows(current, platform) +
-          '</section>' + claimReleaseMarkup(current, platform, false);
+          mappingDisclosureMarkup(
+            platform,
+            tr('marketing.assignedTitle', 'Assigned ' + label + ' account').replace(/\{platform\}/g, label),
+            tr('marketing.assignedBody', 'This Taager account is linked only to the ' + label + ' account assigned to it.').replace(/\{platform\}/g, label),
+            mappingRows(current, platform)
+          ) + claimReleaseMarkup(current, platform, false);
       } else if (allMode) {
         mappingContent =
-          '<section class="marketing-mapping-board">' +
-            '<h4>' + escapeHtml(tr('marketing.mappingTitle', 'Map known ' + label + ' accounts to Taager accounts').replace(/\{platform\}/g, label)) + '</h4>' +
-            '<p>' + escapeHtml(tr('marketing.mappingBody', 'Only ad accounts known to this Taager app appear here. Select all that belong to each account.').replace(/\{platform\}/g, label)) + '</p>' +
+          mappingDisclosureMarkup(
+            platform,
+            tr('marketing.mappingTitle', 'Map known ' + label + ' accounts to Taager accounts').replace(/\{platform\}/g, label),
+            tr('marketing.mappingBody', 'Only ad accounts known to this Taager app appear here. Select all that belong to each account.').replace(/\{platform\}/g, label),
             '<div class="marketing-inline-info">' + escapeHtml(tr('marketing.allModeHint', 'Connect accounts, claim existing ad account IDs, assign currencies, then sync mapped accounts.')) + '</div>' +
-            mappingRows(current, platform) +
-            '<div class="marketing-save-all-wrap"><button class="marketing-primary marketing-save-all-btn" data-marketing-save-all="' + escapeHtml(platform) + '" type="button"' +
-              (current.loading ? ' disabled' : '') + '>' + escapeHtml(tr('marketing.saveAllMappings', 'Save all mappings')) + '</button></div>' +
-          '</section>' + claimReleaseMarkup(current, platform, true);
+              mappingRows(current, platform) +
+              '<div class="marketing-save-all-wrap"><button class="marketing-primary marketing-save-all-btn" data-marketing-save-all="' + escapeHtml(platform) + '" type="button"' +
+                (current.loading ? ' disabled' : '') + '>' + escapeHtml(tr('marketing.saveAllMappings', 'Save all mappings')) + '</button></div>'
+          ) + claimReleaseMarkup(current, platform, true);
       } else if (!allMode && current.status === 'connected' && connectedAccounts.length) {
         mappingContent =
-          '<section class="marketing-mapping-board">' +
-            '<h4>' + escapeHtml(tr('marketing.mappingTitle', 'Map known ' + label + ' accounts to Taager accounts').replace(/\{platform\}/g, label)) + '</h4>' +
-            '<p>' + escapeHtml(tr('marketing.mappingBody', 'Only ad accounts known to this Taager app appear here. Select all that belong to each account.').replace(/\{platform\}/g, label)) + '</p>' +
-            mappingRows(current, platform) +
-          '</section>' + claimReleaseMarkup(current, platform, false);
+          mappingDisclosureMarkup(
+            platform,
+            tr('marketing.mappingTitle', 'Map known ' + label + ' accounts to Taager accounts').replace(/\{platform\}/g, label),
+            tr('marketing.mappingBody', 'Only ad accounts known to this Taager app appear here. Select all that belong to each account.').replace(/\{platform\}/g, label),
+            mappingRows(current, platform)
+          ) + claimReleaseMarkup(current, platform, false);
+      } else if (!allMode && current.status === 'connected' && !connectedAccounts.length) {
+        mappingContent =
+          mappingDisclosureMarkup(
+            platform,
+            tr('marketing.noAccountTitle', 'No ' + label + ' ad account connected').replace(/\{platform\}/g, label),
+            tr('marketing.mappingBody', 'Choose the advertising account that belongs to this dashboard account.').replace(/\{platform\}/g, label),
+            '<div class="marketing-inline-warning">' +
+              escapeHtml(tr('marketing.connectedNoAccountsBody', 'Successfully connected, but no ad accounts were discovered. If your account was recently created, please wait or claim an ad account ID below.')) +
+            '</div>'
+          ) + claimReleaseMarkup(current, platform, false);
       } else if (!allMode && current.status !== 'connected') {
         mappingContent = unassignedMarkup(current, platform);
       }
@@ -590,7 +668,7 @@
           (current.loading ? '<div class="marketing-loading"><span class="dash-preloader-spinner"></span><span>' + escapeHtml(busyLabel || tr('marketing.working', 'Working...')) + '</span></div>' : '') +
           '<div class="marketing-platform-head">' +
             '<div class="marketing-platform-brand"><span class="marketing-platform-mark ' + escapeHtml(config.markClass || '') + '">' + escapeHtml(config.mark) + '</span>' +
-            '<div><strong>' + escapeHtml(config.name) + '</strong><small>' + escapeHtml(tr('marketing.liveFirst', 'Available now')) + '</small></div></div>' +
+            '<div><strong>' + escapeHtml(tr(config.nameKey, config.name)) + '</strong><small>' + escapeHtml(tr('marketing.liveFirst', 'Available now')) + '</small></div></div>' +
             '<span class="marketing-status' + connectionClass + '">' + escapeHtml(statusLabel) + '</span>' +
           '</div>' +
           '<div class="marketing-metric-grid">' +
@@ -607,8 +685,8 @@
           '<div class="marketing-last-sync"><span>' + escapeHtml(tr('marketing.lastSync', 'Last sync')) + '</span><strong>' + escapeHtml(formatDate(current.lastSyncAt)) + '</strong></div>' +
           '<div class="marketing-actions">' +
             '<button class="marketing-primary" data-marketing-connect="' + escapeHtml(platform) + '" type="button"' + (canConnectNow ? '' : ' disabled') + '>' + escapeHtml(connectLabel) + '</button>' +
-            '<button class="marketing-secondary" data-marketing-sync="' + escapeHtml(platform) + '" type="button"' + (canSync ? '' : ' disabled') + '>' + escapeHtml(syncButtonLabel) + '</button>' +
-            (allMode ? '<button class="marketing-secondary" data-marketing-sync-all="' + escapeHtml(platform) + '" type="button"' + (canSyncAll ? '' : ' disabled') + '>' + escapeHtml(tr('marketing.syncAll', 'Sync All Accounts')) + '</button>' : '') +
+            '<button class="marketing-sync-btn" data-marketing-sync="' + escapeHtml(platform) + '" type="button"' + (canSync ? '' : ' disabled') + '>' + escapeHtml(syncButtonLabel) + '</button>' +
+            (allMode ? '<button class="marketing-sync-btn" data-marketing-sync-all="' + escapeHtml(platform) + '" type="button"' + (canSyncAll ? '' : ' disabled') + '>' + escapeHtml(tr('marketing.syncAll', 'Sync All Accounts')) + '</button>' : '') +
             (allMode
               ? '<button class="marketing-secondary" data-marketing-full-sync-all="' + escapeHtml(platform) + '" type="button"' + (canSyncAll ? '' : ' disabled') + '>' + escapeHtml(tr('marketing.fullRefresh', 'Refresh all selected dates')) + '</button>'
               : '<button class="marketing-secondary" data-marketing-full-sync="' + escapeHtml(platform) + '" type="button"' + (canSync ? '' : ' disabled') + '>' + escapeHtml(tr('marketing.fullRefresh', 'Refresh all selected dates')) + '</button>') +
@@ -630,6 +708,7 @@
             '</div>' +
             '<aside class="marketing-security"><strong>' + escapeHtml(tr('marketing.secureTitle', 'Secure connection')) + '</strong><span>' + escapeHtml(tr('marketing.secureBody', 'Authorization and API secrets run through the protected backend, not this dashboard.')) + '</span></aside>' +
           '</header>' +
+          marketingGuideMarkup() +
           '<div class="marketing-platform-grid">' +
             LIVE_PLATFORMS.map(platformCard).join('') +
           '</div>' +
@@ -649,7 +728,44 @@
       if (store && typeof store.invalidate === 'function') store.invalidate(accountId, platform);
     }
 
+    function refreshAllStatus(platform) {
+      if (!store || typeof store.load !== 'function') return Promise.resolve();
+      return store.load('__all__', platform, { force: true, background: true }).catch(function (error) {
+        log('refresh_all_status:failed', { platform: platform, error: error && error.message || String(error) });
+        return null;
+      });
+    }
+
+    function forceRefreshStatusAfterOk(result, platform) {
+      if (result && result.ok) return loadStatus(platform, { force: true });
+      return Promise.resolve(null);
+    }
+
+    function refreshAfterMutation(platform, accountId, result) {
+      var targetId = String(accountId || selectedAccountId || '');
+      invalidateStatus(targetId, platform);
+      invalidateStatus('__all__', platform);
+      var tasks = [];
+      if (targetId && targetId !== selectedAccountId && targetId !== '__all__' && store && typeof store.load === 'function') {
+        tasks.push(store.load(targetId, platform, { force: true, background: true }).catch(function (error) {
+          log('refresh_target_status:failed', { accountId: targetId, platform: platform, error: error && error.message || String(error) });
+          return null;
+        }));
+      }
+      tasks.push(forceRefreshStatusAfterOk(result || { ok: true }, platform));
+      if (selectedAccountId !== '__all__') tasks.push(refreshAllStatus(platform));
+      return Promise.all(tasks).then(function (results) {
+        return results[0] || results[1] || null;
+      });
+    }
+
     function hasUsableConnection(result) {
+      if (allMode && result && (
+        (Array.isArray(result.linkedAccounts) && result.linkedAccounts.length) ||
+        (Array.isArray(result.availableAccounts) && result.availableAccounts.length)
+      )) {
+        return true;
+      }
       return result && result.status === 'connected' && (
         (Array.isArray(result.mappedAccounts) && result.mappedAccounts.length) ||
         (Array.isArray(result.linkedAccounts) && result.linkedAccounts.length) ||
@@ -693,6 +809,18 @@
           linkedAccountCount: result && result.linkedAccountCount || 0
         });
         var usableConnection = hasUsableConnection(result);
+        if (result && (result.reconnectRequired || result.error === 'WINDSOR_RECONNECT_REQUIRED')) {
+          if (!toastedPlatforms[platform]) {
+            toastedPlatforms[platform] = true;
+            if (window.TaagerUI && typeof window.TaagerUI.toast === 'function') {
+              var platformName = platformLabel(platform);
+              window.TaagerUI.toast(
+                tr('marketing.reconnectRequiredToast', platformName + ' connection has expired. Please reconnect in the Marketing settings.').replace(/\{platform\}/g, platformName),
+                { kind: 'error', timeout: 9000 }
+              );
+            }
+          }
+        }
         if (awaitingAuthorizationPlatform === platform && (usableConnection || result && (result.error || result.reconnectRequired))) {
           awaitingAuthorizationPlatform = '';
         }
@@ -705,6 +833,17 @@
           } else if (Date.now() - pollStartedAt >= AUTO_REFRESH_TIMEOUT_MS) {
             log('connect:auto_refresh_timeout', { platform: platform });
             stopAutoRefresh('timeout', platform, result);
+          }
+        }
+        var nextStatus = result && result.status || 'disconnected';
+        if (pendingMappingOpen[platform] && nextStatus === 'connected') {
+          pendingMappingOpen[platform] = false;
+          mappingDisclosure[platform] = true;
+          if (window.TaagerUI && typeof window.TaagerUI.toast === 'function') {
+            window.TaagerUI.toast(
+              tr('marketing.connectionSuccess', '{platform} account is ready.').replace(/\{platform\}/g, label),
+              { kind: 'success' }
+            );
           }
         }
         render();
@@ -738,7 +877,7 @@
       var platform = awaitingAuthorizationPlatform;
       if (!platform) return;
       log('connect:focus_refresh', { platform: platform });
-      loadStatus(platform, { force: true, background: true }).then(function (result) {
+      loadStatus(platform, { force: true }).then(function (result) {
         if (awaitingAuthorizationPlatform === platform && !hasUsableConnection(result) && !(result && (result.error || result.reconnectRequired))) {
           startAutoRefresh(platform);
         }
@@ -791,13 +930,18 @@
           selectedCount: sourceAccounts.length,
           error: result && result.error || ''
         });
-        store.set(result && result.ok ? result : Object.assign({}, state(platform), {
-          loading: false,
-          error: result && result.error || tr('marketing.mappingFailed', 'Unable to save mapping.')
-        }), selectedAccountId, platform);
-        render();
-        if (result && result.ok && !(result.cache && result.cache.unchanged)) {
-          return loadStatus(platform, { force: true });
+        if (result && result.ok) {
+          invalidateStatus(targetId, platform);
+          invalidateStatus('__all__', platform);
+          store.set(result, targetId, platform);
+          render();
+          return refreshAfterMutation(platform, targetId, result);
+        } else {
+          store.set(Object.assign({}, state(platform), {
+            loading: false,
+            error: result && result.error || tr('marketing.mappingFailed', 'Unable to save mapping.')
+          }), selectedAccountId, platform);
+          render();
         }
       });
     }
@@ -828,7 +972,7 @@
         busyLabel = '';
         store.set(result, selectedAccountId, platform);
         render();
-        if (!(result.cache && result.cache.unchanged)) return loadStatus(platform, { force: true });
+        return refreshAfterMutation(platform, '__all__', result);
       }).catch(function (error) {
         busyLabel = '';
         log('mapping:save_all_finished', { platform: platform, accountCount: payloads.length, ok: false, error: error.message || String(error) });
@@ -841,6 +985,10 @@
     }
 
     function bind() {
+      var mappingDisclosures = mount.querySelectorAll('[data-marketing-mapping-disclosure]');
+      var claimDisclosures = mount.querySelectorAll('[data-marketing-claim-disclosure]');
+      var guideDismissButton = mount.querySelector('[data-marketing-guide-dismiss]');
+      var guideOpenButton = mount.querySelector('[data-marketing-guide-open]');
       var connectButtons = mount.querySelectorAll('[data-marketing-connect]');
       var syncButtons = mount.querySelectorAll('[data-marketing-sync], [data-marketing-full-sync]');
       var syncAllButtons = mount.querySelectorAll('[data-marketing-sync-all], [data-marketing-full-sync-all]');
@@ -849,6 +997,36 @@
       var saveButtons = mount.querySelectorAll('[data-marketing-save-map]');
       var claimButtons = mount.querySelectorAll('[data-marketing-claim]');
       var releaseButtons = mount.querySelectorAll('[data-marketing-release]');
+
+      Array.prototype.forEach.call(mappingDisclosures, function (disclosure) {
+        disclosure.addEventListener('toggle', function () {
+          var platform = disclosure.getAttribute('data-marketing-mapping-disclosure') || 'tiktok';
+          mappingDisclosure[platform] = disclosure.open;
+        });
+      });
+
+      Array.prototype.forEach.call(claimDisclosures, function (disclosure) {
+        disclosure.addEventListener('toggle', function () {
+          var platform = disclosure.getAttribute('data-marketing-claim-disclosure') || 'tiktok';
+          claimReleaseDisclosure[platform] = disclosure.open;
+        });
+      });
+
+      if (guideDismissButton) {
+        guideDismissButton.addEventListener('click', function () {
+          guideExpanded = false;
+          try { localStorage.setItem(GUIDE_STORAGE_KEY, '1'); } catch (_) {}
+          render();
+        });
+      }
+
+      if (guideOpenButton) {
+        guideOpenButton.addEventListener('click', function () {
+          guideExpanded = true;
+          try { localStorage.removeItem(GUIDE_STORAGE_KEY); } catch (_) {}
+          render();
+        });
+      }
 
       Array.prototype.forEach.call(connectButtons, function (connectButton) {
         connectButton.addEventListener('click', function () {
@@ -860,12 +1038,24 @@
           window.api.connectMarketing(selectedAccountId, platform).then(function (result) {
             busyLabel = '';
             log('connect:finished', result || {});
-            invalidateStatus(selectedAccountId, platform);
-            store.set(result, selectedAccountId, platform);
-            render();
-            if (result && result.ok && result.authorizationUrl) {
-              awaitingAuthorizationPlatform = platform;
-              startAutoRefresh(platform);
+            if (result && result.ok) {
+              pendingMappingOpen[platform] = true;
+              invalidateStatus(selectedAccountId, platform);
+              invalidateStatus('__all__', platform);
+              store.set(result, selectedAccountId, platform);
+              render();
+              if (result.authorizationUrl) {
+                awaitingAuthorizationPlatform = platform;
+                startAutoRefresh(platform);
+              } else {
+                refreshAfterMutation(platform, selectedAccountId, result);
+              }
+            } else {
+              store.set(Object.assign({}, state(platform), {
+                loading: false,
+                error: result && result.error || tr('marketing.requestFailed', 'Marketing connection request failed.')
+              }), selectedAccountId, platform);
+              render();
             }
             if (result && result.authorizationUrl && typeof window.api.openExternalUrl === 'function') {
               window.api.openExternalUrl(result.authorizationUrl);
@@ -911,15 +1101,28 @@
             return;
           }
           log('button:claim', { accountId: selectedAccountId, platform: platform, sourceAccountId: sourceAccountId });
+          claimReleaseDisclosure[platform] = true;
           claimButton.disabled = true;
           setBusy(tr('marketing.loadingClaim', 'Claiming ad account...'), platform);
           window.api.claimMarketingSourceAccount(selectedAccountId, platform, sourceAccountId).then(function (result) {
             busyLabel = '';
             log('claim:finished', result || {});
-            if (result && result.ok) invalidateStatus(selectedAccountId, platform);
-            store.set(result, selectedAccountId, platform);
-            render();
-            if (result && result.ok) return loadStatus(platform, { force: true });
+            if (result && result.ok) {
+              pendingMappingOpen[platform] = true;
+              mappingDisclosure[platform] = true;
+              claimReleaseDisclosure[platform] = false;
+              invalidateStatus(selectedAccountId, platform);
+              invalidateStatus('__all__', platform);
+              store.set(result, selectedAccountId, platform);
+              render();
+              return refreshAfterMutation(platform, selectedAccountId, result);
+            } else {
+              store.set(Object.assign({}, state(platform), {
+                loading: false,
+                error: result && result.error || tr('marketing.claimFailed', 'Unable to claim ad account.')
+              }), selectedAccountId, platform);
+              render();
+            }
           }).catch(function (error) {
             busyLabel = '';
             log('claim:failed', { platform: platform, error: error && error.message || String(error) });
@@ -933,7 +1136,7 @@
       });
 
       Array.prototype.forEach.call(releaseButtons, function (releaseButton) {
-        releaseButton.addEventListener('click', function () {
+        releaseButton.addEventListener('click', async function () {
           var platform = platformOfButton(releaseButton);
           var card = releaseButton.closest('[data-marketing-platform]');
           var select = (card || mount).querySelector('[data-marketing-release-select="' + CSS.escape(platform) + '"]');
@@ -957,9 +1160,19 @@
             render();
             return;
           }
-          var confirmed = window.confirm(tr('marketing.releaseConfirm', 'Release this ad account from this app? It will stop syncing here and free one slot.'));
+          var confirmed = window.TaagerUI && typeof window.TaagerUI.confirm === 'function'
+            ? await window.TaagerUI.confirm({
+              kicker: tr('marketing.accountManagementTitle', 'Account management'),
+              title: tr('marketing.disconnectConfirmTitle', 'Disconnect this account?'),
+              message: tr('marketing.disconnectConfirmBody', 'This account will stop syncing here and one connection slot will become available. The advertising account will not be deleted.'),
+              confirmText: tr('marketing.disconnectFreeSlot', 'Disconnect & free slot'),
+              cancelText: tr('marketing.cancel', 'Cancel'),
+              danger: true
+            })
+            : window.confirm(tr('marketing.disconnectConfirmBody', 'This account will stop syncing here and one connection slot will become available. The advertising account will not be deleted.'));
           if (!confirmed) return;
           log('button:release', { accountId: targetAccountId, platform: platform, sourceAccountId: sourceAccountId });
+          claimReleaseDisclosure[platform] = true;
           releaseButton.disabled = true;
           setBusy(tr('marketing.loadingRelease', 'Releasing ad account...'), platform);
           window.api.releaseMarketingSourceAccount(targetAccountId, platform, sourceAccountId).then(function (result) {
@@ -968,10 +1181,10 @@
             if (result && result.ok) {
               invalidateStatus(selectedAccountId, platform);
               if (targetAccountId !== selectedAccountId) invalidateStatus(targetAccountId, platform);
+              invalidateStatus('__all__', platform);
             }
-            store.set(result, selectedAccountId, platform);
-            if (targetAccountId !== selectedAccountId && result && result.ok) store.set(result, targetAccountId, platform);
-            if (result && result.ok) return loadStatus(platform, { force: true });
+            store.set(result, result && result.ok ? targetAccountId : selectedAccountId, platform);
+            if (result && result.ok) return refreshAfterMutation(platform, targetAccountId, result);
             render();
           }).catch(function (error) {
             busyLabel = '';
@@ -1039,7 +1252,7 @@
         syncButton.addEventListener('click', function () {
           var platform = platformOfButton(syncButton);
           var fullRefresh = syncButton.hasAttribute('data-marketing-full-sync');
-          if (fullRefresh && !window.confirm(tr('marketing.fullRefreshConfirm', 'Refresh every selected date from the ad platform? This uses more provider requests.'))) return;
+          if (fullRefresh && !window.confirm(tr('marketing.fullRefreshConfirm', 'Force reload all ad data for the selected dates? This fetches fresh data directly from the ad platform and overwrites any cached values.'))) return;
           log('button:sync', { accountId: selectedAccountId, platform: platform });
           var sourceAccounts = sourcesForRow(mappingRowForAccount(selectedAccountId, platform));
           if (!sourceAccounts.length) {
@@ -1076,6 +1289,11 @@
             busyLabel = '';
             log('sync:finished', result || {});
             if (!store || typeof store.sync !== 'function') store.set(result, selectedAccountId, platform);
+            if (result && result.ok) {
+              invalidateStatus(selectedAccountId, platform);
+              invalidateStatus('__all__', platform);
+              refreshAllStatus(platform);
+            }
             render();
             if (result && result.ok && window.DashboardRoiState && typeof window.DashboardRoiState.notify === 'function') {
               window.DashboardRoiState.notify();
@@ -1088,7 +1306,7 @@
         syncAllButton.addEventListener('click', function () {
           var platform = platformOfButton(syncAllButton);
           var fullRefresh = syncAllButton.hasAttribute('data-marketing-full-sync-all');
-          if (fullRefresh && !window.confirm(tr('marketing.fullRefreshConfirm', 'Refresh every selected date from the ad platform? This uses more provider requests.'))) return;
+          if (fullRefresh && !window.confirm(tr('marketing.fullRefreshConfirm', 'Force reload all ad data for the selected dates? This fetches fresh data directly from the ad platform and overwrites any cached values.'))) return;
           var label = platformLabel(platform);
           var period = fullData && fullData.meta && fullData.meta.period || {};
           var accountSettings = taagerAccounts.map(function (account) {
@@ -1131,6 +1349,7 @@
             }
             store.set(result, selectedAccountId, platform);
             render();
+            if (result && result.ok) return refreshAfterMutation(platform, '__all__', result);
           });
         });
       });
@@ -1156,11 +1375,13 @@
 
     log('section:mounted', { accountId: selectedAccountId, allMode: allMode, shownAccounts: shownAccounts.length });
     window.addEventListener('focus', refreshAfterAuthorizationFocus);
+    window.addEventListener('taager-lang-change', render);
     render();
     LIVE_PLATFORMS.forEach(function (platform) { loadStatus(platform.id, { cached: true }); });
 
     return function cleanupMarketingConnections() {
       window.removeEventListener('focus', refreshAfterAuthorizationFocus);
+      window.removeEventListener('taager-lang-change', render);
       stopAutoRefresh('cleanup');
       if (store && typeof store.unsubscribe === 'function') {
         store.unsubscribe(listener);

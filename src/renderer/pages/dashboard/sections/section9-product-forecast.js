@@ -43,28 +43,39 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   }
   function p9Num(v) { return Number(v || 0).toLocaleString(isAr ? 'ar-EG-u-nu-latn' : 'en-US'); }
 
+  var expectedRateMode = window.isExpectedNdrMode && window.isExpectedNdrMode();
   var simulations = pd.map(function (p) {
-    var orders    = p.netOrderCount !== undefined ? p.netOrderCount : (p.placedCount || p.totalPieces || 1);
+    var orders = window.DashboardOrderMetrics
+      ? window.DashboardOrderMetrics.netOrders(p)
+      : (p.netOrderCount !== undefined ? p.netOrderCount : (p.placedCount || 0));
     var delivered = p.deliveredCount || p.units || 0;
     var realNdr   = orders > 0 ? (delivered / orders) : 0;
-    var realComm  = delivered > 0 ? (p.commission / delivered) : 0;
-    if (realComm === 0) realComm = 35;
+    var actDelivered = p.actualDeliveredCount !== undefined ? p.actualDeliveredCount : delivered;
+    var actCommission = p.actualCommission !== undefined ? p.actualCommission : (p.commission || 0);
+    var realComm = actDelivered > 0 ? (actCommission / actDelivered) : 0;
 
     var realTaagerProfitAfterTax = Number(p.commission || 0);
     var realConfirmationRate = Number(p.confirmationPct || p.confirmationRate || 0) / 100;
+    var realConfirmed = p.confirmationStatusCount != null
+      ? Number(p.confirmationStatusCount)
+      : p.confirmedCount != null
+        ? Number(p.confirmedCount)
+        : p.confirmedOrders != null
+          ? Number(p.confirmedOrders)
+          : Math.round(orders * realConfirmationRate);
+    if (!Number.isFinite(realConfirmed)) realConfirmed = Math.round(orders * realConfirmationRate);
     var realDr = Number(p.drRate || p.drPct || 0) / 100;
     var realDeliveredSales = Number(p.deliveredSales || p.totalDeliveredSales || 0);
     var realDeliveredAov = p.deliveredAov !== undefined
       ? Number(p.deliveredAov || 0)
       : (delivered > 0 ? realDeliveredSales / delivered : 0);
 
-    var isExpectedNdr = window.isExpectedNdrMode && window.isExpectedNdrMode();
-    if (isExpectedNdr) {
+    if (expectedRateMode) {
       var globalExpectedNdrRate = (data && data.overview && data.overview.deliveryRate != null) ? (data.overview.deliveryRate / 100) : 0.35;
       var expectedNdrRate = (p.ndrPct != null) ? (p.ndrPct / 100) : globalExpectedNdrRate;
       
       realNdr = expectedNdrRate;
-      delivered = Math.round(orders * expectedNdrRate);
+      delivered = Math.min(orders, Math.max(0, Math.round(Number(delivered) || 0)));
       realTaagerProfitAfterTax = delivered * realComm;
       
       var originalDelivered = p.deliveredCount || p.units || 0;
@@ -72,7 +83,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         realDeliveredSales = realDeliveredSales * (delivered / originalDelivered);
       } else {
         var totalSales = Number(p.revenue || p.sales || p.totalSales || 0);
-        var placedOrders = p.placedCount || p.totalOrderCount || orders;
+        var placedOrders = orders;
         var avgAov = placedOrders > 0 ? totalSales / placedOrders : 0;
         realDeliveredSales = delivered * (realDeliveredAov || avgAov);
       }
@@ -90,11 +101,13 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       name:          p.name || p9Txt('Unknown Product', 'منتج غير معروف'),
       realOrders:    orders,
       realDelivered: delivered,
+      realConfirmed: Math.max(0, Math.round(Number(realConfirmed) || 0)),
       realNdr:       realNdr,
       realCommission:realComm,
       realTaagerProfitAfterTax: realTaagerProfitAfterTax,
       realConfirmationRate: realConfirmationRate,
       realDr: realDr,
+      rateMode: p.rateMode || (expectedRateMode ? 'historical_cohort' : 'actual'),
       realDeliveredSales: realDeliveredSales,
       realDeliveredAov: realDeliveredAov,
       realAdSpend:   realAdSpend,
@@ -117,6 +130,12 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   var tableSortDir = mountEl._s9TableSortDir || 'desc';
   var tableSearchQuery = mountEl._s9TableSearchQuery || '';
   var tableSearchTimer = null;
+  var tableSearchToken = 0;
+  var tableRenderTimer = null;
+  var tableRenderPending = false;
+  var simulationRowsRevision = Number(mountEl._s9SimulationRowsRevision || 0);
+  var simulationRowsCacheKey = '';
+  var simulationRowsCacheValue = null;
   var forecastAccountId = (data && data.meta && data.meta.activeAccountId) ||
     (ctx && ctx.data && ctx.data.meta && ctx.data.meta.activeAccountId) ||
     (window.getActiveAccountId ? window.getActiveAccountId() : '__all__');
@@ -192,6 +211,8 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   function formatPct(v) { return Math.round(v * 100) + '%'; }
 
   function matchMethodLabel(sim) {
+    if (sim && sim.syncMatchDetail === 'separated_sku') return p9Txt('Marketing spend matched by separated SKU', 'Marketing spend matched by separated SKU');
+    if (sim && sim.syncMatchDetail === 'glued_sku') return p9Txt('Marketing spend matched by glued SKU', 'Marketing spend matched by glued SKU');
     if (sim && sim.syncMatchMethod === 'sku') return p9Txt('Marketing spend matched by SKU', 'تمت مطابقة إنفاق التسويق بواسطة SKU');
     if (sim && sim.syncMatchMethod === 'sku+name') return p9Txt('Marketing spend matched by SKU and normalized name', 'تمت مطابقة إنفاق التسويق بواسطة SKU والاسم الموحد');
     if (sim && sim.syncMatchMethod === 'name') return p9Txt('Marketing spend matched by normalized name fallback', 'تمت مطابقة إنفاق التسويق بالاسم الموحد كخيار احتياطي');
@@ -278,66 +299,44 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     return amount;
   }
 
-  var productMatchKeys = pd.map(function (product, idx) {
-    var tokens = productTokens(product.name || '');
-    return { idx: idx, sku: validSku(product), tokens: tokens, phrases: productPhrases(tokens) };
-  });
-  var tokenOwners = {};
-  var phraseOwners = {};
-  productMatchKeys.forEach(function (product) {
-    product.tokens.forEach(function (token) {
-      tokenOwners[token] = (tokenOwners[token] || 0) + 1;
-    });
-    product.phrases.forEach(function (phrase) {
-      phraseOwners[phrase] = (phraseOwners[phrase] || 0) + 1;
-    });
-  });
-
-  function nameMatchScore(campaignText, product) {
-    var hits = product.tokens.filter(function (token) { return hasTerm(campaignText, token); });
-    var phraseHits = product.phrases.filter(function (phrase) { return hasTerm(campaignText, phrase); });
-    var uniqueWordHit = hits.some(function (token) { return token.length >= 4 && tokenOwners[token] === 1; });
-    var uniquePhraseHit = phraseHits.some(function (phrase) { return phraseOwners[phrase] === 1; });
-    if (hits.length < Math.min(2, product.tokens.length) && !uniqueWordHit && !uniquePhraseHit) return 0;
-    var score = hits.reduce(function (total, token) {
-      return total + token.length + (tokenOwners[token] === 1 ? 6 : 0);
-    }, 0);
-    return score + phraseHits.reduce(function (total, phrase) {
-      return total + phrase.length + (phraseOwners[phrase] === 1 ? 12 : 0);
-    }, 0);
-  }
+  var attribution = window.TaagerProductAttribution;
+  var productIndex = attribution
+    ? attribution.createProductIndex(pd, {
+        productNameOverrides: window.TaagerProductNames && typeof window.TaagerProductNames.all === 'function'
+          ? window.TaagerProductNames.all()
+          : {}
+      })
+    : null;
 
   function buildCampaignAssignments() {
     var assignments = {};
-    var summary = { skuRows: 0, nameRows: 0, unmatchedRows: 0 };
+    var summary = {
+      skuRows: 0,
+      separatedSkuRows: 0,
+      gluedSkuRows: 0,
+      nameRows: 0,
+      ambiguousRows: 0,
+      unmatchedRows: 0
+    };
     campaignSpendRows.forEach(function (row) {
-      var campaignText = textKey(row && row.campaign || '');
-      if (!campaignText) {
+      var result = productIndex ? attribution.matchCampaign(row, productIndex) : null;
+      if (!result || result.status === 'unmatched') {
         summary.unmatchedRows++;
         return;
       }
-      var skuCandidates = productMatchKeys.filter(function (product) {
-        return product.sku && hasTerm(campaignText, product.sku);
-      }).sort(function (a, b) { return b.sku.length - a.sku.length; });
-      var best = skuCandidates.length ? { idx: skuCandidates[0].idx, method: 'sku' } : null;
-      if (!best) {
-        var nameCandidates = productMatchKeys.map(function (product) {
-          return { idx: product.idx, score: nameMatchScore(campaignText, product) };
-        }).filter(function (candidate) { return candidate.score > 0; })
-          .sort(function (a, b) { return b.score - a.score; });
-        if (nameCandidates.length && (!nameCandidates[1] || nameCandidates[0].score > nameCandidates[1].score)) {
-          best = { idx: nameCandidates[0].idx, method: 'name' };
-        }
-      }
-      if (!best) {
-        summary.unmatchedRows++;
+      if (result.status === 'ambiguous') {
+        summary.ambiguousRows++;
         return;
       }
-      if (!assignments[best.idx]) assignments[best.idx] = { spend: 0, methods: {}, rowCount: 0 };
-      assignments[best.idx].spend += campaignSpendToSar(row);
-      assignments[best.idx].methods[best.method] = true;
-      assignments[best.idx].rowCount++;
-      summary[best.method + 'Rows']++;
+      var idx = result.productIndex;
+      if (!assignments[idx]) assignments[idx] = { spend: 0, methods: {}, details: {}, rowCount: 0 };
+      assignments[idx].spend += campaignSpendToSar(row);
+      assignments[idx].methods[result.method] = true;
+      assignments[idx].details[result.matchDetail] = true;
+      assignments[idx].rowCount++;
+      summary[result.method + 'Rows']++;
+      if (result.matchDetail === 'separated_sku') summary.separatedSkuRows++;
+      if (result.matchDetail === 'glued_sku') summary.gluedSkuRows++;
     });
     return { assignments: assignments, summary: summary };
   }
@@ -351,6 +350,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       sim.syncedAdSpend = false;
       sim.platformSpendFiltered = true;
       sim.syncMatchMethod = '';
+      sim.syncMatchDetail = '';
       sim.syncMatchedRows = 0;
       return;
     }
@@ -360,6 +360,9 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     sim.syncedAdSpend = true;
     sim.syncMatchMethod = assignment.methods.sku && assignment.methods.name ? 'sku+name' :
       (assignment.methods.sku ? 'sku' : 'name');
+    sim.syncMatchDetail = Object.keys(assignment.details || {}).length === 1
+      ? Object.keys(assignment.details)[0]
+      : sim.syncMatchMethod;
     sim.syncMatchedRows = assignment.rowCount;
   });
 
@@ -473,7 +476,8 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       'data-tip-icon="' + enc(icon) + '" ' +
       'data-tip-title="' + enc(title) + '" ' +
       'data-tip-desc="' + enc(desc) + '" ' +
-      'data-tip-formula="' + enc(formula) + '">?</span>';
+      'data-tip-formula="' + enc(formula) + '" ' +
+      'aria-label="' + enc(title) + '"></span>';
   }
 
   function _kpiMiniTip(label, val, color, icon, tipTitle, tipDesc, tipFormula) {
@@ -660,10 +664,13 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   }
 
   function _insightHtml(i) {
+    var trust = window.TaagerSmartInsights && window.TaagerSmartInsights.trustLabel
+      ? window.TaagerSmartInsights.trustLabel(i.trust || 'estimated')
+      : 'Estimated';
     return '<div class="sfe-insight sfe-insight--' + i.type + '">' +
       '<span class="sfe-insight-icon">' + i.icon + '</span>' +
       '<div class="sfe-insight-body">' +
-        '<div class="sfe-insight-category">' + i.cat + '</div>' +
+        '<div class="sfe-insight-category">' + i.cat + ' · ' + trust + '</div>' +
         '<div class="sfe-insight-text">' + i.text + '</div>' +
       '</div></div>';
   }
@@ -673,7 +680,24 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     return (Math.max(0, Math.round(Number(sim.realDelivered) || 0)) * sim.realCommission) - sim.realAdSpend;
   }
 
+  function invalidateSimulationRowsCache() {
+    simulationRowsRevision += 1;
+    mountEl._s9SimulationRowsRevision = simulationRowsRevision;
+    simulationRowsCacheKey = '';
+    simulationRowsCacheValue = null;
+  }
+
   function sortedSimulationRows() {
+    var cacheKey = [
+      simulationRowsRevision,
+      simulations.length,
+      tableSearchQuery,
+      tableSortBy,
+      tableSortDir
+    ].join('\u001f');
+    if (simulationRowsCacheValue && simulationRowsCacheKey === cacheKey) {
+      return simulationRowsCacheValue;
+    }
     var rows = simulations.map(function (sim, idx) {
       return { sim: sim, idx: idx };
     });
@@ -684,14 +708,19 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
           textKey(row.sim.sku).indexOf(query) !== -1;
       });
     }
-    if (!tableSortBy) return rows;
+    if (!tableSortBy) {
+      simulationRowsCacheKey = cacheKey;
+      simulationRowsCacheValue = rows;
+      return rows;
+    }
     var direction = tableSortDir === 'asc' ? 1 : -1;
-    return rows.sort(function (left, right) {
+    rows = rows.sort(function (left, right) {
       var a = left.sim;
       var b = right.sim;
       var comparison = 0;
       if (tableSortBy === 'product') comparison = textKey(a.name).localeCompare(textKey(b.name));
       else if (tableSortBy === 'orders') comparison = a.realOrders - b.realOrders;
+      else if (tableSortBy === 'confirmed') comparison = a.realConfirmed - b.realConfirmed;
       else if (tableSortBy === 'delivered') comparison = a.realDelivered - b.realDelivered;
       else if (tableSortBy === 'ndr') comparison = a.realNdr - b.realNdr;
       else if (tableSortBy === 'spend') comparison = a.realAdSpend - b.realAdSpend;
@@ -699,6 +728,9 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       if (!comparison) comparison = left.idx - right.idx;
       return comparison * direction;
     });
+    simulationRowsCacheKey = cacheKey;
+    simulationRowsCacheValue = rows;
+    return rows;
   }
 
   function sortHeader(label, key) {
@@ -725,7 +757,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       var displaySpend = s.realAdSpend === 0
         ? (s.platformSpendFiltered ? '0' : '')
         : Math.round(toDisplay(s.realAdSpend));
-      var spendLocked = s.syncedAdSpend || s.platformSpendFiltered
+      var spendLocked = s.platformSpendFiltered
         ? ' disabled title="' + p9Txt('Filtered from marketing campaign spend', 'تمت تصفية الإنفاق من حملات التسويق') + '"'
         : '';
 
@@ -740,6 +772,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
           '<div style="font-size:10px;font-weight:700;color:' + (s.syncedAdSpend ? '#2dd4bf' : '#f59e0b') + ';margin-top:3px;">' + matchMethodLabel(s) + '</div>' +
         '</td>' +
         '<td style="padding:12px 16px;color:rgba(255,255,255,0.6);">' + p9Num(s.realOrders) + '</td>' +
+        '<td style="padding:12px 16px;color:#3b82f6;font-weight:700;">' + p9Num(s.realConfirmed) + '</td>' +
         '<td style="padding:12px 16px;color:rgba(255,255,255,0.6);">' + p9Num(s.realDelivered) + window.supposedBadgeHtml('delivered') + '</td>' +
         '<td style="padding:12px 16px;color:rgba(255,255,255,0.6);">' + formatPct(s.realNdr) + window.supposedBadgeHtml('dr') + '</td>' +
         '<td style="padding:12px 16px;">' +
@@ -752,7 +785,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       '</tr>';
     }).join('');
     if (!rows) {
-      rows = '<tr><td colspan="6" style="padding:28px 16px;text-align:center;color:rgba(255,255,255,0.45);font-size:13px;font-weight:700;">' +
+      rows = '<tr><td colspan="7" style="padding:28px 16px;text-align:center;color:rgba(255,255,255,0.45);font-size:13px;font-weight:700;">' +
         (tableSearchQuery
           ? p9Txt('No product matches this search.', 'لا يوجد منتج مطابق لهذا البحث.')
           : p9Txt('No products available.', 'لا توجد منتجات متاحة.')) +
@@ -780,27 +813,25 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     }) : null;
     var syncedProductCount = simulations.filter(function (sim) { return !!sim.syncedAdSpend; }).length;
     var matchSummary = campaignAssignmentResult.summary;
-    var syncDisabled = forecastMarketingState && forecastMarketingState.loading ? ' disabled' : '';
-    var syncLabel = forecastMarketingState && forecastMarketingState.loading ? p9Txt('Syncing...', 'Syncing...') : p9Txt('Sync Now', 'Sync Now');
     var platformTabs = FORECAST_PLATFORMS.map(function (platform) {
       return '<button type="button" class="s9-platform-tab' + (selectedMarketingPlatform === platform.id ? ' is-active' : '') +
         '" data-s9-platform="' + platform.id + '">' + platform.label + '</button>';
     }).join('');
 
-    return '<div style="flex:1;display:flex;flex-direction:column;border-left:1px solid rgba(255,255,255,0.06);overflow:hidden;">' +
+    return '<div class="s9-table-container dash-scroll">' +
       '<div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.01);">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">' +
           '<div style="font-size:16px;font-weight:800;color:#fff;">' + p9Txt('Products', 'المنتجات') + '</div>' +
           '<button type="button" id="s9-clear-sort" class="s9-clear-sort"' + (tableSortBy ? '' : ' disabled') + '>' + p9Txt('Clear sort', 'مسح الترتيب') + '</button>' +
         '</div>' +
         '<div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:2px;">' + p9Txt('Enter budget per product to see forecasts.', 'أدخل الميزانية لكل منتج لرؤية التوقعات.') + '</div>' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding:9px 10px;border:1px solid rgba(45,212,191,.18);border-radius:10px;background:rgba(45,212,191,.06);flex-wrap:wrap;">' +
+        '<div style="display:block;margin-top:10px;padding:8px 10px;border:1px solid rgba(45,212,191,.18);border-radius:10px;background:rgba(45,212,191,.06);">' +
           '<div style="display:flex;flex-direction:column;gap:2px;min-width:0;">' +
             '<span style="font-size:11px;color:#2dd4bf;font-weight:900;">' + p9Txt('Marketing sync period', 'Marketing sync period') + ': ' + productSyncPeriodLabel() + ' · ' + p9Txt('Spend platform', 'منصة الإنفاق') + ': ' + FORECAST_PLATFORMS.filter(function (platform) { return platform.id === selectedMarketingPlatform; })[0].label + '</span>' +
-            '<span style="font-size:10px;color:rgba(255,255,255,.48);font-weight:700;">' + p9Txt('Matched products', 'المنتجات المطابقة') + ': ' + syncedProductCount + ' / ' + simulations.length + ' · ' + p9Txt('SKU rows', 'صفوف SKU') + ': ' + matchSummary.skuRows + ' · ' + p9Txt('Name fallback rows', 'صفوف مطابقة الاسم') + ': ' + matchSummary.nameRows + ' · ' + p9Txt('Unmatched', 'غير مطابق') + ': ' + matchSummary.unmatchedRows + '</span>' +
+            '<span style="font-size:10px;color:rgba(255,255,255,.48);font-weight:700;">' + p9Txt('Matched products', 'المنتجات المطابقة') + ': ' + syncedProductCount + ' / ' + simulations.length + ' · ' + p9Txt('Separated SKU', 'SKU منفصل') + ': ' + matchSummary.separatedSkuRows + ' · ' + p9Txt('Glued SKU', 'SKU ملتصق') + ': ' + matchSummary.gluedSkuRows + ' · ' + p9Txt('Name fallback', 'مطابقة الاسم') + ': ' + matchSummary.nameRows + ' · ' + p9Txt('Ambiguous', 'ملتبس') + ': ' + matchSummary.ambiguousRows + ' · ' + p9Txt('Unmatched', 'غير مطابق') + ': ' + matchSummary.unmatchedRows + '</span>' +
             '<span style="font-size:10px;color:#f59e0b;font-weight:700;">' + p9Txt('Best accuracy: include the product SKU in each TikTok, Snapchat, or Facebook campaign name. Name fallback accepts a distinctive single word or matching phrase and normalizes common Arabic spelling variants. Renamed historical campaigns may require a campaign-data refresh before they appear here.', 'لأدق نتيجة: ضع SKU المنتج داخل اسم كل حملة تيك توك أو سناب شات أو فيسبوك. تقبل مطابقة الاسم كلمة مميزة واحدة أو عبارة مطابقة مع توحيد اختلافات الكتابة العربية الشائعة. قد تحتاج أسماء الحملات التاريخية المعدلة إلى تحديث بيانات الحملات قبل أن تظهر هنا.') + '</span>' +
           '</div>' +
-          '<button type="button" id="s9-sync-now" style="border:1px solid rgba(168,85,247,.45);background:rgba(168,85,247,.18);color:#fff;border-radius:8px;padding:7px 11px;font-size:11px;font-weight:900;cursor:pointer;font-family:inherit;"' + syncDisabled + '>' + syncLabel + '</button>' +
+          '<button type="button" id="s9-sync-now" style="align-self:flex-start;border:1px solid rgba(45,212,191,.35);background:rgba(45,212,191,.10);color:#2dd4bf;border-radius:8px;padding:6px 10px;font-size:10px;font-weight:900;font-family:inherit;cursor:pointer;">' + p9Txt('Sync Now', 'زامن الآن') + '</button>' +
         '</div>' +
         '<div class="s9-platform-tabs" aria-label="' + p9Txt('Advertising spend platform', 'منصة الإنفاق الإعلاني') + '">' + platformTabs + '</div>' +
         '<div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">' +
@@ -813,12 +844,13 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
           '</div>' +
         '</div>' +
       '</div>' +
-      '<div style="flex:1;overflow-y:auto;" class="dash-scroll">' +
+      '<div class="s9-table-scroll dash-scroll">' +
         '<table style="width:100%;border-collapse:collapse;text-align:right;">' +
           '<thead style="position:sticky;top:0;background:#0b0f19;z-index:10;border-bottom:1px solid rgba(255,255,255,0.06);font-size:11px;color:rgba(255,255,255,0.4);">' +
             '<tr>' +
               '<th style="padding:10px 16px;font-weight:600;">' + sortHeader(p9Txt('Product', 'المنتج'), 'product') + '</th>' +
-              '<th style="padding:10px 16px;font-weight:600;">' + sortHeader(p9Txt('Total Orders', 'إجمالي الطلبات'), 'orders') + '</th>' +
+              '<th style="padding:10px 16px;font-weight:600;">' + sortHeader(p9Txt('Net Orders', 'صافي الطلبات'), 'orders') + '</th>' +
+              '<th style="padding:10px 16px;font-weight:600;">' + sortHeader(p9Txt('Confirmed Orders', 'الطلبات المؤكدة'), 'confirmed') + '</th>' +
               '<th style="padding:10px 16px;font-weight:600;">' + sortHeader(p9Txt('Delivered Orders', 'الطلبات المسلمة'), 'delivered') + '</th>' +
               '<th style="padding:10px 16px;font-weight:600;">' + sortHeader('NDR ' + p9Txt('Real', 'الفعلي'), 'ndr') + '</th>' +
               '<th style="padding:10px 16px;font-weight:600;">' + sortHeader(p9Txt('Ad Budget', 'الميزانية الإعلانية') + ' (' + viewCurrency + ')', 'spend') + '</th>' +
@@ -852,15 +884,22 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
 
     // ── 4 product-level metric mini-cards (mirrors S7 "Real Bot Data" grid) ──
     var metricsHtml =
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">' +
+      '<div class="s9-kpi-grid">' +
         // Taager dashboard/status/NDR migration:
         // Average profit is derived from order profit minus tax profit, then averaged per delivered order.
         _kpiMiniTip(
-          p9Txt('Total Orders', 'إجمالي الطلبات'),
+          p9Txt('Net Orders', 'صافي الطلبات'),
           p9Num(c.totalOrders), '#fff', '📦',
-          p9Txt('Total Orders', 'إجمالي الطلبات'),
+          p9Txt('Net Orders', 'صافي الطلبات'),
           p9Txt('Total number of orders placed for this product.', 'العدد الكلي للطلبات التي وردت لهذا المنتج.'),
           null
+        ) +
+        _kpiMiniTip(
+          p9Txt('Confirmed', 'مؤكدة'),
+          p9Num(s.realConfirmed), '#3b82f6', '✓',
+          p9Txt('Confirmed Orders', 'الطلبات المؤكدة'),
+          p9Txt('Orders that passed confirmation for this selected product.', 'الطلبات التي تم تأكيدها لهذا المنتج المحدد.'),
+          'confirmedOrders = netOrders * confirmationRate'
         ) +
         _kpiMiniTip(
           p9Txt('Delivered', 'تم تسليمها'),
@@ -891,11 +930,13 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
           'confirmationRate = confirmedOrders / netOrders'
         ) +
         _kpiMiniTip(
-          p9Txt('DR Rate', 'نسبة DR'),
+          expectedRateMode ? p9Txt('Historical Cohort DR', 'نسبة DR للفئة التاريخية') : p9Txt('DR Rate', 'نسبة DR'),
           formatPct(s.realDr), '#60a5fa', '📈',
-          p9Txt('DR Rate', 'نسبة DR'),
-          p9Txt('Delivered orders divided by confirmed orders for this selected product.', 'الطلبات المسلمة مقسومة على الطلبات المؤكدة لهذا المنتج المحدد.'),
-          'DR = deliveredOrders / confirmedOrders'
+          expectedRateMode ? p9Txt('Historical Cohort DR', 'نسبة DR للفئة التاريخية') : p9Txt('DR Rate', 'نسبة DR'),
+          expectedRateMode
+            ? p9Txt('Delivered orders divided by confirmed orders from the selected historical NDR cohort.', 'الطلبات المسلمة مقسومة على الطلبات المؤكدة من فئة NDR التاريخية المحددة.')
+            : p9Txt('Delivered orders divided by confirmed orders for this selected product.', 'الطلبات المسلمة مقسومة على الطلبات المؤكدة لهذا المنتج المحدد.'),
+          expectedRateMode ? 'Historical DR = cohort delivered / cohort confirmed' : 'DR = deliveredOrders / confirmedOrders'
         ) +
       '</div>';
 
@@ -910,7 +951,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
               p9Txt('Percentage of orders delivered to customers. Below 20% is critical, 30%+ is healthy, 40%+ is top tier.', 'نسبة الطلبات التي وصلت للعميل. أقل من 20% خطر، 30% فأعلى صحي، 40% فأعلى أعلى مستوى.'),
               'NDR = deliveredOrders / totalOrders * 100') +
           '</label>' +
-          '<span style="font-size:11px;color:rgba(255,255,255,0.35);">' + p9Txt('Real: ', 'الفعلي: ') + formatPct(s.realNdr) + '</span>' +
+          '<span style="font-size:11px;color:rgba(255,255,255,0.35);">' + p9Txt('Actual: ', 'الفعلي: ') + formatPct(s.realNdr) + '</span>' +
         '</div>' +
         '<div class="sfe-input-wrap2">' +
           '<input type="number" class="s9-ndr-input sfe-input2" min="1" max="100" step="1" value="' + Math.round(s.ndr * 100) + '" placeholder="24" style="direction:ltr;">' +
@@ -934,7 +975,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
               p9Txt('Editable average profit assumption used for forecast math. The real KPI above is average profit from the sheet.', 'افتراض متوسط الربح المستخدم في المحاكاة. المؤشر الحقيقي أعلاه هو متوسط الربح من الشيت.'),
               'revenue = deliveredOrders * averageProfitPerDeliveredOrder') +
           '</label>' +
-          '<span style="font-size:11px;color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Real: ', 'الفعلي: ') + toDisplay(s.realCommission).toFixed(2) + ' ' + viewCurrency + '</span>' +
+          '<span style="font-size:11px;color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + toDisplay(s.realCommission).toFixed(2) + ' ' + viewCurrency + '</span>' +
         '</div>' +
         '<div class="sfe-input-wrap2">' +
           '<input type="number" class="s9-comm-input sfe-input2" min="1" step="0.5" value="' + toDisplay(s.avgCommission).toFixed(2) + '" placeholder="32.79" style="direction:ltr;">' +
@@ -946,28 +987,28 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       '<div style="background:rgba(255,255,255,0.02);padding:16px;border-radius:12px;border:1px solid rgba(255,255,255,0.05);">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
           '<label style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.7);display:flex;align-items:center;gap:5px;">' +
-            p9Txt('Scenario Ad Budget', 'Scenario Ad Budget') +
+            p9Txt('Scenario Ad Budget', 'ميزانية الإعلان في السيناريو') +
           '</label>' +
-          '<span style="font-size:11px;color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Real: ', 'Real: ') + formatMoney(s.realAdSpend, true) + '</span>' +
+          '<span style="font-size:11px;color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + formatMoney(s.realAdSpend, true) + '</span>' +
         '</div>' +
         '<div class="sfe-input-wrap2">' +
           '<input type="number" class="s9-sim-spend-input sfe-input2" min="0" step="1" value="' + Math.round(toDisplay(s.adSpend)) + '" placeholder="0" style="direction:ltr;">' +
           '<span class="sfe-input-unit2">' + viewCurrency + '</span>' +
         '</div>' +
-        (s.syncedAdSpend ? '<div style="font-size:10px;color:#2dd4bf;font-weight:800;margin-top:8px">' + p9Txt('Real spend loaded from marketing platforms for ', 'تم تحميل الإنفاق الفعلي من منصات التسويق للفترة ') + productSyncPeriodLabel() + '. ' + p9Txt('Edit this scenario freely; Reset to Real Data restores it.', 'يمكنك تعديل السيناريو بحرية؛ زر الرجوع للبيانات الحقيقية يعيد القيمة الفعلية.') + '</div>' : '') +
+        (s.syncedAdSpend ? '<div style="font-size:10px;color:#2dd4bf;font-weight:800;margin-top:8px">' + p9Txt('Actual spend is synced from marketing platforms for ', 'تمت مزامنة الإنفاق الفعلي من منصات التسويق للفترة ') + productSyncPeriodLabel() + '. ' + p9Txt('This scenario budget remains editable; Reset to Actual Data restores synced values.', 'تبقى ميزانية السيناريو قابلة للتعديل؛ زر الرجوع للبيانات الفعلية يعيد القيم المتزامنة.') + '</div>' : '') +
       '</div>';
 
     var ordersInputHtml =
       '<div style="background:rgba(255,255,255,0.02);padding:16px;border-radius:12px;border:1px solid rgba(255,255,255,0.05);">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
           '<label style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.7);display:flex;align-items:center;gap:5px;">' +
-            p9Txt('Total Orders', 'Total Orders') +
+            p9Txt('Net Orders', 'صافي الطلبات') +
           '</label>' +
-          '<span style="font-size:11px;color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Real: ', 'Real: ') + p9Num(s.realOrders) + '</span>' +
+          '<span style="font-size:11px;color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + p9Num(s.realOrders) + '</span>' +
         '</div>' +
         '<div class="sfe-input-wrap2">' +
           '<input type="number" class="s9-total-orders-input sfe-input2" min="0" step="1" value="' + c.totalOrders + '" placeholder="0" style="direction:ltr;">' +
-          '<span class="sfe-input-unit2">' + p9Txt('orders', 'orders') + '</span>' +
+          '<span class="sfe-input-unit2">' + p9Txt('orders', 'طلبات') + '</span>' +
         '</div>' +
       '</div>';
 
@@ -975,13 +1016,13 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       '<div style="background:rgba(255,255,255,0.02);padding:16px;border-radius:12px;border:1px solid rgba(255,255,255,0.05);">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
           '<label style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.7);display:flex;align-items:center;gap:5px;">' +
-            p9Txt('Delivered Orders', 'Delivered Orders') +
+            p9Txt('Delivered Orders', 'الطلبات المسلمة') +
           '</label>' +
-          '<span style="font-size:11px;color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Real: ', 'Real: ') + p9Num(s.realDelivered) + '</span>' +
+          '<span style="font-size:11px;color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + p9Num(s.realDelivered) + '</span>' +
         '</div>' +
         '<div class="sfe-input-wrap2">' +
           '<input type="number" class="s9-delivered-orders-input sfe-input2" min="0" step="1" value="' + c.deliveredOrders + '" placeholder="0" style="direction:ltr;">' +
-          '<span class="sfe-input-unit2">' + p9Txt('orders', 'orders') + '</span>' +
+          '<span class="sfe-input-unit2">' + p9Txt('orders', 'طلبات') + '</span>' +
         '</div>' +
       '</div>';
 
@@ -1014,7 +1055,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     var isLight = document.documentElement.getAttribute('data-theme') === 'light';
     var npColor = c.netProfit < 0 ? '#ef4444' : (c.netProfit > 0 ? (isLight ? '#10b981' : '#00e676') : (isLight ? '#6b7280' : 'rgba(255,255,255,0.6)'));
     var kpiCardsHtml =
-      '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;">' +
+      '<div class="s9-kpi-cards-grid">' +
         // Net Profit
         '<div class="s7-card">' +
           '<div style="font-size:11px;color:#00e676;font-weight:700;display:flex;align-items:center;gap:4px;">' + p9Txt('Net Profit', 'صافي الربح') + ' ' + _tip('🪙', p9Txt('Net Profit', 'الربح الصافي'), p9Txt('Net profit after deducting ad spend from revenue.', 'الربح بعد خصم الإنفاق من الإيراد.'), 'netProfit = revenue - adSpend') + '</div>' +
@@ -1029,7 +1070,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         '</div>' +
         // CPA
         '<div class="s7-card">' +
-          '<div style="font-size:11px;color:#a855f7;font-weight:700;display:flex;align-items:center;gap:4px;">CPA ' + _tip('🎯', p9Txt('Cost Per Acquisition (CPA)', 'تكلفة الطلب (CPA)'), p9Txt('Cost per acquired order. Should be lower than average profit per delivered order for profitability.', 'تكلفة الحصول على طلب واحد. يجب أن تكون أقل من متوسط الربح لكل طلب مسلم لضمان الربح.'), 'CPA = adSpend / totalOrders') + '</div>' +
+          '<div style="font-size:11px;color:#a855f7;font-weight:700;display:flex;align-items:center;gap:4px;">CPA ' + _tip('🎯', p9Txt('Cost Per Acquisition (CPA)', 'تكلفة الطلب (CPA)'), p9Txt('Cost per acquired net order. It should remain below break-even CPA.', 'تكلفة الحصول على طلب صافي واحد. يجب أن تبقى أقل من تكلفة التعادل.'), 'CPA = adSpend / netOrders') + '</div>' +
           '<div style="font-size:17px;font-weight:900;color:#fff;" dir="ltr">' + formatMoney(c.cpa, false, 2) + '</div>' +
           '<div style="font-size:10px;color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;">' + viewCurrency + '</div>' +
         '</div>' +
@@ -1039,6 +1080,12 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
           '<div class="s9-kpi-breakeven" style="font-size:17px;font-weight:900;color:' + (c.cpa > c.breakEvenCpa ? '#ef4444' : '#f59e0b') + ';" dir="ltr">' + formatMoney(c.breakEvenCpa, false, 2) + window.supposedBadgeHtml('breakeven') + '</div>' +
           '<div style="font-size:10px;color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;">' + viewCurrency + '</div>' +
         '</div>' +
+        // Confirmed Orders
+        '<div class="s7-card">' +
+          '<div style="font-size:11px;color:#3b82f6;font-weight:700;display:flex;align-items:center;gap:4px;">' + p9Txt('Confirmed', 'مؤكدة') + ' ' + _tip('✓', p9Txt('Confirmed Orders', 'الطلبات المؤكدة'), p9Txt('Orders that passed confirmation for this selected product.', 'الطلبات التي تم تأكيدها لهذا المنتج المحدد.'), 'confirmedOrders = netOrders * confirmationRate') + '</div>' +
+          '<div class="s9-kpi-confirmed" style="font-size:17px;font-weight:900;color:#3b82f6;">' + p9Num(s.realConfirmed) + '</div>' +
+          '<div style="font-size:10px;color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;">' + p9Txt('orders', 'طلب') + '</div>' +
+        '</div>' +
         // Delivered Orders
         '<div class="s7-card">' +
           '<div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;display:flex;align-items:center;gap:4px;">' + p9Txt('Delivered', 'مسلمة') + ' ' + _tip('✅', p9Txt('Delivered Orders', 'الطلبات المسلمة'), p9Txt('Number of orders delivered based on simulated NDR.', 'عدد الطلبات المسلمة بناءً على نسبة التسليم المحاكاة.'), 'delivered = totalOrders * NDR') + '</div>' +
@@ -1047,25 +1094,36 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         '</div>' +
       '</div>';
 
-    return '<div style="flex:1;display:flex;flex-direction:column;background:#0b0f19;overflow-y:auto;" class="dash-scroll">' +
+    return '<div class="s9-sim-container dash-scroll">' +
 
       // Header + currency toggle
-      '<div style="padding:20px 24px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">' +
-        '<div style="min-width:0;flex:1;overflow:hidden;">' +
-          '<div style="font-size:12px;color:#3b82f6;font-weight:700;letter-spacing:1px;margin-bottom:4px;white-space:nowrap;">' + p9Txt('PRODUCT SMART FORECAST', 'مُحاكي التوقعات الذكية') + '</div>' +
-          '<div data-i18n-preserve style="font-size:18px;font-weight:900;color:#fff;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.35;word-break:break-word;" title="' + s.name.replace(/"/g, '&quot;') + '">' + s.name + '</div>' +
-          '<div style="font-size:10px;font-weight:700;color:' + (s.syncedAdSpend ? '#2dd4bf' : '#f59e0b') + ';margin-top:5px;">SKU: ' + (s.sku || 'N/A') + ' · ' + matchMethodLabel(s) + '</div>' +
+      '<div style="padding:20px 24px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;gap:12px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+          '<div style="font-size:12px;color:#3b82f6;font-weight:700;letter-spacing:1px;white-space:nowrap;">' + p9Txt('PRODUCT SMART FORECAST', 'مُحاكي التوقعات الذكية') + '</div>' +
+          '<button type="button" class="s9-reset-real-btn" style="border:1px solid ' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(34,197,94,0.35)' : 'rgba(34,197,94,0.45)') + ';background:' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.10)') + ';color:' + (document.documentElement.getAttribute('data-theme') === 'light' ? '#15803d' : '#86efac') + ';border-radius:9px;padding:6px 12px;font-size:11px;font-weight:900;font-family:inherit;cursor:pointer;flex-shrink:0;">' + p9Txt('Reset to Actual Data', 'الرجوع للبيانات الفعلية') + '</button>' +
         '</div>' +
-        '<div style="flex-shrink:0;margin-top:2px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;">' +
-          '<button type="button" class="s9-reset-real-btn" style="border:1px solid ' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(34,197,94,0.35)' : 'rgba(34,197,94,0.45)') + ';background:' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.10)') + ';color:' + (document.documentElement.getAttribute('data-theme') === 'light' ? '#15803d' : '#86efac') + ';border-radius:9px;padding:8px 12px;font-size:11px;font-weight:900;font-family:inherit;cursor:pointer;">' + p9Txt('Reset to Real Data', 'Reset to Real Data') + '</button>' +
-          currToggleHtml +
-        '</div>' +
+        '<div data-i18n-preserve style="font-size:18px;font-weight:900;color:#fff;line-height:1.35;word-break:break-word;" title="' + s.name.replace(/"/g, '&quot;') + '">' + s.name + '</div>' +
+        '<div style="font-size:10px;font-weight:700;color:' + (s.syncedAdSpend ? '#2dd4bf' : '#f59e0b') + ';">SKU: ' + (s.sku || 'N/A') + ' · ' + matchMethodLabel(s) + '</div>' +
+        '<div style="margin-top:4px;">' + currToggleHtml + '</div>' +
       '</div>' +
 
       '<div data-sim-panel="1" style="padding:24px;display:flex;flex-direction:column;gap:20px;">' +
 
         // 4-metric product panel
         metricsHtml +
+
+        // KPI Cards row — above scenario inputs
+        kpiCardsHtml +
+
+        // Controls: scenario inputs
+        '<div class="s9-inputs-grid">' +
+          ordersInputHtml +
+          spendInputHtml +
+          ndrInputHtml +
+          deliveredInputHtml +
+          commInputHtml +
+          rateNoteHtml +
+        '</div>' +
 
         // Gauge
         '<div style="background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.04);border-radius:14px;padding:20px;display:flex;flex-direction:column;align-items:center;">' +
@@ -1075,19 +1133,6 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
           '</div>' +
           '<div id="s9-gauge-wrap" style="width:100%;max-width:340px;">' + gaugeHtml(c.roi) + '</div>' +
         '</div>' +
-
-        // Controls: scenario inputs
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">' +
-          ordersInputHtml +
-          spendInputHtml +
-          ndrInputHtml +
-          deliveredInputHtml +
-          commInputHtml +
-          rateNoteHtml +
-        '</div>' +
-
-        // KPI Cards row
-        kpiCardsHtml +
 
         // Insights feed
         '<div>' +
@@ -1156,7 +1201,8 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     '.sfe-marker--danger{color:#ff3b5c}.sfe-marker--mid{color:#f5a623}.sfe-marker--safe{color:#22d3ee}' +
 
     // Tooltip badge
-    '.s7-tip-badge{width:18px;height:18px;border-radius:50%;background:' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(37,99,235,0.12)' : 'rgba(59,130,246,0.16)') + ';border:1px solid rgba(96,165,250,0.55);color:#93c5fd;font-size:11px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;cursor:help;transition:background .18s,border-color .18s,color .18s;font-family:system-ui,sans-serif;flex-shrink:0;vertical-align:middle;line-height:1;user-select:none}' +
+    '.s7-tip-badge{width:18px;height:18px;border-radius:50%;background:' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(37,99,235,0.12)' : 'rgba(59,130,246,0.16)') + ';border:1px solid rgba(96,165,250,0.55);color:#93c5fd;font-size:0;font-weight:900;display:inline-flex;align-items:center;justify-content:center;cursor:help;transition:background .18s,border-color .18s,color .18s;font-family:system-ui,sans-serif;flex-shrink:0;vertical-align:middle;line-height:1;user-select:none}' +
+    '.s7-tip-badge::before{content:"?";display:block;color:currentColor;font-size:11px;font-weight:900;line-height:1}' +
     '.s7-tip-badge:hover{background:rgba(59,130,246,0.28);border-color:rgba(59,130,246,0.7);color:#93c5fd}' +
 
     // S7 KPI card
@@ -1187,7 +1233,49 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
 
     // Spend input (table column)
     '.s9-spend-input{background:rgba(0,0,0,0.3)!important;color:#fff!important;color-scheme:dark}' +
-    '.s9-spend-input:focus{outline:none;border-color:#3b82f6!important;background:rgba(59,130,246,0.1)!important}';
+    '.s9-spend-input:focus{outline:none;border-color:#3b82f6!important;background:rgba(59,130,246,0.1)!important}' +
+
+    // Layout containers
+    '.s9-root { display: flex; width: 100%; height: 100%; background: #070a13; font-family: "Cairo", sans-serif; }' +
+    '.s9-table-container { flex: 1.2; display: flex; flex-direction: column; border-left: 1px solid rgba(255,255,255,0.06); overflow-y: auto; }' +
+    '.s9-table-scroll { flex: none; overflow-x: auto; overflow-y: visible; }' +
+    '.s9-sim-container { flex: 0.8; display: flex; flex-direction: column; background: #0b0f19; overflow-y: auto; }' +
+    '.s9-kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }' +
+    '.s9-inputs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }' +
+    '.s9-kpi-cards-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }' +
+
+    // Responsive rules for size classes
+    '.dash-size-md .s9-root, .dash-size-sm .s9-root, .dash-size-xs .s9-root { flex-direction: column !important; height: auto !important; overflow: visible !important; }' +
+    '.dash-size-md .s9-table-container, .dash-size-sm .s9-table-container, .dash-size-xs .s9-table-container { width: 100% !important; flex: none !important; border-left: none !important; overflow: visible !important; height: auto !important; }' +
+    '.dash-size-md .s9-table-scroll, .dash-size-sm .s9-table-scroll, .dash-size-xs .s9-table-scroll { overflow-y: visible !important; overflow-x: auto !important; }' +
+    '.dash-size-md .s9-sim-container, .dash-size-sm .s9-sim-container, .dash-size-xs .s9-sim-container { width: 100% !important; flex: none !important; height: auto !important; overflow: visible !important; }' +
+
+    // Responsive grids
+    '.dash-size-md .s9-kpi-grid, .dash-size-sm .s9-kpi-grid { grid-template-columns: repeat(3, 1fr) !important; }' +
+    '.dash-size-xs .s9-kpi-grid { grid-template-columns: 1fr 1fr !important; }' +
+    '@media (max-width: 480px) { .s9-kpi-grid { grid-template-columns: 1fr !important; } }' +
+
+    '.dash-size-xs .s9-inputs-grid { grid-template-columns: 1fr !important; }' +
+
+    '.dash-size-md .s9-kpi-cards-grid { grid-template-columns: repeat(3, 1fr) !important; }' +
+    '.dash-size-sm .s9-kpi-cards-grid { grid-template-columns: repeat(2, 1fr) !important; }' +
+    '.dash-size-xs .s9-kpi-cards-grid { grid-template-columns: 1fr 1fr !important; }' +
+    '@media (max-width: 400px) { .s9-kpi-cards-grid { grid-template-columns: 1fr !important; } }' +
+
+    // Media query fallback for direct viewport sizing
+    '@media (max-width: 1180px) {' +
+      '.s9-root { flex-direction: column !important; height: auto !important; overflow: visible !important; }' +
+      '.s9-table-container { width: 100% !important; flex: none !important; border-left: none !important; overflow: visible !important; height: auto !important; }' +
+      '.s9-table-scroll { overflow-y: visible !important; overflow-x: auto !important; }' +
+      '.s9-sim-container { width: 100% !important; flex: none !important; height: auto !important; overflow: visible !important; }' +
+      '.s9-kpi-grid { grid-template-columns: repeat(3, 1fr) !important; }' +
+      '.s9-kpi-cards-grid { grid-template-columns: repeat(2, 1fr) !important; }' +
+    '}' +
+    '@media (max-width: 760px) {' +
+      '.s9-kpi-grid { grid-template-columns: 1fr 1fr !important; }' +
+      '.s9-inputs-grid { grid-template-columns: 1fr !important; }' +
+      '.s9-kpi-cards-grid { grid-template-columns: repeat(2, 1fr) !important; }' +
+    '}';
 
   // ── 11. Inject global CSS into <head> so it beats dashboard stylesheets ─────
   function injectGlobalCSS() {
@@ -1222,7 +1310,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   function renderAll() {
     injectGlobalCSS();
     mountEl.innerHTML =
-      '<div style="display:flex;width:100%;height:100%;background:#070a13;font-family:\'Cairo\',sans-serif;">' +
+      '<div class="s9-root">' +
         buildTable() +
         buildSimulator() +
       '</div>';
@@ -1237,11 +1325,75 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       applyProfitColor(cell, realNetProfit);
     });
 
-    bindEvents();
+    bindEvents(mountEl);
     initTooltips();
   }
 
+  function renderTableOnly(options) {
+    options = options || {};
+    var active = document.activeElement;
+    var preserveSearch = active && active.id === 's9-product-search';
+    var selectionStart = preserveSearch ? active.selectionStart : null;
+    var selectionEnd = preserveSearch ? active.selectionEnd : null;
+    var holder = document.createElement('div');
+    holder.innerHTML = buildTable();
+    var nextTable = holder.firstElementChild;
+    var currentTable = mountEl.querySelector('.s9-table-container');
+    if (!nextTable || !currentTable) {
+      renderAll();
+      return;
+    }
+    currentTable.replaceWith(nextTable);
+    bindEvents(nextTable);
+    if (preserveSearch || options.focusSearch) {
+      var nextSearch = mountEl.querySelector('#s9-product-search');
+      if (nextSearch) {
+        nextSearch.focus();
+        if (nextSearch.setSelectionRange && selectionStart !== null && selectionEnd !== null) {
+          nextSearch.setSelectionRange(selectionStart, selectionEnd);
+        }
+      }
+    }
+  }
+
+  function applyImmediateTableSearch(query) {
+    var normalized = textKey(query);
+    mountEl.querySelectorAll('.s9-row').forEach(function (row) {
+      var idx = parseInt(row.getAttribute('data-idx'));
+      var sim = simulations[idx];
+      var matches = !normalized || (sim && (
+        textKey(sim.name).indexOf(normalized) !== -1 ||
+        textKey(sim.sku).indexOf(normalized) !== -1
+      ));
+      row.hidden = !matches;
+    });
+  }
+
   // ── 12. Smart update — avoids full re-render during input (no focus loss) ──
+  function flushScheduledRender() {
+    if (tableRenderTimer) {
+      clearTimeout(tableRenderTimer);
+      tableRenderTimer = null;
+    }
+    if (!tableRenderPending || !mountEl.isConnected) return;
+    tableRenderPending = false;
+    renderTableOnly();
+  }
+
+  function scheduleRenderAll(delay) {
+    tableRenderPending = true;
+    if (tableRenderTimer) clearTimeout(tableRenderTimer);
+    tableRenderTimer = setTimeout(function () {
+      tableRenderTimer = null;
+      if (!mountEl.isConnected) return;
+      if (document.activeElement && document.activeElement.classList &&
+          document.activeElement.classList.contains('s9-spend-input')) {
+        return;
+      }
+      flushScheduledRender();
+    }, delay || 180);
+  }
+
   function updateSimulatorOnly() {
     var s = simulations[selectedIdx];
     if (!s) return;
@@ -1253,7 +1405,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
 
     // KPI cards — update text nodes only
     var cards = mountEl.querySelectorAll('.s7-card');
-    if (cards.length >= 5) {
+    if (cards.length >= 6) {
       // Net Profit — update text AND color (class + inline important)
       var npEl = cards[0].querySelector('.s9-kpi-netprofit');
       if (npEl) {
@@ -1272,8 +1424,11 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         beEl.innerHTML = formatMoney(c.breakEvenCpa, false, 2) + window.supposedBadgeHtml('breakeven');
         beEl.style.color = c.cpa > c.breakEvenCpa ? '#ef4444' : '#f59e0b';
       }
+      // Confirmed
+      var confirmedEl = cards[4].querySelector('.s9-kpi-confirmed');
+      if (confirmedEl) confirmedEl.textContent = p9Num(s.realConfirmed);
       // Delivered
-      var delEl = cards[4].querySelector('div:nth-child(2)');
+      var delEl = cards[5].querySelector('div:nth-child(2)');
       if (delEl) delEl.innerHTML = p9Num(Math.round(c.deliveredOrders)) + window.supposedBadgeHtml('delivered');
     }
 
@@ -1282,11 +1437,12 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     if (simPanel) {
       var metricVals = simPanel.querySelectorAll('.s9-metric-val');
       if (metricVals[0]) metricVals[0].textContent = p9Num(c.totalOrders);
-      if (metricVals[1]) metricVals[1].innerHTML = p9Num(Math.round(c.deliveredOrders)) + window.supposedBadgeHtml('delivered');
-      if (metricVals[2]) metricVals[2].innerHTML = Math.round(s.ndr * 100) + '%' + window.supposedBadgeHtml('dr');
-      if (metricVals[3]) metricVals[3].innerHTML = toDisplay(s.avgCommission).toFixed(2) + ' ' + viewCurrency + window.supposedBadgeHtml('profit');
-      if (metricVals[4]) metricVals[4].textContent = formatPct(s.realConfirmationRate);
-      if (metricVals[5]) metricVals[5].textContent = formatPct(s.realDr);
+      if (metricVals[1]) metricVals[1].textContent = p9Num(s.realConfirmed);
+      if (metricVals[2]) metricVals[2].innerHTML = p9Num(Math.round(c.deliveredOrders)) + window.supposedBadgeHtml('delivered');
+      if (metricVals[3]) metricVals[3].innerHTML = Math.round(s.ndr * 100) + '%' + window.supposedBadgeHtml('dr');
+      if (metricVals[4]) metricVals[4].innerHTML = toDisplay(s.avgCommission).toFixed(2) + ' ' + viewCurrency + window.supposedBadgeHtml('profit');
+      if (metricVals[5]) metricVals[5].textContent = formatPct(s.realConfirmationRate);
+      if (metricVals[6]) metricVals[6].textContent = formatPct(s.realDr);
     }
 
     var totalInput = mountEl.querySelector('.s9-total-orders-input');
@@ -1307,6 +1463,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     rows.forEach(function (row) {
       var idx = parseInt(row.getAttribute('data-idx'));
       var rs  = simulations[idx];
+      row.style.background = idx === selectedIdx ? 'rgba(59,130,246,0.1)' : 'transparent';
       var realNetProfit = (Math.max(0, Math.round(Number(rs.realDelivered) || 0)) * rs.realCommission) - rs.realAdSpend;
       var profitCell = row.querySelector('.s9-profit-cell');
       if (profitCell) {
@@ -1324,8 +1481,9 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   }
 
   // ── 13. Event binding ───────────────────────────────────────────────────────
-  function bindEvents() {
-    mountEl.querySelectorAll('.s9-platform-tab').forEach(function (button) {
+  function bindEvents(rootEl) {
+    var eventRoot = rootEl || mountEl;
+    eventRoot.querySelectorAll('.s9-platform-tab').forEach(function (button) {
       button.addEventListener('click', function () {
         var nextPlatform = button.getAttribute('data-s9-platform') || 'all';
         if (nextPlatform === selectedMarketingPlatform) return;
@@ -1339,7 +1497,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       });
     });
 
-    mountEl.querySelectorAll('.s9-sort-btn').forEach(function (button) {
+    eventRoot.querySelectorAll('.s9-sort-btn').forEach(function (button) {
       button.addEventListener('click', function () {
         var key = button.getAttribute('data-sort') || '';
         if (!key) return;
@@ -1353,11 +1511,11 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         mountEl._s9CurrentPage = currentPage;
         mountEl._s9TableSortBy = tableSortBy;
         mountEl._s9TableSortDir = tableSortDir;
-        renderAll();
+        renderTableOnly();
       });
     });
 
-    var clearSortBtn = mountEl.querySelector('#s9-clear-sort');
+    var clearSortBtn = eventRoot.querySelector('#s9-clear-sort');
     if (clearSortBtn) {
       clearSortBtn.addEventListener('click', function () {
         tableSortBy = '';
@@ -1366,20 +1524,26 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         mountEl._s9CurrentPage = currentPage;
         mountEl._s9TableSortBy = tableSortBy;
         mountEl._s9TableSortDir = tableSortDir;
-        renderAll();
+        renderTableOnly();
       });
     }
 
-    var productSearch = mountEl.querySelector('#s9-product-search');
+    var productSearch = eventRoot.querySelector('#s9-product-search');
     if (productSearch) {
       productSearch.addEventListener('input', function () {
+        var searchStartedAt = performance.now();
+        var searchToken = ++tableSearchToken;
         tableSearchQuery = productSearch.value || '';
+        applyImmediateTableSearch(tableSearchQuery);
         currentPage = 1;
         mountEl._s9CurrentPage = currentPage;
         mountEl._s9TableSearchQuery = tableSearchQuery;
         if (tableSearchTimer) clearTimeout(tableSearchTimer);
         tableSearchTimer = setTimeout(function () {
-          renderAll();
+          if (searchToken !== tableSearchToken) return;
+          tableSearchTimer = null;
+          renderTableOnly({ focusSearch: true });
+          mountEl._s9LastSearchDurationMs = performance.now() - searchStartedAt;
         }, 120);
       });
       productSearch.addEventListener('focus', function () {
@@ -1393,7 +1557,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     }
 
     // Row clicks
-    mountEl.querySelectorAll('.s9-row').forEach(function (row) {
+    eventRoot.querySelectorAll('.s9-row').forEach(function (row) {
       row.addEventListener('click', function (e) {
         if (e.target.tagName === 'INPUT') return;
         selectedIdx = parseInt(row.getAttribute('data-idx'));
@@ -1403,7 +1567,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     });
 
     // Ad Spend inputs (table column)
-    mountEl.querySelectorAll('.s9-spend-input').forEach(function (inp) {
+    eventRoot.querySelectorAll('.s9-spend-input').forEach(function (inp) {
       inp.addEventListener('input', function (e) {
         var idx = parseInt(e.target.getAttribute('data-idx'));
         var val = parseFloat(e.target.value.replace(/,/g, '')) || 0;
@@ -1412,23 +1576,18 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         if (!simulations[idx].isModified) simulations[idx].adSpend = newSpend;
         localStorage.setItem('kbot_s9_spend_' + simulations[idx].id, newSpend);
         selectedIdx = idx;
-
-        var act    = document.activeElement;
-        var actIdx = act ? act.getAttribute('data-idx') : null;
-        renderAll();
-        if (actIdx !== null) {
-          var newInp = mountEl.querySelector('.s9-spend-input[data-idx="' + actIdx + '"]');
-          if (newInp) {
-            newInp.focus();
-            var len = newInp.value.length;
-            if (newInp.setSelectionRange) newInp.setSelectionRange(len, len);
-          }
-        }
+        mountEl._s9SelectedProductId = simulations[idx] && simulations[idx].id;
+        invalidateSimulationRowsCache();
+        updateSimulatorOnly();
+        scheduleRenderAll(180);
+      });
+      inp.addEventListener('blur', function () {
+        flushScheduledRender();
       });
     });
 
     // Scenario Ad Spend input (simulator panel)
-    var simSpendInp = mountEl.querySelector('.s9-sim-spend-input');
+    var simSpendInp = eventRoot.querySelector('.s9-sim-spend-input');
     if (simSpendInp) {
       simSpendInp.addEventListener('input', function (e) {
         var v = parseFloat(e.target.value);
@@ -1439,7 +1598,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       });
     }
 
-    var totalOrdersInp = mountEl.querySelector('.s9-total-orders-input');
+    var totalOrdersInp = eventRoot.querySelector('.s9-total-orders-input');
     if (totalOrdersInp) {
       totalOrdersInp.addEventListener('input', function (e) {
         var v = parseFloat(e.target.value);
@@ -1449,7 +1608,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       });
     }
 
-    var deliveredOrdersInp = mountEl.querySelector('.s9-delivered-orders-input');
+    var deliveredOrdersInp = eventRoot.querySelector('.s9-delivered-orders-input');
     if (deliveredOrdersInp) {
       deliveredOrdersInp.addEventListener('input', function (e) {
         var v = parseFloat(e.target.value);
@@ -1459,7 +1618,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       });
     }
 
-    var ndrInp = mountEl.querySelector('.s9-ndr-input');
+    var ndrInp = eventRoot.querySelector('.s9-ndr-input');
     if (ndrInp) {
       ndrInp.addEventListener('input', function (e) {
         var v = parseFloat(e.target.value);
@@ -1474,7 +1633,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       });
     }
 
-    var commInp = mountEl.querySelector('.s9-comm-input');
+    var commInp = eventRoot.querySelector('.s9-comm-input');
     if (commInp) {
       commInp.addEventListener('input', function (e) {
         var v = parseFloat(e.target.value);
@@ -1487,33 +1646,42 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       });
     }
 
-    var resetBtn = mountEl.querySelector('.s9-reset-real-btn');
+    var resetBtn = eventRoot.querySelector('.s9-reset-real-btn');
     if (resetBtn) {
       resetBtn.addEventListener('click', function () {
         resetSimulationToReal(simulations[selectedIdx]);
+        invalidateSimulationRowsCache();
         renderAll();
       });
     }
 
-    var syncNowBtn = mountEl.querySelector('#s9-sync-now');
+    var syncNowBtn = eventRoot.querySelector('#s9-sync-now');
     if (syncNowBtn && window.DashboardMarketingState && typeof window.DashboardMarketingState.sync === 'function') {
       syncNowBtn.addEventListener('click', function () {
         var period = forecastPeriod || {};
         syncNowBtn.disabled = true;
-        syncNowBtn.textContent = p9Txt('Syncing...', 'Syncing...');
-        window.DashboardMarketingState.sync(forecastAccountId, {
+        syncNowBtn.textContent = p9Txt('Syncing...', 'جاري المزامنة...');
+        var result = window.DashboardMarketingState.sync(forecastAccountId, {
           dateFrom: period.from || period.dateFrom || period.start || '',
           dateTo: period.to || period.dateTo || period.end || '',
           targetCurrency: viewCurrency || window.dashboardActiveCurrency || 'SAR',
           egpRate: egpRate || 52
-        }).then(function () {
-          window.renderSectionProductForecast(mountEl, data, ctx);
         });
+        if (result && typeof result.catch === 'function') {
+          result.catch(function (error) {
+            console.warn('[ProductForecast] marketing sync failed', error && error.message ? error.message : error);
+          }).finally(function () {
+            if (syncNowBtn && syncNowBtn.isConnected) {
+              syncNowBtn.disabled = false;
+              syncNowBtn.textContent = p9Txt('Sync Now', 'زامن الآن');
+            }
+          });
+        }
       });
     }
 
     // Currency toggle
-    mountEl.querySelectorAll('.s9-curr-btn').forEach(function (btn) {
+    eventRoot.querySelectorAll('.s9-curr-btn').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
         var newCurr = e.currentTarget.getAttribute('data-curr');
         if (newCurr === viewCurrency) return;
@@ -1531,30 +1699,30 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
 
     // Pagination
     var totalPages = Math.ceil(simulations.length / itemsPerPage);
-    mountEl.querySelectorAll('.s9-page-btn').forEach(function (btn) {
+    eventRoot.querySelectorAll('.s9-page-btn').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
         currentPage = parseInt(e.target.getAttribute('data-page'));
         mountEl._s9CurrentPage = currentPage;
-        renderAll();
+        renderTableOnly();
       });
     });
-    var prevBtn = mountEl.querySelector('.s9-page-prev');
+    var prevBtn = eventRoot.querySelector('.s9-page-prev');
     if (prevBtn) {
       prevBtn.addEventListener('click', function () {
         if (currentPage > 1) {
           currentPage--;
           mountEl._s9CurrentPage = currentPage;
-          renderAll();
+          renderTableOnly();
         }
       });
     }
-    var nextBtn = mountEl.querySelector('.s9-page-next');
+    var nextBtn = eventRoot.querySelector('.s9-page-next');
     if (nextBtn) {
       nextBtn.addEventListener('click', function () {
         if (currentPage < totalPages) {
           currentPage++;
           mountEl._s9CurrentPage = currentPage;
-          renderAll();
+          renderTableOnly();
         }
       });
     }
@@ -1565,6 +1733,15 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   var baseSectionCleanup = mountEl._dashboardSectionCleanup;
   mountEl._dashboardSectionCleanup = function () {
     if (typeof baseSectionCleanup === 'function') baseSectionCleanup();
+    if (tableSearchTimer) {
+      clearTimeout(tableSearchTimer);
+      tableSearchTimer = null;
+    }
+    if (tableRenderTimer) {
+      clearTimeout(tableRenderTimer);
+      tableRenderTimer = null;
+    }
+    tableRenderPending = false;
     if (mountEl._s9TooltipCleanup) {
       mountEl._s9TooltipCleanup();
       mountEl._s9TooltipCleanup = null;

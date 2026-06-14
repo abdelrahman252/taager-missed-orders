@@ -331,12 +331,13 @@
       }));
     }
 
-    if (roi && (roi.avgCPA || roi.adSpend || roi.avgCommission)) {
+    var roiAverageProfit = roi && (roi.averageProfit != null ? roi.averageProfit : roi.avgCommission);
+    if (roi && (roi.avgCPA || roi.adSpend || roiAverageProfit)) {
       var roiSignals = [
         roi.avgCPA ? tr("aii.signal.cpa", { value: number(roi.avgCPA) }, "CPA: " + number(roi.avgCPA)) : "",
-        roi.avgCommission ? tr("aii.signal.avgCommission", { value: number(roi.avgCommission) }, "Average commission: " + number(roi.avgCommission)) : "",
+        roiAverageProfit ? tr("aii.signal.avgCommission", { value: number(roiAverageProfit) }, "Average profit: " + number(roiAverageProfit)) : "",
       ];
-      if (roi.avgCPA && roi.avgCommission && Number(roi.avgCPA) > Number(roi.avgCommission)) {
+      if (roi.avgCPA && roiAverageProfit && Number(roi.avgCPA) > Number(roiAverageProfit)) {
         recommendations.push(recommendation({
           id: "rec-budget-roi",
           title: tr("aii.recommend.increaseBudgetCarefully", null, "Adjust budget only after ROI review"),
@@ -354,21 +355,35 @@
         id: "forecast-roi",
         title: tr("aii.forecast.roiTitle", null, "ROI pressure forecast"),
         forecastType: "risk",
-        valueLabel: roi.avgCPA && roi.avgCommission && Number(roi.avgCPA) > Number(roi.avgCommission)
+        valueLabel: roi.avgCPA && roiAverageProfit && Number(roi.avgCPA) > Number(roiAverageProfit)
           ? tr("aii.forecast.marginRisk", null, "Margin risk if CPA stays above commission.")
           : tr("aii.forecast.stable", null, "Current ROI signals look manageable."),
-        trend: roi.avgCPA && roi.avgCommission && Number(roi.avgCPA) > Number(roi.avgCommission) ? "down" : "flat",
+        trend: roi.avgCPA && roiAverageProfit && Number(roi.avgCPA) > Number(roiAverageProfit) ? "down" : "flat",
         assumptions: [tr("aii.assumption.currentMix", null, "Current product and city mix remains similar.")],
         influencingSignals: roiSignals,
-        confidence: roi.avgCPA && roi.avgCommission ? "medium" : "limited",
+        confidence: roi.avgCPA && roiAverageProfit ? "medium" : "limited",
         recommendedFollowUp: tr("aii.next.roi", null, "Compare CPA against delivered commission before budget changes."),
-        limitations: roi.avgCPA && roi.avgCommission ? [] : [tr("aii.limit.roi", null, "ROI data is incomplete.")],
+        limitations: roi.avgCPA && roiAverageProfit ? [] : [tr("aii.limit.roi", null, "ROI data is incomplete.")],
       }));
     }
 
-    var totalOrders = metricValue(overview.totalOrders);
+    var totalOrders = overview.totalOrders && overview.totalOrders.netOrderCount != null
+      ? Number(overview.totalOrders.netOrderCount)
+      : metricValue(overview.totalOrders);
     var earnedCommission = metricValue(overview.earnedCommission || roi.earnedCommission);
-    var avgCommission = Number(roi.avgCommission || (products.length ? products.reduce(function (sum, p) { return sum + Number(p.commission || 0); }, 0) / Math.max(1, products.length) : 0));
+    var deliveredProfitTotal = products.reduce(function (sum, p) {
+      var profit = p.actualCommission !== undefined ? p.actualCommission : p.commission;
+      return sum + Number(profit || 0);
+    }, 0);
+    var deliveredOrderTotal = products.reduce(function (sum, p) {
+      var delivered = p.actualDeliveredCount !== undefined
+        ? p.actualDeliveredCount
+        : (p.deliveredCount !== undefined ? p.deliveredCount : (p.units || p.delivered));
+      return sum + Number(delivered || 0);
+    }, 0);
+    var avgCommission = Number(roiAverageProfit != null
+      ? roiAverageProfit
+      : (deliveredOrderTotal > 0 ? deliveredProfitTotal / deliveredOrderTotal : 0));
     forecasts.push(forecast({
       id: "forecast-sales",
       title: tr("aii.forecast.sales.title", null, "Short-term sales forecast"),

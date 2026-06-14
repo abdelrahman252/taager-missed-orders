@@ -6,6 +6,44 @@
 window.renderSection7 = function (mountEl, data, ctx) {
   "use strict";
 
+  var calcUpdateFrame = null;
+  var calcUpdateTimer = null;
+  var calcVisualTimer = null;
+  var calcPersistTimer = null;
+  function scheduleCalculatorSettingsPersist() {
+    if (calcPersistTimer != null) clearTimeout(calcPersistTimer);
+    calcPersistTimer = setTimeout(function () {
+      calcPersistTimer = null;
+      persistCalculatorSettings();
+    }, 180);
+  }
+  function scheduleCalcUI() {
+    if (calcUpdateFrame != null) cancelAnimationFrame(calcUpdateFrame);
+    if (calcUpdateTimer != null) clearTimeout(calcUpdateTimer);
+    if (calcVisualTimer != null) clearTimeout(calcVisualTimer);
+    calcUpdateFrame = requestAnimationFrame(function () {
+      calcUpdateFrame = null;
+      if (!mountEl.isConnected) return;
+      calcUpdateTimer = setTimeout(function () {
+        calcUpdateTimer = null;
+        calcUpdateFrame = requestAnimationFrame(function () {
+          calcUpdateFrame = null;
+          if (mountEl.isConnected) updateCalcUI({ deferVisuals: true });
+        });
+      }, 120);
+      calcVisualTimer = setTimeout(function () {
+        calcVisualTimer = null;
+        if (!mountEl.isConnected) return;
+        requestAnimationFrame(function () {
+          if (!mountEl.isConnected) return;
+          var res = compute();
+          buildGrowthChart(res.cpaSAR, res.spendSAR);
+          renderScenarios(res.cpaSAR, res.spendSAR);
+        });
+      }, 260);
+    });
+  }
+
   // -- Theme Observer ---------------------------------------------------------
   if (mountEl._s7ThemeObserver) {
     mountEl._s7ThemeObserver.disconnect();
@@ -85,10 +123,22 @@ window.renderSection7 = function (mountEl, data, ctx) {
     }
     d = Object.assign({}, d, { adSpend: _convertedSyncedSpend });
   }
-  var realTotalOrders = d.totalOrders != null ? Number(d.totalOrders) : 0;
+  var realTotalOrders = window.DashboardOrderMetrics
+    ? window.DashboardOrderMetrics.netOrders(d)
+    : Number(d.netOrderCount != null ? d.netOrderCount : d.totalOrders || 0);
   var realNdrPct = d.ndrPct != null ? Number(d.ndrPct) : 0;
   var realConfirmationRate = d.confirmationRate != null ? Number(d.confirmationRate) : 0;
-  var realAvgCommission = d.avgCommission != null ? Number(d.avgCommission) : 0;
+  var realConfirmedOrders =
+    d.confirmationStatusCount != null ? Number(d.confirmationStatusCount)
+    : d.confirmedCount != null ? Number(d.confirmedCount)
+    : d.confirmedOrders != null ? Number(d.confirmedOrders)
+    : Math.round(realTotalOrders * (realConfirmationRate / 100));
+  if (!Number.isFinite(realConfirmedOrders)) {
+    realConfirmedOrders = Math.round(realTotalOrders * (realConfirmationRate / 100));
+  }
+  var realAvgCommission = d.averageProfit != null
+    ? Number(d.averageProfit)
+    : (d.avgCommission != null ? Number(d.avgCommission) : 0);
   var realTaagerProfitAfterTax = d.taagerProfitAfterTax != null
     ? Number(d.taagerProfitAfterTax)
     : realAvgCommission;
@@ -1283,12 +1333,12 @@ window.renderSection7 = function (mountEl, data, ctx) {
     el.innerHTML =
       card(
         "sfe-neutral",
-        s7Txt("Total Orders", "?????? ???????"),
+        s7Txt("Net Orders", "صافي الطلبات"),
         s7Num(Math.round(s.totalOrders)),
         s7Txt("simulation input", "???? ??????"),
-        s7Txt("Total Orders", "?????? ???????"),
+        s7Txt("Net Orders", "صافي الطلبات"),
         s7Txt(
-          "Total orders entered in the simulation. You can edit it for testing.",
+          "Net orders entered in the simulation. You can edit it for testing.",
           "????? ????? ??????? ??????? ?? ???????? — ????? ?????? ???????.",
         ),
         null,
@@ -1304,7 +1354,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
           "Orders that reached the customer based on the simulated delivery rate.",
           "??? ??????? ???? ???? ?????? ????? ??? ???? ??????? ????????.",
         ),
-        "delivered = totalOrders * NDR",
+        "delivered = netOrders * NDR",
         "?",
       ) +
       card(
@@ -1364,7 +1414,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
           "Cost to acquire one order. It should be lower than average profit per delivered order to stay profitable.",
           "????? ?????? ??? ??? ????. ??? ?? ???? ??? ?? ??? ???? ????? ?????.",
         ),
-        "CPA = adSpend / totalOrders",
+        "CPA = adSpend / netOrders",
         "??",
       );
   }
@@ -1805,6 +1855,9 @@ window.renderSection7 = function (mountEl, data, ctx) {
     el.innerHTML = insights
       .slice(0, 6)
       .map(function (i) {
+        var trust = window.TaagerSmartInsights && window.TaagerSmartInsights.trustLabel
+          ? window.TaagerSmartInsights.trustLabel(i.trust || "estimated")
+          : "Estimated";
         return (
           '<div class="sfe-insight sfe-insight--' +
           i.type +
@@ -1813,9 +1866,11 @@ window.renderSection7 = function (mountEl, data, ctx) {
           i.icon +
           "</span>" +
           '<div class="sfe-insight-body">' +
-          '<div class="sfe-insight-category">' +
-          i.cat +
-          "</div>" +
+           '<div class="sfe-insight-category">' +
+           i.cat +
+          " · " +
+          trust +
+           "</div>" +
           '<div class="sfe-insight-text">' +
           i.text +
           "</div>" +
@@ -1958,7 +2013,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
   }
 
   // -- 8. Main Calculator UI Update --------------------------------------------
-  function updateCalcUI() {
+  function updateCalcUI(options) {
+    options = options || {};
     if (syncedSpendActive && sourceBreakdown.length) {
       state.budget = syncedBudgetInCurrency();
       d.adSpend = state.budget;
@@ -2146,8 +2202,10 @@ window.renderSection7 = function (mountEl, data, ctx) {
       if (iconEl) iconEl.textContent = tipIcon;
     }
 
-    buildGrowthChart(res.cpaSAR, res.spendSAR);
-    renderScenarios(res.cpaSAR, res.spendSAR);
+    if (!options.deferVisuals) {
+      buildGrowthChart(res.cpaSAR, res.spendSAR);
+      renderScenarios(res.cpaSAR, res.spendSAR);
+    }
   }
 
   // -- 9. Render HTML ----------------------------------------------------------
@@ -2557,7 +2615,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "rgba(40, 79, 143, 0.28)"
         : "rgba(255,255,255,0.06)") +
-      ";border:1px solid rgba(96,165,250,0.55);color:#93c5fd;font-size:11px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;cursor:help;transition:background .18s,border-color .18s,color .18s;font-family:system-ui,sans-serif;flex-shrink:0;vertical-align:middle;line-height:1;user-select:none}" +
+      ";border:1px solid rgba(96,165,250,0.55);color:#93c5fd;font-size:0;font-weight:900;display:inline-flex;align-items:center;justify-content:center;cursor:help;transition:background .18s,border-color .18s,color .18s;font-family:system-ui,sans-serif;flex-shrink:0;vertical-align:middle;line-height:1;user-select:none}" +
+      ".s7-tip-badge::before{content:'?';display:block;color:currentColor;font-size:11px;font-weight:900;line-height:1}" +
       ".s7-tip-badge:hover{background:rgba(59,130,246,0.28);border-color:rgba(59,130,246,0.7);color:#93c5fd}" +
       // -- Light Theme Overrides ----------------------------------------------
       '[data-theme="light"] .s7-source-breakdown{background:#ffffff !important;border-color:#cbd5e1 !important}' +
@@ -2652,12 +2711,12 @@ window.renderSection7 = function (mountEl, data, ctx) {
       "</div>" +
       '<div class="s7-rate-note">' +
       '<strong>' +
-      s7Txt("Exchange rates are global", "????? ????? ??????") +
+      s7Txt("Exchange rates are global", "أسعار الصرف موحدة") +
       "</strong>" +
       '<span>' +
       s7Txt(
         "Use the Rates control in the dashboard top bar to refresh live rates or edit USD-based rates for all currencies.",
-        "?????? ?? ????? ??????? ?? ?????? ?????? ?????? ????? ??????? ?????? ?? ????? ??????? ?????? ??????? ???????.",
+        "استخدم زر أسعار الصرف في شريط لوحة التحكم لتحديث الأسعار المباشرة أو تعديل أسعار الدولار لكل العملات.",
       ) +
       "</span>" +
       "</div>" +
@@ -2695,18 +2754,30 @@ window.renderSection7 = function (mountEl, data, ctx) {
       // Taager dashboard/status/NDR migration:
       // Average profit comes from Taager order profit minus tax profit, not sales revenue.
       _kpiMiniTip(
-        s7Txt("Total Orders", "?????? ???????"),
+        s7Txt("Net Orders", "صافي الطلبات"),
         s7Num(realTotalOrders),
         document.documentElement.getAttribute("data-theme") === "light"
           ? "#1e293b"
           : "#fff",
         "??",
-        s7Txt("Total Orders", "?????? ???????"),
+        s7Txt("Net Orders", "صافي الطلبات"),
         s7Txt(
           "Total number of orders received from the bot during the selected period.",
           "????? ????? ??????? ??????? ?? ????? ???? ?????? ???????.",
         ),
         null,
+      ) +
+      _kpiMiniTip(
+        s7Txt("Confirmed Orders", "الطلبات المؤكدة"),
+        s7Num(realConfirmedOrders),
+        "#3b82f6",
+        "✓",
+        s7Txt("Confirmed Orders", "الطلبات المؤكدة"),
+        s7Txt(
+          "Orders that passed confirmation and are part of the confirmation base.",
+          "الطلبات التي تم تأكيدها وتدخل ضمن قاعدة التأكيد.",
+        ),
+        "confirmedOrders = netOrders * confirmationRate",
       ) +
       _kpiMiniTip(
         s7Txt("Delivered Orders", "??????? ???????"),
@@ -2717,10 +2788,10 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "?",
         s7Txt("Delivered Orders", "??????? ???????"),
         s7Txt(
-          "Orders that actually reached the customer. Calculated from total orders × delivery rate.",
+          "Orders that actually reached the customer. Calculated from net orders × delivery rate.",
           "??????? ???? ???? ?????? ??????. ???? ?? ?????? ??????? × ???? ???????.",
         ),
-        "delivered = totalOrders * NDR%",
+        "delivered = netOrders * NDR%",
       ) +
       _kpiMiniTip(
         s7Txt("Delivery Rate NDR", "???? ??????? NDR"),
@@ -2732,7 +2803,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
           "Percentage of orders delivered successfully. Healthy benchmark starts at 30%, with top tier at 40%+.",
           "?????? ??????? ??????? ???? ?? ??????? ?????. ??????? ????? ???? ?? 30%.",
         ),
-        "NDR = deliveredOrders / totalOrders * 100",
+        "NDR = deliveredOrders / netOrders * 100",
       ) +
       _kpiMiniTip(
         s7Txt("Confirmation Rate", "نسبة التأكيد"),
@@ -2858,7 +2929,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
           "Cost to acquire one order. Lower CPA means the campaign is more efficient.",
           "????? ?????? ??? ??? ????. ???? ?????? ???? ?????? ???? ?????.",
         ),
-        "CPA = adSpend / totalOrders",
+        "CPA = adSpend / netOrders",
       ) +
       '</div><div style="display:flex;align-items:center;gap:8px;font-size:22px;font-weight:900"><span style="color:#a855f7">??</span><span id="s7-out-cpa">--</span></div><div class="s7-curr-lbl" style="font-size:10px;color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
@@ -3116,7 +3187,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       '<div class="sfe-control-group">' +
       '<div class="sfe-control-row">' +
       '<label class="sfe-label">' +
-      s7Txt("Total Orders", "?????? ???????") +
+      s7Txt("Net Orders", "صافي الطلبات") +
       "</label>" +
       '<div class="sfe-input-wrap2"><input type="number" id="sfe-orders" class="sfe-input2" min="1" step="50"><span class="sfe-input-unit2">' +
       s7Txt("orders", "???") +
@@ -3207,8 +3278,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
         return;
       }
       state.budget = val;
-      persistCalculatorSettings();
-      updateCalcUI();
+      scheduleCalculatorSettingsPersist();
+      scheduleCalcUI();
     });
     if (budgetInput && syncedSpendActive) {
       budgetInput.disabled = true;
@@ -3333,7 +3404,9 @@ window.renderSection7 = function (mountEl, data, ctx) {
       '" ' +
       'data-tip-formula="' +
       enc(f) +
-      '">?</span>'
+      '" aria-label="' +
+      enc(title) +
+      '"></span>'
     );
   }
 
@@ -3744,6 +3817,23 @@ window.renderSection7 = function (mountEl, data, ctx) {
     };
     window.DashboardMarketingState.subscribe(mountEl._s7MarketingListener);
     mountEl._dashboardSectionCleanup = function () {
+      if (calcUpdateFrame != null) {
+        cancelAnimationFrame(calcUpdateFrame);
+        calcUpdateFrame = null;
+      }
+      if (calcUpdateTimer != null) {
+        clearTimeout(calcUpdateTimer);
+        calcUpdateTimer = null;
+      }
+      if (calcVisualTimer != null) {
+        clearTimeout(calcVisualTimer);
+        calcVisualTimer = null;
+      }
+      if (calcPersistTimer != null) {
+        clearTimeout(calcPersistTimer);
+        calcPersistTimer = null;
+        persistCalculatorSettings();
+      }
       if (mountEl._s7MarketingListener) {
         window.DashboardMarketingState.unsubscribe(
           mountEl._s7MarketingListener,
@@ -3775,5 +3865,3 @@ window.renderSection7 = function (mountEl, data, ctx) {
     }
   }
 };
-
-

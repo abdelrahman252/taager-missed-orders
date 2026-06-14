@@ -115,11 +115,11 @@
         }
       });
       
-      g.placedCount += num(p.placedCount || p.orders);
+      g.placedCount += num(p.netOrderCount != null ? p.netOrderCount : (p.orders != null ? p.orders : p.placedCount));
       g.deliveredCount += num(p.deliveredCount || p.units || p.delivered);
       g.canceledCount += num(p.canceledCount || 0);
       g.cancelStatusCount += num(p.cancelStatusCount || p.canceledCount || 0);
-      g.statusTotalCount += num(p.statusTotalCount || p.placedCount || p.orders || 0);
+      g.statusTotalCount += num(p.statusTotalCount || p.netOrderCount || p.orders || p.placedCount || 0);
       g.failedCount += num(p.failedCount || p.realFailedCount || 0);
       g.confirmedCount += num(p.confirmedCount || 0);
       g.confirmationStatusCount += num(p.confirmationStatusCount || p.confirmedCount || 0);
@@ -386,7 +386,12 @@
   }
 
   function productSnapshot(product, reportingCurrency, egpRate) {
-    var orders = num(product && (product.placedCount || product.orders));
+    var orders = num(product && (product.netOrderCount != null
+      ? product.netOrderCount
+      : (product.orders != null ? product.orders : product.placedCount)));
+    var totalOrderCount = num(product && (product.totalOrderCount != null
+      ? product.totalOrderCount
+      : (product.rawTotalOrders != null ? product.rawTotalOrders : orders)));
     var delivered = num(product && (product.deliveredCount || product.units || product.delivered));
     var sourceCurrency = String(product && product.currency || window.dashboardActiveCurrency || "SAR").toUpperCase();
     var targetCurrency = String(reportingCurrency || sourceCurrency || "SAR").toUpperCase();
@@ -411,6 +416,8 @@
       name: String(product && (product.name || product.key || product.sku) || "Unknown product"),
       sku: String(product && product.sku || ""),
       orders: orders,
+      netOrderCount: orders,
+      totalOrderCount: totalOrderCount,
       delivered: delivered,
       ndrPct: num(ndr, 1),
       drPct: num(dr, 1),
@@ -428,7 +435,11 @@
       topCities: (product && Array.isArray(product.cityBreakdown) ? product.cityBreakdown : []).slice(0, 4).map(function (city) {
         return {
           city: city.name || city.city || "",
-          orders: num(city.count || city.orders),
+          orders: num(city.netOrderCount != null ? city.netOrderCount : (city.orders != null ? city.orders : city.count)),
+          netOrderCount: num(city.netOrderCount != null ? city.netOrderCount : (city.orders != null ? city.orders : city.count)),
+          totalOrderCount: num(city.totalOrderCount != null
+            ? city.totalOrderCount
+            : (city.rawTotalOrders != null ? city.rawTotalOrders : (city.netOrderCount != null ? city.netOrderCount : (city.orders != null ? city.orders : city.count)))),
           ndrPct: num(city.ndr || city.ndrPct, 1)
         };
       })
@@ -475,37 +486,18 @@
   }
 
   function matchCampaign(row, products, index, state) {
-    var campaignText = textKey(campaignName(row));
-    if (!campaignText) return null;
-    var spaceText = " " + campaignText + " ";
-    var rowAccountId = String(row && row.dashboardAccountId || state && state.accountId || "");
-    if (rowAccountId === "__all__") rowAccountId = "";
-    var rowCountry = String(row && row.country || state && state.country || "").toLowerCase();
-    
-    // Quick SKU match in single loop (no allocations and sorting)
-    var bestSkuEntry = null;
-    var bestMatchedSkuLength = 0;
-    for (var i = 0; i < index.entries.length; i++) {
-      var entry = index.entries[i];
-      if (rowAccountId && entry.accountId && rowAccountId !== entry.accountId) continue;
-      if (!rowAccountId && rowCountry && entry.country && rowCountry !== entry.country) continue;
-      if (entry.skus && entry.skus.length > 0) {
-        for (var j = 0; j < entry.skus.length; j++) {
-          var s = entry.skus[j];
-          if (campaignText.indexOf(s) !== -1 && spaceText.indexOf(" " + s + " ") !== -1) {
-            if (!bestSkuEntry || s.length > bestMatchedSkuLength) {
-              bestSkuEntry = entry;
-              bestMatchedSkuLength = s.length;
-            }
-          }
-        }
-      }
-    }
-    if (bestSkuEntry) {
-      return { product: products[bestSkuEntry.idx], idx: bestSkuEntry.idx, method: "sku", confidence: "high" };
-    }
-    
-    return null;
+    var attribution = window.TaagerProductAttribution;
+    if (!attribution || !index) return null;
+    var scopedRow = Object.assign({}, row, {
+      dashboardAccountId: row && row.dashboardAccountId || state && state.accountId || "",
+      country: row && row.country || state && state.country || ""
+    });
+    var result = attribution.matchCampaign(scopedRow, index);
+    if (result.status !== "matched") return result;
+    return Object.assign({}, result, {
+      idx: result.productIndex,
+      product: products[result.productIndex]
+    });
   }
 
   function marketingStates(accountId, platform) {
@@ -587,9 +579,20 @@
     var snapshots = products.map(function (product) {
       return productSnapshot(product, reportingCurrency, egpRate);
     });
-    var index = productMatchIndex(products);
+    var attribution = window.TaagerProductAttribution;
+    var index = attribution
+      ? attribution.createProductIndex(products, {
+          productNameOverrides: productNameOverrides
+        })
+      : null;
     var states = opts.marketingState ? [opts.marketingState] : marketingStates(accountId, opts.platform);
-    var cacheKey = buildCacheKey(data, states, Object.assign({}, opts, { egpRate: egpRate }), accountId, rawProducts, reportingCurrency);
+    var productNameOverrides = window.TaagerProductNames && typeof window.TaagerProductNames.all === "function"
+      ? window.TaagerProductNames.all()
+      : {};
+    var attributionVersion = window.TaagerProductAttribution ? window.TaagerProductAttribution.VERSION : 0;
+    var cacheKey = buildCacheKey(data, states, Object.assign({}, opts, { egpRate: egpRate }), accountId, rawProducts, reportingCurrency) +
+      "|attribution:" + attributionVersion +
+      "|names:" + JSON.stringify(productNameOverrides);
     var cached = cachedBuild(data, cacheKey);
     if (cached) return cached;
     var rows = [];
@@ -601,7 +604,12 @@
       unmatchedSpend: 0,
       spentCampaignCount: 0,
       zeroSpendRowsSkipped: 0,
-      missingSkuCampaignCount: 0
+      missingSkuCampaignCount: 0,
+      separatedSkuRows: 0,
+      gluedSkuRows: 0,
+      nameRows: 0,
+      ambiguousRows: 0,
+      unmatchedRows: 0
     };
     var objectiveMap = {};
     var productGroups = {};
@@ -638,8 +646,7 @@
       var objective = objectiveOf(row);
       var scopedRow = Object.assign({}, row, { dashboardAccountId: entry.dashboardAccountId });
       var match = matchCampaign(scopedRow, products, index, entry.state);
-      var isVerifiedSkuMatch = !!(match && match.method === "sku" && match.product);
-      var product = isVerifiedSkuMatch ? snapshots[match.idx] : null;
+      var product = match && match.status === "matched" && match.product ? snapshots[match.idx] : null;
       var taagerOrders = product ? product.orders : 0;
       var taagerCpa = product && taagerOrders > 0 ? spend / taagerOrders : 0;
       var performance = campaignPerformance(row, spend, currency);
@@ -650,6 +657,11 @@
         totals.unmatchedSpend += spend;
         totals.missingSkuCampaignCount += 1;
       }
+      if (match && match.matchDetail === "separated_sku") totals.separatedSkuRows += 1;
+      else if (match && match.matchDetail === "glued_sku") totals.gluedSkuRows += 1;
+      else if (match && match.method === "name") totals.nameRows += 1;
+      else if (match && match.method === "ambiguous") totals.ambiguousRows += 1;
+      else totals.unmatchedRows += 1;
       if (!objectiveMap[objective]) objectiveMap[objective] = { objective: objective, spend: 0, campaignCount: 0 };
       objectiveMap[objective].spend += spend;
       objectiveMap[objective].campaignCount += 1;
@@ -684,7 +696,10 @@
         product: product ? product.name : null,
         productSku: product ? product.sku : "",
         matchMethod: match ? match.method : "unmatched",
+        matchDetail: match ? match.matchDetail : "no_match",
         matchConfidence: product ? match.confidence : "none",
+        matchedSku: match ? match.matchedSku : "",
+        candidateIds: match ? match.candidateIds : [],
         attributionVerified: !!product,
         taagerOrders: taagerOrders,
         taagerDelivered: product ? product.delivered : 0,
@@ -911,6 +926,11 @@
         rowCount: totals.rowCount || rows.length,
         zeroSpendRowsSkipped: totals.zeroSpendRowsSkipped,
         missingSkuCampaignCount: totals.missingSkuCampaignCount,
+        separatedSkuRows: totals.separatedSkuRows,
+        gluedSkuRows: totals.gluedSkuRows,
+        nameRows: totals.nameRows,
+        ambiguousRows: totals.ambiguousRows,
+        unmatchedRows: totals.unmatchedRows,
         adSpendSar: num(totals.spend, 2),
         matchedSpendSar: num(totals.matchedSpend, 2),
         unmatchedSpendSar: num(totals.unmatchedSpend, 2),

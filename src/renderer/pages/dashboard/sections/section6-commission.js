@@ -88,6 +88,23 @@ window.renderSection6 = function (mountEl, data, ctx) {
     return val;
   }
 
+  function moneyNumber(value, decimals) {
+    decimals = decimals == null ? 1 : decimals;
+    if (window.formatDashboardNumber && activeCurrency === 'IQD' && Math.abs(Number(value) || 0) >= 100000) {
+      return window.formatDashboardNumber(value, {
+        decimals: decimals,
+        compact: true,
+        compactThreshold: 100000,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 1
+      });
+    }
+    return Number(value || 0).toLocaleString('en-US', {
+      minimumFractionDigits: decimals > 1 ? decimals : 0,
+      maximumFractionDigits: decimals
+    });
+  }
+
   function supportedCurrencies() {
     if (window.DashboardRoiState && Array.isArray(window.DashboardRoiState.currencies)) {
       return window.DashboardRoiState.currencies.slice();
@@ -150,11 +167,10 @@ window.renderSection6 = function (mountEl, data, ctx) {
 
   function getBreakEvenCpa() {
     const roi = (ctx && ctx.data && ctx.data.roi) || {};
-    const avgCommission = Number(roi.avgCommission) || 0;
+    const avgCommission = Number(roi.averageProfit != null ? roi.averageProfit : roi.avgCommission) || 0;
     const ndrPct = Number(roi.ndrPct) || 0;
     const breakEven = avgCommission * (ndrPct / 100);
-    const baseBreakEven = breakEven > 0 ? breakEven : 50;
-    return convert(baseBreakEven, baseCurrency, activeCurrency);
+    return convert(breakEven, baseCurrency, activeCurrency);
   }
 
   // ── static constants ──────────────────────────────────────────────────────
@@ -290,10 +306,10 @@ window.renderSection6 = function (mountEl, data, ctx) {
             <div id="s6-header-cpa-badge" style="display:inline-flex;align-items:center;gap:4px;
               background:${cColor}12;border:1px solid ${cColor}25;
               border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;color:${cColor};">
-              ${s6Txt('commission.breakEvenLine', 'تكلفة التعادل')}: ${breakEvenCpa.toLocaleString('en-US', {maximumFractionDigits: 1})} ${activeCurrency}
+              ${s6Txt('commission.breakEvenLine', 'تكلفة التعادل')}: ${moneyNumber(breakEvenCpa, 1)} ${activeCurrency}
             </div>
             <span style="font-size:30px;font-weight:900;color:#fff;letter-spacing:-1px;">
-              <span id="s6-total-countup">${averageCpa.toLocaleString('en-US', {maximumFractionDigits: 1})}</span> ${activeCurrency}
+              <span id="s6-total-countup">${moneyNumber(averageCpa, 1)}</span> ${activeCurrency}
             </span>
           </div>
         </div>
@@ -389,7 +405,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
     const legendRows = PERF_DATA.map((d, i) => `
       <div class="fade-up" style="display:flex;align-items:center;justify-content:space-between;animation-delay:${400 + i * 80}ms;">
         <span style="font-size:13px;font-weight:800;color:${d.color};">
-          ${d.sar.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${activeCurrency}
+          ${moneyNumber(d.sar, 2)} ${activeCurrency}
         </span>
         <div style="display:flex;align-items:center;gap:8px;">
           <div style="text-align:right;">
@@ -444,7 +460,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
           <!-- center label -->
           <div style="position:absolute;z-index:1;text-align:center;pointer-events:none;">
             <div style="font-size:20px;font-weight:900;color:#fff;" id="s6-donut-total">
-              ${totalSAR.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${moneyNumber(totalSAR, 2)}
             </div>
             <div style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.5);">${centerLabel}</div>
           </div>
@@ -682,11 +698,11 @@ window.renderSection6 = function (mountEl, data, ctx) {
       const maxCpa = cpaValues.length > 0 ? Math.max(...cpaValues) : 0;
 
       METRICS_ROWS = [
-        { label: s6Txt('Average CPA', 'متوسط تكلفة الطلب (CPA)'), value: averageCpa.toLocaleString('en-US', {maximumFractionDigits: 1}), unit: activeCurrency, color: 'rgba(255,255,255,0.85)' },
-        { label: s6Txt('commission.breakEvenLine', 'تكلفة التعادل (CPA)'), value: breakEvenCpa.toLocaleString('en-US', {maximumFractionDigits: 1}), unit: activeCurrency, color: '#f59e0b' },
-        { label: s6Txt('Lowest Daily CPA', 'أقل تكلفة طلب يومية'), value: minCpa.toLocaleString('en-US', {maximumFractionDigits: 1}), unit: activeCurrency, color: '#00e676' },
-        { label: s6Txt('Highest Daily CPA', 'أعلى تكلفة طلب يومية'), value: maxCpa.toLocaleString('en-US', {maximumFractionDigits: 1}), unit: activeCurrency, color: '#ef4444' },
-        { label: s6Txt('Total Period Ad Spend', 'إجمالي الإنفاق للفترة'), value: totalSpend.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), unit: activeCurrency, color: 'rgba(255,255,255,0.85)' }
+        { label: s6Txt('Average CPA', 'متوسط تكلفة الطلب (CPA)'), value: moneyNumber(averageCpa, 1), unit: activeCurrency, color: 'rgba(255,255,255,0.85)' },
+        { label: s6Txt('commission.breakEvenLine', 'تكلفة التعادل (CPA)'), value: moneyNumber(breakEvenCpa, 1), unit: activeCurrency, color: '#f59e0b' },
+        { label: s6Txt('Lowest Daily CPA', 'أقل تكلفة طلب يومية'), value: moneyNumber(minCpa, 1), unit: activeCurrency, color: '#00e676' },
+        { label: s6Txt('Highest Daily CPA', 'أعلى تكلفة طلب يومية'), value: moneyNumber(maxCpa, 1), unit: activeCurrency, color: '#ef4444' },
+        { label: s6Txt('Total Period Ad Spend', 'إجمالي الإنفاق للفترة'), value: moneyNumber(totalSpend, 2), unit: activeCurrency, color: 'rgba(255,255,255,0.85)' }
       ];
 
       // Find best CPA day
@@ -708,7 +724,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
           iconSvg: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 7L13.5 15.5L8.5 10.5L2 17" stroke="#00e676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 7h6v6" stroke="#00e676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
           iconBg:   '#00e676',
           title:    s6Txt('Best CPA Day', 'أفضل يوم لتكلفة الطلب'),
-          line1:    bestCpaVal > 0 ? `${bestCpaVal.toLocaleString('en-US', {maximumFractionDigits: 1})} ${activeCurrency} — ${bestDayLabel}` : 'N/A',
+          line1:    bestCpaVal > 0 ? `${moneyNumber(bestCpaVal, 1)} ${activeCurrency} — ${bestDayLabel}` : 'N/A',
           line2:    bestCpaVal > 0 ? s6Txt('Lowest cost of acquisition in this period', 'أقل تكلفة اكتساب تم تحقيقها في هذه الفترة') : '',
           line2Color: '#00e676',
         },
@@ -784,17 +800,17 @@ window.renderSection6 = function (mountEl, data, ctx) {
       });
 
       PERF_DATA = [
-        { key: 'high', label: s6Txt('High Performance', 'أداء مرتفع'), days: highDays, pct: parseFloat(((highDays / n) * 100).toFixed(1)), sar: convert(highSar, baseCurrency, activeCurrency), color: '#00e676', threshold: '> ' + Math.round(convert(450, baseCurrency, activeCurrency)) + ' ' + activeCurrency     },
-        { key: 'mid',  label: s6Txt('Medium Performance', 'أداء متوسط'), days: midDays,  pct: parseFloat(((midDays / n) * 100).toFixed(1)),  sar: convert(midSar, baseCurrency, activeCurrency),  color: '#3b82f6', threshold: Math.round(convert(200, baseCurrency, activeCurrency)) + ' - ' + Math.round(convert(450, baseCurrency, activeCurrency)) + ' ' + activeCurrency },
-        { key: 'low',  label: s6Txt('Low Performance', 'أداء منخفض'), days: lowDays,  pct: parseFloat(((lowDays / n) * 100).toFixed(1)),  sar: convert(lowSar, baseCurrency, activeCurrency),  color: '#ef4444', threshold: '< ' + Math.round(convert(200, baseCurrency, activeCurrency)) + ' ' + activeCurrency     },
+        { key: 'high', label: s6Txt('High Performance', 'أداء مرتفع'), days: highDays, pct: parseFloat(((highDays / n) * 100).toFixed(1)), sar: convert(highSar, baseCurrency, activeCurrency), color: '#00e676', threshold: '> ' + moneyNumber(convert(450, baseCurrency, activeCurrency), 0) + ' ' + activeCurrency     },
+        { key: 'mid',  label: s6Txt('Medium Performance', 'أداء متوسط'), days: midDays,  pct: parseFloat(((midDays / n) * 100).toFixed(1)),  sar: convert(midSar, baseCurrency, activeCurrency),  color: '#3b82f6', threshold: moneyNumber(convert(200, baseCurrency, activeCurrency), 0) + ' - ' + moneyNumber(convert(450, baseCurrency, activeCurrency), 0) + ' ' + activeCurrency },
+        { key: 'low',  label: s6Txt('Low Performance', 'أداء منخفض'), days: lowDays,  pct: parseFloat(((lowDays / n) * 100).toFixed(1)),  sar: convert(lowSar, baseCurrency, activeCurrency),  color: '#ef4444', threshold: '< ' + moneyNumber(convert(200, baseCurrency, activeCurrency), 0) + ' ' + activeCurrency     },
       ];
 
       METRICS_ROWS = [
-        { label: s6Txt('Average Daily Taager Profit After Tax', 'متوسط ربح تاجر بعد الضريبة اليومي'), value: convert(avg, baseCurrency, activeCurrency).toLocaleString('en-US', {maximumFractionDigits: 1}), unit: activeCurrency, color: 'rgba(255,255,255,0.85)' },
-        { label: s6Txt('Highest Daily Taager Profit After Tax', 'أعلى ربح تاجر بعد الضريبة يومي'),       value: convert(maxVal, baseCurrency, activeCurrency).toLocaleString('en-US', {maximumFractionDigits: 1}),    unit: activeCurrency, color: '#00e676' },
-        { label: s6Txt('Lowest Daily Taager Profit After Tax', 'أقل ربح تاجر بعد الضريبة يومي'),        value: convert(minVal, baseCurrency, activeCurrency).toLocaleString('en-US', {maximumFractionDigits: 1}),    unit: activeCurrency, color: '#ef4444' },
+        { label: s6Txt('Average Daily Taager Profit After Tax', 'متوسط ربح تاجر بعد الضريبة اليومي'), value: moneyNumber(convert(avg, baseCurrency, activeCurrency), 1), unit: activeCurrency, color: 'rgba(255,255,255,0.85)' },
+        { label: s6Txt('Highest Daily Taager Profit After Tax', 'أعلى ربح تاجر بعد الضريبة يومي'),       value: moneyNumber(convert(maxVal, baseCurrency, activeCurrency), 1), unit: activeCurrency, color: '#00e676' },
+        { label: s6Txt('Lowest Daily Taager Profit After Tax', 'أقل ربح تاجر بعد الضريبة يومي'),        value: moneyNumber(convert(minVal, baseCurrency, activeCurrency), 1), unit: activeCurrency, color: '#ef4444' },
         { label: s6Txt('Days Above Average', 'أيام فوق المتوسط'),       value: aboveAvgDays.toString(),      unit: s6Txt('days', 'أيام'), color: 'rgba(255,255,255,0.85)' },
-        { label: s6Txt('Last 24 Hours', 'آخر 24 ساعة'),           value: convert(last24h, baseCurrency, activeCurrency).toLocaleString('en-US', {maximumFractionDigits: 1}),     unit: activeCurrency, color: 'rgba(255,255,255,0.85)' },
+        { label: s6Txt('Last 24 Hours', 'آخر 24 ساعة'),           value: moneyNumber(convert(last24h, baseCurrency, activeCurrency), 1), unit: activeCurrency, color: 'rgba(255,255,255,0.85)' },
       ];
 
       const maxIdx = values.indexOf(maxVal);
@@ -816,7 +832,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
           iconSvg: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 7L13.5 15.5L8.5 10.5L2 17" stroke="#00e676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 7h6v6" stroke="#00e676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
           iconBg:   '#00e676',
           title:    s6Txt('Best Performing Day', 'أفضل يوم أداء'),
-          line1:    `${convert(maxVal, baseCurrency, activeCurrency).toLocaleString('en-US', {maximumFractionDigits: 1})} ${activeCurrency} — ${bestDayLabel} ` + s6Txt('(highest value in the period)', '(أعلى قيمة في الفترة)'),
+          line1:    `${moneyNumber(convert(maxVal, baseCurrency, activeCurrency), 1)} ${activeCurrency} — ${bestDayLabel} ` + s6Txt('(highest value in the period)', '(أعلى قيمة في الفترة)'),
           line2:    `↑ ${pctAboveAvg}% ` + s6Txt('above daily average', 'فوق المتوسط اليومي'),
           line2Color: '#00e676',
         },
@@ -972,11 +988,11 @@ window.renderSection6 = function (mountEl, data, ctx) {
     ];
 
     METRICS_ROWS = [
-      { label: s6Txt('Average CPA', 'متوسط تكلفة الطلب (CPA)'), value: averageCpa.toLocaleString('en-US', {maximumFractionDigits: 1}), unit: activeCurrency, color: 'rgba(255,255,255,0.85)' },
-      { label: s6Txt('commission.breakEvenLine', 'تكلفة التعادل (CPA)'), value: breakEvenCpa.toLocaleString('en-US', {maximumFractionDigits: 1}), unit: activeCurrency, color: '#f59e0b' },
-      { label: s6Txt('Lowest Daily CPA', 'أقل تكلفة طلب يومية'), value: minCpa.toLocaleString('en-US', {maximumFractionDigits: 1}), unit: activeCurrency, color: '#00e676' },
-      { label: s6Txt('Highest Daily CPA', 'أعلى تكلفة طلب يومية'), value: maxCpa.toLocaleString('en-US', {maximumFractionDigits: 1}), unit: activeCurrency, color: '#ef4444' },
-      { label: s6Txt('Total Period Ad Spend', 'إجمالي الإنفاق للفترة'), value: totalSpend.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), unit: activeCurrency, color: 'rgba(255,255,255,0.85)' }
+      { label: s6Txt('Average CPA', 'متوسط تكلفة الطلب (CPA)'), value: moneyNumber(averageCpa, 1), unit: activeCurrency, color: 'rgba(255,255,255,0.85)' },
+      { label: s6Txt('commission.breakEvenLine', 'تكلفة التعادل (CPA)'), value: moneyNumber(breakEvenCpa, 1), unit: activeCurrency, color: '#f59e0b' },
+      { label: s6Txt('Lowest Daily CPA', 'أقل تكلفة طلب يومية'), value: moneyNumber(minCpa, 1), unit: activeCurrency, color: '#00e676' },
+      { label: s6Txt('Highest Daily CPA', 'أعلى تكلفة طلب يومية'), value: moneyNumber(maxCpa, 1), unit: activeCurrency, color: '#ef4444' },
+      { label: s6Txt('Total Period Ad Spend', 'إجمالي الإنفاق للفترة'), value: moneyNumber(totalSpend, 2), unit: activeCurrency, color: 'rgba(255,255,255,0.85)' }
     ];
 
     const nonZeroCpaValues = cpaValues.map((v, idx) => ({ v, idx })).filter(x => x.v > 0);
@@ -997,7 +1013,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
         iconSvg: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 7L13.5 15.5L8.5 10.5L2 17" stroke="#00e676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 7h6v6" stroke="#00e676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
         iconBg:   '#00e676',
         title:    s6Txt('Best CPA Day', 'أفضل يوم لتكلفة الطلب'),
-        line1:    bestCpaVal > 0 ? `${bestCpaVal.toLocaleString('en-US', {maximumFractionDigits: 1})} ${activeCurrency} — ${bestDayLabel}` : 'N/A',
+        line1:    bestCpaVal > 0 ? `${moneyNumber(bestCpaVal, 1)} ${activeCurrency} — ${bestDayLabel}` : 'N/A',
         line2:    bestCpaVal > 0 ? s6Txt('Lowest cost of acquisition in this period', 'أقل تكلفة اكتساب تم تحقيقها في هذه الفترة') : '',
         line2Color: '#00e676',
       },
@@ -1143,12 +1159,72 @@ window.renderSection6 = function (mountEl, data, ctx) {
       }];
     }
 
+    const breakEvenTargetPlugin = {
+      id: 's6BreakEvenTarget',
+      afterDatasetsDraw: function (chart) {
+        if (activeMode !== 'cpa' || !breakEvenCpa) return;
+        const xScale = chart.scales && chart.scales.x;
+        const yScale = chart.scales && chart.scales.y;
+        const chartArea = chart.chartArea;
+        if (!xScale || !yScale || !chartArea) return;
+
+        const y = yScale.getPixelForValue(breakEvenCpa);
+        if (y < chartArea.top || y > chartArea.bottom) return;
+
+        const ctx = chart.ctx;
+        const fontFamily = getComputedStyle(document.body).fontFamily || 'sans-serif';
+        const markerX = Math.max(chartArea.left + 18, xScale.getPixelForValue(0) + 24);
+        const labelText = s6Txt('commission.breakEvenLine', 'Break-even CPA') + ': ' +
+          moneyNumber(breakEvenCpa, 1) + ' ' + activeCurrency;
+
+        ctx.save();
+        ctx.font = '800 10px ' + fontFamily;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+
+        const maxLabelWidth = Math.max(110, chartArea.right - markerX - 24);
+        const labelWidth = Math.min(Math.max(ctx.measureText(labelText).width + 18, 108), maxLabelWidth);
+        const labelHeight = 18;
+        const labelX = markerX + 12;
+        const preferredLabelY = y + 10;
+        const labelY = Math.min(Math.max(preferredLabelY, chartArea.top + 4), chartArea.bottom - labelHeight - 4);
+
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.14)';
+        ctx.beginPath();
+        ctx.arc(markerX, y, 11, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.9)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(markerX, y, 6.5, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath();
+        ctx.arc(markerX, y, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.14)';
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.34)';
+        ctx.lineWidth = 1;
+        roundRect(ctx, labelX, labelY, labelWidth, labelHeight, 5);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillText(labelText, labelX + 10, labelY + (labelHeight / 2), labelWidth - 20);
+        ctx.restore();
+      }
+    };
+
     chartInstance = new Chart(canvas, {
       type: 'line',
       data: {
         labels,
         datasets,
       },
+      plugins: activeMode === 'cpa' ? [breakEvenTargetPlugin] : [],
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -1201,6 +1277,13 @@ window.renderSection6 = function (mountEl, data, ctx) {
             },
           },
           y: {
+            beginAtZero: activeMode === 'cpa',
+            suggestedMax: activeMode === 'cpa'
+              ? Math.max(
+                  breakEvenCpa * 1.24,
+                  (datasets[0] && datasets[0].data ? Math.max(...datasets[0].data) : 0) * 1.12
+                )
+              : undefined,
             grid: {
               color: theme.grid,
               drawBorder: false,
@@ -1330,7 +1413,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
             callbacks: {
               label: (ctx) => {
                 const perf = PERF_DATA[ctx.dataIndex];
-                return ` ${Number(perf.sar || 0).toLocaleString('en-US', { maximumFractionDigits: 1 })} ${activeCurrency} — ${perf.days} ` + s6Txt('days', 'أيام');
+                return ` ${moneyNumber(perf.sar, 1)} ${activeCurrency} — ${perf.days} ` + s6Txt('days', 'أيام');
               },
             },
           },
@@ -1347,7 +1430,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
     // Only animate if in profit mode (average CPA is static and simple)
     if (activeMode !== 'cpa' && typeof window.animateNumber === 'function') {
       const convertedTotal = convert(total, baseCurrency, activeCurrency);
-      window.animateNumber(el, convertedTotal, { duration: 520, decimals: 2 });
+      window.animateNumber(el, convertedTotal, { duration: 520, decimals: 2, compact: activeCurrency === 'IQD' });
     } else {
       if (activeMode === 'cpa') {
         const ordersData = getDailyOrdersData(activePeriod);
@@ -1355,10 +1438,10 @@ window.renderSection6 = function (mountEl, data, ctx) {
         const totalOrders = ordersValues.reduce((a, b) => a + b, 0);
         const totalSpend = dailyAdSpend * ordersValues.length;
         const averageCpa = totalOrders > 0 ? totalSpend / totalOrders : 0;
-        el.textContent = averageCpa.toLocaleString('en-US', {maximumFractionDigits: 1});
+        el.textContent = moneyNumber(averageCpa, 1);
       } else {
         const convertedTotal = convert(total, baseCurrency, activeCurrency);
-        el.textContent = convertedTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        el.textContent = moneyNumber(convertedTotal, 2);
       }
     }
   }

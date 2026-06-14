@@ -184,6 +184,17 @@ contextBridge.exposeInMainWorld("api", {
   syncAllMarketingData:  (platform, range) => monitoredInvoke("sync-all-marketing-data", platform, range),
   openExternalUrl:       (url)             => monitoredInvoke("open-external-url", url),
   dashboardAiQuery:      (payload)         => monitoredInvoke("dashboard-ai-query", payload),
+  onDashboardAiProgress: (requestId, cb)   => {
+    const wanted = String(requestId || "");
+    const handler = (_event, payload) => {
+      if (!payload || String(payload.requestId || "") !== wanted) return;
+      cb(payload);
+    };
+    ipcRenderer.on("dashboard-ai-progress", handler);
+    return () => ipcRenderer.removeListener("dashboard-ai-progress", handler);
+  },
+  getDashboardAiMirror:  (mirrorKey)       => monitoredInvoke("get-dashboard-ai-mirror", mirrorKey),
+  saveDashboardAiMirror: (payload)         => monitoredInvoke("save-dashboard-ai-mirror", payload),
   getAiAdminAnalytics:   ()                => monitoredInvoke("get-ai-admin-analytics"),
   debugGeminiPing:       ()                => monitoredInvoke("debug-gemini-ping"),
   getAiAssistantMemory:  ()                => monitoredInvoke("get-ai-assistant-memory"),

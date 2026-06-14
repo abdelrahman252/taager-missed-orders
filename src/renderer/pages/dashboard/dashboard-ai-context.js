@@ -17,6 +17,8 @@
     { id: "productForecast", label: "Product forecast", path: "/dashboard/product-forecast" },
     { id: "prepaid", label: "Prepaid intelligence", path: "/dashboard/prepaid" },
   ];
+  var contextCache = [];
+  var CONTEXT_CACHE_LIMIT = 8;
 
   function num(value, digits) {
     var n = Number(value || 0);
@@ -30,7 +32,9 @@
   }
 
   function tr(key, params, fallback) {
-    var value = window.dashboardI18n ? window.dashboardI18n.t(key, params) : key;
+    var value = window.dashboardI18n && typeof window.dashboardI18n.t === "function"
+      ? window.dashboardI18n.t(key, params)
+      : key;
     return value && value !== key ? value : (fallback || key);
   }
 
@@ -38,6 +42,83 @@
     var shell = document.getElementById("db-shell-mount");
     return shell && shell._dashboardActiveSection ? shell._dashboardActiveSection : "master";
   }
+
+  function currentLanguage() {
+    if (window.dashboardI18n && typeof window.dashboardI18n.locale === "function") return window.dashboardI18n.locale();
+    return document.documentElement.getAttribute("lang") || window._kbotLang || "en";
+  }
+
+  function currentFilterState() {
+    return window.DashboardFilterBus && typeof window.DashboardFilterBus.getState === "function"
+      ? window.DashboardFilterBus.getState()
+      : {};
+  }
+
+  function marketingFreshnessKey(accountId) {
+    var marketing = window.DashboardMarketingState && typeof window.DashboardMarketingState.get === "function"
+      ? window.DashboardMarketingState.get(accountId)
+      : null;
+    if (!marketing) return "";
+    return [
+      marketing.status || "",
+      marketing.lastSyncAt || "",
+      marketing.manualOverride ? 1 : 0,
+      marketing.summary && marketing.summary.adSpend || 0,
+      marketing.summary && marketing.summary.campaignCount || 0,
+      marketing.summary && marketing.summary.rowCount || 0
+    ].join(":");
+  }
+
+  function campaignFreshnessKey(data) {
+    var campaign = data && (data.campaignIntelligence || data.mediaBuying) || {};
+    return [
+      campaign.updatedAt || campaign.lastUpdatedAt || campaign.lastSyncAt || "",
+      campaign.version || "",
+      campaign.sourceOfTruth || ""
+    ].join(":");
+  }
+
+  function contextCacheKey(opts, data, section) {
+    data = data || {};
+    opts = opts || {};
+    var meta = data.meta || {};
+    var accountId = meta.activeAccountId || "__all__";
+    var filters = currentFilterState();
+    return JSON.stringify({
+      version: data._version != null ? data._version : "",
+      accountId: accountId,
+      language: currentLanguage(),
+      section: section,
+      selectedProduct: opts.productId || filters.selectedProduct || "",
+      selectedCity: opts.city || filters.selectedCity || "",
+      selectedProvince: filters.selectedProvince || "",
+      productLimit: Number(opts.productLimit || 80),
+      cityLimit: Number(opts.cityLimit || 80),
+      forecastLimit: Number(opts.forecastLimit || 40),
+      marketing: marketingFreshnessKey(accountId),
+      campaign: campaignFreshnessKey(data)
+    });
+  }
+
+  function getCachedContext(key) {
+    for (var i = 0; i < contextCache.length; i += 1) {
+      if (contextCache[i].key === key) {
+        var entry = contextCache.splice(i, 1)[0];
+        contextCache.push(entry);
+        return entry.value;
+      }
+    }
+    return null;
+  }
+
+  function setCachedContext(key, value) {
+    contextCache.push({ key: key, value: value });
+    while (contextCache.length > CONTEXT_CACHE_LIMIT) contextCache.shift();
+  }
+
+  window.invalidateDashboardAiContextCache = function () {
+    contextCache = [];
+  };
 
   function currentRoiSettings(data) {
     var meta = data && data.meta ? data.meta : {};
@@ -92,8 +173,11 @@
     var ndrPct = Number(roi.ndrPct || 0);
     var breakEvenSar = breakEvenCpaSar(avgCommissionSar, ndrPct);
     var breakEvenInCurrency = convertCommissionFromSar(breakEvenSar, settings || roi);
-    var cpa = Number(settings && settings.adSpend || roi.adSpend || 0) > 0 && Number(roi.totalOrders || 0) > 0
-      ? Number(settings && settings.adSpend || roi.adSpend || 0) / Number(roi.totalOrders || 1)
+    var netOrders = window.DashboardOrderMetrics
+      ? window.DashboardOrderMetrics.netOrders(roi)
+      : Number(roi.netOrderCount != null ? roi.netOrderCount : roi.totalOrders || 0);
+    var cpa = Number(settings && settings.adSpend || roi.adSpend || 0) > 0 && netOrders > 0
+      ? Number(settings && settings.adSpend || roi.adSpend || 0) / netOrders
       : Number(roi.avgCPA || 0);
     return {
       formula: "breakEvenCpa = avgCommissionPerDeliveredOrder * NDR",
@@ -111,7 +195,9 @@
 
   function compactProduct(p, financials) {
     financials = financials || {};
-    var placed = Number(p.placedCount || 0);
+    var placed = window.DashboardOrderMetrics
+      ? window.DashboardOrderMetrics.netOrders(p)
+      : Number(p.netOrderCount || p.placedCount || 0);
     var allocatedSpend = Number(financials.totalPlaced || 0) > 0
       ? Number(financials.adSpend || 0) * placed / Number(financials.totalPlaced || 1)
       : 0;
@@ -127,7 +213,7 @@
       id: String(p.key || p.sku || p.name || ""),
       name: p.name || p.key || "Unknown product",
       sku: p.sku || "",
-      orders: Number(p.placedCount || 0),
+      orders: placed,
       delivered: delivered,
       ndrPct: ndrPct,
       drPct: num(p.drRate || p.deliveryPct || 0, 1),
@@ -141,6 +227,17 @@
       cpaStatus: cpa > 0 && breakEvenInCurrency > 0 ? (cpa > breakEvenInCurrency ? "above_break_even_losing" : "below_break_even_safe") : "unknown",
       profitLoss: num(profitLoss, 2),
       financialCurrency: String(financials.currency || "SAR").toUpperCase(),
+      accountBreakdown: (p.accountBreakdown || []).slice(0, 20).map(function (account) {
+        return {
+          accountId: account.accountId || "",
+          accountLabel: account.accountLabel || account.accountId || "",
+          orders: Number(account.orders || 0),
+          delivered: Number(account.delivered || 0),
+          ndrPct: num(account.ndrPct || 0, 1),
+          commission: num(account.commission || 0, 2),
+          deliveredSales: num(account.deliveredSales || 0, 2)
+        };
+      }),
       topCities: (p.cityBreakdown || []).slice(0, 4).map(function (c) {
         return { city: c.name, orders: Number(c.count || c.orders || 0), ndrPct: num(c.ndr || 0, 1) };
       }),
@@ -165,16 +262,43 @@
         : pct(city.drBaseOrders ? (city.deliveredOrders || 0) / city.drBaseOrders : 0),
       codPct: pct(city.count ? (city.codCount || 0) / city.count : 0),
       prepaidPct: pct(city.count ? (city.prepaidCount || 0) / city.count : 0),
-      earnedCommission: num(city.earnedCommission || 0, 2),
+      earnedProfitAfterTax: num(
+        city.earnedProfitAfterTax != null ? city.earnedProfitAfterTax : city.earnedCommission || 0,
+        2
+      ),
+      earnedCommission: num(
+        city.earnedProfitAfterTax != null ? city.earnedProfitAfterTax : city.earnedCommission || 0,
+        2
+      ),
       riskScore: Number(city.riskScore || 0),
       scalingScore: Number(city.scalingScore || 0),
+      accountBreakdown: (city.accountBreakdown || []).slice(0, 20).map(function (account) {
+        return {
+          accountId: account.accountId || "",
+          accountLabel: account.accountLabel || account.accountId || "",
+          orders: Number(account.orders || 0),
+          delivered: Number(account.delivered || 0),
+          ndrPct: num(account.ndrPct || 0, 1),
+          earnedProfitAfterTax: num(
+            account.earnedProfitAfterTax != null ? account.earnedProfitAfterTax : account.commission || 0,
+            2
+          ),
+          commission: num(
+            account.earnedProfitAfterTax != null ? account.earnedProfitAfterTax : account.commission || 0,
+            2
+          ),
+          deliveredSales: num(account.deliveredSales || 0, 2)
+        };
+      })
     };
   }
 
   function productForecasts(products, roi) {
     var adSpend = Number(roi && roi.adSpend || 0);
     return (products || []).map(function (p) {
-      var orders = Number(p.placedCount || 0);
+      var orders = window.DashboardOrderMetrics
+        ? window.DashboardOrderMetrics.netOrders(p)
+        : Number(p.netOrderCount || p.placedCount || 0);
       var delivered = Number(p.deliveredCount || 0);
       var avgCommission = delivered > 0 ? Number(p.commission || 0) / delivered : Number(roi && roi.avgCommission || 0);
       var ndr = orders > 0 ? delivered / orders : 0;
@@ -367,12 +491,20 @@
     opts = opts || {};
     var data = opts.data || window.dashboardGeoData || {};
     var section = opts.section || activeSection();
+    var perfTimer = window.TaagerPerf && typeof window.TaagerPerf.start === "function"
+      ? window.TaagerPerf.start("ai:context:build", {
+        section: section,
+        dataVersion: data && data._version != null ? data._version : ""
+      })
+      : null;
     var geo = data.geo || {};
     var roiSettings = currentRoiSettings(data);
     var sourceProducts = data.products && data.products.rankedList ? data.products.rankedList : [];
     var productFinancials = Object.assign({}, roiSettings, {
       totalPlaced: sourceProducts.reduce(function (sum, p) {
-        return sum + Number(p.placedCount || 0);
+        return sum + (window.DashboardOrderMetrics
+          ? window.DashboardOrderMetrics.netOrders(p)
+          : Number(p.netOrderCount || p.placedCount || 0));
       }, 0),
     });
     var products = sourceProducts.map(function (p) { return compactProduct(p, productFinancials); });
@@ -439,6 +571,13 @@
     context.sectionSignals = buildSectionSignals(data, context, rawProductForecasts);
     context.localSummary = localExecutiveSummary(context);
     if (context.sectionSignals && context.sectionSignals.master) context.sectionSignals.master.localSummary = context.localSummary;
+    if (window.TaagerPerf && typeof window.TaagerPerf.end === "function" && perfTimer) {
+      window.TaagerPerf.end(perfTimer, {
+        products: products.length,
+        cities: cities.length,
+        forecasts: rawProductForecasts.length
+      });
+    }
     return context;
   };
 
@@ -447,7 +586,15 @@
   };
 
   window.getDashboardAiContext = function (opts) {
+    var perfTimer = window.TaagerPerf && typeof window.TaagerPerf.start === "function"
+      ? window.TaagerPerf.start("ai:context:get", {
+        section: opts && opts.section || activeSection()
+      })
+      : null;
     if (typeof window.buildDashboardAiContext !== "function") {
+      if (window.TaagerPerf && typeof window.TaagerPerf.end === "function" && perfTimer) {
+        window.TaagerPerf.end(perfTimer, { fallback: true });
+      }
       return {
         currentPage: activeSection(),
         pages: PAGE_MAP.slice(),
@@ -468,7 +615,26 @@
         },
       };
     }
-    return window.buildDashboardAiContext(opts || {});
+    opts = opts || {};
+    var data = opts.data || window.dashboardGeoData || {};
+    var section = opts.section || activeSection();
+    var cacheKey = contextCacheKey(opts, data, section);
+    var cached = getCachedContext(cacheKey);
+    if (cached) {
+      if (window.TaagerPerf && typeof window.TaagerPerf.end === "function" && perfTimer) {
+        window.TaagerPerf.end(perfTimer, { fallback: false, cacheHit: true });
+      }
+      return cached;
+    }
+    var context = window.buildDashboardAiContext(Object.assign({}, opts, {
+      data: data,
+      section: section
+    }));
+    setCachedContext(cacheKey, context);
+    if (window.TaagerPerf && typeof window.TaagerPerf.end === "function" && perfTimer) {
+      window.TaagerPerf.end(perfTimer, { fallback: false, cacheHit: false });
+    }
+    return context;
   };
 
   window.renderProductAiAdvisor = function (product) {
@@ -482,7 +648,10 @@
       : (cancel >= 40
         ? tr("ai.productAdvisor.cancelRisk", null, "Cancellation risk is too high for aggressive spend.")
         : (ndr >= 40 ? tr("ai.productAdvisor.safeScale", null, "Safe to test controlled scaling.") : tr("ai.productAdvisor.liftNdr", null, "Best lever: lift NDR before scaling.")));
-    var commissionText = Math.round(commission).toLocaleString(window.dashboardI18n ? window.dashboardI18n.locale() : "en-US");
+    var locale = window.dashboardI18n && typeof window.dashboardI18n.locale === "function"
+      ? window.dashboardI18n.locale()
+      : "en-US";
+    var commissionText = Math.round(commission).toLocaleString(locale);
     var sub = commission > 0 ? tr("ai.productAdvisor.commission", { value: commissionText }, "Taager profit: " + commissionText + " " + (window.dashboardActiveCurrency || "SAR")) : tr("ai.productAdvisor.needsCommission", null, "Needs live Taager profit signal");
     return '<div class="ai-inline-advisor ' + tone + '">' +
       '<span>' + tr("ai.productAdvisor.title", null, "AI product advisor") + '</span>' +

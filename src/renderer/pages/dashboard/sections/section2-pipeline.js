@@ -133,7 +133,9 @@ window.renderSection2 = function (mountEl, data, ctx) {
     function combine(id, label, ids, color, businessGroup) {
       var rows = ids.map(function (id) { return byId[id]; }).filter(Boolean);
       var count = rows.reduce(function (sum, row) { return sum + Number(row.count || 0); }, 0);
-      var share = pctNum(count, metrics.businessTotalOrders || metrics.totalOrders || metrics.totalDelivery || source.reduce(function (sum, row) { return sum + Number(row.count || 0); }, 0));
+      var share = pctNum(count, metrics.netOrderCount || metrics.businessTotalOrders || metrics.statusTotalCount || source.reduce(function (sum, row) {
+        return row && row.businessGroup !== 'excluded' ? sum + Number(row.count || 0) : sum;
+      }, 0));
       var sar = rows.reduce(function (sum, row) {
         var rawSar = row.profitAfterTax != null ? row.profitAfterTax : row.sar;
         return sum + Number(String(rawSar == null ? 0 : rawSar).replace(/[^\d.-]/g, '') || 0);
@@ -163,7 +165,18 @@ window.renderSection2 = function (mountEl, data, ctx) {
   }
 
   stages = compactVisibleStages(stages);
-  metrics.totalOrders = metrics.totalOrders || metrics.totalDelivery || stages.reduce(function (sum, s) { return sum + Number(s.count || 0); }, 0);
+  var resolvedNetOrders = window.DashboardOrderMetrics
+    ? window.DashboardOrderMetrics.netOrders(metrics)
+    : Number(metrics.netOrderCount || metrics.businessTotalOrders || metrics.statusTotalCount || 0);
+  if (!resolvedNetOrders) {
+    resolvedNetOrders = stages.reduce(function (sum, s) {
+      return s && s.businessGroup !== 'excluded' ? sum + Number(s.count || 0) : sum;
+    }, 0);
+  }
+  metrics.netOrderCount = resolvedNetOrders;
+  metrics.totalOrderCount = Number(metrics.totalOrderCount != null ? metrics.totalOrderCount : metrics.rawTotalOrders || resolvedNetOrders);
+  metrics.totalOrders = resolvedNetOrders;
+  metrics.totalDelivery = resolvedNetOrders;
   metrics.deliveredCount = metrics.deliveredCount != null ? metrics.deliveredCount : ((stages.find(function (s) { return s.id === 'delivered'; }) || {}).count || 0);
   metrics.failedCount = metrics.failedCount != null ? metrics.failedCount : ((stages.find(function (s) { return s.id === 'lost'; }) || {}).count || 0);
   metrics.deliveryRate = metrics.deliveryRate != null ? metrics.deliveryRate : pctNum(metrics.deliveredCount, metrics.totalOrders);
@@ -379,7 +392,7 @@ window.renderSection2 = function (mountEl, data, ctx) {
   }
 
   function buildAnalyticsCards() {
-    var total = Number(metrics.totalOrders || 0);
+    var total = Number(metrics.netOrderCount || 0);
     var activeCount = stageCount(['received', 'confirmed', 'waiting', 'shipping']);
     var preShipCount = stageCount(['received', 'confirmed', 'waiting']);
     var shippingCount = stageCount('shipping');
@@ -620,6 +633,8 @@ window.renderSection2 = function (mountEl, data, ctx) {
   var _s2ThemeObserver = new MutationObserver(function (mutations) {
     for (var i = 0; i < mutations.length; i++) {
       if (mutations[i].attributeName === 'data-theme') {
+        var shellEl = mountEl.closest && mountEl.closest('.dash-shell');
+        if (!shellEl || shellEl._dashboardActiveSection !== 'pipeline') return;
         window.renderSection2(mountEl, data, ctx);
         return;
       }

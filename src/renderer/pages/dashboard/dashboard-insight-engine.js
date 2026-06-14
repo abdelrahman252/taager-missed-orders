@@ -52,6 +52,10 @@
       body:           opts.body       || '',
       recommendation: opts.recommendation || '',
       metric:         opts.metric     || {},
+      evidence:       opts.evidence   || [],
+      trust:          opts.trust      || undefined,
+      confidence:     opts.confidence || undefined,
+      sampleSize:     opts.sampleSize || undefined,
       tags:           opts.tags       || []
     };
   }
@@ -61,6 +65,7 @@
   ════════════════════════════════════════════════════════════════════════════ */
   window.runInsightEngine = function (geo, thresholds) {
   const isAr = window.dashboardI18n ? window.dashboardI18n.currentLocale === 'ar' : true;
+  var SI = window.TaagerSmartInsights || null;
   function tx(en, ar) {
     return window.dashboardI18n && window.dashboardI18n.pick
       ? window.dashboardI18n.pick(en, ar)
@@ -90,6 +95,11 @@
     var nationalPrepaid = Number(kpis.prepaidPct) || 0;
     var MIN_SAMPLE      = T.INSIGHT_MIN_SAMPLE;
     var MIN_SCALING     = T.SCALING_MIN_ORDERS;
+    function ndrEvidence(delivered, eligible) {
+      return SI ? SI.rateEvidence('NDR', delivered, eligible) : ('NDR ' + pct(safeNdr(delivered, eligible)) + '% (' + delivered + '/' + eligible + ')');
+    }
+    function trustMeasured() { return 'measured'; }
+    function trustEstimated() { return 'estimated'; }
 
     function getProductName(key) {
       if (!key) return tx('Unknown product', 'منتج غير معروف');
@@ -109,12 +119,15 @@
       if ((cs.count || 0) < MIN_SAMPLE) return;
       var cityNdr  = safeNdr(cs.deliveredOrders || 0, cs.count || 0);
       if (cityNdr < T.NDR_DANGER) {
+        var cityEligible = cs.ndrBaseOrders || cs.count || 0;
         insights.push(makeInsight('risk', 'city', 'critical', {
           city:  city,
           title: tx('⚠️ NDR Risk: ', '⚠️ NDR خطر: ') + city,
-          body:  tx('Returns rate ', 'نسبة المرتجعات ') + pct(cityNdr) + tx('% — much higher than the safe limit (', '% — أعلى بكثير من الحد الآمن (') + pct(T.NDR_DANGER) + '%)',
-          recommendation: tx('Pause campaigns in ', 'أوقف الحملات في ') + city + tx(' temporarily and review Orders quality', ' مؤقتاً وراجع جودة الطلبات'),
-          metric: { ndr: cityNdr, orders: cs.count },
+          body:  tx('Net delivery rate ', 'نسبة التسليم الصافية ') + pct(cityNdr) + tx('% is below the safe floor (', '% أقل من حد الأمان (') + pct(T.NDR_DANGER) + '%). ' + ndrEvidence(cs.deliveredOrders || 0, cityEligible),
+          recommendation: tx('Reduce or hold scaling in ', 'خفّض أو ثبّت التوسع في ') + city + tx(' until order quality and delivery recovery are reviewed.', ' حتى تتم مراجعة جودة الطلبات وتحسن التسليم.'),
+          metric: { ndr: cityNdr, orders: cs.count, delivered: cs.deliveredOrders || 0, eligible: cityEligible },
+          evidence: [ndrEvidence(cs.deliveredOrders || 0, cityEligible)],
+          trust: trustMeasured(),
           tags:   ['ndr', 'risk']
         }));
       }
@@ -133,9 +146,11 @@
           insights.push(makeInsight('risk', 'product-city', 'critical', {
             city: city, product: product,
             title: tx('🔴 NDR Warning: ', '🔴 تحذير NDR: ') + pName + tx(' in ', ' في ') + city,
-            body:  'NDR ' + pct(cell.ndr) + tx('% — very high risk for this product in this city', '% — خطر عالٍ جداً لهذا المنتج في هذه المدينة'),
-            recommendation: tx('Stop ads for this product in ', 'أوقف إعلانات هذا المنتج في ') + city + tx(' immediately', ' فوراً'),
+            body:  tx('Net delivery rate ', 'نسبة التسليم الصافية ') + pct(cell.ndr) + tx('% is below the safe floor for this product-city pair. ', '% أقل من حد الأمان لهذا المنتج داخل المدينة. ') + ndrEvidence(cell.delivered || 0, cell.orders || 0),
+            recommendation: tx('Reduce or pause aggressive traffic for this product in ', 'خفّض أو أوقف الزيارات المكثفة لهذا المنتج في ') + city + tx(' until the product-city delivery signal recovers.', ' حتى تتحسن إشارة التسليم للمنتج داخل المدينة.'),
             metric: { ndr: cell.ndr, orders: cell.orders, delivered: cell.delivered },
+            evidence: [ndrEvidence(cell.delivered || 0, cell.orders || 0)],
+            trust: trustMeasured(),
             tags:   ['ndr', 'risk', 'product']
           }));
         }
@@ -168,9 +183,14 @@
         insights.push(makeInsight('recommendation', 'city', 'high', {
           city: city,
           title: tx('💳 Apply Prepaid: ', '💳 تطبيق الدفع المسبق: ') + city,
-          body:  tx('COD NDR ', 'NDR الدفع عند الاستلام ') + pct(codNdr) + tx('% vs ', '% مقابل ') + pct(prepNdr) + tx('% for Prepaid — gap of ', '% للدفع المسبق — فارق ') + pct(advantage) + '%',
-          recommendation: tx('Switching campaigns in ', 'تحويل حملات ') + city + tx(' to Prepaid will significantly improve delivery rate', ' للدفع المسبق سيحسن نسبة التسليم بشكل ملحوظ'),
+          body:  tx('Estimated COD NDR ', 'NDR تقديري للدفع عند الاستلام ') + pct(codNdr) + tx('% vs ', '% مقابل ') + pct(prepNdr) + tx('% for Prepaid — gap of ', '% للدفع المسبق — فارق ') + pct(advantage) + '%',
+          recommendation: tx('Test prepaid-first traffic in ', 'اختبر زيارات تفضل الدفع المسبق في ') + city + tx(' and monitor whether measured NDR improves.', ' وراقب ما إذا كانت NDR المقاسة تتحسن.'),
           metric: { codNdr: codNdr, prepaidNdr: prepNdr, advantage: advantage },
+          evidence: [
+            ndrEvidence(codDelivered, cs.codCount || 0),
+            ndrEvidence(prepDelivered, cs.prepaidCount || 0)
+          ],
+          trust: trustEstimated(),
           tags:   ['prepaid', 'recommendation']
         }));
       }
@@ -186,10 +206,12 @@
       if ((p.ndrPct || 0) < T.NDR_DANGER) {
         insights.push(makeInsight('risk', 'province', 'high', {
           province: pid,
-          title:    tx('📍 Region ', '📍 منطقة ') + p.name + tx(': High NDR', ': NDR مرتفع'),
-          body:     tx('Region NDR ', 'NDR المنطقة ') + pct(p.ndrPct) + tx('% is lower than national average ', '% أقل من المتوسط الوطني ') + pct(nationalNdr) + '%',
+          title:    tx('📍 Region ', '📍 منطقة ') + p.name + tx(': Low NDR', ': NDR منخفض'),
+          body:     tx('Region net delivery rate ', 'نسبة التسليم الصافية للمنطقة ') + pct(p.ndrPct) + tx('% is below the safe floor and lower than national average ', '% أقل من حد الأمان وأقل من المتوسط الوطني ') + pct(nationalNdr) + '%',
           recommendation: tx('Review order quality in cities of ', 'راجع جودة الطلبات في مدن ') + p.name,
           metric: { provinceNdr: p.ndrPct, nationalNdr: nationalNdr },
+          evidence: [ndrEvidence(p.totalDelivered || 0, p.totalOrders || 0)],
+          trust: trustMeasured(),
           tags:   ['ndr', 'risk', 'province']
         }));
       }
@@ -207,10 +229,12 @@
       if (codPct > T.COD_HEAVY_THRESHOLD && cityNdr < T.NDR_DANGER) {
         insights.push(makeInsight('risk', 'city', 'high', {
           city: city,
-          title: tx('🚨 Dangerous COD concentration: ', '🚨 تركيز COD خطير: ') + city,
-          body:  tx('COD rate ', 'نسبة الدفع عند الاستلام ') + pct(codPct) + tx('% with NDR ', '% مع NDR ') + pct(cityNdr) + tx('% — high financial exposure', '% — تعرض مالي عالٍ'),
-          recommendation: tx('Start converting part of orders in ', 'ابدأ بتحويل جزء من طلبات ') + city + tx(' to prepaid gradually', ' إلى دفع مسبق تدريجياً'),
+          title: tx('🚨 COD-heavy low-NDR city: ', '🚨 مدينة COD مرتفع مع NDR منخفض: ') + city,
+          body:  tx('COD share ', 'نسبة الدفع عند الاستلام ') + pct(codPct) + tx('% with measured NDR ', '% مع NDR مقاسة ') + pct(cityNdr) + tx('% — high exposure if volume is scaled.', '% — تعرض عالٍ إذا تم توسيع الحجم.'),
+          recommendation: tx('Test gradual prepaid conversion in ', 'اختبر التحويل التدريجي للدفع المسبق في ') + city + tx(' before increasing COD traffic.', ' قبل زيادة زيارات COD.'),
           metric: { codPct: codPct, ndr: cityNdr },
+          evidence: [ndrEvidence(cs.deliveredOrders || 0, cs.ndrBaseOrders || cs.count || 0)],
+          trust: trustMeasured(),
           tags:   ['cod', 'risk']
         }));
       }

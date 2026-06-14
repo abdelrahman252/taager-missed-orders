@@ -5,6 +5,7 @@
   var resolvedFlags = null;
   var requestSeq = {};
   var latest = {};
+  var prewarmKeys = {};
 
   function loadFlags() {
     if (flagsPromise) return flagsPromise;
@@ -49,9 +50,13 @@
       ndrDateFrom: ndrPeriod.dateFrom || ndrPeriod.from || "",
       ndrDateTo: ndrPeriod.dateTo || ndrPeriod.to || "",
       reportingCurrency: meta.reportingCurrency || meta.activeCurrency || window.dashboardActiveCurrency || "SAR",
+      isMixedCountry: !!meta.isMixedCountry,
       exchangeRates: Object.assign({}, meta.exchangeRates || {}),
       exchangeRatesUpdatedAt: meta.exchangeRatesUpdatedAt || "",
-      exchangeRateSource: meta.exchangeRateSource || ""
+      exchangeRateSource: meta.exchangeRateSource || "",
+      productNameOverrides: window.TaagerProductNames && typeof window.TaagerProductNames.all === "function"
+        ? window.TaagerProductNames.all()
+        : {}
     };
   }
 
@@ -241,6 +246,29 @@
     var legacyTop = legacyRows.slice(0, 10).map(productRankIdentity).join("|");
     var queryTop = (result.rows || []).slice(0, 10).map(productRankIdentity).join("|");
     compareValue(mismatches, "products", "topRanking", legacyTop, queryTop);
+    var legacyByProduct = {};
+    legacyRows.forEach(function (row) {
+      legacyByProduct[productRankIdentity(row)] = row;
+    });
+    (result.rows || []).forEach(function (row) {
+      var identity = productRankIdentity(row);
+      var legacyRow = legacyByProduct[identity];
+      if (!legacyRow) return;
+      [
+        "deliveredCount",
+        "netOrderCount",
+        "ndrBaseOrders",
+        "ndrDeliveredOrders",
+        "drBaseOrders",
+        "drDeliveredOrders",
+        "ndrPct",
+        "drRate"
+      ].forEach(function (field) {
+        compareNumber(mismatches, "products", "row." + field, legacyRow[field], row[field], identity);
+      });
+      compareValue(mismatches, "products", "row.rateMode", legacyRow.rateMode || "actual", row.rateMode || "actual", identity);
+      compareValue(mismatches, "products", "row.rateSource", legacyRow.rateSource || "product", row.rateSource || "product", identity);
+    });
     return mismatches;
   }
 
@@ -323,7 +351,27 @@
     else console.info("[DashboardQuery][shadow] rollout verified", payload);
   }
 
+  function scheduleQueryPrewarm(data) {
+    loadFlags().then(function (flags) {
+      if (!flags || !flags.cities) return;
+      var key = stableStringify(scopePayload(data));
+      if (prewarmKeys.cities === key) return;
+      prewarmKeys.cities = key;
+
+      var start = function () {
+        query("cities", {}, data).then(function (result) {
+          if (!result || !result.ok) prewarmKeys.cities = "";
+        }).catch(function () {
+          prewarmKeys.cities = "";
+        });
+      };
+      if (window.requestIdleCallback) window.requestIdleCallback(start, { timeout: 3500 });
+      else window.setTimeout(start, 1200);
+    }).catch(function () {});
+  }
+
   function observe(sectionId, data) {
+    scheduleQueryPrewarm(data);
     if (["orders", "products", "campaigns"].indexOf(sectionId) === -1) return;
     loadFlags().then(function (flags) {
       if (!flags.shadow) return;

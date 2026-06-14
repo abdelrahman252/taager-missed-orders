@@ -64,6 +64,51 @@
     return window.COLOR_MAP.red;
   };
 
+  function finiteCount(value) {
+    var count = Number(value);
+    return isFinite(count) && count > 0 ? count : 0;
+  }
+
+  window.DashboardOrderMetrics = {
+    netOrders: function (row) {
+      row = row || {};
+      if (row.netOrderCount != null) return finiteCount(row.netOrderCount);
+      if (row.businessTotalOrders != null) return finiteCount(row.businessTotalOrders);
+      if (row.statusTotalCount != null) return finiteCount(row.statusTotalCount);
+      if (row.orders != null) return finiteCount(row.orders);
+      return finiteCount(row.placedCount);
+    },
+    rawOrders: function (row) {
+      row = row || {};
+      if (row.totalOrderCount != null) return finiteCount(row.totalOrderCount);
+      if (row.rawTotalOrders != null) return finiteCount(row.rawTotalOrders);
+      if (row.rawValue != null) return finiteCount(row.rawValue);
+      return this.netOrders(row);
+    },
+    deliveredOrders: function (row) {
+      row = row || {};
+      if (row.deliveredCount != null) return finiteCount(row.deliveredCount);
+      if (row.deliveredOrders != null) return finiteCount(row.deliveredOrders);
+      if (row.delivered != null) return finiteCount(row.delivered);
+      return finiteCount(row.units);
+    },
+    averageProfit: function (row) {
+      row = row || {};
+      var delivered = row.actualDeliveredCount != null
+        ? finiteCount(row.actualDeliveredCount)
+        : this.deliveredOrders(row);
+      if (!delivered) return 0;
+      var earned = row.actualCommission != null
+        ? Number(row.actualCommission)
+        : (row.earnedProfitAfterTax != null
+          ? Number(row.earnedProfitAfterTax)
+          : (row.earnedCommission != null
+            ? Number(row.earnedCommission)
+            : Number(row.commission)));
+      return isFinite(earned) ? earned / delivered : 0;
+    }
+  };
+
   /* ── Inline SVG icons ────────────────────────────────────────────────────── */
   window.ICONS = {
     home:
@@ -184,9 +229,21 @@
 
   window.formatDashboardMoney = function (n, currency, decimals, opts) {
     decimals = (decimals === undefined) ? 0 : decimals;
-    currency = currency || activeDashboardCurrency();
+    currency = String(currency || activeDashboardCurrency()).toUpperCase();
+    opts = opts || {};
+    var amount = Number(n || 0);
+    var compactIqd = opts.compact !== false && currency === 'IQD' && Math.abs(amount) >= 100000;
+    if ((opts.compact === true || compactIqd) && window.formatDashboardNumber) {
+      return window.formatDashboardNumber(amount, {
+        decimals: decimals,
+        compact: true,
+        compactThreshold: currency === 'IQD' ? 100000 : opts.compactThreshold,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 1
+      }) + ' ' + currency;
+    }
     if (window.TaagerCurrency && window.TaagerCurrency.format) {
-      return window.TaagerCurrency.format(n, currency, Object.assign({ decimals: decimals }, opts || {}));
+      return window.TaagerCurrency.format(n, currency, Object.assign({ decimals: decimals }, opts));
     }
     if (window.dashboardI18n) return window.dashboardI18n.number(n, {
       minimumFractionDigits: decimals,
@@ -199,8 +256,8 @@
   };
 
   /* Compatibility alias: most dashboard sections still call formatSAR. */
-  window.formatSAR = function (n, decimals, currency) {
-    return window.formatDashboardMoney(n, currency, decimals);
+  window.formatSAR = function (n, decimals, currency, opts) {
+    return window.formatDashboardMoney(n, currency, decimals, opts);
   };
 
   window.formatDashboardNumber = function (value, opts) {
@@ -448,8 +505,8 @@
     var iconSize   = compact ? 18 : 20;
     var pad        = compact ? '12px 14px' : '16px 18px 14px';
     var minH       = compact ? 'auto' : '160px';
-    var numSize    = compact ? '26px' : 'clamp(18px, 1.5vw, 26px)';
-    var unitSize   = compact ? '10px' : '12px';
+    var numSize    = compact ? '22px' : 'clamp(18px, 1.15vw, 22px)';
+    var unitSize   = compact ? '9px' : '11px';
 
     return '<div class="kpi-card dash-kpi-card" style="background:#0b1120;border:1px solid ' + accent + '35;' +
       'border-radius:16px;box-shadow:0 0 0 1px ' + accent + '20,8px 0 40px ' + accent + '15,inset 0 0 60px ' + accent + '08;' +
@@ -540,21 +597,21 @@
 
     return '<div class="s8-kpi-card" style="background:#0b1120;border:1px solid rgba(255,255,255,0.08);' +
       'border-radius:14px;overflow:hidden;position:relative;direction:ltr;display:flex;flex-direction:row;' +
-      'align-items:stretch;padding:12px 14px;gap:12px;flex:1;min-width:180px;">' +
+      'align-items:stretch;padding:10px 12px;gap:10px;flex:1;min-width:0;">' +
       /* radial glow */
       '<div style="position:absolute;inset:0;background:radial-gradient(ellipse at 8% 50%,'+accent+'1c 0%,transparent 58%);pointer-events:none;"></div>' +
       /* icon circle */
-      '<div style="width:44px;height:44px;border-radius:50%;background:'+accent+'20;border:1.5px solid '+accent+'65;' +
+      '<div style="width:38px;height:38px;border-radius:50%;background:'+accent+'20;border:1.5px solid '+accent+'65;' +
         'box-shadow:0 0 18px '+accent+'55,inset 0 0 10px '+accent+'18;display:flex;align-items:center;justify-content:center;' +
         'flex-shrink:0;align-self:center;z-index:1;">' +
-        cardIconHtml(accent, iconType, 20) +
+        cardIconHtml(accent, iconType, 17) +
       '</div>' +
       /* content */
       '<div style="flex:1;min-width:0;display:flex;flex-direction:column;z-index:1;">' +
         '<div class="dash-kpi-label" style="font-size:10px;text-align:' + (window.dashboardI18n && !window.dashboardI18n.isRtl() ? 'left' : 'right') + ';direction:inherit;margin-bottom:3px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + label + helpHtml(tooltip) + '</div>' +
         '<div style="display:flex;align-items:baseline;justify-content:flex-end;gap:4px;line-height:1;">' +
-          '<span title="' + fullValue + (unit ? ' ' + unit : '') + '" style="font-size:20px;font-weight:900;color:#fff;letter-spacing:0;line-height:1;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums;" class="dash-kpi-value ' + ((hideDelta || staticDisplay) ? '' : 'kpi-num') + '" data-id="'+id+'" data-decimals="' + decimals + '" data-compact="true" ' + ((hideDelta || staticDisplay) ? '' : 'data-to="'+value+'"') + '>' + ((hideDelta || staticDisplay) ? displayValue : '0') + '</span>' +
-          '<span style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.5);direction:inherit;">'+unit+'</span>' + window.supposedBadgeHtml(opts.label) +
+          '<span title="' + fullValue + (unit ? ' ' + unit : '') + '" style="font-size:18px;font-weight:900;color:#fff;letter-spacing:0;line-height:1;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums;" class="dash-kpi-value ' + ((hideDelta || staticDisplay) ? '' : 'kpi-num') + '" data-id="'+id+'" data-decimals="' + decimals + '" data-compact="true" ' + ((hideDelta || staticDisplay) ? '' : 'data-to="'+value+'"') + '>' + ((hideDelta || staticDisplay) ? displayValue : '0') + '</span>' +
+          '<span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.5);direction:inherit;">'+unit+'</span>' + window.supposedBadgeHtml(opts.label) +
         '</div>' +
         (hideDelta ? '' : '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin-top:4px;">' +
           '<span style="font-size:12px;font-weight:700;color:'+dColor+';line-height:1;">'+(isPositive?'↑':'↓')+'&nbsp;'+Math.abs(delta)+'%</span>' +

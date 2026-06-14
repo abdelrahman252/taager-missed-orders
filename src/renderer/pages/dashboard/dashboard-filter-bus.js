@@ -565,6 +565,53 @@
     return keys.filter(function (key, index) { return key && keys.indexOf(key) === index; });
   }
 
+  function sourceAccountSignature(accounts) {
+    return (Array.isArray(accounts) ? accounts : []).map(function (account) {
+      return String(account && account.id || '');
+    }).filter(Boolean).sort().join('|');
+  }
+
+  function mergeSourceAccounts() {
+    var byId = {};
+    var out = [];
+    Array.prototype.forEach.call(arguments, function (list) {
+      (Array.isArray(list) ? list : []).forEach(function (account) {
+        var id = String(account && account.id || '');
+        if (!id) return;
+        if (byId[id]) {
+          byId[id] = Object.assign({}, byId[id], account);
+        } else {
+          byId[id] = Object.assign({}, account);
+          out.push(byId[id]);
+        }
+      });
+    });
+    return out;
+  }
+
+  function mergeMarketingMappings() {
+    var merged = {};
+    Array.prototype.forEach.call(arguments, function (mappings) {
+      if (!mappings || typeof mappings !== 'object') return;
+      Object.keys(mappings).forEach(function (key) {
+        merged[key] = mergeSourceAccounts(merged[key], mappings[key]);
+      });
+    });
+    return merged;
+  }
+
+  function latestMarketingDate(a, b) {
+    if (!a) return b || null;
+    if (!b) return a || null;
+    return new Date(a) > new Date(b) ? a : b;
+  }
+
+  function oldestMarketingDate(a, b) {
+    if (!a) return b || null;
+    if (!b) return a || null;
+    return new Date(a) < new Date(b) ? a : b;
+  }
+
   function normalizeMarketingStatus(value, accountId, platform) {
     value = value || {};
     platform = normalizeMarketingPlatform(platform || value.platform);
@@ -653,12 +700,312 @@
     return bucket;
   }
 
+  function limitForMarketingAccount(allStatus, accountId, account) {
+    var limits = allStatus && allStatus.limits && typeof allStatus.limits === 'object' ? allStatus.limits : {};
+    var keys = [accountId].concat(marketingAccountKeys(account || accountId));
+    var found = null;
+    keys.some(function (key) {
+      key = String(key || '').trim();
+      if (key && limits[key]) {
+        found = limits[key];
+        return true;
+      }
+      return false;
+    });
+    return found;
+  }
+
+  function hydrateMarketingAccountsFromAllStatus(allStatus, platform) {
+    if (!allStatus || !allStatus.mappings || typeof allStatus.mappings !== 'object') return [];
+    platform = normalizeMarketingPlatform(platform || allStatus.platform);
+    var knownAccounts = mergeSourceAccounts(allStatus.availableAccounts, allStatus.linkedAccounts, allStatus.mappedAccounts);
+    var changedIds = [];
+    dashboardMarketingAccounts().forEach(function (account) {
+      var id = String(account && (account.id || account.accountId || account.key || '') || '');
+      if (!id) return;
+      var assigned = [];
+      marketingAccountKeys(account).some(function (key) {
+        if (!Array.isArray(allStatus.mappings[key])) return false;
+        assigned = allStatus.mappings[key];
+        return true;
+      });
+      var bucket = marketingBucket(id);
+      var previous = normalizeMarketingStatus(bucket[platform], id, platform);
+      var sameAssigned = sourceAccountSignature(previous.selectedSourceAccounts) === sourceAccountSignature(assigned);
+      var authorizationPending = allStatus.status === 'pending';
+      var reconnectRequired = !!allStatus.reconnectRequired;
+      var nextValue = Object.assign({}, previous, {
+        platform: platform,
+        status: authorizationPending ? 'pending' : (assigned.length ? 'connected' : 'disconnected'),
+        mappedAccounts: assigned,
+        linkedAccounts: assigned.length ? assigned : [],
+        linkedAccountCount: assigned.length,
+        availableAccounts: assigned.length ? [] : knownAccounts,
+        mappings: allStatus.mappings,
+        selectedSourceAccounts: assigned,
+        selectedSourceAccountIds: assigned.map(function (source) { return String(source && source.id || ''); }).filter(Boolean),
+        limit: limitForMarketingAccount(allStatus, id, account) || previous.limit,
+        limits: null,
+        loading: false,
+        error: '',
+        errorCode: '',
+        reconnectRequired: reconnectRequired,
+        summary: !authorizationPending && sameAssigned && assigned.length ? previous.summary : null,
+        lastSyncAt: !authorizationPending && sameAssigned && assigned.length ? previous.lastSyncAt : null
+      });
+      var next = normalizeMarketingStatus(nextValue, id, platform);
+      if (JSON.stringify(previous) !== JSON.stringify(next)) {
+        bucket[platform] = next;
+        changedIds.push(id);
+      }
+    });
+    return changedIds;
+  }
+
+  function allPlatformStatus(platform) {
+    platform = normalizeMarketingPlatform(platform);
+    var stored = marketingBucket('__all__')[platform] || null;
+    var aggregate = aggregateMarketingStatusForPlatform(platform);
+    if (!stored) return aggregate;
+    stored = normalizeMarketingStatus(stored, '__all__', platform);
+    var mergedMappings = mergeMarketingMappings(stored.mappings, aggregate.mappings);
+    var storedHasConnectionData =
+      stored.status === 'connected' ||
+      stored.status === 'pending' ||
+      stored.summary ||
+      stored.linkedAccounts.length ||
+      stored.availableAccounts.length ||
+      stored.mappedAccounts.length ||
+      Object.keys(stored.mappings || {}).length;
+    var aggregateHasConnectionData =
+      aggregate.status === 'connected' ||
+      aggregate.status === 'pending' ||
+      aggregate.summary ||
+      aggregate.linkedAccounts.length ||
+      aggregate.availableAccounts.length ||
+      aggregate.mappedAccounts.length ||
+      Object.keys(aggregate.mappings || {}).length;
+    var status = aggregate.status === 'connected' || stored.status === 'connected'
+      ? 'connected'
+      : (aggregate.status === 'pending' || stored.status === 'pending' || aggregate.loading || stored.loading
+        ? 'pending'
+        : (storedHasConnectionData || aggregateHasConnectionData ? stored.status || aggregate.status : 'disconnected'));
+    return Object.assign({}, stored, aggregate, {
+      accountId: '__all__',
+      platform: platform,
+      platformLabel: platformLabel(platform),
+      status: status,
+      linkedAccounts: mergeSourceAccounts(stored.linkedAccounts, aggregate.linkedAccounts),
+      linkedAccountCount: mergeSourceAccounts(stored.linkedAccounts, aggregate.linkedAccounts).length,
+      mappedAccounts: mergeSourceAccounts(stored.mappedAccounts, aggregate.mappedAccounts),
+      availableAccounts: mergeSourceAccounts(stored.availableAccounts, aggregate.availableAccounts),
+      mappings: mergedMappings,
+      selectedSourceAccounts: mergeSourceAccounts(stored.selectedSourceAccounts, aggregate.selectedSourceAccounts),
+      selectedSourceAccountIds: mergeSourceAccounts(stored.selectedSourceAccounts, aggregate.selectedSourceAccounts).map(function (source) {
+        return String(source && source.id || '');
+      }).filter(Boolean),
+      claimableAccounts: mergeSourceAccounts(stored.claimableAccounts, aggregate.claimableAccounts),
+      diagnostics: stored.diagnostics || aggregate.diagnostics,
+      limit: stored.limit || aggregate.limit,
+      limits: stored.limits || aggregate.limits,
+      statusCheckedAt: oldestMarketingDate(stored.statusCheckedAt, aggregate.statusCheckedAt),
+      lastSyncAt: latestMarketingDate(stored.lastSyncAt, aggregate.lastSyncAt),
+      summary: aggregate.summary || stored.summary,
+      cache: stored.cache || aggregate.cache,
+      stale: !!(stored.stale || aggregate.stale),
+      offline: !!(stored.offline || aggregate.offline),
+      error: [stored.error, aggregate.error].filter(Boolean).join('; '),
+      errorCode: [stored.errorCode, aggregate.errorCode].filter(Boolean).join('; '),
+      reconnectRequired: !!(stored.reconnectRequired || aggregate.reconnectRequired),
+      loading: !!(stored.loading || aggregate.loading),
+      manualOverride: readManualMarketingOverride('__all__')
+    });
+  }
+
+  function aggregateMarketingStatusForPlatform(platform) {
+    platform = normalizeMarketingPlatform(platform);
+    var accounts = dashboardMarketingAccounts();
+    var individualStatuses = accounts.map(function (acc) {
+      var accId = String(acc && (acc.id || acc.accountId || acc.key || '') || '');
+      var bucket = _marketingByAccount[accId];
+      return bucket && bucket[platform] ? bucket[platform] : null;
+    }).filter(Boolean);
+
+    if (individualStatuses.length === 0) {
+      return normalizeMarketingStatus({
+        platform: platform,
+        status: 'disconnected',
+        summary: null
+      }, '__all__', platform);
+    }
+
+    var connectedStatuses = individualStatuses.filter(function (s) { return s.status === 'connected'; });
+    if (connectedStatuses.length === 0) {
+      var isAnyLoading = individualStatuses.some(function (s) { return s.loading || s.status === 'pending'; });
+      var errorMsgs = individualStatuses.map(function (s) { return s.error; }).filter(Boolean).join('; ');
+      return normalizeMarketingStatus({
+        platform: platform,
+        status: isAnyLoading ? 'pending' : 'disconnected',
+        error: errorMsgs,
+        loading: isAnyLoading
+      }, '__all__', platform);
+    }
+
+    var latestSyncAt = null;
+    var oldestStatusCheckedAt = null;
+    var adSpend = 0;
+    var impressions = 0;
+    var clicks = 0;
+    var campaignCount = 0;
+    var rowCount = 0;
+    var dateFrom = '';
+    var dateTo = '';
+    var sourceBreakdown = [];
+    var campaignBreakdown = [];
+
+    var reportingCurrency = window.dashboardActiveCurrency || 'SAR';
+
+    connectedStatuses.forEach(function (s) {
+      if (s.lastSyncAt) {
+        if (!latestSyncAt || new Date(s.lastSyncAt) > new Date(latestSyncAt)) {
+          latestSyncAt = s.lastSyncAt;
+        }
+      }
+      if (s.statusCheckedAt) {
+        if (!oldestStatusCheckedAt || new Date(s.statusCheckedAt) < new Date(oldestStatusCheckedAt)) {
+          oldestStatusCheckedAt = s.statusCheckedAt;
+        }
+      }
+      var source = s.summary || {};
+      var sourceCurrency = source.currency || 'USD';
+
+      var convertedSpend = window.TaagerCurrency && typeof window.TaagerCurrency.convert === 'function'
+        ? window.TaagerCurrency.convert(source.adSpend || 0, sourceCurrency, reportingCurrency)
+        : source.adSpend || 0;
+
+      adSpend += Number(convertedSpend || 0);
+      impressions += Number(source.impressions || 0);
+      clicks += Number(source.clicks || 0);
+      campaignCount += Number(source.campaignCount || 0);
+      rowCount += Number(source.rowCount || 0);
+
+      if (source.dateFrom && (!dateFrom || new Date(source.dateFrom) < new Date(dateFrom))) {
+        dateFrom = source.dateFrom;
+      }
+      if (source.dateTo && (!dateTo || new Date(source.dateTo) > new Date(dateTo))) {
+        dateTo = source.dateTo;
+      }
+
+      if (Array.isArray(source.sourceBreakdown)) {
+        source.sourceBreakdown.forEach(function (row) {
+          sourceBreakdown.push(Object.assign({}, row));
+        });
+      }
+      if (Array.isArray(source.campaignBreakdown)) {
+        source.campaignBreakdown.forEach(function (row) {
+          campaignBreakdown.push(Object.assign({}, row));
+        });
+      }
+    });
+
+    var summary = {
+      adSpend: Number(adSpend.toFixed(2)),
+      currency: reportingCurrency,
+      impressions: impressions,
+      clicks: clicks,
+      campaignCount: campaignCount,
+      rowCount: rowCount,
+      dateFrom: dateFrom,
+      dateTo: dateTo,
+      sourceBreakdown: sourceBreakdown,
+      campaignBreakdown: campaignBreakdown
+    };
+
+    var linkedAccounts = [];
+    var mappings = {};
+    var mappedAccounts = [];
+    var availableAccounts = [];
+    var selectedSourceAccounts = [];
+    var claimableAccounts = [];
+
+    individualStatuses.forEach(function (s) {
+      if (Array.isArray(s.linkedAccounts)) {
+        s.linkedAccounts.forEach(function (acc) {
+          linkedAccounts.push(Object.assign({}, acc));
+        });
+      }
+      if (Array.isArray(s.mappedAccounts)) {
+        s.mappedAccounts.forEach(function (acc) {
+          mappedAccounts.push(Object.assign({}, acc));
+        });
+      }
+      if (Array.isArray(s.availableAccounts)) {
+        s.availableAccounts.forEach(function (acc) {
+          availableAccounts.push(Object.assign({}, acc));
+        });
+      }
+      if (Array.isArray(s.selectedSourceAccounts)) {
+        s.selectedSourceAccounts.forEach(function (acc) {
+          selectedSourceAccounts.push(Object.assign({}, acc));
+        });
+      }
+      if (Array.isArray(s.claimableAccounts)) {
+        s.claimableAccounts.forEach(function (acc) {
+          claimableAccounts.push(Object.assign({}, acc));
+        });
+      }
+      if (s.mappings) {
+        Object.keys(s.mappings).forEach(function (key) {
+          mappings[key] = (mappings[key] || []).concat(s.mappings[key] || []);
+        });
+      }
+    });
+
+    return {
+      accountId: '__all__',
+      platform: platform,
+      platformLabel: platformLabel(platform),
+      status: 'connected',
+      sourceAccountId: '',
+      sourceAccountName: connectedStatuses.length + ' connected accounts',
+      linkedAccounts: linkedAccounts,
+      linkedAccountCount: linkedAccounts.length,
+      mappedAccounts: mappedAccounts,
+      availableAccounts: availableAccounts,
+      mappings: mappings,
+      selectedSourceAccounts: selectedSourceAccounts,
+      selectedSourceAccountIds: selectedSourceAccounts.map(function (acc) { return String(acc.id || ''); }).filter(Boolean),
+      claimableAccounts: claimableAccounts,
+      diagnostics: null,
+      limit: null,
+      limits: null,
+      statusCheckedAt: oldestStatusCheckedAt,
+      lastSyncAt: latestSyncAt,
+      summary: summary,
+      cache: null,
+      stale: individualStatuses.some(function (s) { return !!s.stale; }),
+      offline: individualStatuses.some(function (s) { return !!s.offline; }),
+      error: individualStatuses.map(function (s) { return s.error; }).filter(Boolean).join('; '),
+      errorCode: individualStatuses.map(function (s) { return s.errorCode; }).filter(Boolean).join('; '),
+      reconnectRequired: individualStatuses.some(function (s) { return !!s.reconnectRequired; }),
+      loading: individualStatuses.some(function (s) { return !!s.loading; }),
+      manualOverride: readManualMarketingOverride('__all__')
+    };
+  }
+
   function summarizeMarketingPlatforms(accountId) {
     var id = marketingAccountId(accountId);
-    var bucket = marketingBucket(id);
-    var statuses = MARKETING_PLATFORMS.map(function (platform) {
-      return normalizeMarketingStatus(bucket[platform], id, platform);
-    });
+    var statuses;
+    if (id === '__all__') {
+      statuses = MARKETING_PLATFORMS.map(function (platform) {
+        return window.DashboardMarketingState.get('__all__', platform);
+      });
+    } else {
+      var bucket = marketingBucket(id);
+      statuses = MARKETING_PLATFORMS.map(function (platform) {
+        return normalizeMarketingStatus(bucket[platform], id, platform);
+      });
+    }
     var activeStatuses = statuses.filter(function (status) {
       return status.status === 'connected' && status.summary && !status.manualOverride;
     });
@@ -776,6 +1123,10 @@
     platforms: MARKETING_PLATFORMS.slice(),
     get: function (accountId, platform) {
       var id = marketingAccountId(accountId);
+      if (id === '__all__') {
+        if (!platform) return summarizeMarketingPlatforms('__all__');
+        return allPlatformStatus(platform);
+      }
       if (!platform) return summarizeMarketingPlatforms(id);
       var bucket = marketingBucket(id);
       return normalizeMarketingStatus(bucket[normalizeMarketingPlatform(platform)], id, platform);
@@ -807,8 +1158,17 @@
       }
       var next = normalizeMarketingStatus(value, id, platform);
       bucket[platform] = next;
+      var hydratedAccountIds = id === '__all__' ? hydrateMarketingAccountsFromAllStatus(next, platform) : [];
       notifyMarketing(next);
       notifyMarketing(summarizeMarketingPlatforms(id));
+      hydratedAccountIds.forEach(function (accountId) {
+        notifyMarketing(window.DashboardMarketingState.get(accountId, platform));
+        notifyMarketing(window.DashboardMarketingState.get(accountId));
+      });
+      if (id !== '__all__') {
+        notifyMarketing(window.DashboardMarketingState.get('__all__', platform));
+        notifyMarketing(window.DashboardMarketingState.get('__all__'));
+      }
       return next;
     },
     setLoading: function (loading, accountId, platform) {
@@ -836,6 +1196,19 @@
       var loadKey = id + '|' + platform;
       _marketingLoadSeq[loadKey] = Number(_marketingLoadSeq[loadKey] || 0) + 1;
       delete _marketingLoadedAt[loadKey];
+      if (id !== '__all__') {
+        var allLoadKey = '__all__|' + platform;
+        _marketingLoadSeq[allLoadKey] = Number(_marketingLoadSeq[allLoadKey] || 0) + 1;
+        delete _marketingLoadedAt[allLoadKey];
+      } else {
+        dashboardMarketingAccounts().forEach(function (account) {
+          var accId = String(account && (account.id || account.accountId || account.key || '') || '');
+          if (!accId) return;
+          var accountLoadKey = accId + '|' + platform;
+          _marketingLoadSeq[accountLoadKey] = Number(_marketingLoadSeq[accountLoadKey] || 0) + 1;
+          delete _marketingLoadedAt[accountLoadKey];
+        });
+      }
     },
     useManualSpend: function (manual, accountId) {
       var id = marketingAccountId(accountId);
@@ -849,6 +1222,16 @@
     },
     load: function (accountId, platform, options) {
       var id = marketingAccountId(accountId);
+      if (id === '__all__') {
+        var self = this;
+        if (!platform) {
+          return Promise.all(MARKETING_PLATFORMS.map(function (item) {
+            return self.load('__all__', item, options).catch(function () { return null; });
+          })).then(function () {
+            return self.get('__all__');
+          });
+        }
+      }
       if (!platform) {
         var selfAll = this;
         return Promise.all(MARKETING_PLATFORMS.map(function (item) {
@@ -1083,6 +1466,19 @@
     },
     unsubscribe: function (fn) {
       _expectedNdrRangeListeners = _expectedNdrRangeListeners.filter(function (l) { return l !== fn; });
+    }
+  };
+
+  window.DashboardSubscriptionDiagnostics = {
+    snapshot: function () {
+      return {
+        filters: _listeners.length,
+        roi: _roiListeners.length,
+        marketing: _marketingListeners.length,
+        period: _periodListeners.length,
+        deliveredDate: _deliveredDateModeListeners.length,
+        expectedNdrRange: _expectedNdrRangeListeners.length
+      };
     }
   };
 

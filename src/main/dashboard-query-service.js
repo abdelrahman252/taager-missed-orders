@@ -1,6 +1,7 @@
 "use strict";
 
 const { buildCampaignIntelligence, filterAndPage } = require("../renderer/pages/dashboard/dashboard-campaign-query-core");
+const productAttribution = require("../renderer/pages/dashboard/dashboard-product-attribution-core");
 const currencyCore = require("../renderer/pages/dashboard/dashboard-currency-core");
 
 const DEFAULT_PAGE_SIZE = 25;
@@ -12,6 +13,23 @@ function text(value) {
 
 function lower(value) {
   return text(value).toLowerCase();
+}
+
+function sanitizeProductNameOverrides(value) {
+  const out = {};
+  Object.entries(value && typeof value === "object" ? value : {}).slice(0, 1000).forEach(([sku, name]) => {
+    const cleanSku = text(sku).slice(0, 160);
+    const cleanName = text(name).slice(0, 240);
+    if (cleanSku && cleanName) out[cleanSku] = cleanName;
+  });
+  return out;
+}
+
+function productNameOverride(sku, fallback, overrides) {
+  const wanted = lower(sku);
+  if (!wanted) return text(fallback);
+  const key = Object.keys(overrides || {}).find((candidate) => lower(candidate) === wanted);
+  return text(key && overrides[key]) || text(fallback);
 }
 
 function number(value) {
@@ -164,6 +182,35 @@ function productStatusPercentages(confirmationCount, cancelCount, pendingCount, 
   return { confirmationPct, cancelPct, pendingPct: Math.max(0, pendingPct) };
 }
 
+function boundedProductRatePct(deliveredCount, baseCount, context) {
+  const delivered = number(deliveredCount);
+  const base = number(baseCount);
+  if (base <= 0) return 0;
+  if (delivered < 0 || delivered > base) {
+    console.warn("[DashboardRateIntegrity] Invalid product rate counts", {
+      context: context || "unknown",
+      delivered,
+      base,
+    });
+  }
+  return Math.round(Math.max(0, Math.min(1, delivered / base)) * 1000) / 10;
+}
+
+function boundedExpectedDeliveries(netOrders, ndrRate, context) {
+  const net = Math.max(0, Math.round(number(netOrders)));
+  const rate = Math.max(0, Math.min(1, number(ndrRate)));
+  const projected = Math.round(net * rate);
+  if (projected > net) {
+    console.warn("[DashboardRateIntegrity] Expected deliveries exceed net orders", {
+      context: context || "unknown",
+      projected,
+      netOrders: net,
+      ndrRate: rate,
+    });
+  }
+  return Math.min(net, Math.max(0, projected));
+}
+
 function rowTotal(row) {
   return number(row.dashboardTotalPrice ?? row.totalPrice ?? row.total ?? row.orderValue);
 }
@@ -179,8 +226,8 @@ function rowProfit(row) {
   return number(row && (row.profitAfterTax ?? row.taagerProfit ?? row.profitAfterFees ?? row.commission ?? row.marketerCommission));
 }
 
-function rowProduct(row) {
-  return text(row.products || row.productName || row.product);
+  function rowProduct(row) {
+    return text(row.productName || row.product || row.products);
 }
 
 function rowSku(row) {
@@ -328,10 +375,11 @@ function pageInfo(input, total) {
 }
 
 function compareRows(sortBy, sortDir) {
+  const field = sortBy === "default" ? "rank" : sortBy;
   const factor = sortDir === "asc" ? 1 : -1;
   return (a, b) => {
-    const av = a[sortBy];
-    const bv = b[sortBy];
+    const av = a[field];
+    const bv = b[field];
     let result = 0;
     if (typeof av === "number" || typeof bv === "number") result = (number(av) - number(bv)) * factor;
     else result = String(av == null ? "" : av).localeCompare(String(bv == null ? "" : bv)) * factor;
@@ -466,39 +514,43 @@ function createDashboardQueryService(options) {
     return campaigns;
   }
 
-  function assignCampaignProducts(campaigns, products) {
-    const skuProducts = products.filter((product) => product.sku).sort((a, b) => b.sku.length - a.sku.length);
+  function assignCampaignProducts(campaigns, products, productNameOverrides) {
+    const overrides = sanitizeProductNameOverrides(productNameOverrides);
+    const index = productAttribution.createProductIndex(products, { productNameOverrides: overrides });
+
     return campaigns.map((campaign) => {
-      const campaignText = lower(campaign.campaign || campaign.name);
-      const campaignCountry = lower(campaign.country || "");
-      const match = skuProducts.find((product) =>
-        product.accounts && product.accounts[campaign.accountId] &&
-        (!campaignCountry || !product.country || lower(product.country) === campaignCountry) &&
-        campaignText.includes(lower(product.sku))
-      );
+      const result = productAttribution.matchCampaign(campaign, index);
+      const match = result.status === "matched" ? result.product : null;
       return match ? {
         ...campaign,
         productKey: match.key,
-        product: match.name,
+        product: productNameOverride(match.sku, match.name, overrides),
         productSku: match.sku,
         attributionVerified: true,
-        matchMethod: "sku",
-        matchConfidence: "high",
+        matchMethod: result.method,
+        matchDetail: result.matchDetail,
+        matchConfidence: result.confidence,
+        matchedSku: result.matchedSku,
+        candidateIds: result.candidateIds,
       } : {
         ...campaign,
         attributionVerified: false,
-        matchMethod: "unmatched",
+        matchMethod: result.method,
+        matchDetail: result.matchDetail,
         matchConfidence: "none",
+        matchedSku: "",
+        candidateIds: result.candidateIds,
       };
     });
   }
 
-  function campaignProductRows(rows) {
+  function campaignProductRows(rows, productNameOverrides) {
+    const overrides = sanitizeProductNameOverrides(productNameOverrides);
     const products = new Map();
     const seen = new Set();
     rows.forEach((row, index) => {
       const sku = rowSku(row);
-      const name = rowProduct(row) || sku || "Unknown product";
+      const name = productNameOverride(sku, rowProduct(row) || sku || "Unknown product", overrides);
       const productKeyValue = String(sku || name).toLowerCase();
       if (!productKeyValue) return;
       const country = lower(row.taagerCountry || row.country || "unknown");
@@ -566,13 +618,19 @@ function createDashboardQueryService(options) {
         seen.add("campaignNdr:" + uniqueOrderKey);
         product.ndrBaseCount += 1;
       }
-      if (netOrder) product.totalSales += rowTotal(row);
+      if (netOrder && !seen.has("campaignSales:" + uniqueOrderKey)) {
+        seen.add("campaignSales:" + uniqueOrderKey);
+        product.totalSales += rowTotal(row);
+      }
       if (bucket === "delivered" && netOrder && !seen.has("campaignNdrDelivered:" + uniqueOrderKey)) {
         seen.add("campaignNdrDelivered:" + uniqueOrderKey);
         product.ndrDeliveredCount += 1;
       }
       if (bucket === "delivered" && netOrder) {
-        product.deliveredSales += rowTotal(row);
+        if (!seen.has("campaignDeliveredSales:" + uniqueOrderKey)) {
+          seen.add("campaignDeliveredSales:" + uniqueOrderKey);
+          product.deliveredSales += rowTotal(row);
+        }
         if (!seen.has("campaignDelivered:" + uniqueOrderKey)) {
           seen.add("campaignDelivered:" + uniqueOrderKey);
           product.commission += rowProfit(row);
@@ -584,7 +642,7 @@ function createDashboardQueryService(options) {
       const ndrBase = product.ndrBaseCount || product.placedCount;
       const ndrDelivered = product.ndrDeliveredCount != null ? product.ndrDeliveredCount : product.deliveredCount;
       const confirmed = product.confirmedCount || 0;
-      const statusTotal = product.statusTotalCount !== undefined ? product.statusTotalCount : (product.totalOrderCount || product.placedCount || 0);
+      const statusTotal = product.statusTotalCount !== undefined ? product.statusTotalCount : (product.placedCount || 0);
       const statusRates = productStatusPercentages(
         product.confirmationStatusCount,
         product.cancelStatusCount,
@@ -712,6 +770,10 @@ function createDashboardQueryService(options) {
       const globalOrderKeys = new Set();
       const globalNetOrderKeys = new Set();
       const globalDeliveredOrderKeys = new Set();
+      const globalConfirmedOrderKeys = new Set();
+      const globalNdrOrderKeys = new Set();
+      const globalNdrConfirmedOrderKeys = new Set();
+      const globalNdrDeliveredOrderKeys = new Set();
       let globalDeliveredCommission = 0;
       const reportingCurrency = cleanCurrency(input && (input.reportingCurrency || input.currency) || "SAR", "SAR");
       const financialCurrency = cleanCurrency(input && (input.productFinancialCurrency || input.financialCurrency) || reportingCurrency, reportingCurrency);
@@ -733,11 +795,15 @@ function createDashboardQueryService(options) {
 
       rows.forEach((row, index) => {
         const sku = rowSku(row);
-        const name = rowProduct(row) || "Unknown Product";
+        const name = productNameOverride(
+          sku,
+          rowProduct(row) || "Unknown Product",
+          sanitizeProductNameOverrides(input && input.productNameOverrides)
+        );
         const country = lower(row.taagerCountry || row.country || "unknown");
-        // Key matches the legacy aggregator's bare-SKU scheme (row.sku || productName),
-        // so cross-country products with the same SKU are merged into one row — same as legacy.
-        const key = sku ? lower(sku) : row.accountId + "|name:" + lower(name);
+        // Key matches country-aware SKU scheme to keep countries separate
+        // while combining same-country duplicate accounts.
+        const key = sku ? country + "|sku:" + lower(sku) : row.accountId + "|name:" + lower(name);
         if (!products.has(key)) {
           products.set(key, {
             key, legacyKey: sku || name, sku, name, country,
@@ -756,6 +822,7 @@ function createDashboardQueryService(options) {
         const inPrimaryPeriod = inRange(row, scope);
         if (inPrimaryPeriod) globalOrderKeys.add(productOrderKey);
         if (inPrimaryPeriod && bucket !== "canceled_by_you") globalNetOrderKeys.add(productOrderKey);
+        if (inPrimaryPeriod && isConfirmedBucket(bucket)) globalConfirmedOrderKeys.add(productOrderKey);
         if (inPrimaryPeriod && bucket === "delivered" && !globalDeliveredOrderKeys.has(productOrderKey)) {
           globalDeliveredOrderKeys.add(productOrderKey);
           globalDeliveredCommission += rowProfit(row);
@@ -784,13 +851,18 @@ function createDashboardQueryService(options) {
         }
         // Bug B fix: track DR base and delivered count within the NDR cohort period
         const inNdrCohort = inNdrRange(row, ndrFrom, ndrTo);
+        if (inNdrCohort && bucket !== "canceled_by_you") {
+          globalNdrOrderKeys.add(productOrderKey);
+          if (isConfirmedBucket(bucket)) globalNdrConfirmedOrderKeys.add(productOrderKey);
+          if (bucket === "delivered") globalNdrDeliveredOrderKeys.add(productOrderKey);
+        }
         if (inNdrCohort && bucket !== "canceled_by_you" && !product.ndrOrderKeys.has(productOrderKey)) {
           product.ndrOrderKeys.add(productOrderKey);
           product.ndrBaseCount += 1;
           if (isConfirmedBucket(bucket)) product.ndrConfirmedCount += 1;
           if (bucket === "delivered") product.ndrDeliveredCount += 1;
         }
-        if (inPrimaryPeriod && bucket !== "canceled_by_you") {
+        if (inPrimaryPeriod && isNewOrder && bucket !== "canceled_by_you") {
           product.totalPieces += Math.max(1, number(row.qty || row.quantity || 1));
           product.revenue += rowTotal(row);
         }
@@ -799,21 +871,25 @@ function createDashboardQueryService(options) {
         if (city) product.cities[city] = (product.cities[city] || 0) + 1;
       });
       const isExpected = text(input && input.deliveredDateMode) === "expected";
-      let globalExpectedNdrRate = 0.35;
+      let globalExpectedNdrRate = 0;
+      let globalExpectedDrRate = 0;
+      let globalNdrDelivered = 0;
+      let globalNdrBase = 0;
+      let globalDrBase = 0;
       if (isExpected) {
-        let globalNdrDelivered = 0;
-        let globalNdrBase = 0;
         const hasNdrPeriod = !!(ndrFrom && ndrTo);
-        Array.from(products.values()).forEach((product) => {
-          globalNdrDelivered += hasNdrPeriod ? product.ndrDeliveredCount : product.deliveredCount;
-          globalNdrBase += hasNdrPeriod ? product.ndrBaseCount : product.netOrderCount;
-        });
+        globalNdrDelivered = hasNdrPeriod ? globalNdrDeliveredOrderKeys.size : globalDeliveredOrderKeys.size;
+        globalNdrBase = hasNdrPeriod ? globalNdrOrderKeys.size : globalNetOrderKeys.size;
+        globalDrBase = hasNdrPeriod ? globalNdrConfirmedOrderKeys.size : globalConfirmedOrderKeys.size;
         if (globalNdrBase > 0) {
           globalExpectedNdrRate = globalNdrDelivered / globalNdrBase;
         }
+        if (globalDrBase > 0) {
+          globalExpectedDrRate = Math.max(0, Math.min(1, globalNdrDelivered / globalDrBase));
+        }
       }
 
-      let list = Array.from(products.values()).map((product) => {
+      let list = Array.from(products.values()).filter((product) => product.netOrderCount > 0).map((product) => {
         // Bug A fix: use confirmedCount (orders in CONFIRMED_BUCKETS) as the DR denominator,
         // matching the frontend aggregator. The old formula (totalOrders - pendingCount)
         // collapses to totalOrders when there are no pending orders, making DR == NDR.
@@ -831,34 +907,42 @@ function createDashboardQueryService(options) {
         // Bug B fix: use ndr-cohort counts when an ndrPeriod was provided,
         // otherwise fall back to totalOrders (matching original behaviour).
         const hasNdrPeriod = !!(ndrFrom && ndrTo);
-        const ndrBase      = hasNdrPeriod ? product.ndrBaseCount     : product.netOrderCount;
-        const drBase       = hasNdrPeriod ? product.ndrConfirmedCount : confirmationBase;
-        const ndrDelivered = hasNdrPeriod ? product.ndrDeliveredCount : product.deliveredCount;
-        // Bug C fix: add deliveryPct (delivered / totalOrders) which the frontend
-        // mapper and AI engine both use as a fallback when drRate is absent.
-        const deliveryPct  = product.netOrderCount ? parseFloat((product.deliveredCount / product.netOrderCount * 100).toFixed(1)) : 0;
-
-        const ndrRate = ndrBase ? (ndrDelivered / ndrBase) : globalExpectedNdrRate;
+        const productNdrBase = isExpected && hasNdrPeriod ? product.ndrBaseCount : product.netOrderCount;
+        const productDrBase = isExpected && hasNdrPeriod ? product.ndrConfirmedCount : confirmationBase;
+        const productNdrDelivered = isExpected && hasNdrPeriod ? product.ndrDeliveredCount : product.deliveredCount;
+        const usesGlobalNdrFallback = isExpected && productNdrBase <= 0;
+        const usesGlobalDrFallback = isExpected && productDrBase <= 0;
+        const ndrBase = usesGlobalNdrFallback ? globalNdrBase : productNdrBase;
+        const drBase = usesGlobalDrFallback ? globalDrBase : productDrBase;
+        const ndrDelivered = usesGlobalNdrFallback ? globalNdrDelivered : productNdrDelivered;
+        const drDelivered = usesGlobalDrFallback ? globalNdrDelivered : productNdrDelivered;
+        const ndrRate = ndrBase > 0
+          ? Math.max(0, Math.min(1, ndrDelivered / ndrBase))
+          : (isExpected ? globalExpectedNdrRate : 0);
+        const drRate = drBase > 0
+          ? Math.max(0, Math.min(1, drDelivered / drBase))
+          : (isExpected ? globalExpectedDrRate : 0);
         const avgCommission = product.deliveredCount ? (product.commission / product.deliveredCount) : 0;
 
-        const expectedDeliveries = Math.round(product.totalOrderCount * ndrRate);
+        const expectedDeliveries = boundedExpectedDeliveries(product.netOrderCount, ndrRate, product.key);
         const expectedCommission = expectedDeliveries * avgCommission;
 
         const deliveriesVal = isExpected ? expectedDeliveries : product.deliveredCount;
         const commissionVal = isExpected ? expectedCommission : product.commission;
 
-        const ndrPctVal = ndrRate * 100;
-        const drRateVal = isExpected
-          ? (confirmationBase > 0 ? (expectedDeliveries / confirmationBase * 100) : 0)
-          : (drBase ? ndrDelivered / drBase * 100 : 0);
-        const deliveryPctVal = isExpected
-          ? (product.totalOrderCount > 0 ? (expectedDeliveries / product.totalOrderCount * 100) : 0)
-          : (product.netOrderCount ? (product.deliveredCount / product.netOrderCount * 100) : 0);
+        const ndrPctVal = boundedProductRatePct(ndrDelivered, ndrBase, product.key + ":ndr") ||
+          (isExpected && ndrBase <= 0 ? Math.round(globalExpectedNdrRate * 1000) / 10 : 0);
+        const drRateVal = boundedProductRatePct(drDelivered, drBase, product.key + ":dr") ||
+          (isExpected && drBase <= 0 ? Math.round(globalExpectedDrRate * 1000) / 10 : 0);
+        const deliveryPctVal = boundedProductRatePct(deliveriesVal, product.netOrderCount, product.key + ":display-delivery");
 
         return {
           ...clean,
-          placedCount: product.totalOrderCount,
+          placedCount: product.netOrderCount,
           totalOrders: product.totalOrderCount,
+          totalOrderCount: product.totalOrderCount,
+          actualDeliveredCount: product.deliveredCount,
+          actualCommission: product.commission,
           deliveries: deliveriesVal,
           deliveredCount: deliveriesVal,
           revenue: commissionVal,
@@ -866,6 +950,12 @@ function createDashboardQueryService(options) {
           ndrPct: ndrPctVal,
           drRate: drRateVal,
           deliveryPct: deliveryPctVal,
+          ndrBaseOrders: ndrBase,
+          ndrDeliveredOrders: ndrDelivered,
+          drBaseOrders: drBase,
+          drDeliveredOrders: drDelivered,
+          rateMode: isExpected ? "historical_cohort" : "actual",
+          rateSource: usesGlobalNdrFallback || usesGlobalDrFallback ? "global_fallback" : "product",
           netOrderCount: product.netOrderCount,
           confirmationPct: statusRates.confirmationPct,
           cancelPct: statusRates.cancelPct,
@@ -878,7 +968,11 @@ function createDashboardQueryService(options) {
           campaignCount: 0,
         };
       });
-      assignCampaignProducts(scopedCampaigns(scope, accounts, "all", input), list).forEach((campaign) => {
+      assignCampaignProducts(
+        scopedCampaigns(scope, accounts, "all", input),
+        list,
+        input && input.productNameOverrides
+      ).forEach((campaign) => {
         if (!campaign.attributionVerified) return;
         const product = list.find((item) => item.key === campaign.productKey);
         if (!product) return;
@@ -888,9 +982,10 @@ function createDashboardQueryService(options) {
       list.forEach((product) => {
         const financialSpend = convertMoney(product.adSpend, reportingCurrency, financialCurrency, financialInput);
         const financialCommission = convertMoney(product.commission, reportingCurrency, financialCurrency, financialInput);
+        const actualFinancialCommission = convertMoney(product.actualCommission, reportingCurrency, financialCurrency, financialInput);
         product.allocatedAdSpend = financialSpend;
-        product.cpa = product.placedCount ? financialSpend / product.placedCount : 0;
-        product.averageProfit = product.deliveredCount ? financialCommission / product.deliveredCount : 0;
+        product.cpa = product.netOrderCount ? financialSpend / product.netOrderCount : 0;
+        product.averageProfit = product.actualDeliveredCount ? actualFinancialCommission / product.actualDeliveredCount : 0;
         product.breakEvenCpa = product.averageProfit * (product.ndrPct / 100);
         product.netProfit = financialCommission - financialSpend;
         product.profitLoss = product.netProfit;
@@ -921,7 +1016,7 @@ function createDashboardQueryService(options) {
       const ranks = new Map(defaultRanked.map((product, index) => [product.key, index + 1]));
       list.forEach((product) => { product.rank = ranks.get(product.key) || 0; });
       const sortBy = text(input.sortBy) || "deliveredCount";
-      list.sort((sortBy === "default" || sortBy === "deliveredCount") && input.sortDir !== "asc" ? productRankCompare : compareRows(sortBy, input.sortDir === "asc" ? "asc" : "desc"));
+      list.sort(sortBy === "deliveredCount" && input.sortDir !== "asc" ? productRankCompare : compareRows(sortBy, input.sortDir === "asc" ? "asc" : "desc"));
       const pagination = pageInfo(input, list.length);
       return {
         ok: true,
@@ -930,6 +1025,9 @@ function createDashboardQueryService(options) {
         summary: {
           uniqueProducts: list.length,
           totalOrders: globalNetOrderKeys.size,
+          netOrderCount: globalNetOrderKeys.size,
+          totalOrderCount: globalOrderKeys.size,
+          rawTotalOrders: globalOrderKeys.size,
           totalPieces: list.reduce((sum, product) => sum + product.totalPieces, 0),
           totalCommission: isExpected ? list.reduce((sum, p) => sum + p.commission, 0) : globalDeliveredCommission,
           deliveredOrders: list.reduce((sum, product) => sum + product.deliveredCount, 0),
@@ -954,8 +1052,8 @@ function createDashboardQueryService(options) {
         const sku = rowSku(row);
         const name = rowProduct(row) || "Unknown Product";
         const country = lower(row.taagerCountry || row.country || "unknown");
-        // Key must match productRows key scheme (bare SKU, no country prefix).
-        const key = sku ? lower(sku) : row.accountId + "|name:" + lower(name);
+        // Key must match productRows key scheme (country-aware SKU).
+        const key = sku ? country + "|sku:" + lower(sku) : row.accountId + "|name:" + lower(name);
         if (!keys.has(key)) return;
         if (!details[key]) details[key] = { key, accounts: {}, cities: {}, quantities: {}, pieces: {}, orders: [], seenOrders: {} };
         const detail = details[key];
@@ -1111,17 +1209,30 @@ function createDashboardQueryService(options) {
     return cached("campaigns", input, () => {
       const { rows: rawOrderRows, scope, accounts } = scopedRows(input);
       const requestedPlatform = text(input.platform);
+      const productNameOverrides = sanitizeProductNameOverrides(input.productNameOverrides);
       const productMap = new Map();
       rawOrderRows.forEach((row) => {
         const sku = rowSku(row);
         if (!sku) return;
         const country = lower(row.taagerCountry || row.country || "unknown");
         // Must match productRows key scheme so campaign.productKey lookups resolve correctly.
-        const key = lower(sku);
-        if (!productMap.has(key)) productMap.set(key, { key, sku, name: rowProduct(row), accounts: {} });
+        const key = country + "|sku:" + lower(sku);
+        if (!productMap.has(key)) {
+          productMap.set(key, {
+            key,
+            sku,
+            name: productNameOverride(sku, rowProduct(row), productNameOverrides),
+            country,
+            accounts: {},
+          });
+        }
         productMap.get(key).accounts[row.accountId] = true;
       });
-      let rows = assignCampaignProducts(scopedCampaigns(scope, accounts, requestedPlatform, input), Array.from(productMap.values()));
+      let rows = assignCampaignProducts(
+        scopedCampaigns(scope, accounts, requestedPlatform, input),
+        Array.from(productMap.values()),
+        productNameOverrides
+      );
       const filters = input.filters || {};
       const query = lower(filters.search);
       rows = rows.filter((row) => {
@@ -1156,7 +1267,9 @@ function createDashboardQueryService(options) {
     return cached("campaign-overview", input, () => {
       const { rows, scope, accounts } = scopedRows(input);
       const platform = text(input.platform) || "all";
+      const productNameOverrides = sanitizeProductNameOverrides(input.productNameOverrides);
       const intel = cached("campaign-base", {
+        attributionVersion: productAttribution.VERSION,
         accountIds: scope.accountIds,
         dateFrom: scope.dateFrom,
         dateTo: scope.dateTo,
@@ -1166,14 +1279,16 @@ function createDashboardQueryService(options) {
         egpRate: input.egpRate,
         exchangeRates: input.exchangeRates || {},
         exchangeRatesUpdatedAt: input.exchangeRatesUpdatedAt || "",
+        productNameOverrides,
       }, () => buildCampaignIntelligence({
           orderRows: rows,
-          products: campaignProductRows(rows),
+          products: campaignProductRows(rows, productNameOverrides),
           campaignRows: scopedCampaigns(scope, accounts, platform, input),
           reportingCurrency: input.reportingCurrency || "SAR",
           orderCurrency: input.orderCurrency || input.reportingCurrency || "SAR",
           egpRate: input.egpRate,
           exchangeRates: input.exchangeRates || {},
+          productNameOverrides,
         }));
       const pages = filterAndPage(intel, input);
       const lastSyncAt = scope.accountIds.reduce((latest, accountId) => {
@@ -1191,7 +1306,7 @@ function createDashboardQueryService(options) {
         scope,
         currency: intel.currency,
         periodLabel: [scope.dateFrom, scope.dateTo].filter(Boolean).join(" - ") || "Synced dashboard period",
-        sourceOfTruth: "Product decisions use exact-SKU campaign spend with Taager orders, delivery, and profit. Campaign rows retain native ad-account money.",
+        sourceOfTruth: "Product decisions use unified SKU or unique-name campaign attribution with Taager orders, delivery, and profit. Campaign rows retain native ad-account money.",
         lastSyncAt,
         totals: intel.totals,
         objectiveMix: intel.objectiveMix,
@@ -1255,16 +1370,16 @@ function createDashboardQueryService(options) {
   }
 
   function citiesQuery(input) {
-    return cached("cities", input, () => {
-      const { rows, scope, accounts } = scopedRows(input, { includeNdrUnion: true });
-      const cityStats = {};
-      const reportingCurrency = cleanCurrency(input && (input.reportingCurrency || input.currency) || "SAR", "SAR");
+      return cached("cities", input, () => {
+        const { rows, scope, accounts } = scopedRows(input, { includeNdrUnion: true });
+        const cityStats = {};
+        const reportingCurrency = cleanCurrency(input && (input.reportingCurrency || input.currency) || "SAR", "SAR");
       
       const ndrFrom = dateKey((input && (input.ndrDateFrom || input.ndrFrom)) || "");
       const ndrTo   = dateKey((input && (input.ndrDateTo   || input.ndrTo))   || "");
 
-      rows.forEach((row, index) => {
-        const rowCountry = lower(row.taagerCountry || row.country || "sa");
+        rows.forEach((row, index) => {
+          const rowCountry = lower(row.taagerCountry || row.country || "sa");
         const cityName = text(row.city || row.customerCity || row.province || "");
         if (!cityName) return;
 
@@ -1279,6 +1394,7 @@ function createDashboardQueryService(options) {
             deliveredOrders: 0, ndrDeliveredOrders: 0, drBaseOrders: 0, drDeliveredOrders: 0,
             canceledCount: 0, shippingCount: 0, confirmedCount: 0, processingCount: 0,
             statusTotalCount: 0, confirmationStatusCount: 0, cancelStatusCount: 0, pendingStatusCount: 0,
+            earnedProfitAfterTax: 0,
             earnedCommission: 0, incomingCommission: 0, lostCommission: 0,
             totalRevenue: 0,
             prepaidCount: 0, codCount: 0,
@@ -1339,7 +1455,7 @@ function createDashboardQueryService(options) {
           }
         }
 
-        if (inPrimaryPeriod && rowIsNetOrder) {
+        if (inPrimaryPeriod && rowIsNetOrder && addOnce('financial:' + uniqueOrderKey)) {
           cs.totalRevenue += priceVal;
         }
 
@@ -1367,6 +1483,7 @@ function createDashboardQueryService(options) {
               cs.collected += dueVal;
             }
             cs.deliveredOrders++;
+            cs.earnedProfitAfterTax += commissionVal;
             cs.earnedCommission += commissionVal;
             
             let span = null;
@@ -1447,7 +1564,7 @@ function createDashboardQueryService(options) {
             if (rowIsPrepaid) cp.prepaidCount++;
             else cp.codCount++;
           }
-          if (inPrimaryPeriod && rowIsNetOrder) {
+          if (inPrimaryPeriod && rowIsNetOrder && addOnce('cityProductFinancial:' + cityProductKey + ':' + uniqueOrderKey)) {
             cp.revenue += priceVal;
           }
           if (inNdrCohort && rowIsNetOrder && addOnce('cityProductNdr:' + cityProductKey + ':' + uniqueOrderKey)) {
@@ -1520,6 +1637,7 @@ function createDashboardQueryService(options) {
           gap: stat.gap,
           sar: stat.gap,
           count: stat.count,
+          netOrderCount: stat.count,
           statusTotalCount: stat.statusTotalCount,
           confirmationStatusCount: stat.confirmationStatusCount,
           cancelStatusCount: stat.cancelStatusCount,
@@ -1536,7 +1654,9 @@ function createDashboardQueryService(options) {
           provinceId: stat.provinceId,
           totalRevenue: stat.totalRevenue,
           avgOrderValue,
-          earnedCommission: stat.earnedCommission,
+          earnedProfitAfterTax: stat.earnedProfitAfterTax,
+          earnedCommission: stat.earnedProfitAfterTax,
+          averageProfit: stat.deliveredOrders > 0 ? stat.earnedProfitAfterTax / stat.deliveredOrders : 0,
           incomingCommission: stat.incomingCommission,
           lostCommission: stat.lostCommission,
           canceledCount: stat.canceledCount,
@@ -1566,11 +1686,11 @@ function createDashboardQueryService(options) {
       }).sort((a, b) => b.gap - a.gap);
 
       return {
-        ok: true,
-        kind: "cities",
-        scope,
+          ok: true,
+          kind: "cities",
+          scope,
         cities: sortedCities
-      };
+        };
     });
   }
 

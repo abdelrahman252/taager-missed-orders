@@ -1,0 +1,125 @@
+@media (min-width: 1280px) {
+  #page-dashboard .s1-body {
+    padding: 22px 26px !important;
+  }
+  #page-dashboard .s1-title-row {
+    margin-bottom: 20px !important;
+  }}
+
+
+#page-dashboard[dir="ltr"],
+#page-dashboard[dir="ltr"] #s1-root,
+#page-dashboard[dir="ltr"] .dash-content,
+#page-dashboard[dir="ltr"] .dash-shell,
+#page-dashboard[dir="ltr"] .dash-sidebar,
+#page-dashboard[dir="ltr"] .dash-global-topbar,
+#page-dashboard[dir="ltr"] .custom-select-container {
+  direction: ltr !important;
+}
+
+#page-dashboard[dir="rtl"] .s1-health-row .health-title,
+#page-dashboard[dir="rtl"] .s1-health-row .health-subtitle {
+  justify-content: flex-end;
+  text-align: right;
+  direction: rtl;
+}
+
+#page-dashboard[dir="ltr"] .s1-health-row .health-title,
+#page-dashboard[dir="ltr"] .s1-health-row .health-subtitle {
+  justify-content: flex-start;
+  text-align: left;
+  direction: ltr;
+}
+
+/* Latin/mixed section headers and app name */
+.s1-title-row h1,
+.dash-section-title,
+#dashboard-section-title,
+#dash-taager-text,
+.s1-health-row span,
+#dash-branding-area div {
+  font-family: 'Syne', 'Tajawal', sans-serif !important;
+}
+
+#page-dashboard .s1-health-row .health-legend-value,
+#page-dashboard .s1-health-row .health-legend-pct {
+  font-family: 'DM Mono', monospace !important;
+  letter-spacing: 0 !important;
+}
+
+#page-dashboard .s1-health-row .health-legend-value {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+}
+
+#page-dashboard .s1-health-row .health-legend-pct {
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+}
+
+@media (max-width: 1399px) {
+
+  /* ── S1 Overview ── */
+  .s1-body { padding: 20px 24px !important; }
+  .s1-kpi-row { gap: 12px !important; }
+  .s1-health-row { gap: 20px !important; }}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   BREAKPOINT: ≤ 1099px — Tablet Landscape / Narrow Window
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 1099px) {
+
+  /* ── S1 Overview ── */
+  .s1-body { padding: 16px 18px !important; }
+  .s1-kpi-row { flex-wrap: wrap !important; }
+  .s1-kpi-row > .kpi-card { flex: 1 1 calc(50% - 8px) !important; min-width: 220px !important; }
+  .s1-health-row { flex-direction: column !important; gap: 16px !important; }
+  .s1-title-row { flex-wrap: wrap !important; gap: 12px !important; justify-content: center !important; }}
+
+@media (max-width: 799px) {
+
+  /* ── S1 Overview ── */
+  .s1-body { padding: 14px 14px !important; }
+  .s1-kpi-row > .kpi-card { flex: 1 1 100% !important; min-height: 140px !important; }
+  .s1-kpi-row > .kpi-card .kpi-num { font-size: 20px !important; }
+  .s1-title h1 { font-size: 28px !important; }}
+
+/* ── KPI cards (section 1) ── */
+[data-theme="light"] #page-dashboard .s1-kpi-card {
+  background: var(--bg2) !important;
+  border-color: var(--border) !important;
+}
+
+/* ── Health bar row ── */
+[data-theme="light"] #page-dashboard .s1-health-row { background: var(--bg2) !important; border-color: var(--border) !important; }
+
+/* Small laptop stabilization: 11-13 inch screens keep density readable without card collisions. */
+@media (max-width: 1399px) {
+
+  #page-dashboard .s1-health-row {
+    gap: 14px !important;
+    padding: 16px !important;
+  }
+
+  #page-dashboard .s1-health-row .health-title span {
+    font-size: 13px !important;
+    line-height: 1.25 !important;
+    white-space: normal !important;
+  }
+
+  #page-dashboard .s1-health-row .health-subtitle {
+    font-size: 10.5px !important;
+    line-height: 1.45 !important;
+  }
+
+  #page-dashboard .s1-health-row [style*="font-size:15px"],
+  #page-dashboard .s1-health-row [style*="font-size:18px"] {
+    font-size: 13px !important;
+    line-height: 1.25 !important;
+    white-space: normal !important;
+  }
+
+  #page-dashboard .s1-health-row [style*="font-size:12px"] {
+    font-size: 10.5px !important;
+  }}

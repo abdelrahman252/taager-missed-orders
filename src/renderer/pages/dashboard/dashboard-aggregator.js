@@ -455,17 +455,24 @@
       }
       return orderProfit - taxProfit;
     }
+    var directAfterTax = row && (
+      row.profitAfterTax != null ? row.profitAfterTax :
+      (row.taagerProfit != null ? row.taagerProfit :
+      (row.profitAfterFees != null ? row.profitAfterFees : null))
+    );
+    if (directAfterTax != null) return dashboardMoneyValue(directAfterTax);
     if (window.TaagerStatus) return window.TaagerStatus.taagerProfit(row);
     return dashboardMoneyValue(row && (row.marketerCommission || row.commission) || 0);
   }
 
   function orderOnlyKey(row, fallbackIndex) {
+    var accountId = String(row && (row.accountId || row.dashboardAccountId || '') || '').trim();
     var direct = String(row && (row.taagerOrderNumber || row.orderNumber || row.id || row.orderId || row.reference || '') || '').trim();
-    if (direct) return 'id:' + direct;
+    if (direct) return accountId + '|id:' + direct;
     var phone = String(row && (row.phone || row.phone1 || row.phone2 || row.rawPhone || '') || '').trim();
     var created = normalizeDateKey(row && (row.createdAt || row.date || row.dashboardDate));
-    if (phone || created) return 'sig:' + phone + '|' + created + '|' + String(row && (row.orderStatus || row.status) || '');
-    return 'idx:' + fallbackIndex;
+    if (phone || created) return accountId + '|sig:' + phone + '|' + created + '|' + String(row && (row.orderStatus || row.status) || '');
+    return accountId + '|idx:' + fallbackIndex;
   }
 
   function addOnce(set, key) {
@@ -474,12 +481,30 @@
     return true;
   }
 
+  function financialLineKey(row, fallbackIndex) {
+    var orderKey = orderOnlyKey(row, fallbackIndex);
+    var itemIndex = row && (row.orderItemIndex != null ? row.orderItemIndex : row.itemIndex);
+    if (itemIndex != null && itemIndex !== '') return orderKey + '|item:' + String(itemIndex);
+    return [
+      orderKey,
+      String(row && (row.sku || row.skuNumber || '') || '').trim().toLowerCase(),
+      String(row && (row.products || row.productName || row.product || '') || '').trim().toLowerCase(),
+      String(row && (row.qty || row.quantity || 1) || 1),
+      String(rowTotalPrice(row)),
+      String(rowCommissionValue(row))
+    ].join('|line:');
+  }
+
   function orderLevelRows(rows, includeCanceled) {
     var map = {};
+    var lineSeen = {};
     (Array.isArray(rows) ? rows : []).forEach(function (row, idx) {
       var key = orderOnlyKey(row, idx);
       var bucket = exactStatusBucket(row);
       if (!includeCanceled && isCanceledByYouBucket(bucket)) return;
+      var lineKey = financialLineKey(row, idx);
+      if (lineSeen[lineKey]) return;
+      lineSeen[lineKey] = true;
       if (!map[key]) {
         map[key] = Object.assign({}, row, {
           dashboardTotalPrice: 0,
@@ -606,6 +631,35 @@
 
   function netDeliveryRatePct(delivered, total) {
     return parseFloat((netDeliveryRate(delivered, total) * 100).toFixed(1));
+  }
+
+  function boundedProductRatePct(delivered, total, context) {
+    delivered = Number(delivered || 0);
+    total = Number(total || 0);
+    if (total <= 0) return 0;
+    if (delivered < 0 || delivered > total) {
+      console.warn('[DashboardRateIntegrity] Invalid product rate counts', {
+        context: context || 'unknown',
+        delivered: delivered,
+        base: total
+      });
+    }
+    return parseFloat((Math.max(0, Math.min(1, delivered / total)) * 100).toFixed(1));
+  }
+
+  function boundedExpectedDeliveries(netOrders, ndrRate, context) {
+    var net = Math.max(0, Math.round(Number(netOrders || 0)));
+    var rate = Math.max(0, Math.min(1, Number(ndrRate || 0)));
+    var projected = Math.round(net * rate);
+    if (projected > net) {
+      console.warn('[DashboardRateIntegrity] Expected deliveries exceed net orders', {
+        context: context || 'unknown',
+        projected: projected,
+        netOrders: net,
+        ndrRate: rate
+      });
+    }
+    return Math.min(net, Math.max(0, projected));
   }
 
   function formatPct(part, total) {
@@ -1223,8 +1277,11 @@
 
   window.invalidateDashboardCache = function (reason) {
     _aggregatorCache = null;
+    _aggregatorCacheAt = 0;
     _aggregatorCacheHash = '';
     _aggregatorCachePreview = false;
+    _snapshotAccountsCache = null;
+    _snapshotRevision = null;
     if (window.TaagerPageLifecycle && typeof window.TaagerPageLifecycle.invalidate === 'function') {
       window.TaagerPageLifecycle.invalidate('page-dashboard', reason || 'dashboard-data');
     }
@@ -1628,11 +1685,13 @@
         dashboardAmountDue: dueVal
       }));
 
-      if (inCreatedPeriod && rowIsNetOrder) {
+      if (inCreatedPeriod && rowIsNetOrder && addOnce(statusFinancialOrderSet, 'businessSales:' + financialLineKey(row))) {
         totalSales += priceVal;
+      }
+      if (inCreatedPeriod && rowIsNetOrder && addOnce(statusFinancialOrderSet, 'businessCommission:' + orderKey)) {
         totalPlacedCommission += commissionVal;
       }
-      if (isDeliveredInPeriod && rowIsNetOrder) {
+      if (isDeliveredInPeriod && rowIsNetOrder && addOnce(statusFinancialOrderSet, 'deliveredSales:' + financialLineKey(row))) {
         totalDeliveredSales += priceVal;
       }
 
@@ -1725,6 +1784,7 @@
             deliveredOrders: 0, ndrDeliveredOrders: 0, drBaseOrders: 0, drDeliveredOrders: 0,
             canceledCount: 0, shippingCount: 0, confirmedCount: 0, processingCount: 0,
             statusTotalCount: 0, confirmationStatusCount: 0, cancelStatusCount: 0, pendingStatusCount: 0,
+            earnedProfitAfterTax: 0,
             earnedCommission: 0, incomingCommission: 0, lostCommission: 0, totalPlacedCommission: 0,
             totalRevenue: 0,
             prepaidCount: 0, codCount: 0,
@@ -1735,12 +1795,30 @@
             codDrBaseOrders: 0, codDrDeliveredOrders: 0,
             deliveryDays: [],
             provinceId: (meta.isMixedCountry ? rowCountry + '-' : '') + resolveProvince(cityName, rowCountry),
-            productMap: {}
+            productMap: {},
+            accountMap: {}
           };
         }
 
         var cs = cityStats[cityKeyName];
-        var cityOrderKey = cityKeyName + ':' + orderKey;
+      var cityOrderKey = cityKeyName + ':' + accountId + ':' + orderKey;
+        var cityAccountId = String(row.accountId || meta.activeAccountId || '');
+        var cityAccountKey = cityAccountId || '__unknown__';
+        if (!cs.accountMap[cityAccountKey]) {
+          cs.accountMap[cityAccountKey] = {
+            accountId: cityAccountId,
+            accountLabel: row.accountLabel || row.accountEmail || cityAccountId,
+            orders: 0,
+            delivered: 0,
+            ndrBaseOrders: 0,
+            ndrDeliveredOrders: 0,
+            earnedProfitAfterTax: 0,
+            commission: 0,
+            deliveredSales: 0
+          };
+        }
+        var cityAccount = cs.accountMap[cityAccountKey];
+        var cityAccountOrderKey = cityKeyName + ':' + cityAccountKey + ':' + orderKey;
 
         // Track statusTotalCount only for net orders (excluding canceled_by_you).
         // This ensures confirmation/cancel/pending rates divide by net orders.
@@ -1759,7 +1837,10 @@
             cs.codCount++;
           }
         }
-        if (inCreatedPeriod && rowIsNetOrder) {
+        if (inCreatedPeriod && rowIsNetOrder && addOnce(cityOrderSet, 'accountPlaced:' + cityAccountOrderKey)) {
+          cityAccount.orders++;
+        }
+        if (inCreatedPeriod && rowIsNetOrder && addOnce(cityOrderSet, 'financial:' + cityOrderKey)) {
           cs.totalRevenue += priceVal;
           cs.totalPlacedCommission += commissionVal;
         }
@@ -1767,6 +1848,9 @@
           cs.ndrBaseOrders++;
           if (rowIsPrepaid) cs.prepaidNdrBaseOrders++;
           else cs.codNdrBaseOrders++;
+        }
+        if (inSelectedNdrBase && addOnce(cityOrderSet, 'accountNdr:' + cityAccountOrderKey)) {
+          cityAccount.ndrBaseOrders++;
         }
         if (rowInConfirmedBase && addOnce(cityOrderSet, 'dr:' + cityOrderKey)) {
           cs.drBaseOrders++;
@@ -1777,6 +1861,9 @@
           cs.ndrDeliveredOrders++;
           if (rowInConfirmedBase) cs.drDeliveredOrders++;
         }
+        if (isDeliveredInNdrCohort && rowIsNetOrder && addOnce(cityOrderSet, 'accountNdrDelivered:' + cityAccountOrderKey)) {
+          cityAccount.ndrDeliveredOrders++;
+        }
 
         if (isDeliveredInPeriod && rowIsNetOrder) {
           if (addOnce(cityOrderSet, 'delivered:' + cityOrderKey)) {
@@ -1785,6 +1872,7 @@
               cs.collected += dueVal;
             }
             cs.deliveredOrders++;
+            cs.earnedProfitAfterTax += commissionVal;
             cs.earnedCommission += commissionVal;
             if (span != null && span <= 60) cs.deliveryDays.push(span);
 
@@ -1795,6 +1883,12 @@
               cs.codDeliveredCount++;
               cs.codDrDeliveredOrders++;
             }
+          }
+          if (addOnce(cityOrderSet, 'accountDelivered:' + cityAccountOrderKey)) {
+            cityAccount.delivered++;
+            cityAccount.earnedProfitAfterTax += commissionVal;
+            cityAccount.commission += commissionVal;
+            cityAccount.deliveredSales += priceVal;
           }
         } else if (isLostBucket(exactBucket) && inCreatedPeriod && rowIsNetOrder) {
           if (addOnce(cityOrderSet, 'lost:' + cityOrderKey)) {
@@ -1857,7 +1951,7 @@
               cp.codCount++;
             }
           }
-          if (inCreatedPeriod && rowIsNetOrder) {
+          if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'cityProductFinancial:' + cpOrderKey)) {
             cp.revenue += priceVal;
             cp.totalPlacedCommission += commissionVal;
           }
@@ -1916,6 +2010,7 @@
             pendingStatusCount: 0,
             deliveredCount: 0,
             ndrBaseCount: 0,
+            ndrConfirmedCount: 0,
             ndrDeliveredCount: 0,
             confirmedCount: 0,
             canceledCount: 0,
@@ -1947,7 +2042,6 @@
         }
         if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'campaignPlaced:' + campaignProductOrderKey)) {
           campaignProduct.placedCount++;
-          campaignProduct.totalPlacedSales += priceVal;
           campaignProduct.totalPlacedCommission += commissionVal;
           if (rowInBusinessConfirmedBase) campaignProduct.confirmedCount++;
           if (isLostBucket(exactBucket)) {
@@ -1959,18 +2053,24 @@
             else if (bucket === 'pending') campaignProduct.pendingCount++;
           }
         }
+        if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'campaignPlacedSales:' + campaignProductKey + ':' + financialLineKey(row))) {
+          campaignProduct.totalPlacedSales += priceVal;
+        }
         if (inSelectedNdrBase && addOnce(productOrderSet, 'campaignNdr:' + campaignProductOrderKey)) {
           campaignProduct.ndrBaseCount++;
+        }
+        if (rowInConfirmedBase && addOnce(productOrderSet, 'campaignNdrConfirmed:' + campaignProductOrderKey)) {
+          campaignProduct.ndrConfirmedCount++;
         }
         if (isDeliveredInNdrCohort && rowIsNetOrder && addOnce(productOrderSet, 'campaignNdrDelivered:' + campaignProductOrderKey)) {
           campaignProduct.ndrDeliveredCount++;
         }
-        if (isDeliveredInPeriod && rowIsNetOrder) {
+        if (isDeliveredInPeriod && rowIsNetOrder && addOnce(productOrderSet, 'campaignDeliveredSales:' + campaignProductKey + ':' + financialLineKey(row))) {
           campaignProduct.deliveredSales += priceVal;
-          if (addOnce(productOrderSet, 'campaignDelivered:' + campaignProductOrderKey)) {
-            campaignProduct.commission += commissionVal;
-            campaignProduct.deliveredCount++;
-          }
+        }
+        if (isDeliveredInPeriod && rowIsNetOrder && addOnce(productOrderSet, 'campaignDelivered:' + campaignProductOrderKey)) {
+          campaignProduct.commission += commissionVal;
+          campaignProduct.deliveredCount++;
         }
 
         if (!productStats[productKey]) {
@@ -1985,11 +2085,27 @@
             shippingCount: 0, processingCount: 0,
             waitingCount: 0, pendingCount: 0,
             realFailedCount: 0,
-            cityMap: {}, piecesMap: {}, quantityCityMap: {}
+            cityMap: {}, piecesMap: {}, quantityCityMap: {}, accountMap: {}
           };
         }
         var rowQty = Number(row.qty || 1);
         var productOrderKey = productKey + ':' + orderKey;
+        var productAccountId = String(row.accountId || meta.activeAccountId || '');
+        var productAccountKey = productAccountId || '__unknown__';
+        if (!productStats[productKey].accountMap[productAccountKey]) {
+          productStats[productKey].accountMap[productAccountKey] = {
+            accountId: productAccountId,
+            accountLabel: row.accountLabel || row.accountEmail || productAccountId,
+            orders: 0,
+            delivered: 0,
+            ndrBaseOrders: 0,
+            ndrDeliveredOrders: 0,
+            commission: 0,
+            deliveredSales: 0
+          };
+        }
+        var productAccount = productStats[productKey].accountMap[productAccountKey];
+        var productAccountOrderKey = productKey + ':' + productAccountKey + ':' + orderKey;
 
         if (inCreatedPeriod && addOnce(productOrderSet, 'total:' + productOrderKey)) {
           productStats[productKey].totalOrderCount++;
@@ -2021,19 +2137,30 @@
             else if (bucket === 'pending') productStats[productKey].pendingCount++;
           }
         }
-        if (inCreatedPeriod && rowIsNetOrder) {
+        if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'accountPlaced:' + productAccountOrderKey)) {
+          productAccount.orders++;
+        }
+        if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'productFinancial:' + productKey + ':' + financialLineKey(row))) {
           productStats[productKey].qty += rowQty;
           productStats[productKey].revenue += priceVal;
+        }
+        if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'productCommission:' + productOrderKey)) {
           productStats[productKey].totalPlacedCommission += commissionVal;
         }
         if (inSelectedNdrBase && addOnce(productOrderSet, 'ndr:' + productOrderKey)) {
           productStats[productKey].ndrBaseCount++;
+        }
+        if (inSelectedNdrBase && addOnce(productOrderSet, 'accountNdr:' + productAccountOrderKey)) {
+          productAccount.ndrBaseOrders++;
         }
         if (rowInConfirmedBase && addOnce(productOrderSet, 'ndrConfirmed:' + productOrderKey)) {
           productStats[productKey].ndrConfirmedCount++;
         }
         if (isDeliveredInNdrCohort && rowIsNetOrder && addOnce(productOrderSet, 'ndrDelivered:' + productOrderKey)) {
           productStats[productKey].ndrDeliveredCount++;
+        }
+        if (isDeliveredInNdrCohort && rowIsNetOrder && addOnce(productOrderSet, 'accountNdrDelivered:' + productAccountOrderKey)) {
+          productAccount.ndrDeliveredOrders++;
         }
 
         if (isDeliveredInPeriod && rowIsNetOrder) {
@@ -2042,6 +2169,11 @@
           if (addOnce(productOrderSet, 'delivered:' + productOrderKey)) {
             productStats[productKey].commission += commissionVal;
             productStats[productKey].deliveredCount++;
+          }
+          if (addOnce(productOrderSet, 'accountDelivered:' + productAccountOrderKey)) {
+            productAccount.delivered++;
+            productAccount.commission += commissionVal;
+            productAccount.deliveredSales += priceVal;
           }
         }
 
@@ -2062,19 +2194,19 @@
 
           var pcmOrderKey = productKey + ':' + cityKey + ':' + orderKey;
 
-          if (inCreatedPeriod && addOnce(productOrderSet, 'productCityStatus:' + pcmOrderKey)) {
+          if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'productCityStatus:' + pcmOrderKey)) {
             pcm.statusTotalCount++;
             var pcmGroup = productStatusGroup(exactBucket);
             if (pcmGroup === 'confirmation') pcm.confirmationStatusCount++;
             else if (pcmGroup === 'cancel') pcm.cancelStatusCount++;
             else pcm.pendingStatusCount++;
           }
-          if (inCreatedPeriod && ndrEligible && addOnce(productOrderSet, 'productCityPlaced:' + pcmOrderKey)) {
+          if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'productCityPlaced:' + pcmOrderKey)) {
             pcm.orders++;
             if (rowIsPrepaid) pcm.prepaidCount++;
             else pcm.codCount++;
           }
-          if (inCreatedPeriod && ndrEligible) {
+          if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'productCityFinancial:' + pcmOrderKey)) {
             pcm.revenue += priceVal;
             pcm.totalPlacedCommission += commissionVal;
           }
@@ -2170,15 +2302,18 @@
       }
     });
 
+    var actualAvgCommission = deliveredCount > 0
+      ? parseFloat((earnedCommission / deliveredCount).toFixed(2))
+      : 0;
+
     if (meta.deliveredDateMode === 'expected') {
       var globalExpectedNdrRate = ndrBaseOrders > 0 ? (ndrDeliveredOrders / ndrBaseOrders) : 0;
+      var globalExpectedDrRate = drBaseOrders > 0 ? (drDeliveredOrders / drBaseOrders) : 0;
       
       // Override global counts
       deliveredCount = Math.round(placedCount * globalExpectedNdrRate);
       earnedCommission = totalPlacedCommission * globalExpectedNdrRate;
       totalDeliveredSales = totalSales * globalExpectedNdrRate;
-      ndrDeliveredOrders = Math.round(ndrBaseOrders * globalExpectedNdrRate);
-      drDeliveredOrders = ndrDeliveredOrders;
       
       // Override dailyStats
       dayKeys.forEach(function (key) {
@@ -2192,9 +2327,8 @@
         var cityExpectedNdrRate = cs.ndrBaseOrders > 0 ? (cs.ndrDeliveredOrders / cs.ndrBaseOrders) : globalExpectedNdrRate;
         
         cs.deliveredOrders = Math.round(cs.count * cityExpectedNdrRate);
-        cs.ndrDeliveredOrders = Math.round(cs.ndrBaseOrders * cityExpectedNdrRate);
-        cs.drDeliveredOrders = cs.ndrDeliveredOrders;
-        cs.earnedCommission = cs.totalPlacedCommission * cityExpectedNdrRate;
+        cs.earnedProfitAfterTax = cs.totalPlacedCommission * cityExpectedNdrRate;
+        cs.earnedCommission = cs.earnedProfitAfterTax;
         cs.collected = cs.due = cs.totalRevenue * cityExpectedNdrRate;
         cs.gap = 0;
         
@@ -2213,6 +2347,9 @@
       Object.keys(productStats).forEach(function (prodKey) {
         var p = productStats[prodKey];
         var prodExpectedNdrRate = p.ndrBaseCount > 0 ? (p.ndrDeliveredCount / p.ndrBaseCount) : globalExpectedNdrRate;
+        p.expectedNdrRate = prodExpectedNdrRate;
+        p.expectedDrRate = p.ndrConfirmedCount > 0 ? (p.ndrDeliveredCount / p.ndrConfirmedCount) : globalExpectedDrRate;
+        p.rateUsesGlobalFallback = p.ndrBaseCount <= 0 || p.ndrConfirmedCount <= 0;
         
         p.actualDeliveredCount = p.deliveredCount;
         p.actualCommission = p.commission;
@@ -2220,8 +2357,7 @@
         p.actualDeliveredSales = p.deliveredSales;
         p.actualNdrDeliveredCount = p.ndrDeliveredCount;
 
-        p.deliveredCount = Math.round(p.placedCount * prodExpectedNdrRate);
-        p.ndrDeliveredCount = Math.round(p.ndrBaseCount * prodExpectedNdrRate);
+        p.deliveredCount = boundedExpectedDeliveries(p.placedCount, prodExpectedNdrRate, prodKey);
         p.commission = p.totalPlacedCommission * prodExpectedNdrRate;
         p.deliveredSales = p.revenue * prodExpectedNdrRate;
         p.deliveredQty = Math.round(p.qty * prodExpectedNdrRate);
@@ -2243,8 +2379,10 @@
         var cp = campaignProductStats[cpKey];
         var cpExpectedNdrRate = cp.ndrBaseCount > 0 ? (cp.ndrDeliveredCount / cp.ndrBaseCount) : globalExpectedNdrRate;
         
-        cp.deliveredCount = Math.round(cp.placedCount * cpExpectedNdrRate);
-        cp.ndrDeliveredCount = Math.round(cp.ndrBaseCount * cpExpectedNdrRate);
+        cp.expectedNdrRate = cpExpectedNdrRate;
+        cp.expectedDrRate = cp.ndrConfirmedCount > 0 ? (cp.ndrDeliveredCount / cp.ndrConfirmedCount) : globalExpectedDrRate;
+        cp.rateUsesGlobalFallback = cp.ndrBaseCount <= 0 || cp.ndrConfirmedCount <= 0;
+        cp.deliveredCount = boundedExpectedDeliveries(cp.placedCount, cpExpectedNdrRate, cpKey);
         cp.commission = cp.totalPlacedCommission * cpExpectedNdrRate;
         cp.deliveredSales = cp.totalPlacedSales * cpExpectedNdrRate;
       });
@@ -2338,13 +2476,38 @@
       stat.prepaidPct = prepaidPctCity;
       stat.codPct = codPctCity;
       stat.avgOrderValue = avgOrderValue;
+      stat.netOrderCount = stat.count;
+      stat.averageProfit = stat.deliveredOrders > 0
+        ? parseFloat(((stat.earnedProfitAfterTax || 0) / stat.deliveredOrders).toFixed(2))
+        : 0;
       stat.avgDeliveryDays = avgDeliveryDays;
       stat.deliveryDurationOrders = stat.deliveryDays.length;
+      var cityAccountBreakdown = Object.keys(stat.accountMap || {}).map(function (accountKey) {
+        var account = stat.accountMap[accountKey];
+        var accountNdrBase = account.ndrBaseOrders || account.orders || 0;
+        return {
+          accountId: account.accountId,
+          accountLabel: account.accountLabel || account.accountId,
+          orders: account.orders || 0,
+          delivered: account.delivered || 0,
+          ndrPct: netDeliveryRatePct(account.ndrDeliveredOrders || 0, accountNdrBase),
+          earnedProfitAfterTax: roundMoney(
+            account.earnedProfitAfterTax != null ? account.earnedProfitAfterTax : account.commission || 0
+          ),
+          commission: roundMoney(
+            account.earnedProfitAfterTax != null ? account.earnedProfitAfterTax : account.commission || 0
+          ),
+          deliveredSales: roundMoney(account.deliveredSales || 0)
+        };
+      }).sort(function (a, b) {
+        return (b.orders - a.orders) || String(a.accountLabel || '').localeCompare(String(b.accountLabel || ''));
+      });
+      stat.accountBreakdown = cityAccountBreakdown;
       return {
         // Existing fields
         key: keyName, name: displayName, country: stat.country || meta.activeCountry || 'sa',
         due: stat.due, collected: stat.collected, gap: stat.gap, sar: stat.gap,
-        count: stat.count, statusTotalCount: stat.statusTotalCount,
+        count: stat.count, netOrderCount: stat.count, statusTotalCount: stat.statusTotalCount,
         confirmationStatusCount: stat.confirmationStatusCount,
         cancelStatusCount: stat.cancelStatusCount,
         pendingStatusCount: stat.pendingStatusCount,
@@ -2358,7 +2521,9 @@
         provinceId: stat.provinceId,
         // T-09: Financial
         totalRevenue: stat.totalRevenue, avgOrderValue: avgOrderValue,
-        earnedCommission: stat.earnedCommission,
+        earnedProfitAfterTax: stat.earnedProfitAfterTax != null ? stat.earnedProfitAfterTax : stat.earnedCommission,
+        earnedCommission: stat.earnedProfitAfterTax != null ? stat.earnedProfitAfterTax : stat.earnedCommission,
+        averageProfit: stat.averageProfit,
         incomingCommission: stat.incomingCommission,
         lostCommission: stat.lostCommission,
         // T-09: Delivery counters
@@ -2376,7 +2541,8 @@
         prepaidDrDeliveredOrders: stat.prepaidDrDeliveredOrders, codDrDeliveredOrders: stat.codDrDeliveredOrders,
         prepaidPct: prepaidPctCity, codPct: codPctCity,
         // T-12: Product map reference
-        productMap: stat.productMap
+        productMap: stat.productMap,
+        accountBreakdown: cityAccountBreakdown
       };
     }).sort(function (a, b) { return b.gap - a.gap; });
 
@@ -2411,14 +2577,13 @@
       ? parseFloat((totalPrepaidCount / placedCount).toFixed(4))
       : 0;
     var taagerProfitAfterTax = earnedCommission + incomingCommission + lostCommission;
-    var avgCommission = deliveredCount > 0
-      ? parseFloat((earnedCommission / deliveredCount).toFixed(2))
-      : 0;
+    var avgCommission = actualAvgCommission;
 
     var nationalAverages = {
       ndr: nationalNdr,
       dr:  nationalDr,
       prepaidPct: nationalPrepaidPct,
+      averageProfit: avgCommission,
       avgCommission: avgCommission,
       taagerProfitAfterTax: taagerProfitAfterTax,
       avgOrderValue: placedCount > 0
@@ -2430,11 +2595,13 @@
       return sum + productStats[key].qty;
     }, 0);
 
-    var rankedProducts = Object.keys(productStats).map(function (key) {
+    var rankedProducts = Object.keys(productStats).filter(function (key) {
+      return Number(productStats[key].placedCount || 0) > 0;
+    }).map(function (key) {
       var p = productStats[key];
       var total = p.placedCount || 1;
 
-      var statusTotal = p.statusTotalCount !== undefined ? p.statusTotalCount : (p.totalOrderCount || p.placedCount || 0);
+      var statusTotal = p.statusTotalCount !== undefined ? p.statusTotalCount : (p.placedCount || 0);
       var statusRates = productStatusPercentages(
         p.confirmationStatusCount,
         p.cancelStatusCount,
@@ -2445,17 +2612,21 @@
       var cancelPct = statusRates.cancelPct;
       var pendingPct = statusRates.pendingPct;
 
-      var productNdrBase = p.ndrBaseCount || p.placedCount;
-      var confirmationBase = p.ndrConfirmedCount != null ? p.ndrConfirmedCount : p.confirmedCount;
-      var productNdrDelivered = p.ndrDeliveredCount != null ? p.ndrDeliveredCount : p.deliveredCount;
-      var ndrPct = netDeliveryRatePct(productNdrDelivered, productNdrBase);
-      var deliveryPct = parseFloat((p.deliveredCount / total * 100).toFixed(1));
+      var expectedRateMode = meta.deliveredDateMode === 'expected';
+      var productUsesGlobalNdr = expectedRateMode && p.ndrBaseCount <= 0;
+      var productUsesGlobalDr = expectedRateMode && p.ndrConfirmedCount <= 0;
+      var productNdrBase = productUsesGlobalNdr ? ndrBaseOrders : (expectedRateMode ? p.ndrBaseCount : p.placedCount);
+      var confirmationBase = productUsesGlobalDr ? drBaseOrders : (expectedRateMode ? p.ndrConfirmedCount : p.confirmedCount);
+      var productNdrDelivered = productUsesGlobalNdr ? ndrDeliveredOrders : (expectedRateMode ? p.ndrDeliveredCount : p.deliveredCount);
+      var productDrDelivered = productUsesGlobalDr ? drDeliveredOrders : (expectedRateMode ? p.ndrDeliveredCount : p.deliveredCount);
+      var ndrPct = boundedProductRatePct(productNdrDelivered, productNdrBase, key + ':ndr');
+      var deliveryPct = boundedProductRatePct(p.deliveredCount, p.placedCount, key + ':display-delivery');
       var productDeliveredAov = p.deliveredCount > 0
         ? parseFloat((p.deliveredSales / p.deliveredCount).toFixed(2))
         : 0;
 
       var activeTotal = confirmationBase;
-      var drPct = activeTotal > 0 ? parseFloat((productNdrDelivered / activeTotal * 100).toFixed(1)) : 0;
+      var drPct = boundedProductRatePct(productDrDelivered, activeTotal, key + ':dr');
 
       var productCities = Object.keys(p.cityMap)
         .map(function (c) {
@@ -2578,6 +2749,21 @@
         count: p.placedCount,
         prepaidPct: productPrepaidPct
       }, nationalAverages) : 0;
+      var productAccountBreakdown = Object.keys(p.accountMap || {}).map(function (accountKey) {
+        var account = p.accountMap[accountKey];
+        var accountNdrBase = account.ndrBaseOrders || account.orders || 0;
+        return {
+          accountId: account.accountId,
+          accountLabel: account.accountLabel || account.accountId,
+          orders: account.orders || 0,
+          delivered: account.delivered || 0,
+          ndrPct: netDeliveryRatePct(account.ndrDeliveredOrders || 0, accountNdrBase),
+          commission: roundMoney(account.commission || 0),
+          deliveredSales: roundMoney(account.deliveredSales || 0)
+        };
+      }).sort(function (a, b) {
+        return (b.orders - a.orders) || String(a.accountLabel || '').localeCompare(String(b.accountLabel || ''));
+      });
 
       return {
         key: key,
@@ -2585,10 +2771,10 @@
         name: p.name,
         units: p.deliveredCount,
         pieces: p.deliveredQty,
-        placedCount: p.totalOrderCount || p.placedCount,
+        placedCount: p.placedCount,
         netOrderCount: p.placedCount,
         totalOrderCount: p.totalOrderCount || p.placedCount,
-        statusTotalCount: p.statusTotalCount !== undefined ? p.statusTotalCount : (p.totalOrderCount || p.placedCount),
+        statusTotalCount: p.statusTotalCount !== undefined ? p.statusTotalCount : p.placedCount,
         qty: p.qty,
         revenue: p.revenue,
         commission: p.commission,
@@ -2600,8 +2786,13 @@
         actualDeliveredQty: p.actualDeliveredQty !== undefined ? p.actualDeliveredQty : p.deliveredQty,
         actualDeliveredSales: p.actualDeliveredSales !== undefined ? p.actualDeliveredSales : p.deliveredSales,
         ndrBaseOrders: productNdrBase,
-        deliveryRate: p.placedCount > 0 ? parseFloat(((p.deliveredCount / p.placedCount) * 100).toFixed(1)) : 0,
-        drRate: activeTotal > 0 ? parseFloat(((p.deliveredCount / activeTotal) * 100).toFixed(1)) : 0,
+        ndrDeliveredOrders: productNdrDelivered,
+        drBaseOrders: activeTotal,
+        drDeliveredOrders: productDrDelivered,
+        rateMode: meta.deliveredDateMode === 'expected' ? 'historical_cohort' : 'actual',
+        rateSource: productUsesGlobalNdr || productUsesGlobalDr ? 'global_fallback' : 'product',
+        deliveryRate: deliveryPct,
+        drRate: drPct,
         totalPieces:      p.qty,
         canceledCount:    p.canceledCount,
         canceledByYouCount: p.canceledByYouCount || p.canceledCount || 0,
@@ -2620,6 +2811,7 @@
         ndrPct:           ndrPct,
         deliveryPct:      deliveryPct,
         scalingScore:     scaleScore,
+        accountBreakdown: productAccountBreakdown,
         cityBreakdown:    productCities,
         piecesBreakdown:  piecesBreakdown,
         quantityCityBreakdown: quantityCityBreakdown
@@ -2651,12 +2843,18 @@
     var productsWithEmojis = rankedProducts.map(function (p, idx) {
       return Object.assign({}, p, { rank: idx + 1, emoji: '📦' });
     });
-    var campaignProducts = Object.keys(campaignProductStats).map(function (key) {
+    var campaignProducts = Object.keys(campaignProductStats).filter(function (key) {
+      return Number(campaignProductStats[key].placedCount || 0) > 0;
+    }).map(function (key) {
       var p = campaignProductStats[key];
-      var ndrBase = p.ndrBaseCount || p.placedCount;
-      var ndrDelivered = p.ndrDeliveredCount != null ? p.ndrDeliveredCount : p.deliveredCount;
-      var confirmed = p.confirmedCount || 0;
-      var statusTotal = p.statusTotalCount || p.totalOrderCount || p.placedCount || 0;
+      var expectedCampaignRateMode = meta.deliveredDateMode === 'expected';
+      var campaignUsesGlobalNdr = expectedCampaignRateMode && p.ndrBaseCount <= 0;
+      var campaignUsesGlobalDr = expectedCampaignRateMode && p.ndrConfirmedCount <= 0;
+      var ndrBase = campaignUsesGlobalNdr ? ndrBaseOrders : (expectedCampaignRateMode ? p.ndrBaseCount : p.placedCount);
+      var ndrDelivered = campaignUsesGlobalNdr ? ndrDeliveredOrders : (expectedCampaignRateMode ? p.ndrDeliveredCount : p.deliveredCount);
+      var confirmed = campaignUsesGlobalDr ? drBaseOrders : (expectedCampaignRateMode ? p.ndrConfirmedCount : (p.confirmedCount || 0));
+      var campaignDrDelivered = campaignUsesGlobalDr ? drDeliveredOrders : (expectedCampaignRateMode ? p.ndrDeliveredCount : p.deliveredCount);
+      var statusTotal = p.statusTotalCount || p.placedCount || 0;
       var campaignStatusRates = productStatusPercentages(
         p.confirmationStatusCount,
         p.cancelStatusCount,
@@ -2671,8 +2869,14 @@
         confirmationPct: campaignStatusRates.confirmationPct,
         cancelPct: campaignStatusRates.cancelPct,
         pendingPct: campaignStatusRates.pendingPct,
-        ndrPct: netDeliveryRatePct(ndrDelivered, ndrBase),
-        drPct: confirmed > 0 ? parseFloat((ndrDelivered / confirmed * 100).toFixed(1)) : 0
+        ndrPct: boundedProductRatePct(ndrDelivered, ndrBase, key + ':campaign-ndr'),
+        drPct: boundedProductRatePct(campaignDrDelivered, confirmed, key + ':campaign-dr'),
+        ndrBaseOrders: ndrBase,
+        ndrDeliveredOrders: ndrDelivered,
+        drBaseOrders: confirmed,
+        drDeliveredOrders: campaignDrDelivered,
+        rateMode: meta.deliveredDateMode === 'expected' ? 'historical_cohort' : 'actual',
+        rateSource: campaignUsesGlobalNdr || campaignUsesGlobalDr ? 'global_fallback' : 'product'
       });
     }).sort(function (a, b) {
       return (b.placedCount - a.placedCount) || (b.commission - a.commission) || String(a.key || '').localeCompare(String(b.key || ''));
@@ -2771,7 +2975,7 @@
       });
     });
     var pipelineStages = exactStatusSummary.map(function (row) {
-      var totalForShare = rawTotalOrders;
+      var totalForShare = row.businessGroup === 'excluded' ? rawTotalOrders : placedCount;
       var st = stage(
         row.bucket,
         row.label,
@@ -2835,7 +3039,7 @@
         earnedCommission:   { value: earnedCommission,   delta: calcDelta(earnedCommission, previousOverview.earnedCommission),        unit: meta.activeCurrency || 'SAR', color: 'green'  },
         incomingCommission: { value: incomingCommission, delta: calcDelta(incomingCommission, previousOverview.incomingCommission),    unit: meta.activeCurrency || 'SAR', color: 'orange' },
         lostCommission:     { value: lostCommission,     delta: calcDelta(lostCommission, previousOverview.lostCommission),            unit: meta.activeCurrency || 'SAR', color: 'red'    },
-        totalOrders:        { value: placedCount, rawValue: rawTotalOrders, canceledByYou: canceledByYouCount, delta: calcDelta(placedCount, previousOverview.totalOrders), unit: raw('طلب'), color: 'blue' },
+        totalOrders:        { value: placedCount, netOrderCount: placedCount, totalOrderCount: rawTotalOrders, rawValue: rawTotalOrders, canceledByYou: canceledByYouCount, delta: calcDelta(placedCount, previousOverview.totalOrders), unit: raw('طلب'), color: 'blue' },
         totalSales:          { value: totalSales,          delta: calcDelta(totalSales, previousOverview.totalSales),                   unit: meta.activeCurrency || 'SAR', color: 'green'  },
         overallAov:          { value: overallAov,          delta: calcDelta(overallAov, previousOverview.overallAov),                   unit: meta.activeCurrency || 'SAR', color: 'blue'   },
         totalDeliveredSales: { value: totalDeliveredSales, delta: calcDelta(totalDeliveredSales, previousOverview.totalDeliveredSales), unit: meta.activeCurrency || 'SAR', color: 'green'  },
@@ -2860,7 +3064,8 @@
       },
       pipeline: {
         metrics: {
-          totalOrders: rawTotalOrders, totalDelivery: rawTotalOrders,
+          totalOrders: placedCount, totalDelivery: placedCount,
+          netOrderCount: placedCount, totalOrderCount: rawTotalOrders,
           deliveredCount: ndrDeliveredOrders, failedCount: failedCount,
           businessTotalOrders: placedCount, businessDeliveredCount: deliveredCount,
           canceledByYouCount: canceledByYouCount,
@@ -2895,7 +3100,7 @@
           stage('shipping',    'قيد الشحن',        shippingCount,   placedCount, '#f59e0b', null, null, null, incomingCommission),
           stage('delivered',   'تم التسليم',       deliveredCount,  placedCount, '#00e676', 'معدل التسليم', placedCount > 0 ? parseFloat(((deliveredCount / placedCount) * 100).toFixed(1)) : 0, 'من إجمالي الطلبات', earnedCommission),
           stage('failed',      'فشل',       failedCount,     placedCount, '#ef4444', 'نسبة الفشل',   placedCount > 0 ? parseFloat(((failedCount / placedCount) * 100).toFixed(1)) : 0, 'من إجمالي الطلبات', lostCommission),
-          stage('canceled_by_you', 'ملغي بواسطتك', canceledByYouCount, placedCount, '#94a3b8', 'مستبعد من NDR', placedCount > 0 ? parseFloat(((canceledByYouCount / placedCount) * 100).toFixed(1)) : 0, 'ظاهر فقط ولا يدخل الحسابات')
+          stage('canceled_by_you', 'ملغي بواسطتك', canceledByYouCount, rawTotalOrders, '#94a3b8', 'مستبعد من NDR', rawTotalOrders > 0 ? parseFloat(((canceledByYouCount / rawTotalOrders) * 100).toFixed(1)) : 0, 'ظاهر فقط ولا يدخل الحسابات')
         ]
       },
       statusBreakdown: statusBreakdown,
@@ -2904,6 +3109,8 @@
       orders: orderLevelRows(createdOrders, true),
       outcomeOrders: orderLevelRows(outcomeOrders, true),
       cod: {
+        netOrderCount: placedCount,
+        totalOrderCount: rawTotalOrders,
         totalDue: totalDue, collected: collectedSar, remaining: remaining,
         collectionRate: collectionRate, collectedSar: collectedSar,
         gapSar: gapSar, expectedCodSar: expectedCodSar,
@@ -2931,7 +3138,7 @@
       },
       products: {
         summary: {
-          totalOrders: placedCount, submitted: deliveredCount,
+          totalOrders: placedCount, netOrderCount: placedCount, totalOrderCount: rawTotalOrders, submitted: deliveredCount,
           confirmationRate: confirmationPct, drPct: drPct,
           totalComm: earnedCommission,
           uniqueProducts: Object.keys(productStats).length,
@@ -2963,7 +3170,8 @@
       },
       roi: {
         adSpend: roiAdSpend, currency: roiCurrency, egpRate: roiEgpRate, sarRate: 3.75,
-        totalOrders: placedCount, ndrPct: ndrPct, confirmationRate: confirmationPct, drPct: drPct, avgCommission: avgCommission,
+        totalOrders: placedCount, netOrderCount: placedCount, totalOrderCount: rawTotalOrders, ndrPct: ndrPct, confirmationRate: confirmationPct, drPct: drPct,
+        averageProfit: avgCommission, avgCommission: avgCommission,
         taagerProfitAfterTax: taagerProfitAfterTax,
         deliveredCount: deliveredCount, totalDeliveredSales: totalDeliveredSales,
         netRoas: netRoas,

@@ -462,7 +462,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
         row[tx("العميل")] = o.customer || "";
         row[tx("الهاتف")] = phoneClean || "";
         row[tx("المدينة")] = tx(o.city || "");
-        row[tx("المنتج")] = tx(o.product || "");
+        row[tx("المنتج")] = o.product || "";
         row[tx("الترميز")] = o.sku || "";
         row[tx("قيمة الطلب")] = o.total || 0;
         row[tx(isRtl ? "الربح بعد الضريبة" : "Profit After Tax")] = o.commission || 0;
@@ -1065,7 +1065,18 @@ window.renderSection3 = function (mountEl, data, ctx) {
           });
           return;
         }
-        _localExportToExcel(getFilteredAndSortedOrders());
+        exportBtn.disabled = true;
+        var ensureXlsx = window.XLSX || typeof window.ensureFeatureScripts !== 'function'
+          ? Promise.resolve()
+          : window.ensureFeatureScripts('dashboardOrdersExport');
+        ensureXlsx.then(function () {
+          _localExportToExcel(getFilteredAndSortedOrders());
+        }).catch(function (err) {
+          console.error("XLSX action-time load failed:", err && err.message ? err.message : err);
+          _localExportToExcel(getFilteredAndSortedOrders());
+        }).finally(function () {
+          exportBtn.disabled = false;
+        });
       });
     }
   }
@@ -1175,7 +1186,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
         invalidateFilteredCache();
         refreshDetails();
         refreshTableData();
-      }, 300));
+      }, 120));
     }
   }
 
@@ -1347,7 +1358,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
           '<td style="text-align:right;min-width:0;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.015);">' +
             '<div style="display:flex;align-items:center;gap:10px;justify-content:flex-start;min-width:0;direction:' + (isRtl ? 'rtl' : 'ltr') + ';">' +
               productThumb(o.type, 36) +
-              '<span style="color:rgba(255,255,255,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;font-weight:700;">' + o.product + '</span>' +
+              '<span data-i18n-preserve style="color:rgba(255,255,255,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;font-weight:700;">' + o.product + '</span>' +
             '</div>' +
           '</td>' +
           '<td style="color:#fff;text-align:right;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.015);font-variant-numeric:tabular-nums;"><span style="font-weight:700;">' + formatReadableNumber(o.total, 2) + '</span> <span style="font-size:10px;color:rgba(255,255,255,0.5);">' + activeCurrency + '</span></td>' +
@@ -1520,6 +1531,8 @@ window.renderSection3 = function (mountEl, data, ctx) {
   var _s3ThemeObserver = new MutationObserver(function (mutations) {
     for (var i = 0; i < mutations.length; i++) {
       if (mutations[i].attributeName === 'data-theme') {
+        var shellEl = mountEl.closest && mountEl.closest('.dash-shell');
+        if (!shellEl || shellEl._dashboardActiveSection !== 'orders') return;
         refreshPipeline();
         return;
       }

@@ -1,0 +1,212 @@
+@media (max-width: 1399px) {
+
+  /* ── S2 Pipeline ── */
+  .s2-header { padding: 24px 24px !important; }
+  #s2-h1 { font-size: 28px !important; }
+  #s2-sub { font-size: 12px !important; }
+  .s2-body { padding: 0 24px 24px !important; }
+  .s2-metrics-grid { grid-template-columns: 1fr 1fr 1fr !important; gap: 12px !important; }
+  .s2-insights-grid { grid-template-columns: 1fr 1fr !important; }
+  .s2-funnel-inner { min-width: 760px !important; padding: 0 24px !important; }
+  .s2-stage-label { font-size: 11px !important; }
+  .s2-stage-card { height: 190px !important; }
+  .s2-card-inner { padding: 18px 6px !important; }
+  .s2-count-num { font-size: 28px !important; }
+  .s2-pct-text { font-size: 11px !important; }
+  .s2-icon-wrap { width: 44px !important; height: 44px !important; }
+  .s2-icon-wrap svg { width: 18px !important; height: 18px !important; }
+  .s2-chevron { height: 190px !important; margin-top: 22px !important; }
+  .s2-chevron svg { width: 22px !important; }}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   BREAKPOINT: ≤ 1099px — Tablet Landscape / Narrow Window
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 1099px) {
+
+  /* ── S2 Pipeline ── */
+  .s2-header { padding: 20px 18px !important; flex-wrap: wrap !important; gap: 12px !important; justify-content: center !important; }
+  #s2-h1 { font-size: 24px !important; }
+  #s2-sub { font-size: 11px !important; }
+  .s2-body { padding: 0 18px 18px !important; }
+  .s2-funnel-scroll { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; padding-bottom: 8px !important; }
+  .s2-metrics-grid { grid-template-columns: 1fr 1fr !important; }
+  .s2-analytics-grid { grid-template-columns: 1fr 1fr !important; }
+  .s2-insights-grid { grid-template-columns: 1fr 1fr !important; }
+  .s2-funnel-inner { min-width: 660px !important; padding: 0 16px !important; }
+  .s2-stage-label { font-size: 10px !important; }
+  .s2-stage-card { height: 165px !important; border-radius: 12px !important; }
+  .s2-card-inner { padding: 12px 4px !important; }
+  .s2-count-num { font-size: 22px !important; letter-spacing: -1px !important; }
+  .s2-pct-text { font-size: 10px !important; margin-top: 4px !important; }
+  .s2-icon-wrap { width: 36px !important; height: 36px !important; margin-bottom: 4px !important; }
+  .s2-icon-wrap svg { width: 15px !important; height: 15px !important; }
+  .s2-chevron { height: 165px !important; margin-top: 20px !important; width: 18px !important; }
+  .s2-chevron svg { width: 18px !important; }
+  .s2-dotted-row { height: 12px !important; margin-bottom: 6px !important; }
+  .s2-conv-card { padding: 6px 8px !important; border-radius: 8px !important; }
+  .s2-conv-label { font-size: 10px !important; }
+  .s2-conv-value { font-size: 13px !important; }
+  .s2-conv-from { font-size: 9px !important; }}
+
+@media (max-width: 799px) {
+
+  /* ── S2 Pipeline ── */
+  .s2-header { padding: 16px 14px !important; }
+  #s2-h1 { font-size: 20px !important; }
+  #s2-sub { font-size: 10px !important; }
+  .s2-body { padding: 0 14px 14px !important; }
+  .s2-metrics-grid { grid-template-columns: 1fr !important; }
+  .s2-analytics-grid { grid-template-columns: 1fr !important; }
+  .s2-insights-grid { grid-template-columns: 1fr !important; }
+  .s2-funnel-inner { min-width: 580px !important; padding: 0 12px !important; }
+  .s2-stage-label { font-size: 9px !important; margin-bottom: 8px !important; }
+  .s2-stage-card { height: 140px !important; border-radius: 10px !important; }
+  .s2-card-inner { padding: 10px 2px !important; }
+  .s2-count-num { font-size: 18px !important; }
+  .s2-pct-text { font-size: 9px !important; }
+  .s2-icon-wrap { width: 30px !important; height: 30px !important; margin-bottom: 2px !important; }
+  .s2-icon-wrap svg { width: 13px !important; height: 13px !important; }
+  .s2-chevron { height: 140px !important; margin-top: 18px !important; width: 14px !important; }
+  .s2-chevron svg { width: 14px !important; }
+  .s2-dotted-row { height: 8px !important; }
+  .s2-conv-card { padding: 4px 6px !important; }
+  .s2-conv-value { font-size: 11px !important; }}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   BREAKPOINT: ≤ 599px — Mobile
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 599px) {
+  /* ── S2 Pipeline Mobile ── */
+  #s2-h1 { font-size: 18px !important; }
+  #s2-sub { font-size: 9px !important; }
+  .s2-dotted-row { display: none !important; }
+  .s2-conv-row { display: none !important; }
+  .s2-funnel-inner { min-width: 480px !important; padding: 0 8px !important; }
+  .s2-stage-label { font-size: 8px !important; margin-bottom: 6px !important; }
+  .s2-stage-card { height: 110px !important; border-radius: 8px !important; }
+  .s2-card-inner { padding: 8px 2px !important; justify-content: center !important; gap: 4px !important; }
+  .s2-count-num { font-size: 14px !important; }
+  .s2-pct-text { font-size: 8px !important; margin-top: 2px !important; }
+  .s2-icon-wrap { display: none !important; }
+  .s2-chevron { height: 110px !important; margin-top: 15px !important; width: 10px !important; }
+  .s2-chevron svg { width: 10px !important; }}
+
+/* ══════════════════════════════════════════════════════════════════
+   Section 2 — Order Pipeline Funnel Cards — Light Mode
+   The JS now builds theme-aware glows and backgrounds directly, so
+   the CSS only needs to clean up any remaining dark overrides and
+   guard against the generic rgba(255,255,255) text replacement.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Stage card count number — JS writes #1e293b in light mode, but guard anyway */
+[data-theme="light"] #page-dashboard .s2-funnel-scroll .s2-count {
+  color: #1e293b !important;
+  text-shadow: none !important;
+}
+
+/* Percent / secondary label — JS now injects #475569 in light mode */
+[data-theme="light"] #page-dashboard .s2-funnel-scroll [style*="color:rgba(255,255,255,0.7)"],
+[data-theme="light"] #page-dashboard .s2-funnel-scroll [style*="color: rgba(255,255,255,0.7)"],
+[data-theme="light"] #page-dashboard .s2-funnel-scroll [style*="color:rgba(255, 255, 255, 0.7)"],
+[data-theme="light"] #page-dashboard .s2-funnel-scroll [style*="color: rgba(255, 255, 255, 0.7)"] {
+  color: #475569 !important;
+}
+
+/* Stage heading label above the card — remove dark glow */
+[data-theme="light"] #page-dashboard .s2-funnel-scroll .fade-up > div[style*="font-weight:700"][style*="white-space:nowrap"],
+[data-theme="light"] #page-dashboard .s2-funnel-scroll .fade-up > div[style*="font-weight: 700"][style*="white-space: nowrap"] {
+  text-shadow: none !important;
+}
+
+/* ── Section 2 Default Sizing (Squeezed globally for premium Electron fit) ── */
+#page-dashboard .s2-funnel-inner {
+  min-width: 800px !important;
+  padding: 0 24px !important;
+}
+#page-dashboard .s2-stage-label {
+  font-size: 11px !important;
+}
+#page-dashboard .s2-stage-card {
+  height: 180px !important;
+}
+#page-dashboard .s2-card-inner {
+  padding: 16px 6px !important;
+}
+#page-dashboard .s2-count-num {
+  font-size: 28px !important;
+}
+#page-dashboard .s2-pct-text {
+  font-size: 11px !important;
+}
+#page-dashboard .s2-icon-wrap {
+  width: 42px !important;
+  height: 42px !important;
+}
+#page-dashboard .s2-icon-wrap svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+#page-dashboard .s2-chevron {
+  height: 180px !important;
+  margin-top: 20px !important;
+  width: 22px !important;
+}
+#page-dashboard .s2-chevron svg {
+  width: 20px !important;
+}
+#page-dashboard .s2-dotted-row {
+  height: 14px !important;
+}
+#page-dashboard .s2-conv-card {
+  padding: 8px 10px !important;
+}
+#page-dashboard .s2-conv-label {
+  font-size: 10px !important;
+}
+#page-dashboard .s2-conv-value {
+  font-size: 14px !important;
+}
+#page-dashboard .s2-conv-from {
+  font-size: 9px !important;
+}
+#page-dashboard .s2-metrics-grid .s2-metric-value {
+  font-size: 32px !important;
+}
+#page-dashboard .s2-metrics-grid .s2-metric-label {
+  font-size: 13px !important;
+}
+#page-dashboard .s2-metrics-grid .s2-metric-card {
+  padding: 24px !important;
+  gap: 16px !important;
+}
+#page-dashboard .s2-metrics-grid .s2-metric-icon {
+  width: 56px !important;
+  height: 56px !important;
+}
+#page-dashboard .s2-metrics-grid .s2-metric-icon svg {
+  width: 24px !important;
+  height: 24px !important;
+}
+#page-dashboard .s2-insights-box {
+  padding: 20px !important;
+}
+#page-dashboard .s2-insights-grid {
+  flex-wrap: wrap !important;
+}
+#page-dashboard .s2-insight-item {
+  padding: 14px !important;
+}
+#page-dashboard .s2-insight-title {
+  font-size: 13px !important;
+}
+#page-dashboard .s2-insight-body {
+  font-size: 11px !important;
+}
+#page-dashboard .s2-insight-icon {
+  width: 44px !important;
+  height: 44px !important;
+}
+#page-dashboard .s2-insight-icon svg {
+  width: 18px !important;
+  height: 18px !important;
+}

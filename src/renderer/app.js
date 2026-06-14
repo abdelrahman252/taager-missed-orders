@@ -1712,6 +1712,7 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/premium-preview.js",
     "pages/taager-product-names.js",
     "pages/taager-status.js",
+    "pages/smart-insights-core.js",
     "pages/analytics/analytics-charts.js",
     "pages/analytics/analytics-kpis.js",
     "pages/analytics/analytics-table.js",
@@ -1726,6 +1727,8 @@ const FEATURE_SCRIPT_GROUPS = {
     "page-i18n.js",
     "pages/guided-tour.js",
     "pages/premium-preview.js",
+    "pages/taager-status.js",
+    "pages/smart-insights-core.js",
     "pages/operations/operations-utils.js",
     "pages/operations/operations-monitor.js",
     "pages/operations/operations-history.js",
@@ -1736,7 +1739,9 @@ const FEATURE_SCRIPT_GROUPS = {
   ai: [
     "pages/taager-product-names.js",
     "pages/taager-status.js",
+    "pages/smart-insights-core.js",
     "pages/dashboard/dashboard-campaign-decision.js",
+    "pages/dashboard/dashboard-ai-shared.js",
     "pages/ai-intelligence/ai-intelligence-data.js",
     "pages/ai-intelligence/engine/intent-detector.js",
     "pages/ai-intelligence/engine/analytics-engine.js",
@@ -1745,6 +1750,8 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/ai-intelligence/engine/local-reasoning-engine.js",
     "pages/ai-intelligence/engine/scenario-database.js",
     "pages/ai-intelligence/engine/business-orchestrator.js",
+    "pages/dashboard/dashboard-ai-context.js",
+    "pages/dashboard/dashboard-ai-mirror.js",
     "pages/ai-intelligence/ai-intelligence.js",
   ],
   dashboard: [
@@ -1753,10 +1760,12 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/premium-preview.js",
     "pages/taager-product-names.js",
     "pages/taager-status.js",
+    "pages/smart-insights-core.js",
     "pages/dashboard/locales/ar/dashboard-locale.js",
     "pages/dashboard/locales/en/dashboard-locale.js",
     "pages/dashboard/dashboard-i18n.js",
     "pages/dashboard/dashboard-currency-core.js",
+    "pages/dashboard/dashboard-product-attribution-core.js",
     "pages/dashboard/dashboard-campaign-decision.js",
     "pages/dashboard/dashboard-aggregator.js",
     "pages/dashboard/dashboard-aggregator-score.js",
@@ -1765,15 +1774,17 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/dashboard/dashboard-filter-bus.js",
     "pages/dashboard/dashboard-query-runtime.js",
     "pages/dashboard/dashboard-shared.js",
-    "pages/dashboard/sections/section8-master.js",
     "pages/dashboard/sections/section-insight-strip.js",
     "pages/dashboard/dashboard-shell.js",
     "pages/dashboard/dashboard.js",
   ],
+  dashboardMaster: ["pages/dashboard/sections/section8-master.js"],
   dashboardProducts: [
+    "pages/smart-insights-core.js",
     "pages/dashboard/sections/section5-products.js",
   ],
   dashboardCampaigns: [
+    "pages/smart-insights-core.js",
     "pages/dashboard/dashboard-campaign-decision.js",
     "pages/dashboard/dashboard-campaign-query-core.js",
     "pages/dashboard/dashboard-campaign-intelligence.js",
@@ -1781,24 +1792,23 @@ const FEATURE_SCRIPT_GROUPS = {
   ],
   dashboardOverview: ["pages/dashboard/sections/section1-overview.js"],
   dashboardPipeline: ["pages/dashboard/sections/section2-pipeline.js"],
-  dashboardOrders: [
-    "../../node_modules/xlsx/dist/xlsx.full.min.js",
-    "pages/dashboard/sections/section3-orders.js"
-  ],
+  dashboardOrders: ["pages/dashboard/sections/section3-orders.js"],
+  dashboardOrdersExport: ["../../node_modules/xlsx/dist/xlsx.full.min.js"],
   dashboardCod: [
+    "pages/smart-insights-core.js",
     "pages/dashboard/sections/section-city-drawer.js",
     "pages/dashboard/sections/section4-cod.js",
   ],
   dashboardCommission: ["pages/dashboard/sections/section6-commission.js"],
   dashboardMarketing: ["pages/dashboard/sections/section-marketing-connections.js"],
-  dashboardCalculator: ["pages/dashboard/sections/section7-calculator.js"],
+  dashboardCalculator: ["pages/smart-insights-core.js", "pages/dashboard/sections/section7-calculator.js"],
   dashboardCities: [
     "pages/dashboard/sections/section-product-matrix.js",
     "pages/dashboard/sections/section-city-drawer.js",
     "pages/dashboard/sections/section-cities.js",
   ],
-  dashboardPrepaid: ["pages/dashboard/sections/section-prepaid.js"],
-  dashboardForecast: ["pages/dashboard/sections/section9-product-forecast.js"],
+  dashboardPrepaid: ["pages/smart-insights-core.js", "pages/dashboard/sections/section-prepaid.js"],
+  dashboardForecast: ["pages/smart-insights-core.js", "pages/dashboard/sections/section9-product-forecast.js"],
   dashboardStaticUpdate: [
     "../../node_modules/xlsx/dist/xlsx.full.min.js",
     "pages/dashboard/sections/section-static-update.js",
@@ -1806,7 +1816,9 @@ const FEATURE_SCRIPT_GROUPS = {
   dashboardAi: [
     "pages/dashboard/dashboard-campaign-decision.js",
     "pages/dashboard/dashboard-campaign-intelligence.js",
+    "pages/dashboard/dashboard-ai-shared.js",
     "pages/dashboard/dashboard-ai-context.js",
+    "pages/dashboard/dashboard-ai-mirror.js",
     "pages/dashboard/dashboard-ai-ui.js",
     "pages/ai-intelligence/ai-intelligence-data.js",
     "pages/ai-intelligence/engine/intent-detector.js",
@@ -1837,7 +1849,22 @@ const FEATURE_STYLE_GROUPS = {
     "styles/analytics.css",
     "pages/dashboard/dashboard-styles.css",
   ],
-  dashboardAi: ["pages/ai-intelligence/ai-intelligence.css"],
+  dashboardOverview: ["pages/dashboard/dashboard-overview.css"],
+  dashboardPipeline: ["pages/dashboard/dashboard-pipeline.css"],
+  dashboardOrders: ["pages/dashboard/dashboard-orders.css"],
+  dashboardCod: ["pages/dashboard/dashboard-cod.css"],
+  dashboardProducts: ["pages/dashboard/dashboard-products.css"],
+  dashboardCities: ["pages/dashboard/dashboard-cities.css"],
+  dashboardCommission: ["pages/dashboard/dashboard-master-commission.css"],
+  dashboardMaster: ["pages/dashboard/dashboard-master-commission.css"],
+  dashboardMarketing: ["pages/dashboard/dashboard-marketing.css"],
+  dashboardCampaigns: ["pages/dashboard/dashboard-campaigns.css"],
+  dashboardCalculator: ["pages/dashboard/dashboard-calculator.css"],
+  dashboardForecast: ["pages/dashboard/dashboard-forecast.css"],
+  dashboardAi: [
+    "pages/dashboard/dashboard-ai.css",
+    "pages/ai-intelligence/ai-intelligence.css",
+  ],
 };
 
 function loadStylesheetOnce(href) {
@@ -1896,19 +1923,30 @@ function preloadScriptResource(src) {
 }
 
 async function ensureFeatureScripts(feature) {
+  const perfTimer = TaagerPerf.start("feature:" + feature + ":ensure", {
+    feature,
+    styles: (FEATURE_STYLE_GROUPS[feature] || []).length,
+    scripts: (FEATURE_SCRIPT_GROUPS[feature] || []).length
+  });
   const styles = FEATURE_STYLE_GROUPS[feature] || [];
-  await Promise.all(styles.map((href) => loadStylesheetOnce(href)));
-  const scripts = FEATURE_SCRIPT_GROUPS[feature] || [];
-  scripts.forEach(preloadScriptResource);
-  for (const src of scripts) {
-    await loadScriptOnce(src);
+  try {
+    await Promise.all(styles.map((href) => loadStylesheetOnce(href)));
+    const scripts = FEATURE_SCRIPT_GROUPS[feature] || [];
+    scripts.forEach(preloadScriptResource);
+    for (const src of scripts) {
+      await loadScriptOnce(src);
+    }
+    TaagerPerf.end(perfTimer, { ok: true });
+  } catch (err) {
+    TaagerPerf.end(perfTimer, { ok: false, error: err && err.message ? err.message : String(err || "") });
+    throw err;
   }
 }
 
 window.ensureFeatureScripts = ensureFeatureScripts;
 
 const DASHBOARD_SECTION_FEATURES = {
-  master: "dashboard",
+  master: "dashboardMaster",
   overview: "dashboardOverview",
   pipeline: "dashboardPipeline",
   orders: "dashboardOrders",
@@ -1931,7 +1969,7 @@ window.ensureDashboardSection = function ensureDashboardSection(sectionId) {
 
 window.prewarmDashboardSections = function prewarmDashboardSections() {
   const start = () => {
-    ["dashboardProducts", "dashboardCampaigns"].reduce(
+    ["dashboardCities", "dashboardProducts", "dashboardCampaigns", "dashboardCod", "dashboardCalculator"].reduce(
       (chain, feature) => chain.then(() => ensureFeatureScripts(feature).catch(() => {})),
       Promise.resolve()
     );
@@ -2024,9 +2062,247 @@ window.TaagerPageLifecycle = {
   canWarmActivate,
 };
 
-function perfMark(name) {
-  if (!window.performance || typeof window.performance.mark !== "function") return;
-  try { window.performance.mark(name); } catch (_) {}
+const TaagerPerf = (() => {
+  const MAX_ENTRIES = 400;
+  const entries = [];
+  const openTimers = new Map();
+  let interactionProbeInstalled = false;
+  let longTaskObserver = null;
+
+  function now() {
+    return window.performance && typeof window.performance.now === "function"
+      ? window.performance.now()
+      : Date.now();
+  }
+
+  function enabled() {
+    try {
+      return window.__TAAGER_PERF_DIAGNOSTICS === true ||
+        localStorage.getItem("taager-perf") === "1" ||
+        /(?:\?|&)taagerPerf=1\b/.test(window.location.search || "");
+    } catch (_) {
+      return window.__TAAGER_PERF_DIAGNOSTICS === true;
+    }
+  }
+
+  function push(entry) {
+    const next = Object.assign({ at: Date.now() }, entry || {});
+    entries.push(next);
+    if (entries.length > MAX_ENTRIES) entries.splice(0, entries.length - MAX_ENTRIES);
+    if (enabled() && next.type === "measure") {
+      console.debug("[TaagerPerf]", next.name, Math.round(next.durationMs * 10) / 10 + "ms", next.detail || "");
+    }
+    return next;
+  }
+
+  function mark(name, detail) {
+    if (!name) return "";
+    if (window.performance && typeof window.performance.mark === "function") {
+      try { window.performance.mark(name); } catch (_) {}
+    }
+    push({ type: "mark", name, time: now(), detail: detail || null });
+    return name;
+  }
+
+  function readMarkTime(name) {
+    if (!name || !window.performance || typeof window.performance.getEntriesByName !== "function") return null;
+    try {
+      const matches = window.performance.getEntriesByName(name, "mark");
+      return matches.length ? matches[matches.length - 1].startTime : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function measure(name, startMark, endMark, detail) {
+    if (!name) return null;
+    let duration = null;
+    if (window.performance && typeof window.performance.measure === "function" && startMark) {
+      try {
+        window.performance.measure(name, startMark, endMark);
+        if (typeof window.performance.getEntriesByName === "function") {
+          const matches = window.performance.getEntriesByName(name, "measure");
+          if (matches.length) duration = matches[matches.length - 1].duration;
+        }
+      } catch (_) {}
+    }
+    if (duration == null) {
+      const start = readMarkTime(startMark);
+      const end = endMark ? readMarkTime(endMark) : now();
+      if (start != null && end != null) duration = Math.max(0, end - start);
+    }
+    if (duration == null) return null;
+    return push({ type: "measure", name, durationMs: duration, detail: detail || null });
+  }
+
+  function start(name, detail) {
+    const id = name + ":" + Date.now().toString(36) + ":" + Math.random().toString(36).slice(2, 7);
+    openTimers.set(id, { name, startedAt: now(), detail: detail || null });
+    mark(id + ":start", detail);
+    return id;
+  }
+
+  function end(id, detail) {
+    const timer = openTimers.get(id);
+    if (!timer) return null;
+    openTimers.delete(id);
+    const endMark = id + ":end";
+    mark(endMark, detail);
+    return measure(timer.name, id + ":start", endMark, Object.assign({}, timer.detail || {}, detail || {}));
+  }
+
+  function afterPaint(name, detail) {
+    const id = start(name, detail);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => end(id, { painted: true }));
+    });
+    return id;
+  }
+
+  function dump(filter) {
+    const value = filter ? String(filter).toLowerCase() : "";
+    const list = entries.filter((entry) => !value || String(entry.name || "").toLowerCase().indexOf(value) !== -1);
+    if (typeof console.table === "function") console.table(list);
+    else console.log("[TaagerPerf]", list);
+    return list;
+  }
+
+  function clear() {
+    entries.splice(0, entries.length);
+    openTimers.clear();
+    if (window.performance && typeof window.performance.clearMarks === "function") {
+      try {
+        window.performance.clearMarks();
+        window.performance.clearMeasures();
+      } catch (_) {}
+    }
+  }
+
+  function snapshot(label) {
+    const subscriptions = window.DashboardSubscriptionDiagnostics &&
+      typeof window.DashboardSubscriptionDiagnostics.snapshot === "function"
+      ? window.DashboardSubscriptionDiagnostics.snapshot()
+      : {};
+    const snap = {
+      label: label || "snapshot",
+      activeSection: (document.getElementById("db-shell-mount") || {})._dashboardActiveSection || "",
+      nodeCount: document.getElementsByTagName("*").length,
+      dashboardPaneChildren: (document.getElementById("dash-section-pane") || { children: [] }).children.length,
+      usedHeap: window.performance && window.performance.memory ? window.performance.memory.usedJSHeapSize : null,
+      subscriptions
+    };
+    push({ type: "snapshot", name: "stability:snapshot", detail: snap });
+    if (enabled()) console.debug("[TaagerPerf] stability snapshot", snap);
+    return snap;
+  }
+
+  async function runDashboardSectionStabilityCheck(sequence, rounds) {
+    const mount = document.getElementById("db-shell-mount");
+    if (!mount) throw new Error("Dashboard shell is not mounted.");
+    const sections = Array.isArray(sequence) && sequence.length
+      ? sequence
+      : ["products", "cities", "orders", "productForecast", "calculator", "cod", "master"];
+    const count = Math.max(1, Number(rounds) || 50);
+    const before = snapshot("before-" + count + "-section-switches");
+    for (let i = 0; i < count; i += 1) {
+      const section = sections[i % sections.length];
+      const button = mount.querySelector('.dash-nav-btn[data-section="' + section + '"]');
+      if (button) button.click();
+      await new Promise((resolve) => setTimeout(resolve, 180));
+    }
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const after = snapshot("after-" + count + "-section-switches");
+    return { before, after, entries: dump("dashboard:section") };
+  }
+
+  function labelInteraction(target, eventType) {
+    if (!target || !target.closest) return "";
+    const inputMap = [
+      ["#s5-search", "products:search-input"],
+      ["#sc-fb-search", "cities:search-input"],
+      ["#s3-search", "orders:search-input"],
+      ["#s9-product-search", "productForecast:search-input"],
+      ["#s7-in-budget", "calculator:budget-input"],
+      [".s9-spend-input,.s9-sim-spend-input,.s9-total-orders-input,.s9-delivered-orders-input,.s9-ndr-input,.s9-comm-input", "productForecast:forecast-input"]
+    ];
+    const clickMap = [
+      [".s5-pill,#s5-search-clear,.sc-pay-pill,#sc-fb-reset,#sc-fb-province,#sc-fb-product", "dashboard:filter-action"],
+      [".s5-page-btn,#s5-prev-page,#s5-next-page,.s9-page-btn,.s9-page-prev,.s9-page-next,.s7-source-page-btn,.s7-source-page-prev,.s7-source-page-next", "dashboard:pagination-action"],
+      [".s9-sort-btn,#s9-clear-sort,.s5-sort-option,.s5-sort-trigger,[data-sort]", "dashboard:sort-action"]
+    ];
+    const map = eventType === "input" || eventType === "change" ? inputMap : clickMap;
+    for (const item of map) {
+      if (target.closest(item[0])) return item[1];
+    }
+    return "";
+  }
+
+  function installDashboardInteractionProbe() {
+    if (interactionProbeInstalled) return;
+    interactionProbeInstalled = true;
+    ["input", "change", "click"].forEach((eventType) => {
+      document.addEventListener(eventType, (event) => {
+        const label = labelInteraction(event.target, eventType);
+        if (!label) return;
+        afterPaint("interaction:" + label + ":to-paint", {
+          eventType,
+          section: (document.getElementById("db-shell-mount") || {})._dashboardActiveSection || ""
+        });
+      }, true);
+    });
+  }
+
+  function installLongTaskObserver() {
+    if (longTaskObserver || !window.PerformanceObserver) return;
+    try {
+      longTaskObserver = new PerformanceObserver((list) => {
+        list.getEntries().forEach((entry) => {
+          push({
+            type: "longtask",
+            name: "renderer:longtask",
+            durationMs: entry.duration,
+            detail: {
+              activeRoute: window.__taagerActiveRoute || "",
+              activeSection: (document.getElementById("db-shell-mount") || {})._dashboardActiveSection || ""
+            }
+          });
+        });
+      });
+      longTaskObserver.observe({ entryTypes: ["longtask"] });
+    } catch (_) {}
+  }
+
+  const api = {
+    mark,
+    measure,
+    start,
+    end,
+    afterPaint,
+    dump,
+    clear,
+    snapshot,
+    runDashboardSectionStabilityCheck,
+    installDashboardInteractionProbe,
+    installLongTaskObserver,
+    entries: () => entries.slice(),
+    enableLogs: () => {
+      try { localStorage.setItem("taager-perf", "1"); } catch (_) {}
+      window.__TAAGER_PERF_DIAGNOSTICS = true;
+    },
+    disableLogs: () => {
+      try { localStorage.removeItem("taager-perf"); } catch (_) {}
+      window.__TAAGER_PERF_DIAGNOSTICS = false;
+    }
+  };
+
+  window.TaagerPerf = api;
+  installDashboardInteractionProbe();
+  installLongTaskObserver();
+  return api;
+})();
+
+function perfMark(name, detail) {
+  TaagerPerf.mark(name, detail);
 }
 
 function featureLoadingShell(title, body) {
@@ -2138,6 +2414,7 @@ function dismissPreloaderWhenReady(pageId) {
 let _activePageId = null;
 function showPage(id) {
   perfMark("route:" + id + ":visible");
+  TaagerPerf.measure("route:" + id + ":click-to-visible", "route:" + id + ":click", "route:" + id + ":visible", { pageId: id });
   const activePreview = document.querySelector(".premium-preview-overlay");
   if (activePreview) activePreview.remove();
 
@@ -2863,6 +3140,7 @@ async function goToDashboard() {
     }
     markPageMounted("page-dashboard");
     perfMark("route:page-dashboard:data-ready");
+    TaagerPerf.measure("route:page-dashboard:click-to-data-ready", "route:page-dashboard:click", "route:page-dashboard:data-ready", { pageId: "page-dashboard" });
     if (window.prewarmDashboardSections) window.prewarmDashboardSections();
     if (isLatestFeatureRoute("dashboard", token) && isActivePage("page-dashboard")) showPage("page-dashboard");
   } catch (err) {
@@ -2878,6 +3156,7 @@ async function goToAiIntelligence() {
     return;
   }
   const token = nextFeatureRouteToken("ai-intelligence");
+  perfMark("route:page-ai-intelligence:click");
   showFeatureLoadingPage("page-ai-intelligence", "Taager AI", "Loading AI intelligence...");
   showPage("page-ai-intelligence");
   try {
@@ -2887,6 +3166,8 @@ async function goToAiIntelligence() {
     if (typeof renderAiIntelligence === "function") {
       await renderAiIntelligence(() => goToSetup("run"));
     }
+    perfMark("route:page-ai-intelligence:data-ready");
+    TaagerPerf.measure("route:page-ai-intelligence:click-to-data-ready", "route:page-ai-intelligence:click", "route:page-ai-intelligence:data-ready", { pageId: "page-ai-intelligence" });
     if (isLatestFeatureRoute("ai-intelligence", token) && isActivePage("page-ai-intelligence")) showPage("page-ai-intelligence");
   } catch (err) {
     if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(err, { operation: "aiIntelligence.render" });
@@ -3188,6 +3469,7 @@ async function _onRunForDashboard(selectedAccountIds, period, options) {
     marketing: marketingResult
   };
 }
+window._onRunForDashboard = _onRunForDashboard;
 
 // ── Re-render current page when language switches ──
 async function reRenderCurrentPage() {

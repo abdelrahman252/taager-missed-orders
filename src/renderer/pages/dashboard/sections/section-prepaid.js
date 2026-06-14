@@ -223,7 +223,7 @@
         label: sTx('Prepaid Share', 'نسبة الدفع المسبق'),
         value: noData ? '-' : pct(pi.globalPrepaidPct),
         color: C.prepaid,
-        sub: noData ? sTx('No data available', 'لا تتوفر بيانات') : sTx('of total orders', 'من إجمالي الطلبات')
+        sub: noData ? sTx('No data available', 'لا تتوفر بيانات') : sTx('of net orders', 'من صافي الطلبات')
       },
       {
         label: sTx('Prepaid NDR', 'NDR المسبق'),
@@ -339,7 +339,9 @@
   }
 
   function buildPrepaidPromoSuggester(pi, geo) {
-    var avgCommission = geo && geo.kpis ? Number(geo.kpis.avgCommission || 0) : 0;
+    var avgCommission = geo && geo.kpis
+      ? Number(geo.kpis.averageProfit != null ? geo.kpis.averageProfit : (geo.kpis.avgCommission || 0))
+      : 0;
     var codNdr = pi ? Number(pi.codNdr || 0) : 0;
     var prepaidNdr = pi ? Number(pi.prepaidNdr || pi.globalPrepaidDr || pi.prepaidDr || 0) : 0;
     var hasData = avgCommission > 0 && codNdr > 0 && prepaidNdr > 0;

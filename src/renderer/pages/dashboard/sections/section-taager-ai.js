@@ -10,6 +10,9 @@
   var assistantMemory = null;
   var followUpSuggestions = [];
   var _mountEl = null;
+  var aiDiagnostics = null;
+  var diagnosticsBusy = false;
+  var lastDiagnosticsLogKey = "";
 
   function getAiSessionId() {
     try {
@@ -62,10 +65,9 @@
   }
 
   function formatAiMessageHtml(text) {
-    var html = esc(layoutAiMessageText(text || ""));
+    var html = esc(layoutAiMessageText(normalizeMetricSpacing(text || "")));
     html = html.replace(/\b((?:Net Delivery Rate\s*\(NDR\)|Delivery Rate\s*\(DR\)|NDR|DR|Delivery Rate|Cancel Rate|Cancellation Rate|Confirm Rate|Confirmation Rate)[^0-9%-]{0,50})(-?\d+(?:\.\d+)?%)/gi, function (_, label, value) {
-      var tone = metricTone(label, parseFloat(value));
-      return label + '<mark class="aii-metric-token ' + tone + '">' + value + '</mark>';
+      return label.replace(/\s+$/, "") + " " + value;
     });
     html = html.replace(/\b(lost commission|loss|lost)\s*(\(?-?\d[\d,.]*(?:\s*(?:SAR|USD|EGP))?\)?)/gi, function (_, label, value) {
       return label + ' <mark class="aii-metric-token bad">' + value + '</mark>';
@@ -150,9 +152,12 @@
       }
       assistantMemory = window.KhodAiSessionMemory.get ? window.KhodAiSessionMemory.get() : assistantMemory;
     }
-    followUpSuggestions = Array.isArray(response.followUpQuestions) && response.followUpQuestions.length
+    var nextSuggestions = Array.isArray(response.followUpQuestions) && response.followUpQuestions.length
       ? response.followUpQuestions.slice(0, 4)
       : defaultFollowUpSuggestions(response.decision || null);
+    followUpSuggestions = window.KhodAiShared && window.KhodAiShared.normalizeSuggestions
+      ? window.KhodAiShared.normalizeSuggestions(nextSuggestions)
+      : nextSuggestions;
   }
 
   function defaultFollowUpSuggestions(decision) {
@@ -180,27 +185,84 @@
   function formatStrategyPlanText(plan) {
     if (!plan || typeof plan !== "object") return "";
     var parts = [];
-    if (plan.recommendation) parts.push("Strategy plan: " + plan.recommendation);
-    if (plan.proof && plan.proof.length) parts.push("Proof: " + plan.proof.slice(0, 4).join(", ") + ".");
+    if (plan.recommendation) parts.push(uiText("Strategy plan: ", "خطة الاستراتيجية: ") + plan.recommendation);
+    if (plan.proof && plan.proof.length) parts.push(uiText("Proof: ", "الدليل: ") + plan.proof.slice(0, 4).join(", ") + ".");
     if (plan.campaignPlan) {
       var cp = plan.campaignPlan;
-      var campaign = [cp.objective ? "Objective: " + cp.objective : "", cp.structure, cp.audience || cp.cityLogic, cp.creativePlan].filter(Boolean);
-      if (campaign.length) parts.push("Campaign: " + campaign.join(" "));
+      var campaign = [cp.objective ? uiText("Objective: ", "الهدف: ") + cp.objective : "", cp.structure, cp.audience || cp.cityLogic, cp.creativePlan].filter(Boolean);
+      if (campaign.length) parts.push(uiText("Campaign: ", "الحملة: ") + campaign.join(" "));
     }
     if (plan.budgetPlan) {
       var bp = plan.budgetPlan;
       var budget = [bp.startBudget, bp.budgetRule, bp.killRule, bp.scaleRule].filter(Boolean);
-      if (budget.length) parts.push("Budget rules: " + budget.join(" "));
+      if (budget.length) parts.push(uiText("Budget rules: ", "قواعد الميزانية: ") + budget.join(" "));
     }
-    if (plan.watchMetrics && plan.watchMetrics.length) parts.push("Watch: " + plan.watchMetrics.slice(0, 6).join(", ") + ".");
+    if (plan.watchMetrics && plan.watchMetrics.length) parts.push(uiText("Watch: ", "راقب: ") + plan.watchMetrics.slice(0, 6).join(", ") + ".");
     return parts.join("\n\n");
   }
 
   function maybeAppendStrategyPlan(text, plan) {
     var planText = formatStrategyPlanText(plan);
     if (!planText) return text;
-    if (String(text || "").indexOf("Strategy plan:") !== -1) return text;
+    if (/Strategy plan:|خطة الاستراتيجية:/.test(String(text || ""))) return text;
     return String(text || "").trim() + "\n\n" + planText;
+  }
+
+  function shouldShowStrategyPlan(command) {
+    var value = String(command || "");
+    return /\b(detailed|formal|full)\s+(strategy|plan|report)\b|\breport\b/i.test(value) ||
+      /\u062e\u0637\u0629 \u0645\u0641\u0635\u0644\u0629|\u062e\u0637\u0629 \u0631\u0633\u0645\u064a\u0629|\u062a\u0642\u0631\u064a\u0631/.test(value);
+    /* istanbul ignore next */
+    return /\b(detailed|formal|full)\s+(strategy|plan|report)\b|\breport\b/i.test(String(command || "")) ||
+      /\u062e\u0637\u0629 \u0645\u0641\u0635\u0644\u0629|\u062e\u0637\u0629 \u0631\u0633\u0645\u064a\u0629|\u062a\u0642\u0631\u064a\u0631/.test(String(command || "")) ||
+      /خطة|استراتيجية|حملة|ميزانية|توسع|توسيع/.test(String(command || ""));
+  }
+
+  function preferConciseMirrorDraft(answerText, route) {
+    if (!route || !route.enhanceWithGemini || !route.message) return answerText;
+    var value = String(answerText || "");
+    var formalHeadings = /Strategy plan:|Budget rules:|Campaign:|\u062e\u0637\u0629 \u0627\u0644\u0627\u0633\u062a\u0631\u0627\u062a\u064a\u062c\u064a\u0629:|\u0642\u0648\u0627\u0639\u062f \u0627\u0644\u0645\u064a\u0632\u0627\u0646\u064a\u0629:|\u0627\u0644\u062d\u0645\u0644\u0629:/.test(value);
+    if (route.selectedSlice === "plan" && !validScalePlanAnswer(value)) return route.message;
+    if (genericBusinessAnswer(value)) return route.message;
+    if (route.selectedSlice === "account" && !validBusinessDiagnosisAnswer(value)) return route.message;
+    return value.length > 900 || formalHeadings ? route.message : answerText;
+  }
+
+  function genericBusinessAnswer(value) {
+    return /\bI am Taager AI\b|How can I assist|I can help you with|As an AI|أنا Taager AI|أستطيع مساعدتك|يمكنني مساعدتك/i.test(String(value || ""));
+  }
+
+  function validBusinessDiagnosisAnswer(value) {
+    var text = String(value || "");
+    var hasMetric = /\b(?:NDR|CPA|DR|ROI|ROAS)\b|\b\d+(?:\.\d+)?%|الربح|الخسار/i.test(text);
+    var hasAction = /Next move|Start with|Fix|Review|Reduce|Pause|ابدأ|الخطوة|عالج|أصلح|راجع|قلل|أوقف/i.test(text);
+    return hasMetric && hasAction && !genericBusinessAnswer(text);
+  }
+
+  function validScalePlanAnswer(value) {
+    var text = String(value || "");
+    var arabicShape = /\u0627\u0644\u062e\u0637\u0629 \u0627\u0644\u0645\u062e\u062a\u0635\u0631\u0629:/.test(text) &&
+      /\u0627\u0644\u062e\u0637\u0648\u0627\u062a:/.test(text) &&
+      /\u062d\u062f\u0648\u062f \u0627\u0644\u0625\u064a\u0642\u0627\u0641:/.test(text) &&
+      /\u0631\u0627\u0642\u0628:/.test(text);
+    var englishShape = /Quick plan:/i.test(text) && /Steps:/i.test(text) && /Stop rules:/i.test(text) && /Watch:/i.test(text);
+    var steps = (text.match(/^\s*\d+\./gm) || []).length;
+    var metricTypes = [
+      /\bNDR\b/i.test(text),
+      /\bCPA\b/i.test(text),
+      /break-even CPA|\u062d\u062f CPA \u0644\u0644\u062a\u0639\u0627\u062f\u0644/i.test(text),
+      /delivered orders|\u0637\u0644\u0628 \u0645\u0633\u0644\u0645/i.test(text),
+      /Earned Profit After Tax|\u0627\u0644\u0631\u0628\u062d \u0627\u0644\u0645\u062d\u0642\u0642 \u0628\u0639\u062f \u0627\u0644\u0636\u0631\u064a\u0628\u0629/i.test(text)
+    ].filter(Boolean).length;
+    return (arabicShape || englishShape) && steps >= 2 && metricTypes >= 2;
+  }
+
+  function normalizeMetricSpacing(value) {
+    return String(value || "")
+      .replace(/([،,:;؛])\s*(NDR|CPA)\b/gi, "$1\u00a0$2")
+      .replace(/\b(NDR|CPA)\s*(\d+(?:\.\d+)?)\s*%/gi, "$1 $2%")
+      .replace(/\b(NDR|CPA)(\d)/gi, "$1 $2")
+      .replace(/%([\u0621-\u064aa-z])/gi, "% $1");
   }
 
   function currentData() {
@@ -227,7 +289,9 @@
   }
 
   function actionButtons(actions, msgIdx) {
-    actions = Array.isArray(actions) ? actions : [];
+    actions = window.KhodAiShared && window.KhodAiShared.sanitizeActions
+      ? window.KhodAiShared.sanitizeActions(actions)
+      : (Array.isArray(actions) ? actions : []);
     if (!actions.length) return "";
     return '<div class="aii-chat-actions">' + actions.slice(0, 4).map(function (action, actionIdx) {
       return '<button type="button" class="aii-action-btn" data-aii-chat-action="' + msgIdx + ':' + actionIdx + '">' +
@@ -247,7 +311,7 @@
   function chatMessageHtml(msg, msgIdx) {
     var avatar = msg.sender === "user" ? '<div class="aii-avatar user-avatar">' + icon('user') + '</div>' : '<div class="aii-avatar ai-avatar">' + icon('diamond') + '</div>';
     var name = msg.sender === "user" ? tr("aii.you", null, "You") : tr("aii.assistant", null, "Taager AI");
-    return '<div class="aii-chat-msg ' + esc(msg.sender) + ' ' + esc(msg.state || "complete") + '">' +
+    return '<div class="aii-chat-msg ' + esc(msg.sender) + ' ' + esc(msg.state || "complete") + '" data-aii-chat-msg="' + msgIdx + '">' +
       avatar +
       '<div class="aii-chat-msg-body">' +
         '<span>' + esc(name) + '</span>' +
@@ -294,6 +358,79 @@
     '</div>';
   }
 
+  function diagnosticsSnapshot() {
+    if (!aiDiagnostics || !aiDiagnostics.developerMode) return null;
+    var events = Array.isArray(aiDiagnostics.recentEvents) ? aiDiagnostics.recentEvents : [];
+    var latestResponse = events.slice().reverse().find(function (event) { return event.type === "ai_response"; }) || {};
+    var traceId = latestResponse.traceId || (aiDiagnostics.gemini && aiDiagnostics.gemini.lastTraceId) || "";
+    var traceEvents = traceId ? events.filter(function (event) { return event.traceId === traceId; }) : [];
+    var request = traceEvents.find(function (event) { return event.type === "ai_request"; }) || {};
+    var failure = traceEvents.slice().reverse().find(function (event) {
+      return event.type === "gemini_failure" || event.type === "gemini_fallback" || event.type === "queue_failed";
+    }) || {};
+    var context = window.getDashboardAiContext
+      ? window.getDashboardAiContext({ data: window.dashboardGeoData || {} })
+      : {};
+    var dataset = context.dataset || {};
+    var locale = window.KhodAiShared && window.KhodAiShared.requestLocale
+      ? window.KhodAiShared.requestLocale("")
+      : { uiLocale: isArabicUi() ? "ar" : "en", responseLanguage: isArabicUi() ? "ar" : "en" };
+    return {
+      traceId: traceId || null,
+      timestamp: latestResponse.ts || request.ts || null,
+      accountScope: dataset.activeAccountId === "__all__" ? "all_accounts" : "single_account",
+      linkedAccounts: (dataset.accountOptions || []).filter(function (account) { return account.id !== "__all__"; }).map(function (account) { return account.label; }),
+      localePolicy: request.responseLanguage
+        ? { uiLocale: request.uiLocale, responseLanguage: request.responseLanguage }
+        : locale,
+      intent: latestResponse.intent || request.intent || null,
+      rankingContract: request.rankingContract || null,
+      localResult: context.localSummary || null,
+      model: latestResponse.model || (aiDiagnostics.gemini && aiDiagnostics.gemini.lastModel) || null,
+      routingMode: latestResponse.routingMode || null,
+      fallbackReason: failure.reason || failure.error || (aiDiagnostics.gemini && aiDiagnostics.gemini.lastFallbackReason) || null,
+      latencyMs: latestResponse.elapsedMs || null,
+      inputTokens: request.inputTokens || null,
+      maxOutputTokens: request.outputTokens || null,
+      validationFailures: latestResponse.validationFailures || [],
+      retries: aiDiagnostics.totals && aiDiagnostics.totals.retryEvents || 0,
+      mirror: window.DashboardAiMirror && window.DashboardAiMirror.diagnostics
+        ? window.DashboardAiMirror.diagnostics()
+        : null,
+      logDirectory: aiDiagnostics.logDirectory || null
+    };
+  }
+
+  function logAiDiagnostics() {
+    var snapshot = diagnosticsSnapshot();
+    if (!snapshot) return;
+    var key = "";
+    try {
+      key = JSON.stringify(snapshot);
+    } catch (_) {
+      key = String(Date.now());
+    }
+    if (key === lastDiagnosticsLogKey) return;
+    lastDiagnosticsLogKey = key;
+    console.log("[Taager AI] Developer diagnostics", snapshot);
+  }
+
+  function refreshAiDiagnostics(renderAfter) {
+    if (diagnosticsBusy || !window.api || typeof window.api.getAiAdminAnalytics !== "function") return Promise.resolve(null);
+    diagnosticsBusy = true;
+    return window.api.getAiAdminAnalytics().then(function (value) {
+      aiDiagnostics = value || null;
+      logAiDiagnostics();
+      return aiDiagnostics;
+    }).catch(function () {
+      aiDiagnostics = null;
+      return null;
+    }).finally(function () {
+      diagnosticsBusy = false;
+      if (renderAfter) renderPage();
+    });
+  }
+
   function renderAlerts(state) {
     if (!state.alerts.length) return "";
     return '<section class="aii-alert-strip" aria-label="' + esc(tr("aii.importantAlerts", null, "Important alerts")) + '">' +
@@ -312,17 +449,21 @@
   }
 
   function renderChat() {
-    var suggestions = followUpSuggestions.length ? followUpSuggestions : [
-      uiText("What should I do next?", "أعمل إيه دلوقتي؟"),
-      uiText("Build a scale plan", "اعمل خطة سكيل"),
-      uiText("Best cities to scale?", "أفضل مدن للسكيل؟"),
-      uiText("Explain weak NDR", "اشرح ضعف NDR"),
-    ];
+    var suggestions = window.KhodAiShared && window.KhodAiShared.normalizeSuggestions
+      ? window.KhodAiShared.normalizeSuggestions(followUpSuggestions)
+      : (followUpSuggestions.length ? followUpSuggestions : [
+        uiText("What should I do next?", "ماذا أفعل بعد ذلك؟"),
+        uiText("Build a scale plan", "ابنِ خطة توسع"),
+        uiText("Best cities to scale?", "ما أفضل المدن للتوسع؟"),
+        uiText("Explain weak NDR", "اشرح ضعف NDR"),
+      ]);
     var pendingLearning = assistantMemory && assistantMemory.pendingLearningSuggestion;
     var controlStrip = '<div class="aii-control-strip">' +
       '<span>' + esc(uiText("Reads all dashboard sections", "يقرأ كل أقسام الداشبورد")) + '</span>' +
       '<span>' + esc(uiText("Suggest-only", "اقتراحات فقط")) + '</span>' +
       '<span>' + esc(uiText("Memory saves after confirmation", "الحفظ بعد التأكيد")) + '</span>' +
+      '<button type="button" class="aii-diagnostics-btn" data-aii-diagnostics="copy">' + esc(uiText("Copy diagnostics", "Copy diagnostics")) + '</button>' +
+      '<button type="button" class="aii-diagnostics-btn" data-aii-diagnostics="logs">' + esc(uiText("Open logs", "Open logs")) + '</button>' +
     '</div>';
     var learningCard = pendingLearning
       ? '<div class="aii-learning-card">' +
@@ -603,6 +744,17 @@
 
   window.renderSectionTaagerAi = function (mountEl, data, ctx) {
     _mountEl = mountEl;
+    window.dashboardGeoData = data || window.dashboardGeoData || {};
+    if (window.DashboardAiMirror) {
+      if (typeof window.DashboardAiMirror.warm === "function") {
+        window.DashboardAiMirror.warm(window.dashboardGeoData, { force: false }).catch(function () {});
+      } else if (typeof window.DashboardAiMirror.hydrate === "function") {
+        window.DashboardAiMirror.hydrate(window.dashboardGeoData).catch(function () {});
+      } else if (typeof window.DashboardAiMirror.ensure === "function") {
+        window.DashboardAiMirror.ensure(window.dashboardGeoData);
+      }
+    }
+    if (aiDiagnostics == null) refreshAiDiagnostics(true);
     hydrateAssistantMemory().then(function () {
       if (_mountEl === mountEl) renderPage();
     });
@@ -611,6 +763,8 @@
 
   function wireChatActionEvents(root) {
     root.querySelectorAll("[data-aii-chat-action]").forEach(function (btn) {
+      if (btn.getAttribute("data-aii-wired") === "true") return;
+      btn.setAttribute("data-aii-wired", "true");
       btn.addEventListener("click", function () {
         var parts = String(btn.getAttribute("data-aii-chat-action") || "").split(":");
         var msg = chatMessages[Number(parts[0])];
@@ -620,30 +774,67 @@
     });
   }
 
-  function updateChatOnly() {
-    if (!_mountEl) return;
-    var log = _mountEl.querySelector("#aii-chat-log");
+  function appendImmediateChatTurn(startIndex) {
+    var log = _mountEl && _mountEl.querySelector("#aii-chat-log");
     if (!log) {
-      renderPage();
+      updateChatOnly(true);
       return;
     }
-    var snapshot = captureScrollState();
+    log.insertAdjacentHTML("beforeend",
+      chatMessageHtml(chatMessages[startIndex], startIndex) +
+      chatMessageHtml(chatMessages[startIndex + 1], startIndex + 1));
+    wireChatActionEvents(log);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function syncChatControls() {
+    if (!_mountEl) return;
     var input = _mountEl.querySelector("#aii-chat-input");
     var button = _mountEl.querySelector("#aii-chat-form button");
-    var hadFocus = document.activeElement === input;
-    log.innerHTML = chatLogHtml(chatMessages);
-    wireChatActionEvents(_mountEl);
-    log.scrollTop = log.scrollHeight;
     if (input) input.disabled = chatBusy;
     if (button) {
       button.disabled = chatBusy;
       if (chatBusy) button.setAttribute("aria-busy", "true");
       else button.removeAttribute("aria-busy");
     }
+  }
+
+  function replaceChatMessageNode(index) {
+    var log = _mountEl && _mountEl.querySelector("#aii-chat-log");
+    var node = log && log.querySelector('[data-aii-chat-msg="' + index + '"]');
+    if (!node || !chatMessages[index]) return false;
+    node.outerHTML = chatMessageHtml(chatMessages[index], index);
+    wireChatActionEvents(log);
+    log.scrollTop = log.scrollHeight;
+    return true;
+  }
+
+  function updatePendingHeartbeat(index) {
+    var msg = chatMessages[index];
+    if (!msg || msg.sender !== "assistant" || msg.state !== "pending") return;
+    msg.text = tr("ai.thinkingStream", null, "Gemini is thinking...");
+    if (!replaceChatMessageNode(index)) updateChatOnly(true);
+  }
+
+  function updateChatOnly(fast) {
+    if (!_mountEl) return;
+    var log = _mountEl.querySelector("#aii-chat-log");
+    if (!log) {
+      renderPage();
+      return;
+    }
+    var snapshot = fast ? null : captureScrollState();
+    var input = _mountEl.querySelector("#aii-chat-input");
+    var button = _mountEl.querySelector("#aii-chat-form button");
+    var hadFocus = document.activeElement === input;
+    log.innerHTML = chatLogHtml(chatMessages);
+    wireChatActionEvents(_mountEl);
+    log.scrollTop = log.scrollHeight;
+    syncChatControls();
     if (hadFocus && input) {
       try { input.focus({ preventScroll: true }); } catch (_) { try { input.focus(); } catch (_) {} }
     }
-    scheduleScrollRestore(snapshot);
+    if (snapshot) scheduleScrollRestore(snapshot);
   }
 
   function wireEvents(root) {
@@ -733,6 +924,23 @@
         }
       });
     });
+    root.querySelectorAll("[data-aii-diagnostics]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var action = String(btn.getAttribute("data-aii-diagnostics") || "");
+        var snapshot = diagnosticsSnapshot() || {};
+        if (action === "copy") {
+          var payload = JSON.stringify(snapshot, null, 2);
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(payload).catch(function () {});
+          }
+          console.log("[Taager AI] Diagnostics copied", snapshot);
+          return;
+        }
+        if (action === "logs" && window.api && typeof window.api.openAiLogFolder === "function") {
+          window.api.openAiLogFolder().catch(function () {});
+        }
+      });
+    });
     wireChatActionEvents(root);
     var btnAction = root.querySelector("[data-aii-run-action]");
     if (btnAction) {
@@ -766,17 +974,67 @@
     return window.DashboardMarketingState.load(accountId).catch(function () { return null; });
   }
 
+  function mirrorRoute(command, parsedIntent, localStrategic, warmOnly) {
+    if (!window.DashboardAiMirror || typeof window.DashboardAiMirror.answer !== "function") return null;
+    if (warmOnly && typeof window.DashboardAiMirror.answerWarm === "function") {
+      return window.DashboardAiMirror.answerWarm(command, {
+        parsedIntent: parsedIntent || null,
+        localStrategic: localStrategic || null
+      });
+    }
+    return window.DashboardAiMirror.answer(command, window.dashboardGeoData || {}, {
+      parsedIntent: parsedIntent || null,
+      localStrategic: localStrategic || null,
+      warmOnly: !!warmOnly
+    });
+  }
+
+  function historyForAi() {
+    return chatMessages
+      .filter(function (msg) { return msg && msg.state !== "pending" && msg.state !== "pending-input"; })
+      .slice(-8)
+      .map(function (msg) {
+        return { role: msg.sender === "user" ? "user" : "assistant", text: msg.text || "" };
+      });
+  }
+
   async function ask(prompt) {
     var text = String(prompt || "").trim();
     if (!text || chatBusy) return;
+    var aiPerfTimer = window.TaagerPerf && typeof window.TaagerPerf.start === "function"
+      ? window.TaagerPerf.start("ai:request:renderer", { source: "dashboard-ai", commandLength: text.length })
+      : null;
+    function finishAiTiming(kind, extra) {
+      var detail = Object.assign({ kind: kind || "unknown" }, extra || {});
+      if (window.TaagerPerf && typeof window.TaagerPerf.end === "function" && aiPerfTimer) {
+        window.TaagerPerf.end(aiPerfTimer, detail);
+        aiPerfTimer = null;
+      }
+      if (window.TaagerPerf && typeof window.TaagerPerf.afterPaint === "function") {
+        window.TaagerPerf.afterPaint("ai:answer:rendered", detail);
+      }
+    }
+
+    var immediateRoute = mirrorRoute(text, null, null, true);
+    if (immediateRoute && immediateRoute.message && immediateRoute.rankingRequest && !immediateRoute.enhanceWithGemini) {
+      var immediateStartIndex = chatMessages.length;
+      chatMessages.push({ sender: "user", state: "complete", text: text });
+      chatMessages.push({ sender: "assistant", state: "complete", text: immediateRoute.message, actions: immediateRoute.actions || [] });
+      appendImmediateChatTurn(immediateStartIndex);
+      setTimeout(function () { rememberAssistantTurn({}, immediateRoute); }, 0);
+      finishAiTiming("local-mirror-immediate", { routingMode: "LOCAL_ONLY" });
+      return;
+    }
 
     // [Taager AI DEBUG] ──────────────────────────────────────────────
     // ─────────────────────────────────────────────────────────────
 
+    var pendingStartIndex = chatMessages.length;
     chatMessages.push({ sender: "user", state: "complete", text: text });
-    chatMessages.push({ sender: "assistant", state: "pending", text: tr("ai.thinking", null, "Reading current dashboard state...") });
+    chatMessages.push({ sender: "assistant", state: "pending", text: tr("ai.thinking", null, "Preparing a local answer...") });
     chatBusy = true;
-    updateChatOnly();
+    appendImmediateChatTurn(pendingStartIndex);
+    syncChatControls();
     await nextUiTick();
     await hydrateAssistantMemory();
 
@@ -784,7 +1042,10 @@
     var parsedIntent = null;
     var analyticsResult = null;
     var localStrategic = null;
-    await refreshMarketingSpendForAi();
+    var marketingRefreshPromise = refreshMarketingSpendForAi().then(function (result) {
+      if (result && window.invalidateDashboardAiContextCache) window.invalidateDashboardAiContextCache();
+      return result;
+    });
     var learningContext = window.getDashboardAiContext
       ? window.getDashboardAiContext({ data: window.dashboardGeoData || {} })
       : (window.buildDashboardAiContext ? window.buildDashboardAiContext({ data: window.dashboardGeoData || {} }) : {});
@@ -801,6 +1062,7 @@
         followUpSuggestions = ["What should I do next?", "Use this rule in a scale plan", "Show scale candidates", "Best cities to scale?"];
         chatBusy = false;
         updateChatOnly();
+        finishAiTiming("local-learning-save", { routingMode: "LOCAL_ONLY" });
         return;
       }
       if (isLearningReject(text) && typeof window.KhodAiSessionMemory.discardPendingLearning === "function") {
@@ -811,6 +1073,7 @@
         followUpSuggestions = defaultFollowUpSuggestions(null);
         chatBusy = false;
         updateChatOnly();
+        finishAiTiming("local-learning-reject", { routingMode: "LOCAL_ONLY" });
         return;
       }
     }
@@ -824,29 +1087,43 @@
         followUpSuggestions = ["Save it", "Do not save", "Use it in a scale plan", "What should I do next?"];
         chatBusy = false;
         updateChatOnly();
+        finishAiTiming("local-learning-detected", { routingMode: "LOCAL_ONLY" });
         return;
       }
     }
     if (window.KhodAiBusinessOrchestrator && window.KhodAiBusinessOrchestrator.orchestrate) {
       var orchestration = window.KhodAiBusinessOrchestrator.orchestrate(text, window.dashboardGeoData || {});
-      if (orchestration.mode === "followup" || orchestration.mode === "local") {
-        chatMessages.pop();
-        chatMessages.push({ sender: "assistant", state: orchestration.mode === "followup" ? "pending-input" : "complete", text: orchestration.message, actions: orchestration.actions || [] });
-        if (orchestration.mode === "local") rememberAssistantTurn(orchestration.context || {}, orchestration);
-        chatBusy = false;
-        updateChatOnly();
-        return;
-      }
       parsedIntent = orchestration.parsedIntent;
       analyticsResult = orchestration.analyticsResult;
       context = orchestration.context || {};
       localStrategic = orchestration.localStrategic || null;
+      if (orchestration.mode === "followup") {
+        chatMessages.pop();
+        chatMessages.push({ sender: "assistant", state: "pending-input", text: orchestration.message, actions: orchestration.actions || [] });
+        chatBusy = false;
+        updateChatOnly();
+        return;
+      }
+      if (orchestration.mode === "local") {
+        var rankingRoute = mirrorRoute(text, parsedIntent, localStrategic);
+        var preferMirrorKpi = rankingRoute && parsedIntent && parsedIntent.intent === "KPI_ANALYSIS" && rankingRoute.selectedSlice === "account";
+        var localResponse = rankingRoute && (rankingRoute.rankingRequest || preferMirrorKpi) ? rankingRoute : orchestration;
+        chatMessages.pop();
+        chatMessages.push({ sender: "assistant", state: "complete", text: localResponse.message, actions: localResponse.actions || [] });
+        rememberAssistantTurn(context, localResponse);
+        chatBusy = false;
+        updateChatOnly();
+        finishAiTiming("local-orchestrator", { routingMode: "LOCAL_ONLY" });
+        return;
+      }
       if (localStrategic && localStrategic.message) {
+        var draftRoute = mirrorRoute(text, parsedIntent, localStrategic);
         chatMessages[chatMessages.length - 1] = {
           sender: "assistant",
-          state: "pending",
-          text: tr("ai.analyzing", null, "🧠 Analyzing metrics & formulating strategy..."),
-          actions: []
+          state: "complete",
+          text: draftRoute && draftRoute.message ? draftRoute.message : localStrategic.message,
+          actions: draftRoute && draftRoute.actions || localStrategic.actions || [],
+          mirrorDraft: true
         };
         updateChatOnly();
         await nextUiTick();
@@ -869,6 +1146,7 @@
       rememberAssistantTurn(context, { message: localText });
       chatBusy = false;
       updateChatOnly();
+      finishAiTiming("local-intent", { routingMode: parsedIntent.blockedReason ? "LOCAL_FALLBACK" : "LOCAL_ONLY" });
       return;
     }
 
@@ -877,35 +1155,124 @@
       chatMessages.push({ sender: "assistant", state: "error", text: tr("ai.unavailableMessage", null, "AI systems offline. Using cached intelligence models.") });
       chatBusy = false;
       updateChatOnly();
+      finishAiTiming("local-unavailable", { routingMode: "LOCAL_FALLBACK" });
       return;
     }
     try {
+      var localeRequest = window.KhodAiShared && window.KhodAiShared.requestLocale
+        ? window.KhodAiShared.requestLocale(text)
+        : { uiLocale: isArabicUi() ? "ar" : "en", responseLanguage: isArabicUi() ? "ar" : "en" };
+      var route = mirrorRoute(text, parsedIntent, localStrategic);
+      if (!route || route.enhanceWithGemini) {
+        await marketingRefreshPromise;
+        route = mirrorRoute(text, parsedIntent, localStrategic);
+      }
+      if (route && route.message && !route.enhanceWithGemini) {
+        var pendingIndex = chatMessages.length - 1;
+        chatMessages[pendingIndex] = { sender: "assistant", state: "complete", text: route.message, actions: route.actions || [], partial: !!route.partial };
+        rememberAssistantTurn(context, { message: route.message, actions: route.actions || [] });
+        chatBusy = false;
+        updateChatOnly();
+        finishAiTiming("local-mirror", { routingMode: "LOCAL_ONLY", partial: !!route.partial });
+        if (route.partial && route.mirrorPending && typeof route.mirrorPending.then === "function") {
+          route.mirrorPending.then(function () {
+            var readyRoute = mirrorRoute(text, parsedIntent, localStrategic);
+            if (!readyRoute || !readyRoute.message || readyRoute.partial || readyRoute.enhanceWithGemini) return;
+            if (!chatMessages[pendingIndex] || !chatMessages[pendingIndex].partial) return;
+            chatMessages[pendingIndex] = { sender: "assistant", state: "complete", text: readyRoute.message, actions: readyRoute.actions || [] };
+            rememberAssistantTurn(context, { message: readyRoute.message, actions: readyRoute.actions || [] });
+            updateChatOnly();
+          }).catch(function () {});
+        }
+        return;
+      }
+      var selectedSlice = route && route.slice ? route.slice : context;
+      context = {
+        intent: parsedIntent && parsedIntent.intent || context.intent || "",
+        question: text,
+        localePolicy: localeRequest,
+        aiMirror: route ? {
+          mirrorKey: route.mirror && route.mirror.mirrorKey,
+          selectedSlice: route.selectedSlice,
+          route: route.enhanceWithGemini ? "LOCAL_PLUS_GEMINI" : "LOCAL_ONLY",
+          enhanceWithGemini: !!route.enhanceWithGemini,
+          localDraft: route.message
+        } : null,
+        localStrategicSkeleton: localStrategic ? {
+          message: localStrategic.message,
+          actions: localStrategic.actions || [],
+          decision: localStrategic.decision || null,
+          strategyPlan: localStrategic.strategyPlan || null,
+          followUpQuestions: localStrategic.followUpQuestions || []
+        } : null,
+        selectedMirrorSlice: selectedSlice
+      };
+      var aiRequestId = "";
+      var unsubscribeProgress = null;
+      var pendingIndexForProgress = chatMessages.length - 1;
+      if ((!route || route.enhanceWithGemini) && window.api && typeof window.api.onDashboardAiProgress === "function") {
+        aiRequestId = "ai-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+        unsubscribeProgress = window.api.onDashboardAiProgress(aiRequestId, function (event) {
+          if (!event || event.done) return;
+          updatePendingHeartbeat(pendingIndexForProgress);
+        });
+      }
+      var mainRequestTimer = window.TaagerPerf && typeof window.TaagerPerf.start === "function"
+        ? window.TaagerPerf.start("ai:request:main-process-roundtrip", { source: "dashboard-ai" })
+        : null;
       var response = await window.api.dashboardAiQuery({
+        requestId: aiRequestId,
         command: text,
         context: context,
-        forceGemini: true,
+        uiLocale: localeRequest.uiLocale,
+        responseLanguage: localeRequest.responseLanguage,
+        localDraft: route && route.message || "",
         sessionId: getAiSessionId(),
         assistantMemory: assistantMemory,
         workflow: assistantMemory && assistantMemory.assistantWorkflow,
         historySummary: assistantMemory && assistantMemory.lastDiagnosis,
-        history: chatMessages.slice(-8).map(function (msg) {
-          return { role: msg.sender === "user" ? "user" : "assistant", text: msg.text || "" };
-        })
+        history: historyForAi()
       });
+      if (unsubscribeProgress) {
+        unsubscribeProgress();
+        unsubscribeProgress = null;
+      }
+      if (window.TaagerPerf && typeof window.TaagerPerf.end === "function" && mainRequestTimer) {
+        window.TaagerPerf.end(mainRequestTimer, {
+          ok: true,
+          routingMode: response && response.meta && response.meta.routingMode || "",
+          source: response && response.meta && response.meta.source || "",
+          cache: response && response.meta && response.meta.cache || ""
+        });
+      }
       // [Taager AI DEBUG]
       var normalized = window.KhodAiIntelligenceData ? window.KhodAiIntelligenceData.normalizeAiResponse(response) : { message: "" };
-      chatMessages.pop();
+      if (chatMessages[chatMessages.length - 1] && chatMessages[chatMessages.length - 1].mirrorDraft) chatMessages.pop();
+      else if (chatMessages[chatMessages.length - 1] && chatMessages[chatMessages.length - 1].state === "pending") chatMessages.pop();
       var meta = response && response.meta ? response.meta : {};
-      var shouldUseLocal = localStrategic && (meta.blocked || meta.error || (meta.source === "fallback" && response.message === "AI service is not available. I am showing local dashboard guidance instead."));
-      var answerText = shouldUseLocal ? localStrategic.message : (normalized.message || (localStrategic && localStrategic.message) || tr("ai.contextReady", null, "Analysis complete."));
-      answerText = maybeAppendStrategyPlan(answerText, normalized.strategyPlan || (localStrategic && localStrategic.strategyPlan));
+      var shouldUseLocal = route && route.message && (meta.blocked || meta.error || meta.source === "fallback");
+      var answerText = shouldUseLocal ? route.message : (normalized.message || (route && route.message) || (localStrategic && localStrategic.message) || tr("ai.contextReady", null, "Analysis complete."));
+      answerText = preferConciseMirrorDraft(answerText, route);
+      if (window.KhodAiShared && window.KhodAiShared.matchesResponseLanguage &&
+          !window.KhodAiShared.matchesResponseLanguage(answerText, localeRequest.responseLanguage)) {
+        answerText = route && route.message
+          ? route.message
+          : localStrategic && localStrategic.message
+          ? localStrategic.message
+          : uiText("I could not produce a reliable answer in the selected language.", "لم أتمكن من إنتاج إجابة موثوقة باللغة المحددة.");
+      }
+      if (shouldShowStrategyPlan(text)) {
+        answerText = maybeAppendStrategyPlan(answerText, normalized.strategyPlan || (localStrategic && localStrategic.strategyPlan));
+      }
+      answerText = normalizeMetricSpacing(answerText);
       var learningSuggestion = normalized.strategyPlan && normalized.strategyPlan.learningSuggestion;
       if (learningSuggestion && window.KhodAiSessionMemory && typeof window.KhodAiSessionMemory.proposeLearningSuggestion === "function") {
         var proposedAfterAnswer = window.KhodAiSessionMemory.proposeLearningSuggestion(learningSuggestion, context || {});
         if (proposedAfterAnswer) answerText += "\n\n" + learningPromptText(proposedAfterAnswer);
       }
-      var answerActions = shouldUseLocal ? (localStrategic.actions || []) : ((normalized.actions && normalized.actions.length ? normalized.actions : (localStrategic && localStrategic.actions)) || []);
-      var memoryResponse = shouldUseLocal ? Object.assign({}, localStrategic || {}, { message: answerText }) : response;
+      var answerActions = shouldUseLocal ? (route.actions || []) : ((normalized.actions && normalized.actions.length ? normalized.actions : (localStrategic && localStrategic.actions)) || []);
+      if (window.KhodAiShared && window.KhodAiShared.sanitizeActions) answerActions = window.KhodAiShared.sanitizeActions(answerActions);
+      var memoryResponse = shouldUseLocal ? Object.assign({}, localStrategic || {}, { message: answerText, actions: answerActions }) : response;
       chatMessages.push({ sender: "assistant", state: "complete", text: answerText, actions: answerActions });
       rememberAssistantTurn(context, memoryResponse);
       chatBusy = false;
@@ -924,19 +1291,30 @@
       if (normalized.forecasts && normalized.forecasts.length) injectedAi.forecasts = normalized.forecasts.concat(injectedAi.forecasts).slice(0, 6);
       if (normalized.alerts && normalized.alerts.length) injectedAi.alerts = normalized.alerts.concat(injectedAi.alerts).slice(0, 6);
     } catch (err) {
+      if (unsubscribeProgress) {
+        unsubscribeProgress();
+        unsubscribeProgress = null;
+      }
+      if (window.TaagerPerf && typeof window.TaagerPerf.end === "function" && mainRequestTimer) {
+        window.TaagerPerf.end(mainRequestTimer, { ok: false, error: err && err.message ? err.message : String(err || "") });
+      }
       chatMessages.pop();
-      if (localStrategic) {
-        chatMessages.push({ sender: "assistant", state: "complete", text: localStrategic.message, actions: localStrategic.actions || [] });
-        rememberAssistantTurn(context, localStrategic);
-        if (localStrategic.insights && localStrategic.insights.length) injectedAi.insights = localStrategic.insights.concat(injectedAi.insights).slice(0, 8);
-        if (localStrategic.recommendations && localStrategic.recommendations.length) injectedAi.recommendations = localStrategic.recommendations.concat(injectedAi.recommendations).slice(0, 8);
-        if (localStrategic.alerts && localStrategic.alerts.length) injectedAi.alerts = localStrategic.alerts.concat(injectedAi.alerts).slice(0, 6);
+      if ((route && route.message) || localStrategic) {
+        var fallbackAnswer = route && route.message ? route.message : localStrategic.message;
+        var fallbackActions = route && route.actions || localStrategic.actions || [];
+        chatMessages.push({ sender: "assistant", state: "complete", text: fallbackAnswer, actions: fallbackActions });
+        rememberAssistantTurn(context, Object.assign({}, localStrategic || {}, { message: fallbackAnswer, actions: fallbackActions }));
+        if (localStrategic && localStrategic.insights && localStrategic.insights.length) injectedAi.insights = localStrategic.insights.concat(injectedAi.insights).slice(0, 8);
+        if (localStrategic && localStrategic.recommendations && localStrategic.recommendations.length) injectedAi.recommendations = localStrategic.recommendations.concat(injectedAi.recommendations).slice(0, 8);
+        if (localStrategic && localStrategic.alerts && localStrategic.alerts.length) injectedAi.alerts = localStrategic.alerts.concat(injectedAi.alerts).slice(0, 6);
       } else {
         chatMessages.push({ sender: "assistant", state: "error", text: tr("ai.requestFailed", null, "AI request failed.") + " " + (err && err.message ? err.message : "") });
       }
     }
     chatBusy = false;
+    refreshAiDiagnostics(false);
     updateChatOnly();
+    finishAiTiming("main-response", { routingMode: "GEMINI_OR_FALLBACK" });
   }
 
 })();

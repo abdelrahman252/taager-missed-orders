@@ -6,11 +6,14 @@
       : root && root.TaagerCampaignDecision,
     typeof module !== "undefined" && module.exports
       ? require("./dashboard-currency-core")
-      : root && root.TaagerDashboardCurrencyCore
+      : root && root.TaagerDashboardCurrencyCore,
+    typeof module !== "undefined" && module.exports
+      ? require("./dashboard-product-attribution-core")
+      : root && root.TaagerProductAttribution
   );
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (root) root.TaagerCampaignQueryCore = api;
-})(typeof window !== "undefined" ? window : null, function (decisionApi, currencyApi) {
+})(typeof window !== "undefined" ? window : null, function (decisionApi, currencyApi, attributionApi) {
   "use strict";
 
 const evaluate = decisionApi && decisionApi.evaluate ? decisionApi.evaluate : function () {
@@ -24,6 +27,7 @@ function text(value) {
 }
 
 function keyText(value) {
+  if (attributionApi && attributionApi.normalizeText) return attributionApi.normalizeText(value);
   return text(value).toLowerCase().normalize("NFKC").replace(/[^\w\u0600-\u06ff]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
@@ -77,8 +81,8 @@ function rowSku(row) {
   return text(row.sku || row.skuNumber);
 }
 
-function rowName(row) {
-  return text(row.products || row.productName || row.product) || "Unknown product";
+  function rowName(row) {
+    return text(row.productName || row.product || row.products || row.name) || "Unknown product";
 }
 
 function rowProfit(row) {
@@ -259,7 +263,8 @@ function normalizeProducts(productRows, reportingCurrency, egpRate, orderCurrenc
     const profit = round(convert(row.commission ?? row.taagerProfit ?? row.profit ?? 0, sourceCurrency, reportingCurrency, egpRate, ratesOverride));
     const deliveredSales = round(convert(row.deliveredSales ?? row.sales ?? 0, sourceCurrency, reportingCurrency, egpRate, ratesOverride));
     const totalSales = round(convert(row.totalSales ?? row.revenue ?? row.sales ?? row.deliveredSales ?? 0, sourceCurrency, reportingCurrency, egpRate, ratesOverride));
-    const orders = number(row.placedCount ?? row.orders);
+    const orders = number(row.netOrderCount ?? row.orders ?? row.placedCount);
+    const totalOrderCount = number(row.totalOrderCount ?? row.rawTotalOrders ?? orders);
     const delivered = number(row.deliveredCount ?? row.units ?? row.delivered);
     const ndrPct = number(row.ndrPct ?? row.deliveryRate ?? row.deliveryPct);
     const avgDeliveredProfit = delivered ? round(profit / delivered) : 0;
@@ -270,6 +275,8 @@ function normalizeProducts(productRows, reportingCurrency, egpRate, orderCurrenc
       product: rowName(row),
       sku: rowSku(row),
       orders,
+      netOrderCount: orders,
+      totalOrderCount,
       delivered,
       canceled: number(row.canceledCount || row.canceled),
       profit,
@@ -281,47 +288,23 @@ function normalizeProducts(productRows, reportingCurrency, egpRate, orderCurrenc
       breakEvenCpa: round(avgDeliveredProfit * ndrPct / 100),
       topCities: Array.isArray(row.cityBreakdown) ? row.cityBreakdown.slice(0, 4).map((city) => ({
         city: text(city.name || city.city),
-        orders: number(city.count || city.orders),
+        orders: number(city.netOrderCount ?? city.orders ?? city.count),
+        netOrderCount: number(city.netOrderCount ?? city.orders ?? city.count),
+        totalOrderCount: number(city.totalOrderCount ?? city.rawTotalOrders ?? city.netOrderCount ?? city.orders ?? city.count),
         ndrPct: number(city.ndr || city.ndrPct),
       })) : [],
     };
   });
 }
 
-function productSkus(skuString) {
-  const raw = text(skuString);
-  const list = [];
-  raw.split(/[\s,]+/).forEach((part) => {
-    const clean = keyText(part);
-    if (!clean || clean === "n a" || clean === "na") return;
-    if (clean.length >= 2 && !list.includes(clean)) {
-      list.push(clean);
-    }
+function uniqueMatchedNetOrders(orderRows, matchedProductIds) {
+  const matchedOrders = new Set();
+  (Array.isArray(orderRows) ? orderRows : []).forEach((row, index) => {
+    if (statusBucket(row) === "canceled_by_you") return;
+    const id = productKey(row, text(row.accountId || row.dashboardAccountId)).toLowerCase();
+    if (matchedProductIds.has(id)) matchedOrders.add(rowOrderKey(row, index));
   });
-  return list;
-}
-
-function exactSkuMatch(campaign, products) {
-  const campaignText = " " + keyText(campaignName(campaign)) + " ";
-  const accountId = text(campaign.dashboardAccountId || campaign.accountId);
-  const country = keyText(campaign.country || "");
-  let match = null;
-  let bestSkuLength = 0;
-  products.forEach((product) => {
-    if (accountId && product.accountId && product.accountId !== accountId) return;
-    const prodCountry = product.country && product.country !== "unknown" ? product.country : "";
-    if (country && prodCountry && prodCountry !== country) return;
-    const skus = productSkus(product.sku);
-    skus.forEach((sku) => {
-      if (campaignText.indexOf(" " + sku + " ") !== -1) {
-        if (!match || sku.length > bestSkuLength) {
-          match = product;
-          bestSkuLength = sku.length;
-        }
-      }
-    });
-  });
-  return match;
+  return matchedOrders.size;
 }
 
 function buildCampaignIntelligence(input) {
@@ -331,10 +314,25 @@ function buildCampaignIntelligence(input) {
   const products = Array.isArray(input.products) && input.products.length
     ? normalizeProducts(input.products, reportingCurrency, egpRate, input.orderCurrency, ratesOverride)
     : buildProducts(input.orderRows || [], reportingCurrency, egpRate, input.orderCurrency, ratesOverride);
+  const productIndex = attributionApi.createProductIndex(products, {
+    productNameOverrides: input.productNameOverrides || {},
+  });
   const productGroups = new Map();
   const campaigns = [];
   const objectiveMap = new Map();
-  const totals = { spend: 0, matchedSpend: 0, unmatchedSpend: 0, campaignCount: 0, impressions: 0, clicks: 0 };
+  const totals = {
+    spend: 0,
+    matchedSpend: 0,
+    unmatchedSpend: 0,
+    campaignCount: 0,
+    impressions: 0,
+    clicks: 0,
+    separatedSkuRows: 0,
+    gluedSkuRows: 0,
+    nameRows: 0,
+    ambiguousRows: 0,
+    unmatchedRows: 0,
+  };
 
   (input.campaignRows || []).forEach((source) => {
     const rawCurrency = currency(source.rawCurrency || source.currency || source.account_currency || "SAR");
@@ -347,7 +345,8 @@ function buildCampaignIntelligence(input) {
     const platformCpc = metric(source, ["cpc", "cost_per_link_click", "cost_per_unique_click"]) || (clicks ? rawSpend / clicks : 0);
     const platformCpm = metric(source, ["cpm"]) || (impressions ? rawSpend / impressions * 1000 : 0);
     const objective = objectiveOf(source);
-    const product = exactSkuMatch(source, products);
+    const attribution = attributionApi.matchCampaign(source, productIndex);
+    const product = attribution.status === "matched" ? attribution.product : null;
     const row = {
       campaignId: campaignId(source),
       campaign: campaignName(source),
@@ -373,9 +372,16 @@ function buildCampaignIntelligence(input) {
       productSku: product ? product.sku : "",
       productKey: product ? product.id : "",
       attributionVerified: !!product,
-      matchMethod: product ? "sku" : "unmatched",
-      matchConfidence: product ? "high" : "none",
-      note: product ? "Orders and delivery results come from the Taager dashboard." : "Unmatched spend; no Taager product attribution.",
+      matchMethod: attribution.method,
+      matchDetail: attribution.matchDetail,
+      matchConfidence: attribution.confidence,
+      matchedSku: attribution.matchedSku,
+      candidateIds: attribution.candidateIds,
+      note: product
+        ? "Orders and delivery results come from the Taager dashboard."
+        : (attribution.status === "ambiguous"
+          ? "Ambiguous campaign name; spend was not assigned to a product."
+          : "Unmatched spend; no Taager product attribution."),
     };
     row.searchHaystack = keyText([row.campaign, row.campaignId, row.platform, row.objective, row.status, row.product, row.productSku, row.matchMethod].join(" "));
     campaigns.push(row);
@@ -385,6 +391,11 @@ function buildCampaignIntelligence(input) {
     totals.clicks += clicks;
     if (product) totals.matchedSpend += spend;
     else totals.unmatchedSpend += spend;
+    if (attribution.matchDetail === "separated_sku") totals.separatedSkuRows++;
+    else if (attribution.matchDetail === "glued_sku") totals.gluedSkuRows++;
+    else if (attribution.method === "name") totals.nameRows++;
+    else if (attribution.method === "ambiguous") totals.ambiguousRows++;
+    else totals.unmatchedRows++;
     if (!objectiveMap.has(objective)) objectiveMap.set(objective, { objective, spend: 0, campaignCount: 0 });
     objectiveMap.get(objective).spend += spend;
     objectiveMap.get(objective).campaignCount++;
@@ -394,6 +405,7 @@ function buildCampaignIntelligence(input) {
         id: product.id, accountId: product.accountId, country: product.country, currency: reportingCurrency,
         product: product.product, sku: product.sku, spend: 0, campaignCount: 0, impressions: 0, clicks: 0, landingPageViews: 0, contentViews: 0, trafficViews: 0, trafficViewAvailable: false,
         taagerOrders: product.orders, taagerDelivered: product.delivered, taagerNdrPct: product.ndrPct,
+        netOrderCount: product.netOrderCount, totalOrderCount: product.totalOrderCount,
         cancelPct: product.cancelPct, taagerProfit: product.profit,
         totalSales: product.totalSales,
         deliveredSales: product.deliveredSales,
@@ -447,7 +459,11 @@ function buildCampaignIntelligence(input) {
 
   totals.matchedSpendPct = totals.spend ? round(totals.matchedSpend / totals.spend * 100) : 0;
   totals.unmatchedSpendPct = totals.spend ? round(totals.unmatchedSpend / totals.spend * 100) : 0;
-  totals.taagerOrders = groups.reduce((sum, row) => sum + row.taagerOrders, 0);
+  totals.productOrderCount = groups.reduce((sum, row) => sum + row.taagerOrders, 0);
+  totals.uniqueMatchedNetOrders = Array.isArray(input.orderRows) && input.orderRows.length
+    ? uniqueMatchedNetOrders(input.orderRows, new Set(productGroups.keys()))
+    : totals.productOrderCount;
+  totals.taagerOrders = totals.uniqueMatchedNetOrders;
   totals.taagerDelivered = groups.reduce((sum, row) => sum + row.taagerDelivered, 0);
   totals.taagerProfit = round(groups.reduce((sum, row) => sum + row.taagerProfit, 0));
   totals.deliveredSales = round(groups.reduce((sum, row) => sum + row.deliveredSales, 0));
@@ -471,7 +487,8 @@ function buildCampaignIntelligence(input) {
       return result;
     }, { scale: 0, fix_first: 0, watch: 0, pause: 0 }),
     creativeSummary: {
-      fatigueCandidates: campaigns.filter((row) => row.attributionVerified && row.spend > 0).slice(0, 8),
+      fatigueCandidates: [],
+      fatigueAvailable: false,
       winners: groups.filter((row) => row.decision === "scale").slice(0, 5).map((row) => row.product),
     },
   };

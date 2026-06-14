@@ -376,6 +376,8 @@ const store          = createStore({ encryptionKey: deriveStoreKey("taager-creds
 const licenseStore   = createStore({ encryptionKey: deriveStoreKey("taager-license-v1"), name: "license" });
 const analyticsStore = createStore({ name: "analytics" }); // unencrypted — run history only
 const dashboardStore = createStore({ name: "dashboard" }); // unencrypted — monthly snapshots
+const AI_MIRROR_STORE_KEY = "aiMirrors.v1";
+const AI_MIRROR_STORE_LIMIT = 8;
 const dashboardQueryService = createDashboardQueryService({
   getAccounts: () => dashboardStore.get("accounts", {}),
   getAllowedAccountIds: () => {
@@ -2951,25 +2953,65 @@ function convertMarketingAmount(amount, from, to, egpRate = 52) {
   return ((Number(amount || 0) || 0) / Number(rates[source] || 1)) * Number(rates[target] || 1);
 }
 
+function mergeMarketingSourceAccounts(...lists) {
+  const byId = new Map();
+  lists.forEach((list) => {
+    (Array.isArray(list) ? list : []).forEach((account) => {
+      const id = String(account && account.id || "").trim();
+      if (!id) return;
+      byId.set(id, { ...(byId.get(id) || {}), ...account, id });
+    });
+  });
+  return Array.from(byId.values());
+}
+
+function mergeMarketingMappings(...items) {
+  const out = {};
+  items.forEach((mappings) => {
+    if (!mappings || typeof mappings !== "object") return;
+    Object.keys(mappings).forEach((key) => {
+      out[key] = mergeMarketingSourceAccounts(out[key], mappings[key]);
+    });
+  });
+  return out;
+}
+
+function mappedMarketingSourcesForKeys(mappings, keys) {
+  const source = mappings && typeof mappings === "object" ? mappings : {};
+  const lookup = (Array.isArray(keys) ? keys : [])
+    .map((key) => String(key || "").trim().toLowerCase())
+    .filter(Boolean);
+  for (const key of lookup) {
+    if (Array.isArray(source[key])) return source[key];
+  }
+  return [];
+}
+
 function getCachedMarketingStatus(accountId, platform) {
   const accounts = dashboardStore.get("accounts", {});
   if (accountId === "__all__") {
+    const storedAll = accounts.__all__?.marketing?.[platform] || null;
     const individualStatuses = Object.keys(accounts)
       .filter((id) => id !== "__all__" && id !== "__connection__")
       .map((id) => accounts[id]?.marketing?.[platform])
       .filter(Boolean);
 
-    if (individualStatuses.length === 0) return null;
+    if (individualStatuses.length === 0) return storedAll;
 
     const connectedStatuses = individualStatuses.filter((s) => s.status === "connected");
     if (connectedStatuses.length === 0) {
       return {
         platform,
-        status: "disconnected",
-        lastSyncAt: null,
-        summary: null,
-        linkedAccounts: [],
-        mappings: {},
+        status: storedAll && (storedAll.status === "connected" || storedAll.status === "pending") ? storedAll.status : "disconnected",
+        lastSyncAt: storedAll && storedAll.lastSyncAt || null,
+        summary: storedAll && storedAll.summary || null,
+        linkedAccounts: storedAll && Array.isArray(storedAll.linkedAccounts) ? storedAll.linkedAccounts : [],
+        mappedAccounts: storedAll && Array.isArray(storedAll.mappedAccounts) ? storedAll.mappedAccounts : [],
+        availableAccounts: storedAll && Array.isArray(storedAll.availableAccounts) ? storedAll.availableAccounts : [],
+        mappings: storedAll && storedAll.mappings || {},
+        limits: storedAll && storedAll.limits || null,
+        diagnostics: storedAll && storedAll.diagnostics || null,
+        statusCheckedAt: storedAll && storedAll.statusCheckedAt || null,
       };
     }
 
@@ -3049,8 +3091,12 @@ function getCachedMarketingStatus(accountId, platform) {
       summary: allSummary,
       sourceAccountName: `${connectedStatuses.length} synced accounts`,
       sourceAccountId: "",
-      linkedAccounts: Array.from(linkedAccountsMap.values()),
-      mappings: combinedMappings,
+      linkedAccounts: mergeMarketingSourceAccounts(storedAll && storedAll.linkedAccounts, Array.from(linkedAccountsMap.values())),
+      mappedAccounts: mergeMarketingSourceAccounts(storedAll && storedAll.mappedAccounts),
+      availableAccounts: mergeMarketingSourceAccounts(storedAll && storedAll.availableAccounts),
+      mappings: mergeMarketingMappings(storedAll && storedAll.mappings, combinedMappings),
+      limits: storedAll && storedAll.limits || null,
+      diagnostics: storedAll && storedAll.diagnostics || null,
       statusCheckedAt: oldestStatusCheckedAt,
     };
   }
@@ -3114,6 +3160,33 @@ function saveCachedMarketingStatus(accountId, platform, status) {
   const changed = marketingRevisionValue(previous) !== marketingRevisionValue(next);
   if (changed) bumpDashboardMarketingRevision();
   return changed;
+}
+
+function saveCachedAllMarketingMappingStatus(platform, result) {
+  if (!result || !result.ok) return;
+  saveCachedMarketingStatus("__all__", platform, result);
+  const mappings = result.mappings && typeof result.mappings === "object" ? result.mappings : {};
+  const knownAccounts = mergeMarketingSourceAccounts(result.availableAccounts, result.linkedAccounts, result.mappedAccounts);
+  const settings = normalizeMarketingAccountSettings([]);
+  settings.forEach((setting) => {
+    const sourceAccounts = mappedMarketingSourcesForKeys(mappings, [
+      setting.dashboardAccountId,
+      setting.dashboardAccountKey,
+      ...(Array.isArray(setting.dashboardAccountKeys) ? setting.dashboardAccountKeys : []),
+    ]);
+    saveCachedMarketingStatus(setting.dashboardAccountId, platform, {
+      platform,
+      status: sourceAccounts.length ? "connected" : "disconnected",
+      linkedAccounts: sourceAccounts,
+      mappedAccounts: sourceAccounts,
+      availableAccounts: sourceAccounts.length ? [] : knownAccounts,
+      mappings,
+      limit: result.limits && result.limits[setting.dashboardAccountId] || null,
+      summary: null,
+      lastSyncAt: null,
+      cache: result.cache || null,
+    });
+  });
 }
 
 async function callMarketingBackend(action, accountId, platform, range) {
@@ -3270,7 +3343,9 @@ ipcMain.handle("save-marketing-mapping", async (_, accountId, platform = "tiktok
 
 ipcMain.handle("save-all-marketing-mappings", async (_, platform = "tiktok", mappings = []) => {
   try {
-    return await callMarketingBackend("save_mappings", "__all__", platform, { mappings });
+    const result = await callMarketingBackend("save_mappings", "__all__", platform, { mappings });
+    if (result && result.ok) saveCachedAllMarketingMappingStatus(platform, result);
+    return result;
   } catch (error) {
     log.error("[Marketing][Main] all mappings save failed", { platform, error: error.message });
     return { ok: false, error: error.message };
@@ -3402,7 +3477,121 @@ ipcMain.handle("clear-ai-assistant-memory", async (_, scope) => {
   }
 });
 
-ipcMain.handle("dashboard-ai-query", async (_, payload) => {
+function sanitizeDashboardAiMirror(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const pick = (obj, keys) => {
+    const out = {};
+    keys.forEach((key) => {
+      if (obj && Object.prototype.hasOwnProperty.call(obj, key)) out[key] = obj[key];
+    });
+    return out;
+  };
+  const limitRows = (rows, limit) => (Array.isArray(rows) ? rows : [])
+    .slice(0, limit)
+    .map((row) => row && typeof row === "object" ? pick(row, [
+      "id", "name", "sku", "city", "orders", "delivered", "ndrPct", "drPct", "cancelPct",
+      "deliveredSales", "aov", "cpa", "breakEvenCpa", "netProfit", "profitLoss",
+      "earnedProfitAfterTax", "earnedCommission", "riskScore", "scalingScore",
+      "scaleScore", "decision", "nextAction", "matchedProduct", "objective", "status",
+      "spend", "currency", "deliveredCpa", "roi", "action"
+    ]) : null)
+    .filter(Boolean);
+  const mirrorKey = String(value.mirrorKey || "").slice(0, 500);
+  if (!mirrorKey) return null;
+  return {
+    version: Number(value.version || 1),
+    mirrorKey,
+    builtAt: String(value.builtAt || new Date().toISOString()).slice(0, 80),
+    freshness: String(value.freshness || "persisted").slice(0, 40),
+    accountSummary: value.accountSummary && typeof value.accountSummary === "object" ? pick(value.accountSummary, [
+      "activeAccountId", "activeAccountLabel", "periodLabel", "deliveredDateMode",
+      "totalOrders", "delivered", "ndrPct", "drPct", "cpa", "spend", "deliveredSales",
+      "aov", "earnedProfitAfterTax", "lostProfitAfterTax", "netProfit", "breakEvenCpa",
+      "currency", "healthLevel", "growthLevel"
+    ]) : {},
+    productScorecards: limitRows(value.productScorecards, 40),
+    cityScorecards: limitRows(value.cityScorecards, 40),
+    campaignScorecards: limitRows(value.campaignScorecards, 25),
+    rankings: value.rankings && typeof value.rankings === "object" ? value.rankings : {},
+    decisions: value.decisions && typeof value.decisions === "object" ? value.decisions : {},
+    planInputs: value.planInputs && typeof value.planInputs === "object" ? value.planInputs : {},
+    diagnostics: value.diagnostics && typeof value.diagnostics === "object" ? value.diagnostics : {},
+  };
+}
+
+function readDashboardAiMirrorStore() {
+  const saved = dashboardStore.get(AI_MIRROR_STORE_KEY, null);
+  const items = saved && saved.items && typeof saved.items === "object" ? saved.items : {};
+  const order = Array.isArray(saved && saved.order) ? saved.order.map((key) => String(key || "")).filter(Boolean) : Object.keys(items);
+  const migrated = dashboardStore.get("aiMirror.v1", null);
+  if (migrated && migrated.mirrorKey && !items[migrated.mirrorKey]) {
+    const mirror = sanitizeDashboardAiMirror(migrated);
+    if (mirror) {
+      items[mirror.mirrorKey] = mirror;
+      order.unshift(mirror.mirrorKey);
+    }
+  }
+  const cleanOrder = [];
+  order.forEach((key) => {
+    if (items[key] && cleanOrder.indexOf(key) === -1) cleanOrder.push(key);
+  });
+  Object.keys(items).forEach((key) => {
+    if (cleanOrder.indexOf(key) === -1) cleanOrder.push(key);
+  });
+  while (cleanOrder.length > AI_MIRROR_STORE_LIMIT) {
+    const oldKey = cleanOrder.pop();
+    delete items[oldKey];
+  }
+  return { version: 1, items, order: cleanOrder };
+}
+
+function writeDashboardAiMirrorStore(next) {
+  const items = next && next.items && typeof next.items === "object" ? next.items : {};
+  const order = Array.isArray(next && next.order) ? next.order : Object.keys(items);
+  dashboardStore.set(AI_MIRROR_STORE_KEY, {
+    version: 1,
+    savedAt: new Date().toISOString(),
+    items,
+    order: order.slice(0, AI_MIRROR_STORE_LIMIT),
+  });
+}
+
+ipcMain.handle("get-dashboard-ai-mirror", async (_, mirrorKey) => {
+  const key = String(mirrorKey || "");
+  const cache = readDashboardAiMirrorStore();
+  const saved = cache.items[key] || null;
+  if (!saved || saved.mirrorKey !== key) return null;
+  cache.order = [key].concat(cache.order.filter((item) => item !== key));
+  writeDashboardAiMirrorStore(cache);
+  return { ok: true, mirror: saved };
+});
+
+ipcMain.handle("save-dashboard-ai-mirror", async (_, payload) => {
+  const mirror = sanitizeDashboardAiMirror(payload && payload.mirror || payload);
+  if (!mirror) return { ok: false, error: "invalid_mirror" };
+  const cache = readDashboardAiMirrorStore();
+  mirror.savedAt = new Date().toISOString();
+  cache.items[mirror.mirrorKey] = mirror;
+  cache.order = [mirror.mirrorKey].concat(cache.order.filter((key) => key !== mirror.mirrorKey));
+  while (cache.order.length > AI_MIRROR_STORE_LIMIT) {
+    const oldKey = cache.order.pop();
+    delete cache.items[oldKey];
+  }
+  writeDashboardAiMirrorStore(cache);
+  return { ok: true, mirrorKey: mirror.mirrorKey, builtAt: mirror.builtAt };
+});
+
+ipcMain.handle("dashboard-ai-query", async (event, payload) => {
+  const _aiRequestStartedAt = Date.now();
+  const _aiRequestId = payload && payload.requestId ? String(payload.requestId).slice(0, 120) : "";
+  const emitAiProgress = (done, error) => {
+    if (!_aiRequestId || !event || !event.sender || event.sender.isDestroyed()) return;
+    event.sender.send("dashboard-ai-progress", {
+      requestId: _aiRequestId,
+      done: !!done,
+      error: !!error,
+    });
+  };
   // [Taager Bot DEBUG] ---------------------------------------------
   const _cmd = payload && payload.command ? String(payload.command).slice(0, 80) : "(no command)";
   const _ctxBytes = payload && payload.context ? Buffer.byteLength(JSON.stringify(payload.context), "utf8") : 0;
@@ -3417,6 +3606,7 @@ ipcMain.handle("dashboard-ai-query", async (_, payload) => {
   try {
     const validation = validateDashboardAiPayload(payload || {});
     if (!validation.ok) {
+      emitAiProgress(true, false);
       return {
         message: validation.message || "Invalid AI request.",
         insights: [],
@@ -3424,10 +3614,18 @@ ipcMain.handle("dashboard-ai-query", async (_, payload) => {
         forecasts: [],
         alerts: [],
         actions: [],
-        meta: { source: "local-guard", blocked: true, code: validation.code },
+        meta: { source: "local-guard", blocked: true, code: validation.code, mainProcessDurationMs: Date.now() - _aiRequestStartedAt },
       };
     }
-    const _result = await askDashboardAi(payload || {});
+    const _result = await askDashboardAi(payload || {}, {
+      onProgress: () => emitAiProgress(false, false),
+    });
+    emitAiProgress(true, false);
+    if (_result && typeof _result === "object") {
+      _result.meta = Object.assign({}, _result.meta || {}, {
+        mainProcessDurationMs: Date.now() - _aiRequestStartedAt
+      });
+    }
     // [Taager Bot DEBUG]
     log.info("[TaagerAI-Debug] AI response message:", _result && _result.message ? _result.message.slice(0, 120) : "(empty)");
     log.info("[TaagerAI-Debug] AI insights count:", _result && _result.insights ? _result.insights.length : 0);
@@ -3436,12 +3634,14 @@ ipcMain.handle("dashboard-ai-query", async (_, payload) => {
     }
     return _result;
   } catch (err) {
+    emitAiProgress(true, true);
     log.error("[TaagerAI-Debug] dashboard-ai-query THREW unexpectedly:", err && err.message ? err.message : String(err));
     monitoring.captureException(err, { operation: "dashboard.aiQuery", extra: { command: _cmd, contextBytes: _ctxBytes } });
     return {
       message: "AI service failed.",
       insights: [err && err.message ? err.message : String(err)],
       actions: [],
+      meta: { source: "fallback", error: true, mainProcessDurationMs: Date.now() - _aiRequestStartedAt },
     };
   }
 });

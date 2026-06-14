@@ -49,8 +49,19 @@
     calculator: 'roi'
   };
 
+  var DASHBOARD_PANE_CACHE_LIMIT = 4;
+  var CACHEABLE_SECTIONS = {
+    overview: true
+  };
+
   function icon(name, color) {
     return window.icon ? window.icon(name, { size: 15, color: color }) : '';
+  }
+
+  function quickGuideIcon() {
+    var rendered = window.icon ? window.icon('info', { size: 21, color: 'var(--dash-accent, #a855f7)' }) : '';
+    if (rendered) return rendered;
+    return '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="var(--dash-accent, #a855f7)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>';
   }
 
   function tr(key, params) {
@@ -147,6 +158,59 @@
     var title = navLabel(navItemById(activeSection));
     var manageAccountsLabel = window._t ? window._t('setup.nav_accounts') : 'Manage Accounts';
     return '<div id="dash-global-topbar" class="dash-global-topbar" dir="' + (isRtl() ? 'rtl' : 'ltr') + '">' +
+      '<div class="dash-topbar-primary">' +
+        '<div class="dash-topbar-identity">' +
+          '<div class="dashboard-account-select-wrap" id="dashboard-account-select-wrap" aria-label="' + tr('shell.account') + '"></div>' +
+          '<div class="dash-topbar-title">' +
+            '<span id="dashboard-section-title">' + title + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="dash-topbar-status">' +
+          '<div class="dash-update-status-wrap">' +
+            '<span class="dash-last-update-label">' + tr('shell.lastUpdate') + '</span>' +
+            '<span id="dashboard-last-updated" class="dash-last-updated">--</span>' +
+          '</div>' +
+          '<button type="button" id="dashboard-tour-btn" class="taager-tour-quick-guide" title="' + tr('tour.common.quickGuide') + '" aria-label="' + tr('tour.common.quickGuide') + '" data-tooltip="' + tr('tour.common.quickGuide') + '"><span class="taager-tour-guide-mark" aria-hidden="true">' + quickGuideIcon() + '</span></button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="dash-topbar-controls">' +
+        '<div class="dash-control-group dash-period-group">' +
+          '<span class="dash-topbar-field-label">' + tr('period.label') + '</span>' +
+          '<div id="dashboard-period-select-wrap" class="dashboard-period-select-wrap" aria-label="' + tr('period.label') + '"></div>' +
+        '</div>' +
+        '<div id="dashboard-custom-range" class="dashboard-custom-range" hidden>' +
+          '<span class="dashboard-custom-range-dates">' +
+            '<button type="button" id="dashboard-date-from" class="dashboard-date-input"></button>' +
+            '<span class="dashboard-date-sep">-</span>' +
+            '<button type="button" id="dashboard-date-to" class="dashboard-date-input"></button>' +
+          '</span>' +
+          '<button type="button" id="dashboard-view-range-btn" class="dashboard-view-range-btn" disabled aria-disabled="true">' +
+            '<span class="dashboard-view-range-icon">' + icon('calendar', 'currentColor') + '<span class="dashboard-view-range-check" aria-hidden="true">âœ“</span></span>' +
+            '<span>' + tr('period.viewRange') + '</span>' +
+          '</button>' +
+        '</div>' +
+        '<div class="dash-control-group dash-ndr-group">' +
+          '<span class="dash-topbar-field-label">' + tr('deliveredDate.label') + '</span>' +
+          '<div id="dashboard-delivered-date-select-wrap" class="dashboard-delivered-date-select-wrap" aria-label="' + tr('deliveredDate.label') + '"></div>' +
+        '</div>' +
+        '<div id="dashboard-expected-ndr-range" class="dashboard-custom-range dashboard-expected-ndr-range" hidden>' +
+          '<button type="button" id="dashboard-expected-ndr-date-from" class="dashboard-date-input"></button>' +
+          '<span class="dashboard-date-sep">-</span>' +
+          '<button type="button" id="dashboard-expected-ndr-date-to" class="dashboard-date-input"></button>' +
+        '</div>' +
+        '<div class="dashboard-rates-control">' +
+          '<button type="button" id="dashboard-rates-btn" class="dash-rates-btn" title="' + tr('rates.label') + '" data-tooltip="' + tr('rates.label') + '">' +
+            '<span>' + tr('rates.label') + '</span><strong id="dashboard-rates-note">defaults</strong>' +
+          '</button>' +
+          '<div id="dashboard-rates-panel" class="dashboard-rates-panel" hidden></div>' +
+        '</div>' +
+        '<div id="dashboard-reporting-currency-wrap" class="dashboard-period-select-wrap dashboard-currency-select-wrap" aria-label="' + tr('currency.label') + '"></div>' +
+        '<button type="button" id="dashboard-update-btn" class="dash-update-btn">' + icon('refreshCw', 'currentColor') + '<span>' + tr('period.update') + '</span></button>' +
+        (window._teamLeaderEnabled ? '<button type="button" id="dashboard-manage-accounts-btn" class="dash-update-btn"><span>' + esc(manageAccountsLabel) + '</span></button>' : '') +
+      '</div>' +
+    '</div>';
+    /*
+    return '<div id="dash-global-topbar" class="dash-global-topbar" dir="' + (isRtl() ? 'rtl' : 'ltr') + '">' +
       '<div class="dash-topbar-cluster">' +
         '<div class="dashboard-account-select-wrap" id="dashboard-account-select-wrap" aria-label="' + tr('shell.account') + '" style="min-width:0;max-width:360px;"></div>' +
         '<div class="dashboard-rates-control">' +
@@ -188,9 +252,10 @@
           '<span class="dash-last-update-label" style="color:var(--dash-text-faint, #64748b);font-weight:700;">' + tr('shell.lastUpdate') + '</span>' +
           '<span id="dashboard-last-updated" class="dash-last-updated" style="color:var(--dash-text, #fff);font-weight:800;">--</span>' +
         '</div>' +
-        '<button type="button" id="dashboard-tour-btn" class="taager-tour-quick-guide" style="width:34px;height:34px;min-width:34px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--dash-text, #fff) !important;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);cursor:pointer;margin:0;flex-shrink:0;" title="' + tr('tour.common.quickGuide') + '" data-tooltip="' + tr('tour.common.quickGuide') + '"><span class="taager-tour-guide-mark" style="color:var(--dash-text, #fff) !important;font-size:16px;font-weight:800;line-height:1;display:inline-block;">?</span></button>' +
+        '<button type="button" id="dashboard-tour-btn" class="taager-tour-quick-guide" style="width:34px;height:34px;min-width:34px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--dash-text, #fff) !important;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);cursor:pointer;margin:0;flex-shrink:0;" title="' + tr('tour.common.quickGuide') + '" aria-label="' + tr('tour.common.quickGuide') + '" data-tooltip="' + tr('tour.common.quickGuide') + '"><span class="taager-tour-guide-mark" aria-hidden="true" style="color:var(--dash-text, #fff) !important;line-height:1;display:inline-flex;align-items:center;justify-content:center;">' + quickGuideIcon() + '</span></button>' +
       '</div>' +
     '</div>';
+    */
   }
 
   function bindDashboardTour(shellEl, data, ctx) {
@@ -518,37 +583,24 @@
 
   function loaderHTML(sectionId) {
     var label = navLabel(navItemById(sectionId || 'master'));
-    var steps = [
-      trText('shell.loadingStep.privateData', 'Preparing private data'),
-      trText('shell.loadingStep.orders', 'Organizing orders'),
-      trText('shell.loadingStep.pipeline', 'Building order pipeline'),
-      trText('shell.loadingStep.cities', 'Mapping cities'),
-      trText('shell.loadingStep.products', 'Reading product signals'),
-      trText('shell.loadingStep.cod', 'Checking COD collection'),
-      trText('shell.loadingStep.accountCalculator', 'Preparing account calculator'),
-      trText('shell.loadingStep.productCalculator', 'Preparing product calculator'),
-      trText('shell.loadingStep.marketing', 'Matching marketing spend'),
-      trText('shell.loadingStep.buyLines', 'Reading buy-line signals'),
-      trText('shell.loadingStep.ai', 'Scanning dashboard insights')
-    ];
-    var stepHtml = steps.map(function (step, idx) {
-      return '<span style="--dash-loader-delay:' + (idx * 1.6).toFixed(1) + 's">' + esc(step) + '</span>';
-    }).join('');
-    return '<div class="dash-section-preloader" data-dashboard-preloader="true" role="status" aria-live="polite">' +
+    var loadingLabel = esc(tr('shell.loading')) + ' ' + esc(label);
+    return '<div class="dash-section-preloader" data-dashboard-preloader="true" data-dashboard-section="' + esc(sectionId || 'master') + '" role="status" aria-live="polite" aria-label="' + loadingLabel + '">' +
       '<div class="dash-preloader-head">' +
         '<span class="dash-preloader-spinner" aria-hidden="true"></span>' +
         '<div class="dash-preloader-copy">' +
           '<div class="dash-preloader-title">' + esc(tr('shell.loading')) + '</div>' +
-          '<div class="dash-preloader-section">' +
-            '<span class="dash-preloader-cycle" aria-hidden="true">' + stepHtml + '</span>' +
-            '<span class="dash-preloader-target">' + esc(trText('shell.loadingFor', 'for')) + ' ' + esc(label) + '</span>' +
-          '</div>' +
+          '<div class="dash-preloader-section">' + esc(label) + '</div>' +
         '</div>' +
       '</div>' +
       '<div class="dash-preloader-grid" aria-hidden="true">' +
         '<span></span><span></span><span></span><span></span>' +
       '</div>' +
-      '<div class="dash-preloader-block" aria-hidden="true"></div>' +
+      '<div class="dash-preloader-body" aria-hidden="true">' +
+        '<div class="dash-preloader-chart"></div>' +
+        '<div class="dash-preloader-table">' +
+          '<span></span><span></span><span></span><span></span><span></span>' +
+        '</div>' +
+      '</div>' +
     '</div>';
   }
 
@@ -563,6 +615,216 @@
       if (shellEl._dashboardRenderToken !== token) return;
       render();
     });
+  }
+
+  function normalizeSectionLifecycle(handle) {
+    if (!handle) return null;
+    if (typeof handle === 'function') {
+      return { destroy: handle };
+    }
+    if (typeof handle === 'object') {
+      return handle;
+    }
+    return null;
+  }
+
+  function runLifecycleHook(lifecycle, hook, pane) {
+    if (!lifecycle || typeof lifecycle[hook] !== 'function') return;
+    try {
+      lifecycle[hook](pane);
+    } catch (err) {
+      console.error('[Dashboard] Section lifecycle ' + hook + ' failed:', err);
+    }
+  }
+
+  function destroyPaneChartInstances(pane) {
+    if (!pane) return;
+    var candidates = ['_commissionChartInstance'];
+    candidates.forEach(function (key) {
+      var chart = pane[key];
+      if (chart && typeof chart.destroy === 'function') {
+        try { chart.destroy(); } catch (err) { console.warn('[Dashboard] Chart cleanup failed:', err); }
+      }
+      pane[key] = null;
+    });
+    if (window.Chart && typeof window.Chart.getChart === 'function' && typeof pane.querySelectorAll === 'function') {
+      pane.querySelectorAll('canvas').forEach(function (canvas) {
+        var chart = window.Chart.getChart(canvas);
+        if (chart && typeof chart.destroy === 'function') {
+          try { chart.destroy(); } catch (err) { console.warn('[Dashboard] Canvas chart cleanup failed:', err); }
+        }
+      });
+    }
+  }
+
+  function isCacheableSection(sectionId) {
+    return !!CACHEABLE_SECTIONS[sectionId];
+  }
+
+  function getPaneCache(shellEl) {
+    if (!shellEl._dashboardPaneCache) {
+      shellEl._dashboardPaneCache = {
+        map: Object.create(null),
+        order: [],
+        tick: 0
+      };
+    }
+    return shellEl._dashboardPaneCache;
+  }
+
+  function touchCachedPane(shellEl, pane) {
+    if (!pane || !pane._dashboardCacheKey) return;
+    var cache = getPaneCache(shellEl);
+    cache.tick += 1;
+    pane._dashboardCacheUsedAt = cache.tick;
+    cache.order = cache.order.filter(function (key) { return key !== pane._dashboardCacheKey; });
+    cache.order.push(pane._dashboardCacheKey);
+  }
+
+  function setSectionPaneHidden(pane, hidden) {
+    if (!pane) return;
+    pane.hidden = !!hidden;
+    pane.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+    if ('inert' in pane) {
+      pane.inert = !!hidden;
+    }
+  }
+
+  function deactivateSectionPane(pane) {
+    if (!pane || pane.hidden) return;
+    runLifecycleHook(pane._dashboardSectionLifecycle, 'deactivate', pane);
+    setSectionPaneHidden(pane, true);
+  }
+
+  function activateSectionPane(shellEl, pane) {
+    if (!pane) return;
+    setSectionPaneHidden(pane, false);
+    shellEl._dashboardActivePane = pane;
+    if (pane._dashboardSectionLifecycle && !pane._dashboardLifecycleActive) {
+      runLifecycleHook(pane._dashboardSectionLifecycle, 'activate', pane);
+    }
+    pane._dashboardLifecycleActive = true;
+    touchCachedPane(shellEl, pane);
+  }
+
+  function destroySectionPane(shellEl, pane) {
+    if (!pane) return;
+    if (shellEl && shellEl._dashboardActivePane === pane) {
+      shellEl._dashboardActivePane = null;
+    }
+    if (shellEl && pane._dashboardCacheKey && shellEl._dashboardPaneCache) {
+      delete shellEl._dashboardPaneCache.map[pane._dashboardCacheKey];
+      shellEl._dashboardPaneCache.order = shellEl._dashboardPaneCache.order.filter(function (key) {
+        return key !== pane._dashboardCacheKey;
+      });
+    }
+    resetSectionPane(pane);
+    if (pane.parentNode) pane.parentNode.removeChild(pane);
+  }
+
+  function deactivateOrDestroyActivePane(shellEl, nextPane) {
+    var active = shellEl && shellEl._dashboardActivePane;
+    if (!active || active === nextPane) return;
+    if (active._dashboardCacheable) {
+      active._dashboardLifecycleActive = false;
+      deactivateSectionPane(active);
+    } else {
+      destroySectionPane(shellEl, active);
+    }
+  }
+
+  function destroyDashboardPaneCache(shellEl) {
+    if (!shellEl) return;
+    var container = shellEl.querySelector('#dash-section-pane');
+    var panes = container ? Array.prototype.slice.call(container.children) : [];
+    panes.forEach(function (pane) {
+      destroySectionPane(shellEl, pane);
+    });
+    shellEl._dashboardPaneCache = null;
+    shellEl._dashboardActivePane = null;
+  }
+
+  function evictDashboardPaneCache(shellEl) {
+    var cache = getPaneCache(shellEl);
+    while (cache.order.length > DASHBOARD_PANE_CACHE_LIMIT) {
+      var key = cache.order.shift();
+      var pane = cache.map[key];
+      if (pane) destroySectionPane(shellEl, pane);
+    }
+  }
+
+  function createSectionPane(sectionId, renderKey, cacheable) {
+    var pane = document.createElement('div');
+    pane.className = 'dash-section-cache-pane';
+    pane.dataset.sectionId = sectionId;
+    pane.dataset.renderKey = renderKey;
+    pane._dashboardRenderKey = renderKey;
+    pane._dashboardCacheable = !!cacheable;
+    pane._dashboardCacheKey = cacheable ? renderKey : '';
+    pane.setAttribute('aria-hidden', 'false');
+    return pane;
+  }
+
+  function prepareFreshSectionPane(shellEl, container, sectionId, renderKey, cacheable) {
+    deactivateOrDestroyActivePane(shellEl, null);
+    var pane = createSectionPane(sectionId, renderKey, cacheable);
+    container.appendChild(pane);
+    shellEl._dashboardActivePane = pane;
+    if (cacheable) {
+      var cache = getPaneCache(shellEl);
+      cache.map[renderKey] = pane;
+      touchCachedPane(shellEl, pane);
+      evictDashboardPaneCache(shellEl);
+    }
+    return pane;
+  }
+
+  function getCachedSectionPane(shellEl, renderKey) {
+    var cache = shellEl && shellEl._dashboardPaneCache;
+    return cache && cache.map ? cache.map[renderKey] : null;
+  }
+
+  function resetSectionPane(pane) {
+    disconnectPaneThemeObservers(pane);
+    if (pane._dashboardLoaderTimer && window.TaagerPerf && typeof window.TaagerPerf.end === 'function') {
+      window.TaagerPerf.end(pane._dashboardLoaderTimer, { canceled: true });
+      pane._dashboardLoaderTimer = null;
+    }
+    if (pane._dashboardSectionLifecycle) {
+      if (pane._dashboardLifecycleActive) {
+        runLifecycleHook(pane._dashboardSectionLifecycle, 'deactivate', pane);
+      }
+      runLifecycleHook(pane._dashboardSectionLifecycle, 'destroy', pane);
+    } else if (typeof pane._dashboardSectionCleanup === 'function') {
+      try {
+        pane._dashboardSectionCleanup();
+      } catch (err) {
+        console.error('[Dashboard] Section cleanup failed:', err);
+      }
+    }
+    pane._dashboardSectionLifecycle = null;
+    pane._dashboardSectionCleanup = null;
+    pane._dashboardLifecycleActive = false;
+    destroyPaneChartInstances(pane);
+    if (pane._inlineThemeObserver) {
+      pane._inlineThemeObserver.disconnect();
+      pane._inlineThemeObserver = null;
+    }
+    pane._dashboardSectionContext = null;
+    pane._dashboardRenderKey = null;
+  }
+
+  function showSectionLoader(pane, sectionId) {
+    var current = pane.firstElementChild;
+    if (current &&
+        current.getAttribute('data-dashboard-preloader') === 'true' &&
+        current.getAttribute('data-dashboard-section') === sectionId) {
+      return;
+    }
+    pane.innerHTML = loaderHTML(sectionId);
+    if (window.TaagerPerf && typeof window.TaagerPerf.start === 'function') {
+      pane._dashboardLoaderTimer = window.TaagerPerf.start('dashboard:loader:visible', { sectionId: sectionId || 'master' });
+    }
   }
 
   function emptyState(data) {
@@ -641,6 +903,28 @@
     }
   }
 
+  function triggerDashboardUpdate(shellEl, opts) {
+    if (!shellEl) return false;
+    opts = opts || {};
+    var current = window.DashboardPeriodState ? window.DashboardPeriodState.get() : null;
+    var draft = current && current.preset === 'custom' ? getCustomRangeDraft(shellEl, current) : null;
+    if (customRangeDraftIsDirty(draft, current)) {
+      syncCustomRangeControls(shellEl, current);
+      var viewRangeBtn = shellEl.querySelector('#dashboard-view-range-btn');
+      if (viewRangeBtn) viewRangeBtn.focus();
+      if (window.TaagerUI && typeof window.TaagerUI.toast === 'function') {
+        window.TaagerUI.toast(tr('period.viewBeforeUpdate'), { kind: 'info' });
+      }
+      return true;
+    }
+    if (window._dashboardFetchState && window._dashboardFetchState.active) return true;
+    if (typeof opts.onDashboardUpdate === 'function') {
+      opts.onDashboardUpdate(current);
+      return true;
+    }
+    return false;
+  }
+
   function syncCustomRangeControls(shellEl, period) {
     if (!shellEl || !period) return;
     var custom = shellEl.querySelector('#dashboard-custom-range');
@@ -697,7 +981,7 @@
           shellEl._topbarReportingCurrencyKey = null;
           if (window.setDashboardReportingCurrency) window.setDashboardReportingCurrency(value);
           if (typeof opts.onReportingCurrencyChange === 'function') opts.onReportingCurrencyChange(value);
-        }, { maxHeight: '220px', ariaLabel: 'Reporting currency' });
+        }, { maxHeight: '220px', ariaLabel: tr('currency.label') });
       }
     }
     if (periodWrap && window.renderCustomSelect && window.DashboardPeriodState) {
@@ -814,17 +1098,12 @@
     if (updateBtn && !updateBtn._dashReady) {
       updateBtn._dashReady = true;
       updateBtn.addEventListener('click', function () {
-        var current = window.DashboardPeriodState ? window.DashboardPeriodState.get() : null;
-        var draft = current && current.preset === 'custom' ? getCustomRangeDraft(shellEl, current) : null;
-        if (customRangeDraftIsDirty(draft, current)) {
-          syncCustomRangeControls(shellEl, current);
-          var viewRangeBtn = shellEl.querySelector('#dashboard-view-range-btn');
-          if (viewRangeBtn) viewRangeBtn.focus();
-          return;
-        }
-        if (typeof opts.onDashboardUpdate === 'function') opts.onDashboardUpdate(window.DashboardPeriodState ? window.DashboardPeriodState.get() : null);
+        triggerDashboardUpdate(shellEl, opts);
       });
     }
+    window.triggerDashboardUpdate = function () {
+      return triggerDashboardUpdate(shellEl, opts);
+    };
     var manageAccountsBtn = shellEl.querySelector('#dashboard-manage-accounts-btn');
     if (manageAccountsBtn && !manageAccountsBtn._dashReady) {
       manageAccountsBtn._dashReady = true;
@@ -1101,7 +1380,9 @@
 
   function disconnectPaneThemeObservers(pane) {
     if (!pane) return;
-    ['_s7ThemeObserver', '_s8ThemeObserver', '_s9ThemeObserver'].forEach(function (key) {
+    Object.keys(pane).filter(function (key) {
+      return /^_s\d+ThemeObserver$/.test(key);
+    }).forEach(function (key) {
       if (pane[key] && typeof pane[key].disconnect === 'function') {
         pane[key].disconnect();
       }
@@ -1117,65 +1398,140 @@
 
   function switchSection(shellEl, sectionId, data, ctx, skipDelay) {
     sectionId = normalizeSection(sectionId);
+    var sectionSwitchTimer = window.TaagerPerf && typeof window.TaagerPerf.start === 'function'
+      ? window.TaagerPerf.start('dashboard:section:switch', {
+        sectionId: sectionId,
+        skipDelay: !!skipDelay,
+        dataVersion: getDataVersion(data)
+      })
+      : null;
+    function finishSectionSwitch(extra) {
+      if (window.TaagerPerf && typeof window.TaagerPerf.end === 'function' && sectionSwitchTimer) {
+        window.TaagerPerf.end(sectionSwitchTimer, extra || {});
+        sectionSwitchTimer = null;
+      }
+    }
     syncDashboardCountryState(data);
     setSidebarActive(shellEl, sectionId);
     updateTopbar(shellEl, data, ctx.options);
     updateFirstRunGuidance(shellEl, data);
 
-    var pane = shellEl.querySelector('#dash-section-pane');
-    if (!pane) return;
+    var container = shellEl.querySelector('#dash-section-pane');
+    if (!container) return;
     var version = getDataVersion(data);
     var renderKey = sectionId + '|' + version + '|' + (window._kbotLang || '') + '|' + (window._kbotTheme || '');
+    var pane = shellEl._dashboardActivePane || container;
     if (!skipDelay && pane._dashboardRenderKey === renderKey && pane.children.length && !(data && data._loading)) {
+      finishSectionSwitch({ ok: true, cacheHit: true, renderKey: renderKey });
       return;
     }
-    disconnectPaneThemeObservers(pane);
-    if (typeof pane._dashboardSectionCleanup === 'function') {
-      pane._dashboardSectionCleanup();
-      pane._dashboardSectionCleanup = null;
+    var cacheable = isCacheableSection(sectionId);
+    var cachedPane = cacheable && !(data && data._loading) ? getCachedSectionPane(shellEl, renderKey) : null;
+    if (!skipDelay && cachedPane && cachedPane.children.length) {
+      deactivateOrDestroyActivePane(shellEl, cachedPane);
+      activateSectionPane(shellEl, cachedPane);
+      var cachedCtx = cachedPane._dashboardSectionContext || Object.assign({}, ctx, {
+        data: data,
+        sectionId: sectionId
+      });
+      cachedCtx.data = data;
+      cachedCtx.options = ctx.options;
+      cachedCtx.onNavigate = ctx.onNavigate;
+      cachedPane._dashboardSectionContext = cachedCtx;
+      if (window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.observe === 'function') {
+        window.DashboardQueryRuntime.observe(sectionId, data);
+      }
+      if (cachedCtx.options && typeof cachedCtx.options.onSectionChange === 'function') {
+        cachedCtx.options.onSectionChange(sectionId, data);
+      }
+      if (window.dashboardI18n) window.dashboardI18n.apply(cachedPane);
+      if (window.TaagerUI) window.TaagerUI.enhance(cachedPane);
+      scheduleInlineThemeFix(cachedPane);
+      finishSectionSwitch({ ok: true, cacheHit: true, cachedPane: true, renderKey: renderKey });
+      return;
     }
-    if (pane._inlineThemeObserver) {
-      pane._inlineThemeObserver.disconnect();
-      pane._inlineThemeObserver = null;
+    var currentLoader = pane.firstElementChild;
+    if ((!data || !data._loaded || data._loading) &&
+        currentLoader &&
+        currentLoader.getAttribute('data-dashboard-preloader') === 'true' &&
+        currentLoader.getAttribute('data-dashboard-section') === sectionId) {
+      finishSectionSwitch({ ok: true, loading: true, loaderReused: true });
+      return;
     }
-    pane._dashboardRenderKey = null;
-    pane.innerHTML = loaderHTML(sectionId);
+    if (!data || !data._loaded || data._loading) pane = prepareFreshSectionPane(shellEl, container, sectionId, renderKey, false);
+
+    if (!data || !data._loaded || data._loading) {
+      showSectionLoader(pane, sectionId);
+      return;
+    }
+
+    var fn = window[SECTION_FN[sectionId]];
+    if (typeof fn !== 'function') {
+      pane = prepareFreshSectionPane(shellEl, container, sectionId, renderKey, false);
+      showSectionLoader(pane, sectionId);
+      if (typeof window.ensureDashboardSection === 'function') {
+        var requestedSection = sectionId;
+        var groupLoadTimer = window.TaagerPerf && typeof window.TaagerPerf.start === 'function'
+          ? window.TaagerPerf.start('dashboard:section-group:load', { sectionId: sectionId })
+          : null;
+        window.ensureDashboardSection(sectionId).then(function () {
+          if (window.TaagerPerf && typeof window.TaagerPerf.end === 'function' && groupLoadTimer) {
+            window.TaagerPerf.end(groupLoadTimer, { ok: true, sectionId: requestedSection });
+          }
+          if (!shellEl.isConnected) return;
+          if (shellEl._dashboardActiveSection !== requestedSection) return;
+          pane._dashboardRenderKey = null;
+          switchSection(shellEl, requestedSection, data, ctx, true);
+        }).catch(function (err) {
+          if (window.TaagerPerf && typeof window.TaagerPerf.end === 'function' && groupLoadTimer) {
+            window.TaagerPerf.end(groupLoadTimer, { ok: false, sectionId: requestedSection, error: err && err.message ? err.message : String(err || '') });
+          }
+          pane.innerHTML = '<div class="dash-coming-soon">' +
+            '<div class="dash-coming-soon-icon">!</div>' +
+            '<div class="dash-coming-soon-title">' + esc(trText('misc.loadFailed', 'Section failed to load')) + '</div>' +
+            '<div class="dash-coming-soon-body">' + esc(err && err.message ? err.message : String(err || 'Unknown error')) + '</div>' +
+            '</div>';
+        });
+        finishSectionSwitch({ ok: true, loadingSectionGroup: true });
+        return;
+      }
+      pane.innerHTML = '<div class="dash-coming-soon"><div class="dash-coming-soon-icon">...</div></div>';
+      finishSectionSwitch({ ok: false, missingRenderer: true });
+      return;
+    }
 
     var render = function () {
-      if (data && data._loading) return;
+      if (!data || !data._loaded || data._loading) {
+        showSectionLoader(pane, sectionId);
+        finishSectionSwitch({ ok: true, loading: true });
+        return;
+      }
+      pane = prepareFreshSectionPane(shellEl, container, sectionId, renderKey, cacheable);
+      if (window.TaagerPerf && typeof window.TaagerPerf.end === 'function' && pane._dashboardLoaderTimer) {
+        window.TaagerPerf.end(pane._dashboardLoaderTimer, { sectionId: sectionId });
+        pane._dashboardLoaderTimer = null;
+      }
+      var renderTimer = window.TaagerPerf && typeof window.TaagerPerf.start === 'function'
+        ? window.TaagerPerf.start('dashboard:section:render', { sectionId: sectionId, renderKey: renderKey })
+        : null;
       pane.innerHTML = '';
-      if (!data || !data._loaded) {
-        pane.innerHTML = loaderHTML(sectionId);
-        return;
-      }
-      var fn = window[SECTION_FN[sectionId]];
-      if (typeof fn !== 'function') {
-        if (typeof window.ensureDashboardSection === 'function') {
-          var requestedSection = sectionId;
-          window.ensureDashboardSection(sectionId).then(function () {
-            if (!shellEl.isConnected) return;
-            if (shellEl._dashboardActiveSection !== requestedSection) return;
-            pane._dashboardRenderKey = null;
-            switchSection(shellEl, requestedSection, data, ctx, true);
-          }).catch(function (err) {
-            pane.innerHTML = '<div class="dash-coming-soon">' +
-              '<div class="dash-coming-soon-icon">!</div>' +
-              '<div class="dash-coming-soon-title">' + esc(trText('misc.loadFailed', 'Section failed to load')) + '</div>' +
-              '<div class="dash-coming-soon-body">' + esc(err && err.message ? err.message : String(err || 'Unknown error')) + '</div>' +
-              '</div>';
-          });
-          return;
-        }
-        pane.innerHTML = '<div class="dash-coming-soon"><div class="dash-coming-soon-icon">...</div></div>';
-        return;
-      }
       var key = DATA_KEY[sectionId];
       var slice = key ? (data[key] || null) : data;
-      ctx.data = data;
-      ctx.sectionId = sectionId;
-      var cleanup = fn(pane, slice, ctx);
-      if (typeof cleanup === 'function') {
-        pane._dashboardSectionCleanup = cleanup;
+      var sectionCtx = Object.assign({}, ctx, {
+        data: data,
+        sectionId: sectionId
+      });
+      pane._dashboardSectionContext = sectionCtx;
+      var lifecycle = normalizeSectionLifecycle(fn(pane, slice, sectionCtx));
+      if (lifecycle) {
+        pane._dashboardSectionLifecycle = lifecycle;
+        if (typeof lifecycle.destroy === 'function') {
+          pane._dashboardSectionCleanup = function () {
+            runLifecycleHook(lifecycle, 'destroy', pane);
+          };
+        }
+        runLifecycleHook(lifecycle, 'activate', pane);
+        pane._dashboardLifecycleActive = true;
       }
       pane._dashboardRenderKey = renderKey;
       if (window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.observe === 'function') {
@@ -1190,6 +1546,10 @@
       if (window.performance && typeof window.performance.mark === 'function') {
         try { window.performance.mark('dashboard:section:' + sectionId + ':rendered'); } catch (_) {}
       }
+      if (window.TaagerPerf && typeof window.TaagerPerf.end === 'function' && renderTimer) {
+        window.TaagerPerf.end(renderTimer, { ok: true, sectionId: sectionId });
+      }
+      finishSectionSwitch({ ok: true, rendered: true, renderKey: renderKey });
     };
 
     if (skipDelay) render();
@@ -1211,12 +1571,15 @@
     var ctx = {
       options: options,
       onNavigate: function (sectionId) {
-        switchSection(mountEl, sectionId, data, ctx);
+        var currentCtx = mountEl._dashboardCurrentCtx || ctx;
+        switchSection(mountEl, sectionId, mountEl._dashboardCurrentData || data, currentCtx);
       },
       accent: '#a855f7',
       formatSAR: window.formatSAR,
       i18n: window.dashboardI18n || null
     };
+    mountEl._dashboardCurrentData = data;
+    mountEl._dashboardCurrentCtx = ctx;
 
     mountEl.classList.add('dash-shell');
     mountEl.setAttribute('dir', isRtl() ? 'rtl' : 'ltr');
@@ -1279,7 +1642,10 @@
         var btn = e.target.closest('.dash-nav-btn');
         if (!btn) return;
         var id = btn.getAttribute('data-section');
-        if (id) switchSection(mountEl, id, data, ctx);
+        if (id) {
+          var currentCtx = mountEl._dashboardCurrentCtx || ctx;
+          switchSection(mountEl, id, mountEl._dashboardCurrentData || data, currentCtx);
+        }
       });
     }
 
@@ -1312,7 +1678,9 @@
     window.addEventListener('resize', _debouncedResize);
     if (_resizeObserver) _resizeObserver.observe(mountEl);
     mountEl._dashboardCleanup = function () {
+      destroyDashboardPaneCache(mountEl);
       disconnectPaneThemeObservers(mountEl.querySelector('#dash-section-pane'));
+      if (window.triggerDashboardUpdate) window.triggerDashboardUpdate = null;
       window.removeEventListener('resize', _debouncedResize);
       clearTimeout(_resizeTimer);
       clearTimeout(mountEl._dashboardRangeAppliedTimer);
@@ -1331,11 +1699,16 @@
     var active = normalizeSection(mountEl._dashboardActiveSection || 'master');
     var ctx = {
       options: mountEl._dashboardOptions || {},
-      onNavigate: function (id) { switchSection(mountEl, id, data, ctx); },
+      onNavigate: function (id) {
+        var currentCtx = mountEl._dashboardCurrentCtx || ctx;
+        switchSection(mountEl, id, mountEl._dashboardCurrentData || data, currentCtx);
+      },
       accent: '#a855f7',
       formatSAR: window.formatSAR,
       i18n: window.dashboardI18n || null
     };
+    mountEl._dashboardCurrentData = data;
+    mountEl._dashboardCurrentCtx = ctx;
     switchSection(mountEl, active, data, ctx);
     bindDashboardTour(mountEl, data, ctx);
     updateFirstRunGuidance(mountEl, data);

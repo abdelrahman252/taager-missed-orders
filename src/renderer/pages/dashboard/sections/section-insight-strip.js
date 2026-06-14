@@ -100,10 +100,19 @@
       var t = ins.type || 'observation';
       if (!recsState.data[t]) t = 'observation';
       var color = typeColors[t] || '#D4B15A';
+      var helper = window.TaagerSmartInsights;
+      var trust = ins.trust || 'measured';
+      var confidence = ins.confidence || (ins.metric && ins.metric.orders >= 30 ? 'strong' : (ins.metric && ins.metric.orders >= 15 ? 'developing' : 'limited'));
+      var evidence = Array.isArray(ins.evidence) ? ins.evidence.filter(Boolean) : [];
+      var trustLabel = helper && helper.trustLabel ? helper.trustLabel(trust) : (trust === 'estimated' ? 'Estimated' : 'Measured');
       
       var reasonHtml = ins.body;
       if (ins.recommendation) {
         reasonHtml += '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.1);color:' + color + ';">💡 ' + ins.recommendation + '</div>';
+      }
+
+      if (evidence.length) {
+        reasonHtml += '<div style="margin-top:8px;font-size:10px;color:rgba(255,255,255,0.42);line-height:1.45;">' + evidence.slice(0, 2).join(' · ') + '</div>';
       }
 
       recsState.data[t].push({
@@ -115,6 +124,8 @@
         city: ins.city || ins.province,
         product: ins.product,
         reason: reasonHtml,
+        trust: trustLabel,
+        confidence: confidence,
         accentColor: color,
         metricsHtml: buildMetrics(ins)
       });
@@ -244,7 +255,8 @@
             '<span title="' + card.title.replace(/"/g, '&quot;') + '" style="font-size:' + titleSize + ';font-weight:700;letter-spacing:0.2px;color:' + titleColor + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;display:inline-block;vertical-align:bottom;">' + formattedTitle + '</span>' +
           '</div>' +
           '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">' +
-            '' +
+            '<span style="font-size:9px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:' + card.accentColor + ';background:' + card.accentColor + '18;border:1px solid ' + card.accentColor + '33;border-radius:999px;padding:2px 7px;">' + (card.trust || 'Measured') + '</span>' +
+            '<span style="font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:rgba(255,255,255,0.42);background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.06);border-radius:999px;padding:2px 7px;">' + (card.confidence || 'limited') + '</span>' +
           '</div>' +
           '<div style="font-size:' + reasonSize + ';color:' + reasonColor + ';line-height:1.5;margin-bottom:10px;">' + card.reason + '</div>' +
           card.metricsHtml + 

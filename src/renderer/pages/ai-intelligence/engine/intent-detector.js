@@ -55,6 +55,7 @@
     "\u0645\u0627", "\u0647\u0648", "\u0647\u064a", "\u0644\u064a", "\u0639\u0646", "\u0641\u064a", "\u0645\u0646", "\u0639\u0644\u0649", "\u0647\u0630\u0627", "\u0647\u0630\u0647",
     "\u0645\u0646\u062a\u062c", "\u0645\u0646\u062a\u062c\u0627\u062a", "\u062a\u0643\u0644\u0641\u0629", "\u0627\u0644\u0637\u0644\u0628", "\u0627\u0644\u0637\u0644\u0628\u0627\u062a"
   ]);
+  const PRODUCT_SEARCH_CACHE = new WeakMap();
 
   function normalizeSearchText(value) {
     return String(value || "")
@@ -80,7 +81,27 @@
     if (value && !list.includes(value)) list.push(value);
   }
 
-  function matchKnownProducts(text, dashboardData) {
+  function productSearchMetadata(product) {
+    if (!product || typeof product !== "object") return null;
+    const name = product.name || "";
+    const sku = product.sku || "";
+    const key = product.key || "";
+    const signature = name + "\u0000" + sku + "\u0000" + key;
+    const cached = PRODUCT_SEARCH_CACHE.get(product);
+    if (cached && cached.signature === signature) return cached;
+    const metadata = {
+      signature,
+      displayName: name || key || sku,
+      normalizedName: normalizeSearchText(name),
+      normalizedSku: normalizeSearchText(sku),
+      normalizedKey: normalizeSearchText(key),
+      tokens: searchTokens(name + " " + sku + " " + key)
+    };
+    PRODUCT_SEARCH_CACHE.set(product, metadata);
+    return metadata;
+  }
+
+  function matchKnownProducts(text, dashboardData, normalizedText, queryTokens) {
     const found = [];
     const candidates = [];
     const products = dashboardData && dashboardData.products && dashboardData.products.rankedList
@@ -88,31 +109,35 @@
       : [];
     if (!products.length) return { matches: found, candidates: [], ambiguous: false, tooShort: false };
 
-    const normalizedText = normalizeSearchText(text);
-    const queryTokens = searchTokens(text);
+    normalizedText = normalizedText || normalizeSearchText(text);
+    queryTokens = queryTokens || searchTokens(text);
     const querySet = new Set(queryTokens);
 
-    products.forEach(p => {
-      const name = p && (p.name || p.key || p.sku);
-      if (!name) return;
-      const normalizedName = normalizeSearchText(p.name || "");
-      const normalizedSku = normalizeSearchText(p.sku || "");
-      const normalizedKey = normalizeSearchText(p.key || "");
-      if ((normalizedName && normalizedText.includes(normalizedName)) ||
-          (normalizedSku && normalizedText.includes(normalizedSku)) ||
-          (normalizedKey && normalizedText.includes(normalizedKey))) {
+    products.forEach(product => {
+      const metadata = productSearchMetadata(product);
+      if (!metadata || !metadata.displayName) return;
+      const name = metadata.displayName;
+      if ((metadata.normalizedName && normalizedText.includes(metadata.normalizedName)) ||
+          (metadata.normalizedSku && normalizedText.includes(metadata.normalizedSku)) ||
+          (metadata.normalizedKey && normalizedText.includes(metadata.normalizedKey))) {
         pushUnique(found, name);
         return;
       }
 
-      const productTokens = searchTokens([p.name, p.sku, p.key].filter(Boolean).join(" "));
+      const productTokens = metadata.tokens;
       if (!productTokens.length || !querySet.size) return;
-      const matched = productTokens.filter(token => querySet.has(token));
+      let matchedCount = 0;
+      let strongSingleToken = "";
+      productTokens.forEach(token => {
+        if (!querySet.has(token)) return;
+        matchedCount++;
+        if (!strongSingleToken && token.length >= 4) strongSingleToken = token;
+      });
       const denominator = Math.max(1, Math.min(productTokens.length, querySet.size));
-      const score = matched.length / denominator;
-      const hasStrongSingleToken = matched.length === 1 && matched[0].length >= 4;
-      if ((matched.length >= 2 && (score >= 0.35 || matched.length >= 4)) || hasStrongSingleToken) {
-        candidates.push({ name, score: hasStrongSingleToken ? 0.25 : score, matched: matched.length });
+      const score = matchedCount / denominator;
+      const hasStrongSingleToken = matchedCount === 1 && !!strongSingleToken;
+      if ((matchedCount >= 2 && (score >= 0.35 || matchedCount >= 4)) || hasStrongSingleToken) {
+        candidates.push({ name, score: hasStrongSingleToken ? 0.25 : score, matched: matchedCount });
       }
     });
 
@@ -139,11 +164,18 @@
     const cities = [];
     const metrics = [];
     const textLower = text.toLowerCase();
+    const normalizedText = normalizeSearchText(text);
+    const queryTokens = searchTokens(text);
 
     // Identify metrics
     const metricKeywords = {
-      'ndr': 'ndr', 'delivery': 'delivery', 'cpa': 'cpa', 'roi': 'roi', 
-      'roas': 'roas', 'profit': 'profit', 'margin': 'margin', 'refund': 'refund', 'approval': 'approval'
+      'ndr': 'ndr', 'delivery': 'ndr', 'delivered': 'ndr',
+      'cpa': 'cpa', 'roi': 'roi', 'roas': 'roas',
+      'profit': 'earnedProfitAfterTax', 'profitable': 'earnedProfitAfterTax', 'commission': 'earnedProfitAfterTax',
+      'orders': 'orders', 'order': 'orders',
+      'risk': 'riskScore', 'risky': 'riskScore',
+      'scale': 'scalingScore', 'scaling': 'scalingScore',
+      'margin': 'margin', 'refund': 'refund', 'approval': 'approval'
     };
     for (const [key, val] of Object.entries(metricKeywords)) {
       if (textLower.includes(key)) metrics.push(val);
@@ -151,29 +183,51 @@
 
     // Identify products and cities from dashboard data if available
     if (dashboardData) {
-      const productMatch = matchKnownProducts(text, dashboardData);
+      const productMatch = matchKnownProducts(text, dashboardData, normalizedText, queryTokens);
       productMatch.matches.forEach(name => pushUnique(products, name));
       var productCandidates = productMatch.candidates || [];
       var productMatchAmbiguous = !!productMatch.ambiguous;
       var productQueryTooShort = !!productMatch.tooShort;
       if (dashboardData.geo && dashboardData.geo.cityStats) {
         Object.keys(dashboardData.geo.cityStats).forEach(cityName => {
-          if (normalizeSearchText(text).includes(normalizeSearchText(cityName))) {
+          if (normalizedText.includes(normalizeSearchText(cityName))) {
             pushUnique(cities, cityName);
           }
         });
       }
     }
 
-    // Determine ranking target (best/worst)
+    // Determine ranking target, metric, and direction.
     let rankingTarget = null;
     let rankingLimit = null;
     let rankingEntity = null;
-    if (textLower.match(/\b(worst|lowest|weakest|bad|failing|dangerous)\b/) || /اسوأ|أسوأ|اضعف|أضعف|وحش|سيئ|خطر/.test(textLower)) rankingTarget = 'worst';
-    if (textLower.match(/\b(best|highest|top|good|winning|strongest)\b/) || /افضل|أفضل|اقوى|أقوى|احسن|أحسن/.test(textLower)) rankingTarget = 'best';
+    let rankingMetric = null;
+    let rankingDirection = null;
+    const asksLowest = /\b(lowest|least|minimum)\b/.test(textLower) || /اقل|أقل/.test(textLower);
+    const asksHighest = /\b(highest|most|maximum)\b/.test(textLower) || /اعلى|أعلى/.test(textLower);
+    if (textLower.match(/\b(worst|lowest|weakest|bad|failing|dangerous)\b/) || /اسوأ|أسوأ|اضعف|أضعف|اقل|أقل|سيئ|خطر/.test(textLower)) {
+      rankingTarget = 'worst';
+      rankingDirection = 'asc';
+    }
+    if (textLower.match(/\b(best|highest|top|good|winning|strongest)\b/) || /افضل|أفضل|اقوى|أقوى|احسن|أحسن|اعلى|أعلى/.test(textLower)) {
+      rankingTarget = 'best';
+      rankingDirection = 'desc';
+    }
     if (textLower.match(/\b(city|cities)\b/) || /مدينة|مدن/.test(textLower)) rankingEntity = 'cities';
     if (textLower.match(/\b(product|products|items|app|apps)\b/) || /منتج|منتجات|ابلكيشن|تطبيق/.test(textLower)) rankingEntity = 'products';
     if (textLower.match(/\b(profitable|profit|commission)\b/) && rankingEntity) rankingTarget = rankingTarget || 'best';
+    if (/\b(ndr|delivery|delivered)\b/i.test(textLower) || /التسليم/.test(textLower)) rankingMetric = 'ndr';
+    else if (/\bcpa\b/i.test(textLower) || /تكلفة.*اكتساب/.test(textLower)) rankingMetric = 'cpa';
+    else if (/\b(risk|risky|danger)\b/i.test(textLower) || /مخاطر|خطر/.test(textLower)) rankingMetric = 'riskScore';
+    else if (/\b(scale|scaling)\b/i.test(textLower) || /توسع|توسيع/.test(textLower)) rankingMetric = 'scalingScore';
+    else if (/\b(order|orders|volume)\b/i.test(textLower) || /طلبات|طلب/.test(textLower)) rankingMetric = 'orders';
+    else if (/\b(profit|profitable|commission)\b/i.test(textLower) || /ربح|عمولة/.test(textLower)) rankingMetric = 'earnedProfitAfterTax';
+    if (!rankingMetric && rankingEntity) rankingMetric = rankingTarget === 'worst' ? 'ndr' : 'earnedProfitAfterTax';
+    if (asksLowest) rankingDirection = 'asc';
+    else if (asksHighest) rankingDirection = 'desc';
+    else if (rankingTarget === 'worst' && (rankingMetric === 'cpa' || rankingMetric === 'riskScore')) rankingDirection = 'desc';
+    else if (rankingTarget === 'best' && (rankingMetric === 'cpa' || rankingMetric === 'riskScore')) rankingDirection = 'asc';
+    if (!rankingDirection && rankingTarget) rankingDirection = rankingTarget === 'worst' ? 'asc' : 'desc';
     
     const limitMatch = textLower.match(/\b(top|worst)\s+(\d+)\b/);
     if (limitMatch) rankingLimit = parseInt(limitMatch[2], 10);
@@ -186,6 +240,16 @@
       rankingLimit: rankingLimit || 1,
       rankingTarget,
       rankingEntity,
+      rankingMetric,
+      rankingDirection,
+      rankingContract: rankingEntity && rankingTarget ? {
+        entity: rankingEntity,
+        metric: rankingMetric || 'earnedProfitAfterTax',
+        direction: rankingDirection || (rankingTarget === 'worst' ? 'asc' : 'desc'),
+        limit: rankingLimit || 1,
+        samplePolicy: rankingMetric === 'ndr' ? 'meaningful_with_raw_note' : 'all',
+        minimumOrders: rankingMetric === 'ndr' ? 20 : 0
+      } : null,
       productCandidates,
       productMatchAmbiguous,
       productQueryTooShort,
@@ -196,6 +260,7 @@
 
   function detectIntent(text, entities) {
     const lower = text.toLowerCase();
+    const normalized = normalizeSearchText(text);
     const hasProductMetric = entities.metrics.length > 0 && PRODUCT_METRIC_WORDS.test(text);
     const hasPossibleProductName = hasProductMetric && !entities.rankingTarget && /[\u0600-\u06ff]/.test(text) && searchTokens(text).length >= 2;
     const hasProductContextWord = PRODUCT_CONTEXT_WORDS.test(lower);
@@ -212,15 +277,32 @@
     if (lower.includes('vs') || lower.includes('compare')) {
       return INTENTS.COMPARISON_QUERY;
     }
+    if (/\bcpa\b/i.test(lower) && (
+      /(?:account|الحساب|حساب|للحساب)/.test(normalized) ||
+      (/(?:ما هي|ما هو|كم|تكلفه)/.test(normalized) && !/(?:منتج|منتجات)/.test(normalized))
+    )) {
+      return INTENTS.KPI_ANALYSIS;
+    }
+    if (/\b(build|make|create|give me)\b.*\b(scale|scaling|growth)\s+plan\b|\bscale\s+plan\b/i.test(lower) ||
+        /\bplan\b.*\b(scale|scaling|growth)\b/i.test(lower) ||
+        /(?:ابن|اعمل|ضع|جهز).*خطه.*(?:توسع|توسيع)/.test(normalized) ||
+        /خطه.*(?:توسع|توسيع)/.test(normalized)) {
+      return INTENTS.SCALE_ANALYSIS;
+    }
     if (lower.match(/\b(what\s+(ndr|cpa|roi|roas|margin)\s+is\s+required|how\s+much\s+margin|need\s+to\s+break\s+even|break-even|calculate|calculator)\b/)) {
       return INTENTS.CALCULATOR_SIMULATION;
     }
-    if (entities.rankingTarget && entities.rankingEntity && !entities.products.length && !/\b(scal\w*|grow\w*|invest)\b/i.test(lower)) return INTENTS.RANKING_QUERY;
+    const explicitScalingScoreRanking = /\b(highest|lowest|top|best|worst)\b.*\b(?:scaling|scale)\s+score\b/i.test(lower);
+    if (entities.rankingTarget && entities.rankingEntity && !entities.products.length &&
+        (explicitScalingScoreRanking || !/\b(scal\w*|grow\w*|invest)\b/i.test(lower))) {
+      return INTENTS.RANKING_QUERY;
+    }
     if (asksProductMetric && !entities.rankingTarget) return INTENTS.PRODUCT_ANALYSIS;
     if (lower.match(/\b(forecast|predict|projection|next week|next month|expected|what\s+will\s+happen|where\s+will\s+profit\s+likely\s+improve)\b/)) {
       return INTENTS.FORECAST_QUERY;
     }
-    if (lower.match(/\b(where\s+is\s+most\s+money\s+being\s+lost|killing|hurting|profitability|margins?|money\s+being\s+lost|lost\s+money|losing|loss|low profit)\b/)) {
+    if (lower.match(/\b(where\s+is\s+most\s+money\s+being\s+lost|killing|hurting|profitability|margins?|money\s+being\s+lost|lost\s+money|losing|loss|low profit|profit\s+weak|weak\s+profit)\b/) ||
+        /ليه.*(?:بخسر|الخسار|الربح)|لماذا.*(?:اخسر|الخسار|الربح)|الربح.*(?:ضعيف|منخفض)|(?:خسار|بخسر)/.test(normalized)) {
       return INTENTS.LOSS_ANALYSIS;
     }
     if (entities.metrics.length > 0 && lower.match(/\b(why|reason|cause|causing|improve|fix|weak|worse|bad|drop|meaning|mean)\b/)) {
@@ -292,12 +374,18 @@
   function parse(text, dashboardData, sessionMemory) {
     const entities = extractEntities(text, dashboardData);
     
-    // Apply session memory if applicable (e.g. "what about Cairo?" while talking about Product X)
+    // Carry entity memory only for genuine references. Unrelated questions such as
+    // "What is my account CPA?" must not inherit the last city or product.
     if (sessionMemory) {
-      if (entities.products.length === 0 && sessionMemory.currentProduct) {
+      const normalized = normalizeSearchText(text);
+      const referencesPrevious = /\b(it|this|that|same|there|what about|for it|its)\b/i.test(normalized) ||
+        /ماذا عن|ما وضع|هذا|هذه|نفسه|نفسها|عنه|عنها/.test(normalized);
+      const referencesProduct = referencesPrevious || /\b(this|that|same)\s+(product|item|app)\b/i.test(normalized);
+      const referencesCity = referencesPrevious || /\b(this|that|same)\s+city\b/i.test(normalized);
+      if (entities.products.length === 0 && sessionMemory.currentProduct && referencesProduct) {
         entities.products.push(sessionMemory.currentProduct);
       }
-      if (entities.cities.length === 0 && sessionMemory.currentCity) {
+      if (entities.cities.length === 0 && sessionMemory.currentCity && referencesCity) {
         entities.cities.push(sessionMemory.currentCity);
       }
     }

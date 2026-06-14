@@ -19,6 +19,8 @@ jobs:
         run: npm install
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+      - name: Run AI reliability QA
+        run: npm run qa:ai
       - name: Create env files
         run: |
           echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> .env

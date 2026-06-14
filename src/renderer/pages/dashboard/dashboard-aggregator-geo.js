@@ -163,7 +163,8 @@
           codPct:            codPct,
           codNdr:            codNdr,
           prepaidPct:        prepaidPct,
-          earnedCommission:  cp.commission || 0,
+          earnedProfitAfterTax: cp.earnedProfitAfterTax != null ? cp.earnedProfitAfterTax : cp.commission || 0,
+          earnedCommission: cp.earnedProfitAfterTax != null ? cp.earnedProfitAfterTax : cp.commission || 0,
           totalRevenue:      cp.revenue    || 0,
           due:               cp.revenue    || 0,
           gap:               0
@@ -355,7 +356,8 @@
           count: cs.count, deliveredOrders: cs.deliveredOrders,
           canceledCount: cs.canceledCount, failedCount: cs.canceledCount,
           codPct: cs.codPct || 0, prepaidPct: cs.prepaidPct || 0,
-          earnedCommission: cs.earnedCommission || 0, totalRevenue: cs.totalRevenue || 0,
+          earnedProfitAfterTax: cs.earnedProfitAfterTax != null ? cs.earnedProfitAfterTax : cs.earnedCommission || 0,
+          earnedCommission: cs.earnedProfitAfterTax != null ? cs.earnedProfitAfterTax : cs.earnedCommission || 0, totalRevenue: cs.totalRevenue || 0,
           due: cs.due || 0, gap: cs.gap || 0
         };
         var sc = callScoring('computeScalingScore', csStats, nationalAverages);

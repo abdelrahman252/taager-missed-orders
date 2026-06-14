@@ -62,6 +62,9 @@
   }
 
   window.renderDashboard = function () {
+    var dashboardMountTimer = window.TaagerPerf && window.TaagerPerf.start
+      ? window.TaagerPerf.start('dashboard:shell:mount', { route: 'dashboard' })
+      : null;
     var el = document.getElementById('page-dashboard');
     if (!el) return;
 
@@ -159,7 +162,16 @@
       return ['master', 'products', 'marketing', 'calculator', 'productForecast'].indexOf(sectionId) !== -1;
     }
 
+    function warmDashboardAiMirror(data) {
+      if (window.DashboardAiMirror && typeof window.DashboardAiMirror.warm === 'function') {
+        window.DashboardAiMirror.warm(data, { force: true }).catch(function () {});
+      }
+    }
+
     function runAggregator(showLoader) {
+      var aggregatorTimer = window.TaagerPerf && window.TaagerPerf.start
+        ? window.TaagerPerf.start('dashboard:data:aggregation', { showLoader: !!showLoader })
+        : null;
       var readyResolve = null;
       var readyPromise = new Promise(function (resolve) { readyResolve = resolve; });
       if (document.getElementById('preloader') && !window._dashboardInitialReady) {
@@ -188,6 +200,9 @@
           window.TaagerPageLifecycle.markMounted('page-dashboard');
         }
         if (readyResolve) readyResolve(dashData);
+        if (window.TaagerPerf && window.TaagerPerf.end && aggregatorTimer) {
+          window.TaagerPerf.end(aggregatorTimer, { ok: true, source: 'empty' });
+        }
         return readyPromise;
       }
 
@@ -199,6 +214,7 @@
         }
         dashData._version = ++dashVersion;
         window.dashboardGeoData = dashData;
+        warmDashboardAiMirror(dashData);
 
         var activeSection = shellMount._dashboardActiveSection || 'master';
         var shouldPrimeMarketing = sectionNeedsMarketing(activeSection);
@@ -209,6 +225,13 @@
             window.refreshDashboardShell(shellMount, dashData);
           }
           if (readyResolve) readyResolve(dashData);
+          if (window.TaagerPerf && window.TaagerPerf.end && aggregatorTimer) {
+            window.TaagerPerf.end(aggregatorTimer, {
+              ok: true,
+              source: result ? 'aggregator' : 'empty',
+              orders: Array.isArray(dashData.orders) ? dashData.orders.length : 0
+            });
+          }
           return;
         }
 
@@ -229,10 +252,18 @@
             dashData._version = ++dashVersion;
           }
           window.dashboardGeoData = dashData;
+          warmDashboardAiMirror(dashData);
           if (typeof window.refreshDashboardShell === 'function') {
             window.refreshDashboardShell(shellMount, dashData);
           }
           if (readyResolve) readyResolve(dashData);
+          if (window.TaagerPerf && window.TaagerPerf.end && aggregatorTimer) {
+            window.TaagerPerf.end(aggregatorTimer, {
+              ok: true,
+              source: result ? 'aggregator+marketing' : 'empty',
+              orders: Array.isArray(dashData.orders) ? dashData.orders.length : 0
+            });
+          }
         });
       });
       return readyPromise;
@@ -351,6 +382,9 @@
         }
       }
     });
+    if (window.TaagerPerf && window.TaagerPerf.end && dashboardMountTimer) {
+      window.TaagerPerf.end(dashboardMountTimer, { ok: true });
+    }
 
     var initialReady = runAggregator(false);
     if (window.TaagerPremiumPreview) window.TaagerPremiumPreview.mount(el, 'dashboard');

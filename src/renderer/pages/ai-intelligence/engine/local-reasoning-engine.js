@@ -18,6 +18,21 @@
     return encodeURIComponent(String(value || "").trim());
   }
 
+  function productKey(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+  }
+
+  function isArabic(context) {
+    var question = context && context.question || "";
+    if (window.KhodAiShared && typeof window.KhodAiShared.responseLanguage === "function") {
+      return window.KhodAiShared.responseLanguage(question) === "ar";
+    }
+    return /[\u0600-\u06ff]/.test(String(question));
+  }
+
   function action(type, label, route, extra) {
     return Object.assign({ type: type, label: label, route: route }, extra || {});
   }
@@ -25,23 +40,24 @@
   function actionSet(context) {
     var product = context.selectedProduct && context.selectedProduct.name;
     var city = context.selectedCity && context.selectedCity.name;
+    var ar = isArabic(context);
     var actions = [];
 
     if (product) {
-      actions.push(action("OPEN_PAGE", "Open Product Calculator", "/calculator/product?product=" + slug(product), { section: "productForecast", productId: product }));
-      actions.push(action("OPEN_PRODUCT", "Open Product Analytics", "/dashboard/products?product=" + slug(product), { productId: product }));
+      actions.push(action("OPEN_PAGE", ar ? "فتح حاسبة المنتج" : "Open Product Calculator", "/calculator/product?product=" + slug(product), { section: "productForecast", productId: product }));
+      actions.push(action("OPEN_PRODUCT", ar ? "فتح تحليل المنتج" : "Open Product Analytics", "/dashboard/products?product=" + slug(product), { productId: product }));
     }
     if (city) {
-      actions.push(action("OPEN_CITY", "Open City Analytics", "/dashboard/cities?city=" + slug(city), { city: city }));
+      actions.push(action("OPEN_CITY", ar ? "فتح تحليل المدينة" : "Open City Analytics", "/dashboard/cities?city=" + slug(city), { city: city }));
     }
     if (!product) {
-      actions.push(action("OPEN_PAGE", "Open Account Calculator", "/calculator/account", { section: "calculator" }));
+      actions.push(action("OPEN_PAGE", ar ? "فتح حاسبة الحساب" : "Open Account Calculator", "/calculator/account", { section: "calculator" }));
     }
-    actions.push(action("OPEN_PAGE", "View Worst Products", "/dashboard/products?sort=worst_ndr", { section: "products", filter: "worst_ndr" }));
+    actions.push(action("OPEN_PAGE", ar ? "عرض أضعف المنتجات" : "View Worst Products", "/dashboard/products?sort=worst_ndr", { section: "products", filter: "worst_ndr" }));
     if (context.productScorecards && context.productScorecards.scale && context.productScorecards.scale.length) {
-      actions.push(action("OPEN_PAGE", "View Scale Candidates", "/dashboard/products?sort=scale", { section: "products", filter: "scale" }));
+      actions.push(action("OPEN_PAGE", ar ? "عرض مرشحي التوسع" : "View Scale Candidates", "/dashboard/products?sort=scale", { section: "products", filter: "scale" }));
     }
-    if (actions.length < 4) actions.push(action("OPEN_PAGE", "Open Spend Breakdown", "/dashboard/calculator?view=spend", { section: "calculator" }));
+    if (actions.length < 4) actions.push(action("OPEN_PAGE", ar ? "فتح تفاصيل الإنفاق" : "Open Spend Breakdown", "/dashboard/calculator?view=spend", { section: "calculator" }));
     return actions.slice(0, 4);
   }
 
@@ -249,38 +265,100 @@
     var p = context.selectedProduct || null;
     var c = context.selectedCity || null;
     var decision = selectedProductDecision(context);
+    var ar = isArabic(context);
     var proof = [];
-    if (p && p.name) proof.push(p.name + " product focus");
-    if (decision && decision.decision) proof.push("product decision: " + decision.decision);
-    if (decision && decision.ndr != null) proof.push("product NDR " + pct(decision.ndr) + "%");
-    if (decision && decision.cpa != null) proof.push("CPA " + decision.cpa + (decision.breakEvenCpa ? " vs break-even " + decision.breakEvenCpa : ""));
-    if (h.ndr) proof.push("account NDR " + pct(h.ndr) + "%");
-    if (h.breakEvenCpa) proof.push("account break-even CPA " + h.breakEvenCpa + " " + (h.breakEvenCurrency || "SAR"));
-    if (c && c.name) proof.push(c.name + " city score " + fmt(c.scalingScore || c.riskScore));
+    if (p && p.name) proof.push(ar ? "المنتج المحدد: " + p.name : p.name + " product focus");
+    if (decision && decision.decision) proof.push(ar ? "قرار المنتج: " + decision.decision : "product decision: " + decision.decision);
+    if (decision && decision.ndr != null) proof.push((ar ? "NDR للمنتج " : "product NDR ") + pct(decision.ndr) + "%");
+    if (decision && decision.cpa != null) proof.push("CPA " + decision.cpa + (decision.breakEvenCpa ? (ar ? " مقابل CPA التعادل " : " vs break-even ") + decision.breakEvenCpa : ""));
+    if (h.ndr) proof.push((ar ? "NDR للحساب " : "account NDR ") + pct(h.ndr) + "%");
+    if (h.breakEvenCpa) proof.push((ar ? "CPA التعادل للحساب " : "account break-even CPA ") + h.breakEvenCpa + " " + (h.breakEvenCurrency || "SAR"));
+    if (c && c.name) proof.push(c.name + (ar ? "، درجة التوسع " : " city scaling score ") + fmt(c.scalingScore || 0) + "/100");
     if (!proof.length && opportunities[0]) proof.push(opportunities[0]);
     if (!proof.length && issues[0]) proof.push(issues[0].title || issues[0].body);
 
     return {
       mode: mode,
-      recommendation: mode === "scale"
-        ? "Use controlled scaling, not aggressive scaling."
-        : (mode === "pause" ? "Pause or reduce traffic until the weak signal is fixed." : recipe.name + " is the safest next strategy."),
+      recommendation: ar
+        ? (mode === "scale"
+          ? "استخدم توسعًا تدريجيًا ومراقبًا."
+          : (mode === "pause" ? "أوقف أو خفّض الزيارات حتى تعالج الإشارة الضعيفة." : "ابدأ بإصلاح نقطة الضعف قبل زيادة الميزانية."))
+        : (mode === "scale"
+          ? "Use controlled scaling, not aggressive scaling."
+          : (mode === "pause" ? "Pause or reduce traffic until the weak signal is fixed." : recipe.name + " is the safest next strategy.")),
       proof: proof.slice(0, 5),
       campaignPlan: {
-        objective: recipe.objective,
-        structure: recipe.structure,
-        audience: mode === "city_focus" ? "Prioritize strong KHOD cities and isolate weak cities." : "Keep audience structure simple and compare broad versus strongest proven segments.",
-        creativePlan: recipe.creatives
+        objective: ar ? "المبيعات" : recipe.objective,
+        structure: ar ? "استخدم اختبارًا بسيطًا ومحدودًا، واحكم عليه من الطلبات وNDR وCPA والمبيعات المسلمة." : recipe.structure,
+        audience: ar
+          ? (mode === "city_focus" ? "ركز على المدن القوية وافصل المدن الضعيفة في مجموعة مستقلة." : "اجعل تقسيم الجمهور بسيطًا وقارن الجمهور الواسع بأقوى شريحة مثبتة.")
+          : (mode === "city_focus" ? "Prioritize strong KHOD cities and isolate weak cities." : "Keep audience structure simple and compare broad versus strongest proven segments."),
+        creativePlan: ar ? "استخدم عرضًا واضحًا للمنتج ورسالة مباشرة للمشكلة والحل." : recipe.creatives
       },
       budgetPlan: {
-        startBudget: "Use the user's normal test budget or ask for budget if missing.",
-        budgetRule: recipe.budgetRule,
-        killRule: recipe.killRule,
-        scaleRule: recipe.scaleRule
+        startBudget: ar ? "ابدأ بميزانية اختبار صغيرة، أو اطلب الميزانية إذا لم تكن معروفة." : "Use the user's normal test budget or ask for budget if missing.",
+        budgetRule: ar ? "غيّر الميزانية تدريجيًا فقط بعد استقرار جودة الطلبات." : recipe.budgetRule,
+        killRule: ar ? "أوقف الاختبار إذا تجاوز CPA نقطة التعادل أو انخفض NDR بوضوح." : recipe.killRule,
+        scaleRule: ar ? "وسّع فقط بعد ثبات NDR وCPA والمبيعات المسلمة." : recipe.scaleRule
       },
-      watchMetrics: ["CPA", "NDR", "DR", "delivered sales", "lost commission", "break-even CPA"],
+      watchMetrics: ar ? ["CPA", "NDR", "DR", "المبيعات المسلمة", "العمولة المفقودة", "CPA التعادل"] : ["CPA", "NDR", "DR", "delivered sales", "lost commission", "break-even CPA"],
       learningSuggestion: null
     };
+  }
+
+  function arabicIssueText(issue, context) {
+    var h = context.accountHealth || {};
+    var p = context.selectedProduct || null;
+    var c = context.selectedCity || null;
+    var key = issue && issue.key || "";
+    if (key === "high_cpa" || key === "account_cpa_above_break_even") return "تكلفة الاكتساب أعلى من نقطة التعادل، لذلك زيادة الإنفاق الآن قد تزيد الخسارة.";
+    if (key === "low_ndr" || key === "unstable_product") return "معدل NDR ضعيف، وهذا يعني أن نسبة كبيرة من الطلبات لا تتحول إلى طلبات مسلمة.";
+    if (key === "weak_city" && c) return c.name + " تحمل مخاطرة تشغيلية مرتفعة، خصوصًا في جودة التسليم والدفع عند الاستلام.";
+    if (key === "lost_commission_spike") return "العمولة المفقودة أعلى من العمولة المكتسبة، وهذه هي أهم نقطة يجب إصلاحها الآن.";
+    if (key === "margin_collapse" && p) return "الإنفاق الحالي يستهلك هامش " + p.name + ".";
+    if (key === "bad_product_cluster") return "هناك منتجات تحتاج إلى إصلاح أو خفض الزيارات قبل التفكير في التوسع.";
+    if (h.ndr) return "البيانات الحالية تشير إلى أن جودة التسليم تحتاج إلى متابعة قبل التوسع.";
+    return "البيانات الحالية تحتاج إلى نطاق أوضح للوصول إلى قرار أدق.";
+  }
+
+  function composeArabic(context, issues, opportunities) {
+    var h = context.accountHealth || {};
+    var p = context.selectedProduct || null;
+    var c = context.selectedCity || null;
+    var issue = issues[0] || null;
+    var answer = issue
+      ? arabicIssueText(issue, context)
+      : (opportunities[0] ? "هناك فرصة جيدة، لكن الأفضل تنفيذها كتجربة صغيرة ومراقبة." : "أستطيع قراءة البيانات، لكن أحتاج هدفًا أكثر تحديدًا للوصول إلى قرار حاسم.");
+    if (c && c.name) answer = "بالنسبة إلى " + c.name + "، " + answer;
+    if (p && p.name) answer = "بالنسبة إلى " + p.name + "، " + answer;
+
+    var facts = [];
+    if (c) {
+      facts.push("عدد الطلبات " + fmt(c.orders));
+      facts.push("NDR " + pct(c.ndr) + "%");
+      facts.push("درجة المخاطر " + fmt(c.riskScore) + "/100");
+      facts.push("درجة التوسع " + fmt(c.scalingScore) + "/100");
+    } else if (p) {
+      facts.push("عدد الطلبات " + fmt(p.orders));
+      facts.push("NDR " + pct(p.ndr) + "%");
+      if (p.cpa != null) facts.push("CPA " + p.cpa + " " + (p.breakEvenCurrency || ""));
+      if (p.breakEvenCpa) facts.push("CPA التعادل " + p.breakEvenCpa + " " + (p.breakEvenCurrency || ""));
+    } else {
+      if (h.ndr) facts.push("NDR للحساب " + pct(h.ndr) + "%");
+      if (h.deliveredSales) facts.push("المبيعات المسلمة " + fmt(h.deliveredSales) + " SAR");
+      if (h.lostCommission) facts.push("العمولة المفقودة " + fmt(h.lostCommission) + " SAR");
+      if (h.actualCpa != null) facts.push("CPA " + h.actualCpa + " " + (h.breakEvenCurrency || ""));
+    }
+
+    var next = issue && (issue.key === "high_cpa" || issue.key === "account_cpa_above_break_even")
+      ? "خفّض الإنفاق أو أوقفه مؤقتًا حتى يصبح CPA أقل من CPA التعادل."
+      : (issue && issue.key === "weak_city"
+        ? "قارن شركات الشحن ونسب الإلغاء داخل المدينة، ثم افصلها في اختبار مستقل قبل زيادة الميزانية."
+        : "ابدأ بأكبر نقطة ضعف، راقب النتيجة لعدة أيام، ثم وسّع تدريجيًا فقط إذا استقرت المؤشرات.");
+
+    return answer +
+      (facts.length ? "\n\nالأرقام التي اعتمدت عليها: " + facts.join("، ") + "." : "") +
+      "\n\nالخطوة التالية: " + next;
   }
 
   function compose(context) {
@@ -294,6 +372,20 @@
     var mainInsight;
     var rootCause;
     var strategicInterpretation;
+
+    if (isArabic(context)) {
+      var arabicPlan = buildStrategyPlan(context, issues, opportunities);
+      return {
+        message: composeArabic(context, issues, opportunities),
+        insights: [],
+        recommendations: [],
+        alerts: [],
+        forecasts: [],
+        actions: actionSet(context),
+        strategyPlan: arabicPlan,
+        localReasoning: { rootCauses: issues, opportunities: opportunities, tips: tips }
+      };
+    }
 
     if (issues.length) {
       mainInsight = issues[0].title + ".";
@@ -329,18 +421,11 @@
       ? "Operationally, fix the leak before scaling. More traffic will not solve a weak delivery, CPA above break-even, refund, or approval relationship."
       : "Operationally, use this as a controlled scaling signal, not a reason to increase spend blindly.";
 
-    var message = "Main insight: " + mainInsight +
-      "\n\nRoot cause: " + rootCause +
-      "\n\nKPI relationship: " + kpiRelationship +
-      "\n\nStrategic interpretation: " + strategicInterpretation +
-      "\n\nTips:\n" + tips.map(function (tip) { return "- " + tip; }).join("\n");
+    var message = mainInsight +
+      "\n\nWhy: " + rootCause +
+      "\n\nThe numbers I used: " + kpiRelationship.replace(/^The key relationship to watch is /, "").replace(/^The key is to /, "") +
+      "\n\nWhat I recommend: " + (tips[0] || strategicInterpretation);
     var plan = buildStrategyPlan(context, issues, opportunities);
-    if (plan && plan.recommendation) {
-      message += "\n\nStrategy plan: " + plan.recommendation;
-      if (plan.campaignPlan && plan.campaignPlan.structure) message += "\nCampaign: " + plan.campaignPlan.structure;
-      if (plan.budgetPlan && plan.budgetPlan.killRule) message += "\nKill rule: " + plan.budgetPlan.killRule;
-      if (plan.budgetPlan && plan.budgetPlan.scaleRule) message += "\nScale rule: " + plan.budgetPlan.scaleRule;
-    }
 
     return {
       message: message,

@@ -1,18 +1,21 @@
 (function (root, factory) {
   "use strict";
 
-  var api = factory();
+  var api = factory(root);
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (root) root.TaagerCampaignDecision = api;
-})(typeof window !== "undefined" ? window : null, function () {
+})(typeof window !== "undefined" ? window : null, function (root) {
   "use strict";
 
+  var shared = root && root.TaagerSmartInsights && typeof root.TaagerSmartInsights.thresholds === "function"
+    ? root.TaagerSmartInsights.thresholds()
+    : {};
   var THRESHOLDS = {
-    minimumEvidenceOrders: 15,
-    scaleOrders: 50,
-    scaleDelivered: 10,
-    dangerNdrPct: 20,
-    scaleNdrPct: 40,
+    minimumEvidenceOrders: shared.insightMinSample || 15,
+    scaleOrders: shared.scaleMinOrders || 50,
+    scaleDelivered: shared.scaleMinDelivered || 10,
+    dangerNdrPct: shared.dangerNdrPct || 20,
+    scaleNdrPct: shared.scaleNdrPct || 40,
     dangerCancelPct: 40
   };
 
