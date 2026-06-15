@@ -1,6 +1,6 @@
 {
   "name": "taager-orders",
-  "version": "1.0.33",
+  "version": "1.0.34",
   "description": "Taager Orders Automation Bot",
   "repository": {
     "type": "git",
@@ -48,6 +48,7 @@
     "qa:dashboard:laptop": "node scripts/qa-dashboard-small-laptop.js",
     "qa:pages:laptop": "node scripts/qa-pages-small-laptop.js",
     "portal:lint": "npm --prefix web-portal run lint -- src",
+    "icons:transparent": "powershell -ExecutionPolicy Bypass -File scripts/regenerate-transparent-icons.ps1",
     "dist:mac": "electron-builder --mac --x64 --arm64",
     "dist:win": "electron-builder --win",
     "dist:all": "electron-builder --mac --win",
