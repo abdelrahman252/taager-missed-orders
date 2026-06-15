@@ -90,7 +90,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
   // -- 0. Pull live calculator settings from DashboardRoiState (written by Section 7)
   var _roiAccountId = (ctx && ctx.data && ctx.data.meta && ctx.data.meta.activeAccountId) ||
     (window.getActiveAccountId ? window.getActiveAccountId() : '__all__');
-  var _roiLiveRaw = (window.DashboardRoiState && window.DashboardRoiState.get(_roiAccountId, d)) || d.roi || {};
+  var _roiLiveRaw = (window.DashboardRoiState && window.DashboardRoiState.get(_roiAccountId, d.roi || d)) || d.roi || {};
   
   var marketingState = window.DashboardMarketingState
     ? window.DashboardMarketingState.get(_roiAccountId)
@@ -108,8 +108,9 @@ window.renderSection8 = function (mountEl, data, ctx) {
       ? marketingState.summary.sourceBreakdown
       : [];
   
-  var targetCurrency = _roiLiveRaw.currency || 'SAR';
-  var nativeCurrency = (data && data.meta && data.meta.activeCurrency) || window.dashboardActiveCurrency || targetCurrency || 'SAR';
+  var nativeCurrency = (data && data.meta && data.meta.activeCurrency) || window.dashboardActiveCurrency || _roiLiveRaw.currency || 'SAR';
+  var targetCurrency = nativeCurrency || _roiLiveRaw.currency || 'SAR';
+  var roiCurrency = _roiLiveRaw.currency || targetCurrency;
   var egpRate = _roiLiveRaw.egpRate != null ? _roiLiveRaw.egpRate : 52.0;
 
   function roiMoney(value, decimals) {
@@ -135,10 +136,16 @@ window.renderSection8 = function (mountEl, data, ctx) {
     return val;
   }
 
-  var finalAdSpend = _roiLiveRaw.adSpend != null ? _roiLiveRaw.adSpend : (d.roi ? d.roi.adSpend : 250);
+  var finalAdSpend = _roiLiveRaw.adSpend != null
+    ? convert(Number(_roiLiveRaw.adSpend) || 0, roiCurrency, targetCurrency)
+    : (d.roi ? convert(Number(d.roi.adSpend) || 0, d.roi.currency || roiCurrency, targetCurrency) : 250);
   if (syncedSpendActive) {
     if (!sourceBreakdown.length) {
-      finalAdSpend = Number((marketingState.summary && marketingState.summary.adSpend) || 0);
+      finalAdSpend = convert(
+        Number((marketingState.summary && marketingState.summary.adSpend) || 0),
+        (marketingState.summary && marketingState.summary.currency) || targetCurrency,
+        targetCurrency
+      );
     } else {
       var convertedTotal = sourceBreakdown.reduce(function (total, source) {
         return total + convert(Number(source.rawSpend || 0), source.currency || "SAR", targetCurrency);
@@ -147,11 +154,13 @@ window.renderSection8 = function (mountEl, data, ctx) {
     }
   }
 
+  var roiNetOrderCount = _roiLiveRaw.netOrderCount != null
+    ? _roiLiveRaw.netOrderCount
+    : (_roiLiveRaw.totalOrders != null ? _roiLiveRaw.totalOrders : (d.roi ? (d.roi.netOrderCount != null ? d.roi.netOrderCount : d.roi.totalOrders) : null));
   var roiLive = {
     adSpend:        finalAdSpend,
-    totalOrders:    _roiLiveRaw.netOrderCount != null
-      ? _roiLiveRaw.netOrderCount
-      : (_roiLiveRaw.totalOrders != null ? _roiLiveRaw.totalOrders : (d.roi ? (d.roi.netOrderCount != null ? d.roi.netOrderCount : d.roi.totalOrders) : null)),
+    netOrderCount:  roiNetOrderCount,
+    totalOrders:    roiNetOrderCount,
     deliveredCount: _roiLiveRaw.deliveredCount != null ? _roiLiveRaw.deliveredCount : (d.roi ? d.roi.deliveredCount : null),
     avgCommission:  d.roi && d.roi.averageProfit != null
       ? d.roi.averageProfit

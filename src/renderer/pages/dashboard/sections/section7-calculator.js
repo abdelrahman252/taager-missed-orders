@@ -177,10 +177,12 @@ window.renderSection7 = function (mountEl, data, ctx) {
     totalOrders: realTotalOrders,
     ndr: realNdrPct / 100,
     avgCommission: realAvgCommission,
-    adSpend: d.adSpend != null ? convert(Number(d.adSpend), state.currency, nativeCurrency) : 0,
+    adSpend: convert(Number(state.budget || 0), state.currency, nativeCurrency),
     egpRate: d.egpRate != null ? d.egpRate : 52.0,
     viewCurrency: d.currency || nativeCurrency,
     _isModified: false,
+    _adSpendModified: false,
+    _avgCommissionModified: false,
   };
 
   function persistCalculatorSettings() {
@@ -289,6 +291,77 @@ window.renderSection7 = function (mountEl, data, ctx) {
         }, 0)
         .toFixed(2),
     );
+  }
+
+  function realBudgetInNativeCurrency() {
+    return convert(
+      Number(state.budget || 0),
+      state.currency,
+      nativeCurrency || window.dashboardActiveCurrency || "SAR",
+    );
+  }
+
+  function realAverageProfitInCalculatorCurrency() {
+    return convert(
+      Number(realAvgCommission || 0),
+      nativeCurrency || window.dashboardActiveCurrency || "SAR",
+      state.currency,
+    );
+  }
+
+  function formatTwoDecimals(value) {
+    return (Number(value) || 0).toFixed(2);
+  }
+
+  function updateSimModifiedFlag() {
+    simState._isModified = !!(
+      simState._adSpendModified ||
+      simState._avgCommissionModified ||
+      simState._ordersModified ||
+      simState._ndrModified
+    );
+  }
+
+  function syncSimFinancialsFromRealData(force) {
+    if (force || !simState._adSpendModified) {
+      simState.adSpend = realBudgetInNativeCurrency();
+    }
+    if (force || !simState._avgCommissionModified) {
+      simState.avgCommission = Number(realAvgCommission || 0);
+    }
+  }
+
+  function refreshSimInputValues() {
+    var inpSpend = document.getElementById("sfe-adspend");
+    var inpComm = document.getElementById("sfe-comm");
+    if (inpSpend && !simState._adSpendModified) {
+      inpSpend.value = Math.round(
+        convert(simState.adSpend, nativeCurrency || window.dashboardActiveCurrency || "SAR", state.currency),
+      );
+    }
+    if (inpComm && !simState._avgCommissionModified) {
+      inpComm.value = formatTwoDecimals(realAverageProfitInCalculatorCurrency());
+    }
+  }
+
+  function refreshBudgetInputValue(force) {
+    var budgetInput = document.getElementById("s7-in-budget");
+    if (!budgetInput) return;
+    if (!force && document.activeElement === budgetInput) return;
+    budgetInput.value = Math.round(Number(state.budget || 0)).toLocaleString("en-US");
+  }
+
+  function setCalculatorCurrency(nextCurrency) {
+    var previousCurrency = state.currency || nativeCurrency || "SAR";
+    var next = nextCurrency || previousCurrency;
+    if (previousCurrency !== next) {
+      state.budget = convert(Number(state.budget || 0), previousCurrency, next);
+      d.adSpend = state.budget;
+    }
+    state.currency = next;
+    state.viewCurrency = next;
+    simState.viewCurrency = next;
+    refreshBudgetInputValue(true);
   }
 
   function periodDate(value) {
@@ -599,7 +672,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
   if (syncedSpendActive && sourceBreakdown.length) {
     state.budget = syncedBudgetInCurrency();
     d.adSpend = state.budget;
-    simState.adSpend = state.budget;
+    syncSimFinancialsFromRealData(false);
   }
 
   function fmt(n, dec) {
@@ -1955,7 +2028,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       {
         label: s7Txt("Profit +20%", "????? +20%"),
         ndr: s.ndr,
-        comm: Math.round(s.avgCommission * 1.2),
+        comm: Number((s.avgCommission * 1.2).toFixed(2)),
         orders: s.totalOrders,
         spend: s.adSpend,
       },
@@ -1986,7 +2059,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
           Math.round(sc.ndr * 100) +
           "%</td>" +
           "<td>" +
-          sfeFmt(sc.comm) +
+          sfeFmt(sc.comm, 2) +
           "</td>" +
           "<td>" +
           s7Num(del) +
@@ -2032,7 +2105,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     var ndrHint = document.getElementById("sfe-ndr-hint");
     var commHint = document.getElementById("sfe-comm-hint");
     if (ndrHint) ndrHint.textContent = Math.round(simState.ndr * 100) + "%";
-    if (commHint) commHint.textContent = simState.avgCommission + " " + state.currency;
+    if (commHint) commHint.textContent = formatTwoDecimals(convert(simState.avgCommission, nativeCurrency || window.dashboardActiveCurrency || "SAR", state.currency)) + " " + state.currency;
     var badge = document.getElementById("sfe-sim-badge");
     if (badge) badge.style.display = simState._isModified ? "flex" : "none";
     renderSimMetrics(c);
@@ -2048,12 +2121,10 @@ window.renderSection7 = function (mountEl, data, ctx) {
     if (syncedSpendActive && sourceBreakdown.length) {
       state.budget = syncedBudgetInCurrency();
       d.adSpend = state.budget;
-      var syncedBudgetInput = document.getElementById("s7-in-budget");
-      if (syncedBudgetInput)
-        syncedBudgetInput.value = Math.round(state.budget).toLocaleString(
-          "en-US",
-        );
+      refreshBudgetInputValue(true);
     }
+    syncSimFinancialsFromRealData(false);
+    refreshSimInputValues();
     if (assignedMarketingAccounts.length) {
       var sourcePanel = document.getElementById("s7-source-breakdown");
       if (sourcePanel) {
@@ -2236,6 +2307,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       buildGrowthChart(res.cpaSAR, res.spendSAR);
       renderScenarios(res.cpaSAR, res.spendSAR);
     }
+    updateSimUI();
   }
 
   // -- 9. Render HTML ----------------------------------------------------------
@@ -3656,9 +3728,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         .getElementById("s7-sel-currency")
         .addEventListener("change", function (e) {
           var val = e.target.value;
-          state.currency = val;
-          state.viewCurrency = val;
-          simState.viewCurrency = val;
+          setCalculatorCurrency(val);
           persistCalculatorSettings();
 
           // Sync tabs classes
@@ -3681,9 +3751,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       return { value: currency, label: currency };
     });
     renderCustomSelect(wrap, options, state.currency, function (val) {
-      state.currency = val;
-      state.viewCurrency = val;
-      simState.viewCurrency = val;
+      setCalculatorCurrency(val);
       persistCalculatorSettings();
 
       // Update all main tab classes
@@ -3712,11 +3780,13 @@ window.renderSection7 = function (mountEl, data, ctx) {
     // Display SFE simulation spend converted from active currency to state.currency
     if (inpSpend)
       inpSpend.value = Math.round(
-        convert(simState.adSpend, window.dashboardActiveCurrency || "SAR", state.currency),
+        convert(simState.adSpend, nativeCurrency || window.dashboardActiveCurrency || "SAR", state.currency),
       );
 
     if (inpNdr) inpNdr.value = Math.round(simState.ndr * 100);
-    if (inpComm) inpComm.value = simState.avgCommission;
+    if (inpComm) inpComm.value = formatTwoDecimals(
+      convert(simState.avgCommission, nativeCurrency || window.dashboardActiveCurrency || "SAR", state.currency),
+    );
   }
 
   // -- Wire Calculator Events --------------------------------------------------
@@ -3726,9 +3796,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     tabs.forEach(function (t) {
       t.addEventListener("click", function (e) {
         var curr = e.currentTarget.dataset.curr;
-        state.currency = curr;
-        state.viewCurrency = curr;
-        simState.viewCurrency = curr;
+        setCalculatorCurrency(curr);
         persistCalculatorSettings();
 
         // Sync custom select
@@ -3753,7 +3821,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
   // -- Wire Simulation Events --------------------------------------------------
   function wireSimEvents() {
     function onChange() {
-      simState._isModified = true;
+      updateSimModifiedFlag();
       updateSimUI();
     }
 
@@ -3766,6 +3834,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     if (ordersEl)
       ordersEl.addEventListener("input", function (e) {
         simState.totalOrders = Math.max(1, parseInt(e.target.value) || 1);
+        simState._ordersModified = true;
         onChange();
       });
     if (spendEl)
@@ -3774,8 +3843,9 @@ window.renderSection7 = function (mountEl, data, ctx) {
         var valInCurr = parseFloat(e.target.value) || 0;
         simState.adSpend = Math.max(
           0,
-          convert(valInCurr, state.currency, window.dashboardActiveCurrency || "SAR"),
+          convert(valInCurr, state.currency, nativeCurrency || window.dashboardActiveCurrency || "SAR"),
         );
+        simState._adSpendModified = true;
         onChange();
       });
     if (ndrEl)
@@ -3785,21 +3855,31 @@ window.renderSection7 = function (mountEl, data, ctx) {
           Math.min(100, parseFloat(e.target.value) || 1),
         );
         simState.ndr = ndrPct / 100;
+        simState._ndrModified = true;
         onChange();
       });
     if (commEl)
       commEl.addEventListener("input", function (e) {
-        simState.avgCommission = Math.max(0, parseFloat(e.target.value) || 0);
+        var valueInCurrency = Math.max(0, parseFloat(e.target.value) || 0);
+        simState.avgCommission = convert(
+          valueInCurrency,
+          state.currency,
+          nativeCurrency || window.dashboardActiveCurrency || "SAR",
+        );
+        simState._avgCommissionModified = true;
         onChange();
       });
     if (resetBtn)
       resetBtn.addEventListener("click", function () {
         simState.totalOrders = realTotalOrders;
         simState.ndr = realNdrPct / 100;
-        simState.avgCommission = realAvgCommission;
-        simState.adSpend = d.adSpend != null ? convert(Number(d.adSpend), state.currency, window.dashboardActiveCurrency || "SAR") : 0;
+        syncSimFinancialsFromRealData(true);
         simState.egpRate = d.egpRate != null ? d.egpRate : 52.0;
         simState.viewCurrency = state.currency; // Keep in sync with main currency
+        simState._ordersModified = false;
+        simState._ndrModified = false;
+        simState._adSpendModified = false;
+        simState._avgCommissionModified = false;
         simState._isModified = false;
         initSimInputs();
         updateSimUI();
@@ -3809,9 +3889,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     mountEl.querySelectorAll(".sfe-curr-tab").forEach(function (tab) {
       tab.addEventListener("click", function () {
         var curr = tab.dataset.sfecurr;
-        state.currency = curr;
-        state.viewCurrency = curr;
-        simState.viewCurrency = curr;
+        setCalculatorCurrency(curr);
         persistCalculatorSettings();
 
         // Sync custom select
