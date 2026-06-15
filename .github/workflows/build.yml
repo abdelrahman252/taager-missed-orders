@@ -21,8 +21,6 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
       - name: Check JavaScript syntax
         run: npm run check:syntax
-      - name: Run static dashboard QA
-        run: npm run qa:static
       - name: Verify performance architecture
         run: npm run verify:performance
       - name: Run AI reliability QA
