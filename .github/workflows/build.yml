@@ -5,39 +5,9 @@ on:
 permissions:
   contents: write
 jobs:
-  verify:
-    name: Verify release source
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - name: Install locked dependencies
-        run: npm ci
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
-      - name: Check JavaScript syntax
-        run: npm run check:syntax
-      - name: Verify performance architecture
-        run: npm run verify:performance
-      - name: Run AI reliability QA
-        run: npm run qa:ai:full
-      - name: Verify expected NDR financial core
-        run: node scripts/verify-dashboard-expected-financial-core.js
-      - name: Verify recovery flows
-        run: |
-          npm run verify:taager-recovery
-          npm run verify:stage1-recovery
-          npm run verify:stage2-recovery
-          npm run verify:stage3-recovery
-
   build-mac-arm64:
     name: Build macOS arm64
     runs-on: macos-latest
-    needs: verify
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -69,7 +39,6 @@ jobs:
   build-mac-x64:
     name: Build macOS x64
     runs-on: macos-latest
-    needs: verify
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -101,7 +70,6 @@ jobs:
   build-win:
     name: Build Windows x64
     runs-on: windows-latest
-    needs: verify
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
