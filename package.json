@@ -1,6 +1,6 @@
 {
   "name": "taager-orders",
-  "version": "1.0.35",
+  "version": "1.0.36",
   "description": "Taager Orders Automation Bot",
   "repository": {
     "type": "git",
@@ -137,7 +137,8 @@
       "installerHeaderIcon": "assets/icon.ico",
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
-      "shortcutName": "Taager Orders"
+      "shortcutName": "Taager Orders",
+      "include": "assets/installer.nsh"
     },
     "dmg": {
       "title": "Taager Orders",
