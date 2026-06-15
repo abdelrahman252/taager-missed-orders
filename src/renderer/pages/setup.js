@@ -90,6 +90,27 @@ window.renderSetup = function (onComplete, initialStep) {
     return !value || value === key ? fallback : value;
   }
 
+  async function refreshAccountStateAfterMutation(reason = "accounts-updated") {
+    const fresh = await window.api.getCredentials();
+    accounts = fresh.accounts || [];
+    window._kbotAccounts = accounts;
+    maxAccounts = fresh.maxAccounts || maxAccounts;
+
+    if (window.invalidateDashboardCache) window.invalidateDashboardCache(reason);
+    if (typeof invalidatePage === "function") {
+      invalidatePage("page-dashboard", reason);
+      invalidatePage("page-analytics", reason);
+      invalidatePage("page-operations", reason);
+    }
+    if (typeof updateTopBarText === "function") updateTopBarText();
+    try {
+      window.dispatchEvent(new CustomEvent("taager-accounts-updated", {
+        detail: { reason, accounts: accounts.slice() }
+      }));
+    } catch (_) {}
+    return fresh;
+  }
+
   function getTaagerCountryOptions() {
     const country = window.TaagerCountry;
     const meta = (value, fallbackCode, fallbackLabel) => {
@@ -2885,8 +2906,8 @@ window.renderSetup = function (onComplete, initialStep) {
         const nextAccounts = accounts.filter(a => a.id !== b.dataset.id);
         const result = await window.api.saveAllAccounts(nextAccounts);
         if (result && result.success === false) return;
-        accounts = nextAccounts;
         selectedIds = selectedIds.filter(x => x !== b.dataset.id);
+        await refreshAccountStateAfterMutation("accounts-updated");
         if (accounts.length === 0) step = "accounts";
         renderStep();
       });
@@ -3648,8 +3669,9 @@ window.renderSetup = function (onComplete, initialStep) {
         saveBtn.textContent = t("setup.saving");
         saveBtn.disabled = true;
       }
-      accounts[idx] = { ...accounts[idx], memberName: String(value || "").trim() };
-      const result = await window.api.saveAllAccounts(accounts);
+      const nextAccounts = accounts.map(a => ({ ...a }));
+      nextAccounts[idx] = { ...nextAccounts[idx], memberName: String(value || "").trim() };
+      const result = await window.api.saveAllAccounts(nextAccounts);
       if (result && result.success === false) {
         if (saveBtn) {
           saveBtn.textContent = t("setup.save_member_name");
@@ -3660,9 +3682,7 @@ window.renderSetup = function (onComplete, initialStep) {
         return;
       }
       close();
-      const fresh = await window.api.getCredentials();
-      accounts = fresh.accounts || [];
-      maxAccounts = fresh.maxAccounts || maxAccounts;
+      await refreshAccountStateAfterMutation("accounts-updated");
       renderStep();
     };
 
@@ -3964,11 +3984,14 @@ window.renderSetup = function (onComplete, initialStep) {
       saveBtn.textContent = t("setup.saving");
       saveBtn.disabled = true;
 
+      const nextAccounts = accounts.map(a => ({ ...a }));
+      let newAccountId = "";
+
       if (isEdit) {
-        const idx = accounts.findIndex(a => a.id === editId);
+        const idx = nextAccounts.findIndex(a => a.id === editId);
         if (idx !== -1) {
-          accounts[idx] = {
-            ...accounts[idx],
+          nextAccounts[idx] = {
+            ...nextAccounts[idx],
             easyEmail: nextEasyEmail,
             easyStore: nextEasyStore,
             taagerLoginMethod,
@@ -3984,9 +4007,9 @@ window.renderSetup = function (onComplete, initialStep) {
         // NOTE: relockAccount is called AFTER saveAllAccounts so that main.js
         // reads the already-updated credentials from store when computing the hash.
       } else {
-        const newId = "account_" + Date.now();
-        accounts.push({
-          id: newId,
+        newAccountId = "account_" + Date.now();
+        nextAccounts.push({
+          id: newAccountId,
           label: getNextLabel(),
           memberName: "",
           easyEmail,
@@ -4000,10 +4023,9 @@ window.renderSetup = function (onComplete, initialStep) {
           taagerAffiliateCode: nextTaagerMerchantId,
           dashboardEnrichmentProvider,
         });
-        selectedIds.push(newId);
       }
 
-      const result = await window.api.saveAllAccounts(accounts);
+      const result = await window.api.saveAllAccounts(nextAccounts);
 
       if (result && result.success === false) {
         saveBtn.textContent = isEdit ? t("setup.save_btn2") : t("setup.add_btn");
@@ -4027,12 +4049,8 @@ window.renderSetup = function (onComplete, initialStep) {
       }
 
       close();
-      // Re-fetch credentials from server so lock status is always fresh.
-      // Fixes: (1) partial admin unlock not showing Edit button for individual accounts,
-      // (2) newly-added accounts incorrectly showing Edit/Delete instead of being locked.
-      const fresh = await window.api.getCredentials();
-      accounts    = fresh.accounts || [];
-      maxAccounts = fresh.maxAccounts || maxAccounts;
+      if (newAccountId && !selectedIds.includes(newAccountId)) selectedIds.push(newAccountId);
+      await refreshAccountStateAfterMutation("accounts-updated");
       renderStep();
     });
 

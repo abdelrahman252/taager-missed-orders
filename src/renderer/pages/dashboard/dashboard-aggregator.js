@@ -925,6 +925,14 @@
     }
     return 'other';
   }
+
+  function effectiveCountry(country, meta, fallback) {
+    var value = String(country || '').trim().toLowerCase();
+    if (value && value !== 'mixed') return value;
+    var active = String(meta && meta.activeCountry || '').trim().toLowerCase();
+    if (active && active !== 'mixed') return active;
+    return fallback || 'sa';
+  }
   // ─────────────────────────────────────────────────────────────────────────────
 
   // ─── T-05: isRowPrepaid(row) ──────────────────────────────────────────────────
@@ -1016,7 +1024,7 @@
     var target = meta.reportingCurrency || meta.activeCurrency || 'SAR';
     var rates = meta.exchangeRates || {};
     return (rows || []).map(function (row) {
-      var country = String(row.taagerCountry || row.country || meta.activeCountry || 'sa').trim().toLowerCase();
+      var country = effectiveCountry(row.taagerCountry || row.country, meta, 'sa');
       var nativeCurrency = window.TaagerCountry && window.TaagerCountry.currency ? window.TaagerCountry.currency(country) : 'SAR';
       var nativeTotalPrice = rowTotalPrice(row);
       var nativeAmountDue = rowAmountDue(row);
@@ -1814,7 +1822,7 @@
         if (span != null && span <= 60) deliveryDays.push(span);
       }
 
-      var rowCountry = String(row.taagerCountry || row.country || meta.activeCountry || 'sa').trim().toLowerCase();
+      var rowCountry = effectiveCountry(row.taagerCountry || row.country, meta, 'sa');
       var cityName = (row.city || '').toString().trim();
       var cityKeyName = meta.isMixedCountry ? (rowCountry + '|' + cityName) : cityName;
       if (cityName) {
@@ -2642,7 +2650,7 @@
       stat.accountBreakdown = cityAccountBreakdown;
       return {
         // Existing fields
-        key: keyName, name: displayName, country: stat.country || meta.activeCountry || 'sa',
+        key: keyName, name: displayName, country: effectiveCountry(stat.country, meta, 'sa'),
         due: stat.due, collected: stat.collected, gap: stat.gap, sar: stat.gap,
         count: stat.count, netOrderCount: stat.count, statusTotalCount: stat.statusTotalCount,
         confirmationStatusCount: stat.confirmationStatusCount,
@@ -2703,7 +2711,7 @@
     });
     var mapCities = topCollectedCities.slice(0, 5).map(function (city, idx) {
       var dot = window.TaagerGeo && typeof window.TaagerGeo.cityPoint === 'function'
-        ? window.TaagerGeo.cityPoint(city.name, city.country || meta.activeCountry || 'sa', idx)
+        ? window.TaagerGeo.cityPoint(city.name, effectiveCountry(city.country, meta, 'sa'), idx)
         : (coords[city.name] || fallbackCoords[idx] || { x: 150, y: 150 });
       return Object.assign({}, city, { x: dot.x, y: dot.y, sar: city.collected || 0 });
     });
@@ -2797,7 +2805,7 @@
           return {
             key:       c,
             name:      cm.name || c,
-            country:   cm.country || meta.activeCountry || 'sa',
+            country:   effectiveCountry(cm.country, meta, 'sa'),
             count:     cityStatusTotal,
             netOrderCount: cityNetOrders,
             confirmed: cityConfirmed,

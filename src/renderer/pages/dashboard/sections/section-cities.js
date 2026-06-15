@@ -493,13 +493,14 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
       var angle = pDef.cities.length * 0.8 + idx * 0.1;
       var r = 5 + (idx % 3) * 5;
+      var resolvedCountry = cityMapCountry(city);
       var geoPoint = window.TaagerGeo && typeof window.TaagerGeo.cityPoint === "function"
-        ? window.TaagerGeo.cityPoint(city.name, city.country || activeMapCountry(), idx)
+        ? window.TaagerGeo.cityPoint(city.name, resolvedCountry, idx)
         : null;
 
       pDef.cities.push({
         name: city.name || s6Txt("Unknown", "غير معروف"),
-        country: city.country || activeMapCountry(),
+        country: resolvedCountry,
         orders: count,
         activeOrders: activeOrders,
         deliveryRate: pct,
@@ -573,7 +574,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     p.cities.forEach(function (c) {
       ALL_CITIES.push({
         name: c.name,
-        country: c.country || activeMapCountry(),
+        country: cityMapCountry(c),
         orders: c.orders,
         activeOrders: c.activeOrders,
         deliveryRate: c.deliveryRate,
@@ -952,6 +953,13 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     var geoData = window.dashboardGeoData || {};
     var meta = geoData.meta || {};
     return meta.activeCountry || window.dashboardActiveCountry || "sa";
+  }
+
+  function cityMapCountry(city) {
+    var country = String(city && city.country || "").trim().toLowerCase();
+    if (country && country !== "mixed") return country;
+    var active = String(activeMapCountry() || "").trim().toLowerCase();
+    return active && active !== "mixed" ? active : "sa";
   }
 
   function mixedCountryMapsHTML(countryGroups) {

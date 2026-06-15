@@ -1396,9 +1396,35 @@ window.TaagerGeo = (() => {
     ]
   };
 
+  function atlasData() {
+    return window.TaagerCountryAtlas || {};
+  }
+
+  function atlasColors() {
+    const atlas = atlasData();
+    return Array.isArray(atlas.colors) && atlas.colors.length ? atlas.colors : COLORS;
+  }
+
+  function atlasOutlines() {
+    const atlas = atlasData();
+    return atlas.outlines || OUTLINES;
+  }
+
+  function atlasRegions() {
+    const atlas = atlasData();
+    return atlas.regions || GEO;
+  }
+
+  function atlasProfiles() {
+    const atlas = atlasData();
+    return atlas.visualProfiles || VISUAL_PROFILES;
+  }
+
   function normalizeCountry(country) {
     const key = String(country || "sa").trim().toLowerCase();
-    return GEO[key] ? key : "sa";
+    const regions = atlasRegions();
+    const outlines = atlasOutlines();
+    return (regions[key] || outlines[key]) ? key : "sa";
   }
 
   function textKey(value) {
@@ -1413,16 +1439,18 @@ window.TaagerGeo = (() => {
   }
 
   function rows(country) {
-    return GEO[normalizeCountry(country)] || GEO.sa;
+    const regions = atlasRegions();
+    return regions[normalizeCountry(country)] || regions.sa || GEO.sa;
   }
 
   function provinceMap(country) {
     const out = {};
+    const colors = atlasColors();
     rows(country).forEach((entry, index) => {
       out[entry[0]] = {
         id: entry[0],
         name: entry[1],
-        color: COLORS[index % COLORS.length],
+        color: colors[index % colors.length],
         x: entry[2],
         y: entry[3],
         rx: entry[4],
@@ -1450,16 +1478,24 @@ window.TaagerGeo = (() => {
   }
 
   function outline(country) {
-    return OUTLINES[normalizeCountry(country)] || OUTLINES.sa;
+    const outlines = atlasOutlines();
+    return outlines[normalizeCountry(country)] || outlines.sa || OUTLINES.sa;
   }
 
-  function viewBox() {
-    return "0 0 400 340";
+  function viewBox(country) {
+    const atlas = atlasData();
+    if (typeof atlas.viewBox === "function") return atlas.viewBox(normalizeCountry(country));
+    if (atlas.viewBox && typeof atlas.viewBox === "object") {
+      const cc = normalizeCountry(country);
+      return atlas.viewBox[cc] || atlas.viewBox.default || "0 0 400 340";
+    }
+    return atlas.viewBox || "0 0 400 340";
   }
 
   function visualProfile(country) {
     const cc = normalizeCountry(country);
-    return Object.assign({}, VISUAL_PROFILES.default, VISUAL_PROFILES[cc] || {});
+    const profiles = atlasProfiles();
+    return Object.assign({}, profiles.default || VISUAL_PROFILES.default, profiles[cc] || {});
   }
 
   function clipRegionCell(polygon, a, b, c) {
@@ -1509,8 +1545,8 @@ window.TaagerGeo = (() => {
     const cc = normalizeCountry(country);
     return {
       country: cc,
-      viewBox: viewBox(),
-      outline: OUTLINES[cc],
+      viewBox: viewBox(cc),
+      outline: outline(cc),
       profile: visualProfile(cc),
       regions: rows(cc).map((entry, index, entries) => ({
         id: cc + "-" + entry[0],
@@ -1817,6 +1853,7 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/dashboard/dashboard-i18n.js",
     "pages/dashboard/dashboard-currency-core.js",
     "pages/dashboard/dashboard-financial-core.js",
+    "pages/dashboard/dashboard-country-atlas.js",
     "pages/dashboard/dashboard-product-attribution-core.js",
     "pages/dashboard/dashboard-campaign-decision.js",
     "pages/dashboard/dashboard-aggregator.js",
@@ -1853,6 +1890,7 @@ const FEATURE_SCRIPT_GROUPS = {
   dashboardOrdersExport: ["../../node_modules/xlsx/dist/xlsx.full.min.js"],
   dashboardCod: [
     "pages/smart-insights-core.js",
+    "pages/dashboard/dashboard-country-atlas.js",
     "pages/dashboard/sections/section-city-drawer.js",
     "pages/dashboard/sections/section4-cod.js",
   ],
@@ -1868,6 +1906,7 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/dashboard/sections/section7-calculator.js",
   ],
   dashboardCities: [
+    "pages/dashboard/dashboard-country-atlas.js",
     "pages/dashboard/sections/section-product-matrix.js",
     "pages/dashboard/sections/section-city-drawer.js",
     "pages/dashboard/sections/section-cities.js",
@@ -2603,24 +2642,15 @@ function startPeriodicLicenseCheck() {
         window._maxAccounts = creds.maxAccounts || 1;
         window._kbotAccounts = creds.accounts || [];
 
-        const prevAnalyticsEnabled = window._analyticsEnabled;
-        const prevOperationsEnabled = window._operationsEnabled;
-        const prevDashboardEnabled = window._dashboardEnabled;
-        const prevTeamLeaderEnabled = window._teamLeaderEnabled;
-
         window._analyticsEnabled  = creds.analyticsEnabled  !== false;
         window._operationsEnabled = creds.operationsEnabled !== false;
         window._dashboardEnabled  = creds.dashboardEnabled  === true;
         window._teamLeaderEnabled = creds.teamLeaderEnabled === true;
 
-        if (
-          prevAnalyticsEnabled !== window._analyticsEnabled ||
-          prevOperationsEnabled !== window._operationsEnabled ||
-          prevDashboardEnabled !== window._dashboardEnabled ||
-          prevTeamLeaderEnabled !== window._teamLeaderEnabled
-        ) {
-          if (window.invalidateDashboardCache) window.invalidateDashboardCache();
-        }
+        if (window.invalidateDashboardCache) window.invalidateDashboardCache("periodic-sync");
+        invalidatePage("page-dashboard", "periodic-sync");
+        invalidatePage("page-analytics", "periodic-sync");
+        invalidatePage("page-operations", "periodic-sync");
 
         updateTopBarText();
         const activeId = document.querySelector(".page.active")?.id;
@@ -2751,10 +2781,6 @@ async function adminRefresh() {
 
     // 3. Re-fetch credentials — checkLicenseNocache also busts the main-process
     //    credential cache, so account unlocks and slot changes are fresh here.
-    const prevAnalyticsEnabled = window._analyticsEnabled;
-    const prevOperationsEnabled = window._operationsEnabled;
-    const prevDashboardEnabled = window._dashboardEnabled;
-    const prevTeamLeaderEnabled = window._teamLeaderEnabled;
     const creds = await window.api.getCredentials();
     window._maxAccounts       = creds.maxAccounts || 1;
     window._kbotAccounts      = creds.accounts || [];
@@ -2762,14 +2788,10 @@ async function adminRefresh() {
     window._operationsEnabled = creds.operationsEnabled !== false;
     window._dashboardEnabled  = creds.dashboardEnabled  === true;
     window._teamLeaderEnabled = creds.teamLeaderEnabled === true;
-    if (
-      prevAnalyticsEnabled !== window._analyticsEnabled ||
-      prevOperationsEnabled !== window._operationsEnabled ||
-      prevDashboardEnabled !== window._dashboardEnabled ||
-      prevTeamLeaderEnabled !== window._teamLeaderEnabled
-    ) {
-      if (window.invalidateDashboardCache) window.invalidateDashboardCache();
-    }
+    if (window.invalidateDashboardCache) window.invalidateDashboardCache("admin-refresh");
+    invalidatePage("page-dashboard", "admin-refresh");
+    invalidatePage("page-analytics", "admin-refresh");
+    invalidatePage("page-operations", "admin-refresh");
 
     // 4. Refresh topbar text (expiry days, accounts badge)
     updateTopBarText();
