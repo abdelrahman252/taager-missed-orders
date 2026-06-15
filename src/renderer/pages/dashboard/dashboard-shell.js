@@ -49,9 +49,17 @@
     calculator: 'roi'
   };
 
-  var DASHBOARD_PANE_CACHE_LIMIT = 4;
+  var DASHBOARD_PANE_CACHE_LIMIT = 6;
   var CACHEABLE_SECTIONS = {
-    overview: true
+    master: true,
+    overview: true,
+    cod: true,
+    products: true,
+    cities: true,
+    campaigns: true,
+    calculator: true,
+    prepaid: true,
+    staticUpdate: true
   };
 
   function icon(name, color) {
@@ -1429,7 +1437,14 @@
     }
     var cacheable = isCacheableSection(sectionId);
     var cachedPane = cacheable && !(data && data._loading) ? getCachedSectionPane(shellEl, renderKey) : null;
+    if (cachedPane && cachedPane._dashboardNeedsRefresh) {
+      destroySectionPane(shellEl, cachedPane);
+      cachedPane = null;
+    }
     if (!skipDelay && cachedPane && cachedPane.children.length) {
+      var restoreTimer = window.TaagerPerf && typeof window.TaagerPerf.start === 'function'
+        ? window.TaagerPerf.start('dashboard:section:cache-restore', { sectionId: sectionId, renderKey: renderKey })
+        : null;
       deactivateOrDestroyActivePane(shellEl, cachedPane);
       activateSectionPane(shellEl, cachedPane);
       var cachedCtx = cachedPane._dashboardSectionContext || Object.assign({}, ctx, {
@@ -1449,6 +1464,9 @@
       if (window.dashboardI18n) window.dashboardI18n.apply(cachedPane);
       if (window.TaagerUI) window.TaagerUI.enhance(cachedPane);
       scheduleInlineThemeFix(cachedPane);
+      if (window.TaagerPerf && typeof window.TaagerPerf.end === 'function' && restoreTimer) {
+        window.TaagerPerf.end(restoreTimer, { ok: true, sectionId: sectionId });
+      }
       finishSectionSwitch({ ok: true, cacheHit: true, cachedPane: true, renderKey: renderKey });
       return;
     }

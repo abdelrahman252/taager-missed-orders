@@ -3921,6 +3921,10 @@ window.renderSection7 = function (mountEl, data, ctx) {
       if (ctx && ctx.sectionId && ctx.sectionId !== "calculator") return;
       if (!next || String(next.accountId) !== String(calculatorAccountId))
         return;
+      if (mountEl.hidden) {
+        mountEl._dashboardNeedsRefresh = true;
+        return;
+      }
       window.renderSection7(mountEl, data, ctx);
     };
     window.DashboardMarketingState.subscribe(mountEl._s7MarketingListener);

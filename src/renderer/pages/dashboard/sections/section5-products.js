@@ -3687,6 +3687,10 @@ window.renderSection5 = function (mountEl, data, ctx) {
   }
 
   function onAiProductFilter(event) {
+    if (mountEl.hidden) {
+      mountEl._dashboardNeedsRefresh = true;
+      return;
+    }
     const detail = event && event.detail || {};
     if (detail.productKey || detail.productId || detail.productName) {
       openAiProduct(detail.productKey || detail.productId || detail.productName, { search: true });
@@ -4895,6 +4899,10 @@ window.renderSection5 = function (mountEl, data, ctx) {
     mountEl._s5RoiListener = function (settings) {
       if (ctx && ctx.sectionId && ctx.sectionId !== 'products') return;
       if (String(settings.accountId) !== String(productAccountId)) return;
+      if (mountEl.hidden) {
+        mountEl._dashboardNeedsRefresh = true;
+        return;
+      }
       productFinancialSettings = settings;
       if (refreshBackendProducts(true)) {
         updateProductCurrencyUIOnly();
@@ -4937,6 +4945,10 @@ window.renderSection5 = function (mountEl, data, ctx) {
     mountEl._s5MarketingListener = function (status) {
       if (ctx && ctx.sectionId && ctx.sectionId !== 'products') return;
       if (String(status.accountId) !== String(productAccountId)) return;
+      if (mountEl.hidden) {
+        mountEl._dashboardNeedsRefresh = true;
+        return;
+      }
       var nextMarketingKey = [status.lastSyncAt || '', status.summary && status.summary.adSpend || 0, status.manualOverride ? 1 : 0].join('|');
       if (nextMarketingKey === productMarketingKey) return;
       productMarketingKey = nextMarketingKey;

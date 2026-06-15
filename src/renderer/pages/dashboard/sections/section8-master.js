@@ -24,6 +24,10 @@ window.renderSection8 = function (mountEl, data, ctx) {
     mountEl._s8ThemeObserver = null;
   }
   var _s8ThemeObs = new MutationObserver(function (mutations) {
+    if (mountEl.hidden) {
+      mountEl._dashboardNeedsRefresh = true;
+      return;
+    }
     mutations.forEach(function (m) {
       if (m.attributeName === 'data-theme') {
         window.renderSection8(mountEl, data, ctx);
@@ -1605,6 +1609,10 @@ window.renderSection8 = function (mountEl, data, ctx) {
     }
     mountEl._s8RoiListener = function (next) {
       if (!next || String(next.accountId) !== String(_roiAccountId)) return;
+      if (mountEl.hidden) {
+        mountEl._dashboardNeedsRefresh = true;
+        return;
+      }
       window.renderSection8(mountEl, data, ctx);
     };
     window.DashboardRoiState.subscribe(mountEl._s8RoiListener);
@@ -1620,6 +1628,10 @@ window.renderSection8 = function (mountEl, data, ctx) {
       : '';
     mountEl._s8MarketingListener = function (next) {
       if (!next || String(next.accountId) !== String(_roiAccountId)) return;
+      if (mountEl.hidden) {
+        mountEl._dashboardNeedsRefresh = true;
+        return;
+      }
       var nextKey = [next.lastSyncAt || '', next.summary && next.summary.adSpend || 0, next.manualOverride ? 1 : 0].join('|');
       if (nextKey === mountEl._s8MarketingKey) return;
       mountEl._s8MarketingKey = nextKey;

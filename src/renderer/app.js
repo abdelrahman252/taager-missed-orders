@@ -1807,7 +1807,6 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/ai-intelligence/ai-intelligence.js",
   ],
   dashboard: [
-    "pages/analytics/chart.umd.min.js",
     "pages/guided-tour.js",
     "pages/premium-preview.js",
     "pages/taager-product-names.js",
@@ -1831,7 +1830,10 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/dashboard/dashboard-shell.js",
     "pages/dashboard/dashboard.js",
   ],
-  dashboardMaster: ["pages/dashboard/sections/section8-master.js"],
+  dashboardMaster: [
+    "pages/analytics/chart.umd.min.js",
+    "pages/dashboard/sections/section8-master.js",
+  ],
   dashboardProducts: [
     "pages/smart-insights-core.js",
     "pages/dashboard/dashboard-financial-core.js",
@@ -1854,9 +1856,17 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/dashboard/sections/section-city-drawer.js",
     "pages/dashboard/sections/section4-cod.js",
   ],
-  dashboardCommission: ["pages/dashboard/sections/section6-commission.js"],
+  dashboardCommission: [
+    "pages/analytics/chart.umd.min.js",
+    "pages/dashboard/sections/section6-commission.js",
+  ],
   dashboardMarketing: ["pages/dashboard/sections/section-marketing-connections.js"],
-  dashboardCalculator: ["pages/smart-insights-core.js", "pages/dashboard/dashboard-financial-core.js", "pages/dashboard/sections/section7-calculator.js"],
+  dashboardCalculator: [
+    "pages/analytics/chart.umd.min.js",
+    "pages/smart-insights-core.js",
+    "pages/dashboard/dashboard-financial-core.js",
+    "pages/dashboard/sections/section7-calculator.js",
+  ],
   dashboardCities: [
     "pages/dashboard/sections/section-product-matrix.js",
     "pages/dashboard/sections/section-city-drawer.js",
@@ -1892,6 +1902,7 @@ const FEATURE_SCRIPT_GROUPS = {
 const _loadedFeatureScripts = new Set();
 const _featureLoadPromises = new Map();
 const _preloadedFeatureScripts = new Set();
+const _preloadedFeatureStyles = new Set();
 const _loadedFeatureStyles = new Set();
 const _featureStylePromises = new Map();
 const _featureRouteTokens = new Map();
@@ -1978,6 +1989,21 @@ function preloadScriptResource(src) {
   document.head.appendChild(link);
 }
 
+function preloadStyleResource(href) {
+  if (_loadedFeatureStyles.has(href) || _preloadedFeatureStyles.has(href)) return;
+  _preloadedFeatureStyles.add(href);
+  const link = document.createElement("link");
+  link.rel = "preload";
+  link.as = "style";
+  link.href = href;
+  document.head.appendChild(link);
+}
+
+function preloadFeatureResources(feature) {
+  (FEATURE_STYLE_GROUPS[feature] || []).forEach(preloadStyleResource);
+  (FEATURE_SCRIPT_GROUPS[feature] || []).forEach(preloadScriptResource);
+}
+
 async function ensureFeatureScripts(feature) {
   const perfTimer = TaagerPerf.start("feature:" + feature + ":ensure", {
     feature,
@@ -1986,12 +2012,13 @@ async function ensureFeatureScripts(feature) {
   });
   const styles = FEATURE_STYLE_GROUPS[feature] || [];
   try {
-    await Promise.all(styles.map((href) => loadStylesheetOnce(href)));
+    const stylePromise = Promise.all(styles.map((href) => loadStylesheetOnce(href)));
     const scripts = FEATURE_SCRIPT_GROUPS[feature] || [];
     scripts.forEach(preloadScriptResource);
     for (const src of scripts) {
       await loadScriptOnce(src);
     }
+    await stylePromise;
     TaagerPerf.end(perfTimer, { ok: true });
   } catch (err) {
     TaagerPerf.end(perfTimer, { ok: false, error: err && err.message ? err.message : String(err || "") });
@@ -2025,7 +2052,20 @@ window.ensureDashboardSection = function ensureDashboardSection(sectionId) {
 
 window.prewarmDashboardSections = function prewarmDashboardSections() {
   const start = () => {
-    ["dashboardCities", "dashboardProducts", "dashboardCampaigns", "dashboardCod", "dashboardCalculator"].reduce(
+    [
+      "dashboardOverview",
+      "dashboardPipeline",
+      "dashboardOrders",
+      "dashboardCod",
+      "dashboardProducts",
+      "dashboardCommission",
+      "dashboardPrepaid",
+      "dashboardCities",
+      "dashboardCampaigns",
+      "dashboardCalculator",
+      "dashboardForecast",
+      "dashboardMarketing",
+    ].reduce(
       (chain, feature) => chain.then(() => ensureFeatureScripts(feature).catch(() => {})),
       Promise.resolve()
     );
@@ -2064,6 +2104,13 @@ function scheduleFeaturePrewarm(preferredFeature) {
   };
   if (window.requestIdleCallback) window.requestIdleCallback(start, { timeout: 1500 });
   else setTimeout(start, 350);
+}
+
+function primeLikelyFeatureRoutes(preferredFeature) {
+  [preferredFeature, "dashboard", "analytics", "operations"]
+    .filter(Boolean)
+    .filter((feature, index, arr) => arr.indexOf(feature) === index)
+    .forEach(preloadFeatureResources);
 }
 
 const _pageLifecycle = new Map();
@@ -2874,6 +2921,7 @@ async function init() {
   window._dashboardEnabled  = creds.dashboardEnabled  === true;
   window._teamLeaderEnabled = creds.teamLeaderEnabled === true;
   updateTopBarText();
+  primeLikelyFeatureRoutes(window._teamLeaderEnabled ? "dashboard" : null);
   // Route based on credential state:
   // - Accounts exist → skip the accounts management step, go straight to run step
   // - No accounts    → land on accounts step so user can add their first account
@@ -2960,6 +3008,7 @@ async function afterLicense(isFlush = false) {
   window._operationsEnabled = creds.operationsEnabled !== false;
   window._dashboardEnabled  = creds.dashboardEnabled  === true;
   window._teamLeaderEnabled = creds.teamLeaderEnabled === true;
+  primeLikelyFeatureRoutes(window._teamLeaderEnabled ? "dashboard" : null);
   const hasAccounts = creds.accounts && creds.accounts.length > 0;
   if (window._teamLeaderEnabled && hasAccounts) goToDashboard();
   else goToSetup(hasAccounts ? "run" : "accounts");
@@ -3217,14 +3266,27 @@ async function goToDashboard() {
   try {
     await ensureFeatureScripts("dashboard");
     if (!isLatestFeatureRoute("dashboard", token) || !isActivePage("page-dashboard")) return;
+    let renderResult = null;
     if (typeof renderDashboard === "function") {
-      await renderDashboard(() => goToSetup("run"));
+      renderResult = renderDashboard(() => goToSetup("run"));
     }
     markPageMounted("page-dashboard");
-    perfMark("route:page-dashboard:data-ready");
-    TaagerPerf.measure("route:page-dashboard:click-to-data-ready", "route:page-dashboard:click", "route:page-dashboard:data-ready", { pageId: "page-dashboard" });
     if (window.prewarmDashboardSections) window.prewarmDashboardSections();
     if (isLatestFeatureRoute("dashboard", token) && isActivePage("page-dashboard")) showPage("page-dashboard");
+    const finishReady = () => {
+      perfMark("route:page-dashboard:data-ready");
+      TaagerPerf.measure("route:page-dashboard:click-to-data-ready", "route:page-dashboard:click", "route:page-dashboard:data-ready", { pageId: "page-dashboard" });
+    };
+    if (renderResult && typeof renderResult.then === "function") {
+      renderResult.then(finishReady).catch((err) => {
+        if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(err, { operation: "dashboard.initialReady" });
+        if (isLatestFeatureRoute("dashboard", token) && isActivePage("page-dashboard")) {
+          console.warn("[Dashboard] Initial data readiness failed:", err?.message || err);
+        }
+      });
+    } else {
+      finishReady();
+    }
   } catch (err) {
     if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(err, { operation: "dashboard.render" });
     if (isLatestFeatureRoute("dashboard", token) && isActivePage("page-dashboard")) showFeatureError("page-dashboard", "Dashboard failed to load", err);

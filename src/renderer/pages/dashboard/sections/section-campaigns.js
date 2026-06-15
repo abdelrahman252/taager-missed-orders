@@ -1521,6 +1521,10 @@
       }
       mount._campaignRoiListener = function (settings) {
         if (String(settings && settings.accountId || "__all__") !== String(accountId || "__all__")) return;
+        if (mount.hidden) {
+          mount._dashboardNeedsRefresh = true;
+          return;
+        }
         mount._cachedIntel = null;
         if (mount._campaignBackendActive || mount._campaignBackendEnabled) {
           requestBackendCampaigns(mount, data, ctx, state, true);

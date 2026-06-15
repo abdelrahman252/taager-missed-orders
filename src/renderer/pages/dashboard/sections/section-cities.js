@@ -3811,6 +3811,10 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   var _prevFocusProduct = null;
 
   function _onFilterBusChange(state) {
+    if (mountEl.hidden) {
+      mountEl._dashboardNeedsRefresh = true;
+      return;
+    }
     var fp = state.selectedProduct || null;
     if (false) console.log(
       "[Cities][_onFilterBusChange] state.selectedProduct:",

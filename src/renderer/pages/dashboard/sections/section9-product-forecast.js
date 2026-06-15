@@ -131,7 +131,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   }));
   var currentPage  = Math.max(1, Number(mountEl._s9CurrentPage) || 1);
   var itemsPerPage = 10;
-  var tableSortBy  = mountEl._s9TableSortBy || '';
+  var tableSortBy  = Object.prototype.hasOwnProperty.call(mountEl, '_s9TableSortBy') ? mountEl._s9TableSortBy : 'orders';
   var tableSortDir = mountEl._s9TableSortDir || 'desc';
   var tableSearchQuery = mountEl._s9TableSearchQuery || '';
   var tableSearchTimer = null;
