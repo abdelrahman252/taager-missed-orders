@@ -2,9 +2,10 @@
 
 const XLSX = require("xlsx");
 const { normalizePhone, normalizePhoneWithMeta } = require("./phone");
+const { normalizeTaagerCountry } = require("./taager-country");
 
 const config = JSON.parse(process.env.BOT_CONFIG || "{}");
-const COUNTRY = (config.taagerCountry || config.taagerCountry || "sa").toLowerCase();
+const COUNTRY = normalizeTaagerCountry(config.taagerCountry || config.taagerCountry || "sa");
 
 // Taager dashboard/status/NDR migration:
 // Taager exports Arabic statuses, SKU-only products, order profit, and tax profit.
@@ -137,9 +138,10 @@ function parseMoney(value) {
   return Number.isFinite(n) ? sign * n : 0;
 }
 
-function parseTaagerProfitMoney(value) {
+function parseTaagerProfitMoney(value, country = COUNTRY) {
   const parsed = parseMoney(value);
   if (!Number.isFinite(parsed) || parsed === 0) return 0;
+  if (normalizeTaagerCountry(country) === "iq") return parsed;
   const text = normalizeDigits(value).trim().replace(/[^\d.,-]/g, "");
   const hasDecimalMark = /[.,]\d{1,2}$/.test(text);
   if (!hasDecimalMark && Math.abs(parsed) >= 1000) {
@@ -513,8 +515,9 @@ function parseTaagerAnalyticsMap(buffer) {
       const prices = splitTaagerProducts(row[priceIdx]);
       const status = String(row[statusIdx] || "").trim();
       const amountDue = parseMoney(row[codIdx]);
-      const orderProfit = parseTaagerProfitMoney(row[commissionIdx]);
-      const taxProfit = parseTaagerProfitMoney(row[taxProfitIdx]);
+      const profitCountry = products.some((sku) => /^IQ/i.test(sku)) ? "iq" : COUNTRY;
+      const orderProfit = parseTaagerProfitMoney(row[commissionIdx], profitCountry);
+      const taxProfit = parseTaagerProfitMoney(row[taxProfitIdx], profitCountry);
       const marketerCommission = orderProfit - taxProfit;
 
       products.forEach((sku, idx) => {
@@ -660,8 +663,11 @@ function parseFullMonthSnapshot(buffer, options = {}) {
       const dashboardDate = inRange(createdAt) ? createdAt : inRange(updatedAt) ? updatedAt : (createdAt || updatedAt || rangeFromKey);
       const notes = String(row[idx.notes] || "").trim();
       const statusMeta = taagerStatusMeta(row[idx.status]);
-      const orderProfit = parseTaagerProfitMoney(row[idx.profit]);
-      const taxProfit = parseTaagerProfitMoney(row[idx.taxProfit]);
+      const profitCountry = products.some((sku) => /^IQ/i.test(sku))
+        ? "iq"
+        : (options.taagerCountry || options.country || COUNTRY);
+      const orderProfit = parseTaagerProfitMoney(row[idx.profit], profitCountry);
+      const taxProfit = parseTaagerProfitMoney(row[idx.taxProfit], profitCountry);
       const taagerProfitValue = orderProfit - taxProfit;
       const payment = classifyStructuredPayment(
         idx.payment >= 0 ? row[idx.payment] : "",

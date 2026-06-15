@@ -273,6 +273,7 @@
       var period = window.DashboardPeriodState ? window.DashboardPeriodState.get() : {};
       var activeId = window.getActiveAccountId ? window.getActiveAccountId() : '__all__';
       var roi = window.DashboardRoiState ? window.DashboardRoiState.get(activeId, {}) : {};
+      var store = window.DashboardMarketingState;
       var syncPayload = {
         dateFrom: period.from || period.dateFrom || period.start || '',
         dateTo: period.to || period.dateTo || period.end || '',
@@ -280,9 +281,18 @@
         egpRate: roi.egpRate || 52,
         mode: 'incremental'
       };
-      if (window.DashboardMarketingState && typeof window.DashboardMarketingState.sync === 'function') {
-        console.log('[Marketing] Triggering background sync on dashboard settings change for account:', activeId, syncPayload);
-        activeMarketingSyncPromise = window.DashboardMarketingState.sync(activeId, syncPayload).catch(function(e) {
+      if (store && typeof store.sync === 'function' && syncPayload.dateFrom && syncPayload.dateTo) {
+        console.log('[Marketing] Loading connections before background sync on dashboard settings change:', activeId, syncPayload);
+        var connectionPromise = typeof store.load === 'function'
+          ? store.load(activeId).catch(function (error) {
+              console.warn('[Marketing] Could not load connections before dashboard auto-sync:', error);
+              return null;
+            })
+          : Promise.resolve(null);
+        activeMarketingSyncPromise = connectionPromise.then(function () {
+          console.log('[Marketing] Triggering background sync on dashboard settings change for account:', activeId, syncPayload);
+          return store.sync(activeId, syncPayload);
+        }).catch(function(e) {
           console.warn('[Marketing] Dashboard auto-sync failed:', e);
           return null;
         });

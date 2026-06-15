@@ -156,8 +156,9 @@ window.renderSection7 = function (mountEl, data, ctx) {
   }
 
   var realExpectedDvl =
-    d.deliveredCount != null && !(window.isExpectedNdrMode && window.isExpectedNdrMode())
-      ? Number(d.deliveredCount || 0)
+    !(window.isExpectedNdrMode && window.isExpectedNdrMode()) &&
+    (d.actualDeliveredCount != null || d.deliveredCount != null)
+      ? Number(d.actualDeliveredCount != null ? d.actualDeliveredCount : d.deliveredCount || 0)
       : Math.round((realNdrPct / 100) * realTotalOrders);
   var realExpectedDvlExact = d.expectedDeliveriesExact != null
     ? Number(d.expectedDeliveriesExact || 0)
@@ -2832,7 +2833,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       "</div>" +
       '<div class="s7-sync-period-note">' +
       s7Txt(
-        "To change this period, select a date range from the top dashboard bar, click Update Dashboard, then click Sync Now.",
+        "Selecting a period from the top dashboard bar syncs connected marketing automatically. Update Dashboard also refreshes marketing after fetching live order data.",
         "?????? ??? ??????? ???? ???? ??????? ?? ?????? ?????? ?????? ?? ???? ????? ???? ??????? ?? ?????? ????.",
       ) +
       "</div>" +

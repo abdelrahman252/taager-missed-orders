@@ -617,7 +617,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         confirmationPct: p.confirmationPct || 0,
         cancelPct:       p.cancelPct       || 0,
         pendingPct:      p.pendingPct      || 0,
-        ndrPct:          p.ndrPct          || 0,
+        ndrPct:          units > 0 ? (p.ndrPct || 0) : 0,
         drRate:          p.drRate          || 0,
         ndrBaseOrders: p.ndrBaseOrders || 0,
         ndrDeliveredOrders: p.ndrDeliveredOrders || 0,
@@ -631,7 +631,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         piecesBreakdown: (p.piecesBreakdown || []).map(function (item) {
           var count = Number(item.count || item.orders || 0);
           var delivered = Number(item.delivered || item.deliveredCount || 0);
-          var ndr = item.ndr !== undefined
+          var ndr = delivered > 0 && item.ndr !== undefined
             ? Number(item.ndr || 0)
             : (count > 0 ? parseFloat((delivered / count * 100).toFixed(1)) : 0);
           return Object.assign({}, item, { count: count, delivered: delivered, ndr: ndr });
@@ -921,7 +921,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
     const commissionVal = Number(row.commission || 0);
     const breakEvenCpaVal = Number(row.breakEvenCpa || 0);
     const profitLossVal = Number(row.profitLoss || row.netProfit || 0);
-    const ndrPctVal = Number(row.ndrPct || 0);
+    const ndrPctVal = deliveriesVal > 0 ? Number(row.ndrPct || 0) : 0;
 
     const failedCountVal = Number(row.failedCount || 0);
     const canceledCountVal = Number(row.canceledCount || 0);
@@ -1646,10 +1646,6 @@ window.renderSection5 = function (mountEl, data, ctx) {
     const compact = viewMode === 'compact';
     const minH    = compact ? '64px' : '88px';
 
-    const noDeliveryRate = p.deliveredCount === 0;
-    const noDeliveriesLabel = s5Txt('No deliveries yet', 'لا تسليمات بعد');
-    const zeroRate = `<div class="s5-empty-rate" title="${attr(noDeliveriesLabel)}" aria-label="${attr(noDeliveriesLabel)}"><span aria-hidden="true">&mdash;</span></div>`;
-
     const productKey = p.key || p.sku || p.name || i;
     const totalPiecesText = productCompactNumber(p.totalPieces || 0, 0, 10000);
     const failedText = productCompactNumber(p.failedCount || 0, 0, 10000);
@@ -1749,13 +1745,13 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
       <!-- Col 9: NDR % -->
       <div class="s5-cell s5-cell-ndr" style="flex:0 0 ${compact?'64px':'66px'};min-width:${compact?'64px':'66px'};padding:0 5px">
-        ${noDeliveryRate ? zeroRate : rateBadgeHTML(p.ndrPct, 'ndr')}
+        ${rateBadgeHTML(p.deliveredCount > 0 ? p.ndrPct : 0, 'ndr')}
       </div>
       ${DIV}
 
       <!-- Col 10: Delivery % -->
       <div class="s5-cell s5-cell-delivery" style="flex:0 0 ${compact?'66px':'70px'};min-width:${compact?'66px':'70px'};padding:0 5px">
-        ${noDeliveryRate ? zeroRate : rateBadgeHTML(p.drRate, 'delivery')}
+        ${rateBadgeHTML(p.drRate, 'delivery')}
       </div>
       ${DIV}
 
@@ -3858,6 +3854,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
       clone.deliveredCount = Number(product && (
         product.actualDeliveredCount != null ? product.actualDeliveredCount : product.deliveredCount
       )) || 0;
+      clone.ndrPct = clone.deliveredCount > 0 ? (Number(product && product.ndrPct) || 0) : 0;
       clone.expectedDeliveriesExact = clone.deliveredCount;
       clone.commission = Number(product && (
         product.actualCommission != null ? product.actualCommission : product.commission
@@ -3901,7 +3898,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         deliveredSales: calculation.expectedDeliveredSales,
         expectedDeliveredSales: calculation.expectedDeliveredSales,
         expectedDeliveredCpa: calculation.expectedDeliveredCpa,
-        ndrPct: Number(product.ndrPct) || 0,
+        ndrPct: calculation.expectedDeliveriesDisplay > 0 ? (Number(product.ndrPct) || 0) : 0,
         drRate: Number(product.drRate || product.deliveryPct || product.ndrPct || 0),
         breakEvenCpa: sarToSelectedCurrency(calculation.breakEvenCpa),
         profitLoss: commissionInCurrency(calculation.expectedTotalProfitBeforeAdSpend) - (Number(product.allocatedAdSpend) || 0)
@@ -3919,6 +3916,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
       expected.allocatedAdSpend = Number(product && product.allocatedAdSpend) || Number(expected.allocatedAdSpend) || 0;
       expected.cpa = Number(product && product.cpa) || Number(expected.cpa) || 0;
       expected.profitLoss = Number(expected.profitLoss != null ? expected.profitLoss : (commissionInCurrency(expected.commission || 0) - expected.allocatedAdSpend));
+      if ((Number(expected.deliveredCount) || 0) <= 0) expected.ndrPct = 0;
       if (expected.expectedDeliveredCpa == null && expected.expectedDeliveriesExact != null) {
         var exactDeliveries = Number(expected.expectedDeliveriesExact) || 0;
         expected.expectedDeliveredCpa = exactDeliveries > 0 ? expected.allocatedAdSpend / exactDeliveries : 0;

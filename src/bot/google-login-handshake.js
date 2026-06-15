@@ -1,5 +1,7 @@
 "use strict";
 
+const { normalizeTaagerCountry, taagerUrl } = require("./taager-country");
+
 function createGoogleLoginRequestId() {
   return `google-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -278,7 +280,7 @@ async function tryAutomatedGooglePopupLogin(page, email, log) {
 function waitForManualGoogleLogin({ config, country, chromePath, timeoutMs, log }) {
   const requestId = createGoogleLoginRequestId();
   const profilePath = config.profilePath || "";
-  const loginUrl = `https://taager.com/${String(country || "sa").toLowerCase()}/auth/login`;
+  const loginUrl = taagerUrl(normalizeTaagerCountry(country || "sa"), "/auth/login");
   const accountLabel = config.label || config.accountLabel || config.easyEmail || config.taagerEmail || "Taager account";
   const accountId = config.id || config.accountId || "__single__";
 

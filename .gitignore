@@ -28,6 +28,7 @@ release/
 # Temporary and local IDE configurations
 .codex-tmp/
 tmp/
+taager-sheet-lab/
 .vscode/
 .idea/
 

@@ -2,9 +2,10 @@
 
 const XLSX = require("xlsx");
 const { formatPhone } = require("./phone");
+const { normalizeTaagerCountry } = require("./taager-country");
 
 const config = JSON.parse(process.env.BOT_CONFIG || "{}");
-const COUNTRY = (config.taagerCountry || config.taagerCountry || "sa").toLowerCase();
+const COUNTRY = normalizeTaagerCountry(config.taagerCountry || config.taagerCountry || "sa");
 
 const COUNTRY_CONFIG = {
   sa: {
@@ -213,7 +214,7 @@ function normalizePlaceName(value) {
 }
 
 function normalizeProvince(city, country) {
-  const cc = (country || "sa").toLowerCase();
+  const cc = normalizeTaagerCountry(country || "sa");
   const cfg = COUNTRY_CONFIG[cc];
   if (!cfg) throw new Error(`UNSUPPORTED_TAAGER_COUNTRY: ${cc}`);
   const raw = city ? String(city).trim() : "";

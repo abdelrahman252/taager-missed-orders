@@ -48,14 +48,15 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     var orders = window.DashboardOrderMetrics
       ? window.DashboardOrderMetrics.netOrders(p)
       : (p.netOrderCount !== undefined ? p.netOrderCount : (p.placedCount || 0));
-    var delivered = p.deliveredCount || p.units || 0;
+    var displayedDelivered = p.deliveredCount || p.units || 0;
+    var actDelivered = p.actualDeliveredCount !== undefined ? p.actualDeliveredCount : displayedDelivered;
+    var delivered = expectedRateMode ? displayedDelivered : actDelivered;
     var realNdr   = orders > 0 ? (delivered / orders) : 0;
     var expectedDeliveriesExact = p.expectedDeliveriesExact != null ? Number(p.expectedDeliveriesExact || 0) : null;
-    var actDelivered = p.actualDeliveredCount !== undefined ? p.actualDeliveredCount : delivered;
     var actCommission = p.actualCommission !== undefined ? p.actualCommission : (p.commission || 0);
     var realComm = actDelivered > 0 ? (actCommission / actDelivered) : 0;
 
-    var realTaagerProfitAfterTax = Number(p.commission || 0);
+    var realTaagerProfitAfterTax = Number(expectedRateMode ? p.commission || 0 : actCommission);
     var realConfirmationRate = Number(p.confirmationPct || p.confirmationRate || 0) / 100;
     var realConfirmed = p.confirmationStatusCount != null
       ? Number(p.confirmationStatusCount)
@@ -80,6 +81,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         ? Math.min(orders, Math.max(0, expectedDeliveriesExact))
         : Math.min(orders, Math.max(0, orders * expectedNdrRate));
       delivered = Math.min(orders, Math.max(0, Math.round(expectedDeliveriesExact)));
+      if (delivered === 0) realNdr = 0;
       realTaagerProfitAfterTax = expectedDeliveriesExact * realComm;
       
       if (p.expectedDeliveredSales != null) {
@@ -90,7 +92,6 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       }
       realDeliveredAov = expectedDeliveriesExact > 0 ? realDeliveredSales / expectedDeliveriesExact : 0;
     } else {
-      if (realNdr  === 0) realNdr  = 0.30;
       expectedDeliveriesExact = delivered;
     }
 
@@ -381,7 +382,9 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     var totalOrders     = Math.max(0, Math.round(Number(s.totalOrders) || 0));
     var deliveredOrders = Math.max(0, Math.round(Number(s.deliveredOrders) || 0));
     if (deliveredOrders > totalOrders && totalOrders > 0) deliveredOrders = totalOrders;
-    var ndr             = Number(s.ndr) || (totalOrders > 0 ? deliveredOrders / totalOrders : 0);
+    var ndr             = deliveredOrders > 0
+      ? (Number(s.ndr) || (totalOrders > 0 ? deliveredOrders / totalOrders : 0))
+      : 0;
     var calculation     = window.TaagerDashboardFinancialCore.calculate({
       mode: 'expected',
       netOrders: totalOrders,
@@ -427,7 +430,9 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     s.totalOrders = Math.max(0, Math.round(Number(s.realOrders) || 0));
     s.deliveredOrders = Math.max(0, Math.round(Number(s.realDelivered) || 0));
     s.expectedDeliveriesExact = Math.max(0, Number(s.realExpectedDeliveriesExact != null ? s.realExpectedDeliveriesExact : s.realDelivered) || 0);
-    s.ndr = Number(s.realNdr) || (s.totalOrders > 0 ? (s.deliveredOrders / s.totalOrders) : 0);
+    s.ndr = s.deliveredOrders > 0
+      ? (Number(s.realNdr) || (s.totalOrders > 0 ? (s.deliveredOrders / s.totalOrders) : 0))
+      : 0;
     s.avgCommission = Math.max(0, Number(s.realCommission) || 0);
     s.isModified = false;
   }
@@ -435,21 +440,24 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   function setSimTotalOrders(s, orders) {
     s.totalOrders = Math.max(0, Math.round(Number(orders) || 0));
     s.deliveredOrders = Math.round(s.totalOrders * s.ndr);
+    if (s.deliveredOrders === 0) s.ndr = 0;
     s.expectedDeliveriesExact = s.totalOrders * s.ndr;
     s.isModified = true;
   }
 
   function setSimDeliveredOrders(s, delivered) {
     s.deliveredOrders = Math.max(0, Math.round(Number(delivered) || 0));
+    if (s.deliveredOrders === 0) s.ndr = 0;
     if (s.ndr > 0) s.totalOrders = Math.max(s.deliveredOrders, Math.ceil(s.deliveredOrders / s.ndr));
     s.expectedDeliveriesExact = s.deliveredOrders;
     s.isModified = true;
   }
 
   function setSimNdr(s, ndrPct) {
-    var pct = Math.min(100, Math.max(1, Number(ndrPct) || 1));
+    var pct = Math.min(100, Math.max(0, Number(ndrPct) || 0));
     s.ndr = pct / 100;
     s.deliveredOrders = Math.round((Number(s.totalOrders) || 0) * s.ndr);
+    if (s.deliveredOrders === 0) s.ndr = 0;
     s.expectedDeliveriesExact = (Number(s.totalOrders) || 0) * s.ndr;
     s.isModified = true;
   }
@@ -984,7 +992,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
           '<span style="font-size:11px;color:rgba(255,255,255,0.35);">' + p9Txt('Actual: ', 'الفعلي: ') + formatPct(s.realNdr) + '</span>' +
         '</div>' +
         '<div class="sfe-input-wrap2">' +
-          '<input type="number" class="s9-ndr-input sfe-input2" min="1" max="100" step="1" value="' + Math.round(s.ndr * 100) + '" placeholder="24" style="direction:ltr;">' +
+          '<input type="number" class="s9-ndr-input sfe-input2" min="0" max="100" step="1" value="' + Math.round(s.ndr * 100) + '" placeholder="24" style="direction:ltr;">' +
           '<span class="sfe-input-unit2">%</span>' +
         '</div>' +
         '<div class="sfe-slider-markers" style="margin-top:6px;">' +

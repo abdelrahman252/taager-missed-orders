@@ -1,5 +1,7 @@
 "use strict";
 
+const { normalizeTaagerCountry } = require("./taager-country");
+
 const COUNTRY_CONFIG = {
   sa: { dialCode: "966", domesticPrefix: "0", startsWith: ["5"], length: 9, rescueTrailingZero: true },
   eg: { dialCode: "20", domesticPrefix: "0", startsWith: ["10", "11", "12", "15"], length: 10, rescueTrailingZero: true },
@@ -21,7 +23,7 @@ function toWesternDigits(value) {
 function _normalizeCore(phone, country) {
   if (!phone) return null;
 
-  const cc = String(country || DEFAULT_COUNTRY).trim().toLowerCase();
+  const cc = normalizeTaagerCountry(country || DEFAULT_COUNTRY);
   const cfg = COUNTRY_CONFIG[cc];
   if (!cfg) return null;
 
@@ -80,7 +82,7 @@ function normalizePhoneWithMeta(phone, country) {
 }
 
 function formatPhone(phone, country) {
-  const cc = String(country || DEFAULT_COUNTRY).trim().toLowerCase();
+  const cc = normalizeTaagerCountry(country || DEFAULT_COUNTRY);
   const cfg = COUNTRY_CONFIG[cc];
   if (!cfg) return null;
   const core = normalizePhone(phone, cc);

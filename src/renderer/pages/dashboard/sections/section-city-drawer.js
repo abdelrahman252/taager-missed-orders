@@ -178,6 +178,7 @@
       : (orders > 0
           ? parseFloat(((cityData.deliveredOrders / orders) * 100).toFixed(1))
           : 0);
+    if (Number(cityData.deliveredOrders || 0) <= 0) ndrPct = 0;
     var commission  = cityData.earnedCommission || 0;
     var prepaidPct  = cityData.prepaidPct     || 0;
     var codRisk     = cityData.gap            || 0;
@@ -351,6 +352,10 @@
       : (prepaidNdrBase > 0 ? (prepaidDel / prepaidNdrBase * 100) : 0);
     var codNdr     = typeof cityData.codNdr === 'number' ? cityData.codNdr
       : (codNdrBase > 0 ? (codDel / codNdrBase * 100) : (cityData.ndrPct || 0));
+    if (Number(cityData.deliveredOrders || 0) <= 0) {
+      prepaidNdr = 0;
+      codNdr = 0;
+    }
 
     var delta      = prepaidNdr - codNdr;
     var prepaidPct = prepaidCount / total * 100;

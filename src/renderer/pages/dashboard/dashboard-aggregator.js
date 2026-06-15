@@ -112,10 +112,13 @@
 
   function isDeliveredRowInPeriod(row, period, mode) {
     if (getStatusBucket(row && (row.orderStatus || row.status)) !== 'delivered') return false;
-    return isRowCreatedInPeriod(row, period);
+    return isDateKeyInPeriod(deliveredDashboardDate(row, mode), period);
   }
 
   function deliveredDashboardDate(row, mode) {
+    if ((mode || deliveredDateMode()) === 'actual') {
+      return normalizeDateKey(row && (row.deliveredAt || row.lastUpdatedAt || row.updatedAt || row.dashboardDate || row.createdAt || row.date));
+    }
     return normalizeDateKey(row && (row.createdAt || row.date || row.dashboardDate));
   }
 
@@ -1586,9 +1589,9 @@
     var placedCount = 0;
     var ndrBaseOrders = 0;
     var ndrDeliveredOrders = 0;
-    var deliveredCount = 0, shippingCount = 0, failedCount = 0, canceledByYouCount = 0;
+    var deliveredCount = 0, calculatorDeliveredCount = 0, shippingCount = 0, failedCount = 0, canceledByYouCount = 0;
     var pendingCount = 0, confirmedCount = 0, processingCount = 0, waitingCount = 0;
-    var earnedCommission = 0, incomingCommission = 0, lostCommission = 0, totalPlacedCommission = 0;
+    var earnedCommission = 0, calculatorEarnedProfitAfterTax = 0, incomingCommission = 0, lostCommission = 0, totalPlacedCommission = 0;
     var collected = 0, gapSar = 0, totalDue = 0;
     var incomingCodSar = 0, lostCodSar = 0, confirmedBaseCodSar = 0;
     var drBaseOrders = 0, drDeliveredOrders = 0;
@@ -1603,7 +1606,7 @@
     var rawOrderSet = {}, placedOrderSet = {}, canceledByYouOrderSet = {};
     var ndrBaseOrderSet = {}, deliveredOrderSet = {}, drBaseOrderSet = {}, drDeliveredOrderSet = {};
     var prepaidDrBaseOrderSet = {}, prepaidDrDeliveredOrderSet = {}, codDrBaseOrderSet = {}, codDrDeliveredOrderSet = {};
-    var earnedOrderSet = {}, incomingOrderSet = {}, lostOrderSet = {}, collectedOrderSet = {}, codOrderSet = {};
+    var earnedOrderSet = {}, calculatorDeliveredOrderSet = {}, incomingOrderSet = {}, lostOrderSet = {}, collectedOrderSet = {}, codOrderSet = {};
     var stageOrderSet = {}, dailyOrderSet = {};
     var statusFinancialOrderSet = {};
     var cityOrderSet = {};
@@ -1663,6 +1666,7 @@
       var rowIsFailedOutcome = isFailedOutcomeBucket(exactBucket);
       var rowIsCanceledByYou = isCanceledByYouBucket(exactBucket);
       var rowIsNetOrder = !rowIsCanceledByYou;
+      var isCalculatorDelivered = bucket === 'delivered' && inCreatedPeriod && rowIsNetOrder;
       var rowInConfirmedBase = inNdrCohortPeriod && rowIsNetOrder && !isConfirmedBaseExcludedBucket(exactBucket);
       var rowInBusinessConfirmedBase = inCreatedPeriod && rowIsNetOrder && !isConfirmedBaseExcludedBucket(exactBucket);
       var orderKey = orderOnlyKey(row, rowIndex);
@@ -1757,6 +1761,10 @@
         if (addOnce(deliveredOrderSet, 'business:' + orderKey)) deliveredCount++;
         if (addOnce(earnedOrderSet, orderKey)) earnedCommission += commissionVal;
         if (!rowIsPrepaid && addOnce(codOrderSet, 'delivered:' + orderKey)) collected += dueVal;
+      }
+      if (isCalculatorDelivered && addOnce(calculatorDeliveredOrderSet, orderKey)) {
+        calculatorDeliveredCount++;
+        calculatorEarnedProfitAfterTax += commissionVal;
       }
       if (isDeliveredInNdrCohort && rowIsNetOrder && rowInConfirmedBase && addOnce(drDeliveredOrderSet, orderKey)) {
         drDeliveredOrders++;
@@ -2128,7 +2136,8 @@
             sku: row.sku || '',
             name: productName || row.sku || raw('منتج غير معروف'),
             qty: 0, deliveredQty: 0, revenue: 0, commission: 0, deliveredSales: 0, totalPlacedCommission: 0,
-            deliveredCount: 0, ndrDeliveredCount: 0, placedCount: 0, totalOrderCount: 0,
+            deliveredCount: 0, calculatorDeliveredCount: 0, calculatorEarnedProfitAfterTax: 0,
+            ndrDeliveredCount: 0, placedCount: 0, totalOrderCount: 0,
             ndrBaseCount: 0,
             statusTotalCount: 0, confirmationStatusCount: 0, cancelStatusCount: 0, pendingStatusCount: 0,
             canceledCount: 0, canceledByYouCount: 0, failedCount: 0, confirmedCount: 0, ndrConfirmedCount: 0,
@@ -2225,6 +2234,10 @@
             productAccount.commission += commissionVal;
             productAccount.deliveredSales += priceVal;
           }
+        }
+        if (isCalculatorDelivered && addOnce(productOrderSet, 'calculatorDelivered:' + productOrderKey)) {
+          productStats[productKey].calculatorDeliveredCount++;
+          productStats[productKey].calculatorEarnedProfitAfterTax += commissionVal;
         }
 
         var cityKey = cityKeyName || (row.city || row.cityName || '').toString().trim();
@@ -2352,9 +2365,9 @@
       }
     });
 
-    var actualAvgCommission = deliveredCount > 0 ? earnedCommission / deliveredCount : 0;
-    var actualDeliveredCount = deliveredCount;
-    var actualEarnedCommission = earnedCommission;
+    var actualAvgCommission = calculatorDeliveredCount > 0 ? calculatorEarnedProfitAfterTax / calculatorDeliveredCount : 0;
+    var actualDeliveredCount = calculatorDeliveredCount;
+    var actualEarnedCommission = calculatorEarnedProfitAfterTax;
     var actualTotalDeliveredSales = totalDeliveredSales;
     var accountFinancials = null;
 
@@ -2438,8 +2451,8 @@
         p.expectedDrRate = p.ndrConfirmedCount > 0 ? (p.ndrDeliveredCount / p.ndrConfirmedCount) : globalExpectedDrRate;
         p.rateUsesGlobalFallback = p.ndrBaseCount <= 0 || p.ndrConfirmedCount <= 0;
         
-        p.actualDeliveredCount = p.deliveredCount;
-        p.actualCommission = p.commission;
+        p.actualDeliveredCount = p.calculatorDeliveredCount;
+        p.actualCommission = p.calculatorEarnedProfitAfterTax;
         p.actualDeliveredQty = p.deliveredQty;
         p.actualDeliveredSales = p.deliveredSales;
         p.actualNdrDeliveredCount = p.ndrDeliveredCount;
@@ -2589,6 +2602,7 @@
       var ndrPctCity = meta.deliveredDateMode === 'expected' && stat.expectedNdrRate !== undefined
         ? parseFloat((stat.expectedNdrRate * 100).toFixed(1))
         : netDeliveryRatePct(cityNdrDelivered, cityNdrBase);
+      if (Number(stat.deliveredOrders || 0) <= 0) ndrPctCity = 0;
       var drPctCity = stat.drBaseOrders > 0
         ? parseFloat(((stat.drDeliveredOrders / stat.drBaseOrders) * 100).toFixed(1))
         : 0;
@@ -2774,7 +2788,9 @@
       var confirmationBase = productUsesGlobalDr ? drBaseOrders : (expectedRateMode ? p.ndrConfirmedCount : p.confirmedCount);
       var productNdrDelivered = productUsesGlobalNdr ? ndrDeliveredOrders : (expectedRateMode ? p.ndrDeliveredCount : p.deliveredCount);
       var productDrDelivered = productUsesGlobalDr ? drDeliveredOrders : (expectedRateMode ? p.ndrDeliveredCount : p.deliveredCount);
-      var ndrPct = boundedProductRatePct(productNdrDelivered, productNdrBase, key + ':ndr');
+      var ndrPct = p.deliveredCount > 0
+        ? boundedProductRatePct(productNdrDelivered, productNdrBase, key + ':ndr')
+        : 0;
       var deliveryPct = boundedProductRatePct(p.deliveredCount, p.placedCount, key + ':display-delivery');
       var productDeliveredAovBase = p.expectedDeliveriesExact !== undefined ? p.expectedDeliveriesExact : p.deliveredCount;
       var productDeliveredAov = productDeliveredAovBase > 0
@@ -2818,7 +2834,7 @@
             pendingPct: cityStatusRates.pendingPct,
             delivered: cityDelivered,
             canceled:  cityCanceled,
-            ndr:       netDeliveryRatePct(cityNdrDelivered, cityBase),
+            ndr:       cityDelivered > 0 ? netDeliveryRatePct(cityNdrDelivered, cityBase) : 0,
             commission: cm.commission || 0,
             revenue:    cm.revenue    || 0
           };
@@ -2937,8 +2953,8 @@
         deliveredSales: p.deliveredSales,
         deliveredAov: productDeliveredAov,
         deliveredCount: p.deliveredCount,
-        actualDeliveredCount: p.actualDeliveredCount !== undefined ? p.actualDeliveredCount : p.deliveredCount,
-        actualCommission: p.actualCommission !== undefined ? p.actualCommission : p.commission,
+        actualDeliveredCount: p.actualDeliveredCount !== undefined ? p.actualDeliveredCount : p.calculatorDeliveredCount,
+        actualCommission: p.actualCommission !== undefined ? p.actualCommission : p.calculatorEarnedProfitAfterTax,
         actualDeliveredQty: p.actualDeliveredQty !== undefined ? p.actualDeliveredQty : p.deliveredQty,
         actualDeliveredSales: p.actualDeliveredSales !== undefined ? p.actualDeliveredSales : p.deliveredSales,
         expectedDeliveriesExact: p.expectedDeliveriesExact !== undefined ? p.expectedDeliveriesExact : p.deliveredCount,
@@ -3018,7 +3034,7 @@
         confirmationPct: campaignStatusRates.confirmationPct,
         cancelPct: campaignStatusRates.cancelPct,
         pendingPct: campaignStatusRates.pendingPct,
-        ndrPct: boundedProductRatePct(ndrDelivered, ndrBase, key + ':campaign-ndr'),
+        ndrPct: p.deliveredCount > 0 ? boundedProductRatePct(ndrDelivered, ndrBase, key + ':campaign-ndr') : 0,
         drPct: boundedProductRatePct(campaignDrDelivered, confirmed, key + ':campaign-dr'),
         ndrBaseOrders: ndrBase,
         ndrDeliveredOrders: ndrDelivered,

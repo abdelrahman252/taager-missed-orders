@@ -471,7 +471,8 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       var pct = Number(city.ndrPct !== undefined ? city.ndrPct : city.pct || 0);
       var due = Number(city.due || 0);
       var gap = Number(city.gap || 0);
-      var deliveredOrders = Number(city.deliveredOrders || count * (pct / 100));
+      var deliveredOrders = Number(city.deliveredOrders != null ? city.deliveredOrders : count * (pct / 100));
+      if (deliveredOrders <= 0) pct = 0;
       var activeOrders = Number(city.drBaseOrders || count);
       var confirmedOrders = Number(
         city.confirmedCount != null && city.confirmedCount !== ""
@@ -1426,6 +1427,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
           : rowTotalOrders > 0 && rowTotalNdr !== null
             ? Math.round(rowTotalOrders * (rowTotalNdr / 100))
             : null;
+      if (deliveredVal === 0) rowTotalNdr = 0;
       var deliveredDisplay =
         deliveredVal !== null ? deliveredVal.toLocaleString("en-US") : "—";
       var confirmedVal =

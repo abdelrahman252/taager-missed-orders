@@ -342,10 +342,21 @@ function normalizeScope(input, allowedIds) {
     accountCount: ids.length,
     dateFrom: dateKey(input.dateFrom),
     dateTo: dateKey(input.dateTo),
+    deliveredDateMode: text(input.deliveredDateMode) === "expected" ? "expected" : "actual",
   };
 }
 
 function inRange(row, scope) {
+  const bucket = statusBucket(row);
+  const key = bucket === "delivered" && scope.deliveredDateMode === "actual"
+    ? dateKey(row.deliveredAt || row.lastUpdatedAt || row.updatedAt || row.dashboardDate || row.createdAt || row.date)
+    : dateKey(row.createdAt || row.date || row.dashboardDate);
+  if (scope.dateFrom && (!key || key < scope.dateFrom)) return false;
+  if (scope.dateTo && (!key || key > scope.dateTo)) return false;
+  return true;
+}
+
+function inCreatedRange(row, scope) {
   const key = dateKey(row.createdAt || row.date || row.dashboardDate);
   if (scope.dateFrom && (!key || key < scope.dateFrom)) return false;
   if (scope.dateTo && (!key || key > scope.dateTo)) return false;
@@ -457,6 +468,7 @@ function createDashboardQueryService(options) {
     const accounts = getAccounts() || {};
     const scope = normalizeScope(input || {}, getAllowedAccountIds());
     const includeNdrUnion = !!options.includeNdrUnion;
+    const includeCreatedUnion = !!options.includeCreatedUnion;
     const deliveredDateMode = text(input && input.deliveredDateMode) === "expected" ? "expected" : "actual";
     const ndrFrom = dateKey((input && (input.ndrDateFrom || input.ndrFrom)) || "");
     const ndrTo = dateKey((input && (input.ndrDateTo || input.ndrTo)) || "");
@@ -465,8 +477,9 @@ function createDashboardQueryService(options) {
       const snapshot = accounts[accountId] && accounts[accountId].snapshot;
       (Array.isArray(snapshot) ? snapshot : []).forEach((row) => {
         const inPrimaryRange = inRange(row, scope);
+        const inCreatedDateRange = includeCreatedUnion && inCreatedRange(row, scope);
         const inExpectedNdrRange = includeNdrUnion && deliveredDateMode === "expected" && !!(ndrFrom && ndrTo) && inNdrRange(row, ndrFrom, ndrTo);
-        if (!inPrimaryRange && !inExpectedNdrRange) return;
+        if (!inPrimaryRange && !inCreatedDateRange && !inExpectedNdrRange) return;
         const account = accounts[accountId] || {};
         rows.push(normalizeOrderMoney({
           ...row,
@@ -766,7 +779,7 @@ function createDashboardQueryService(options) {
 
   function productRows(input) {
     return cached("products", input, () => {
-      const { rows, scope, accounts } = scopedRows(input, { includeNdrUnion: true });
+      const { rows, scope, accounts } = scopedRows(input, { includeNdrUnion: true, includeCreatedUnion: true });
       const products = new Map();
       const globalOrderKeys = new Set();
       const globalNetOrderKeys = new Set();
@@ -802,27 +815,30 @@ function createDashboardQueryService(options) {
           products.set(key, {
             key, legacyKey: sku || name, sku, name, country,
             totalOrderCount: 0, netOrderCount: 0, deliveredCount: 0, totalPieces: 0, commission: 0, revenue: 0,
+            calculatorDeliveredCount: 0, calculatorEarnedProfitAfterTax: 0,
             statusTotalCount: 0, confirmationStatusCount: 0, cancelStatusCount: 0, pendingStatusCount: 0,
             failedCount: 0, canceledCount: 0, confirmedCount: 0, shippingCount: 0,
             processingCount: 0, waitingCount: 0, pendingCount: 0,
             // Bug B fix: track ndr-cohort counts separately from total counts
             ndrBaseCount: 0, ndrConfirmedCount: 0, ndrDeliveredCount: 0,
-            accounts: {}, cities: {}, orderKeys: new Set(), ndrOrderKeys: new Set()
+            accounts: {}, cities: {}, orderKeys: new Set(), deliveredOrderKeys: new Set(),
+            calculatorOrderKeys: new Set(), ndrOrderKeys: new Set()
           });
         }
         const product = products.get(key);
         const bucket = statusBucket(row);
         const productOrderKey = orderKey(row, index);
         const inPrimaryPeriod = inRange(row, scope);
-        if (inPrimaryPeriod) globalOrderKeys.add(productOrderKey);
-        if (inPrimaryPeriod && bucket !== "canceled_by_you") globalNetOrderKeys.add(productOrderKey);
-        if (inPrimaryPeriod && isConfirmedBucket(bucket)) globalConfirmedOrderKeys.add(productOrderKey);
+        const inCreatedPeriod = inCreatedRange(row, scope);
+        if (inCreatedPeriod) globalOrderKeys.add(productOrderKey);
+        if (inCreatedPeriod && bucket !== "canceled_by_you") globalNetOrderKeys.add(productOrderKey);
+        if (inCreatedPeriod && isConfirmedBucket(bucket)) globalConfirmedOrderKeys.add(productOrderKey);
         if (inPrimaryPeriod && bucket === "delivered" && !globalDeliveredOrderKeys.has(productOrderKey)) {
           globalDeliveredOrderKeys.add(productOrderKey);
           globalDeliveredCommission += rowProfit(row);
         }
         const isNewOrder = !product.orderKeys.has(productOrderKey);
-        if (inPrimaryPeriod && isNewOrder) {
+        if (inCreatedPeriod && isNewOrder) {
           product.orderKeys.add(productOrderKey);
           product.totalOrderCount += 1;
           if (bucket !== "canceled_by_you") {
@@ -833,8 +849,6 @@ function createDashboardQueryService(options) {
             else if (group === "cancel") product.cancelStatusCount += 1;
             else product.pendingStatusCount += 1;
           }
-          if (bucket === "delivered") product.deliveredCount += 1;
-          if (bucket === "delivered") product.commission += rowProfit(row);
           if (bucket === "canceled_by_you") product.canceledCount += 1;
           if (isFailedBucket(bucket)) product.failedCount += 1;
           if (isConfirmedBucket(bucket)) product.confirmedCount += 1;
@@ -842,6 +856,16 @@ function createDashboardQueryService(options) {
           if (bucket === "processing") product.processingCount += 1;
           if (bucket === "waiting") product.waitingCount += 1;
           if (bucket === "received" || bucket === "pending") product.pendingCount += 1;
+        }
+        if (inPrimaryPeriod && bucket === "delivered" && !product.deliveredOrderKeys.has(productOrderKey)) {
+          product.deliveredOrderKeys.add(productOrderKey);
+          product.deliveredCount += 1;
+          product.commission += rowProfit(row);
+        }
+        if (inCreatedPeriod && bucket === "delivered" && !product.calculatorOrderKeys.has(productOrderKey)) {
+          product.calculatorOrderKeys.add(productOrderKey);
+          product.calculatorDeliveredCount += 1;
+          product.calculatorEarnedProfitAfterTax += rowProfit(row);
         }
         // Bug B fix: track DR base and delivered count within the NDR cohort period
         const inNdrCohort = inNdrRange(row, ndrFrom, ndrTo);
@@ -856,7 +880,7 @@ function createDashboardQueryService(options) {
           if (isConfirmedBucket(bucket)) product.ndrConfirmedCount += 1;
           if (bucket === "delivered") product.ndrDeliveredCount += 1;
         }
-        if (inPrimaryPeriod && isNewOrder && bucket !== "canceled_by_you") {
+        if (inCreatedPeriod && isNewOrder && bucket !== "canceled_by_you") {
           product.totalPieces += Math.max(1, number(row.qty || row.quantity || 1));
           product.revenue += rowTotal(row);
         }
@@ -891,7 +915,9 @@ function createDashboardQueryService(options) {
         const statusTotal = product.statusTotalCount !== undefined ? product.statusTotalCount : (product.netOrderCount || 0);
         const clean = { ...product };
         delete clean.orderKeys;
+        delete clean.deliveredOrderKeys;
         delete clean.ndrOrderKeys;
+        delete clean.calculatorOrderKeys;
         const statusRates = productStatusPercentages(
           product.confirmationStatusCount,
           product.cancelStatusCount,
@@ -919,8 +945,8 @@ function createDashboardQueryService(options) {
         const projection = financialCore.calculate({
           mode: isExpected ? "expected" : "actual",
           netOrders: product.netOrderCount,
-          actualDeliveredOrders: product.deliveredCount,
-          actualEarnedProfitAfterTax: product.commission,
+          actualDeliveredOrders: product.calculatorDeliveredCount,
+          actualEarnedProfitAfterTax: product.calculatorEarnedProfitAfterTax,
           currentTotalSales: product.revenue,
           expectedNdrRate: ndrRate,
           adSpend: 0,
@@ -930,8 +956,10 @@ function createDashboardQueryService(options) {
         const deliveriesVal = isExpected ? projection.expectedDeliveriesDisplay : product.deliveredCount;
         const commissionVal = isExpected ? projection.expectedTotalProfitBeforeAdSpend : product.commission;
 
-        const ndrPctVal = boundedProductRatePct(ndrDelivered, ndrBase, product.key + ":ndr") ||
-          (isExpected && ndrBase <= 0 ? Math.round(globalExpectedNdrRate * 1000) / 10 : 0);
+        const ndrPctVal = deliveriesVal > 0
+          ? (boundedProductRatePct(ndrDelivered, ndrBase, product.key + ":ndr") ||
+            (isExpected && ndrBase <= 0 ? Math.round(globalExpectedNdrRate * 1000) / 10 : 0))
+          : 0;
         const drRateVal = boundedProductRatePct(drDelivered, drBase, product.key + ":dr") ||
           (isExpected && drBase <= 0 ? Math.round(globalExpectedDrRate * 1000) / 10 : 0);
         const deliveryPctVal = boundedProductRatePct(deliveriesVal, product.netOrderCount, product.key + ":display-delivery");
@@ -941,9 +969,9 @@ function createDashboardQueryService(options) {
           placedCount: product.netOrderCount,
           totalOrders: product.totalOrderCount,
           totalOrderCount: product.totalOrderCount,
-          actualDeliveredCount: product.deliveredCount,
-          actualCommission: product.commission,
-          actualEarnedProfitAfterTax: product.commission,
+          actualDeliveredCount: product.calculatorDeliveredCount,
+          actualCommission: product.calculatorEarnedProfitAfterTax,
+          actualEarnedProfitAfterTax: product.calculatorEarnedProfitAfterTax,
           deliveries: deliveriesVal,
           deliveredCount: deliveriesVal,
           expectedDeliveriesExact: projection.expectedDeliveriesExact,
@@ -1630,7 +1658,6 @@ function createDashboardQueryService(options) {
           : { rate: stat.count > 0 ? stat.deliveredOrders / stat.count : 0, source: "actual", insufficientHistory: false };
         const cityNdrBase = citiesExpectedMode ? stat.ndrBaseOrders : stat.count;
         const cityNdrDelivered = citiesExpectedMode ? stat.ndrDeliveredOrders : stat.deliveredOrders;
-        const ndrPctCity = rateResolution.rate * 100;
         const drPctCity = stat.drBaseOrders > 0
           ? (stat.drDeliveredOrders / stat.drBaseOrders * 100)
           : 0;
@@ -1644,6 +1671,8 @@ function createDashboardQueryService(options) {
           adSpend: 0,
           insufficientHistory: rateResolution.insufficientHistory,
         });
+        const displayedCityDeliveries = citiesExpectedMode ? cityProjection.expectedDeliveriesDisplay : stat.deliveredOrders;
+        const ndrPctCity = displayedCityDeliveries > 0 ? rateResolution.rate * 100 : 0;
 
         const prepaidPctCity = stat.count > 0 ? (stat.prepaidCount / stat.count * 100) : 0;
         const codPctCity = stat.count > 0 ? (stat.codCount / stat.count * 100) : 0;
@@ -1680,7 +1709,7 @@ function createDashboardQueryService(options) {
           cancelPct: cityStatusRates.cancelPct,
           pendingPct: cityStatusRates.pendingPct,
           ndrBaseOrders: cityNdrBase,
-          deliveredOrders: citiesExpectedMode ? cityProjection.expectedDeliveriesDisplay : stat.deliveredOrders,
+          deliveredOrders: displayedCityDeliveries,
           actualDeliveredOrders: stat.deliveredOrders,
           expectedDeliveriesExact: cityProjection.expectedDeliveriesExact,
           expectedDeliveriesDisplay: cityProjection.expectedDeliveriesDisplay,

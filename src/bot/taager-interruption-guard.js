@@ -213,11 +213,22 @@ async function waitForTaagerTarget(page, selector, label, options = {}) {
   const timeout = options.timeout || 30000;
   const interval = options.interval || 1500;
   const state = options.state || "visible";
+  const blockingOverlayTimeout = options.blockingOverlayTimeout || 5000;
   const started = Date.now();
   let lastError = null;
+  let blockingOverlaySince = 0;
 
   while (Date.now() - started < timeout) {
     await clearTaagerInterruption(page, options).catch(() => ({ cleared: false }));
+    if (!options.allowBlockingOverlay && await hasVisibleOverlayWithoutCalendar(page)) {
+      if (!blockingOverlaySince) blockingOverlaySince = Date.now();
+      const blockedFor = Date.now() - blockingOverlaySince;
+      lastError = new Error(`TAAGER_BLOCKING_OVERLAY: ${label || selector} is blocked by a popup overlay for ${Math.round(blockedFor / 1000)}s`);
+      if (blockedFor >= blockingOverlayTimeout) throw lastError;
+      await page.waitForTimeout(Math.min(500, interval)).catch(() => {});
+      continue;
+    }
+    blockingOverlaySince = 0;
     try {
       await page.locator(selector).first().waitFor({ state, timeout: Math.min(interval, timeout) });
       if (!options.allowBlockingOverlay && await hasVisibleOverlayWithoutCalendar(page)) {
