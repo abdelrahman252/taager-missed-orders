@@ -359,9 +359,7 @@
     const badge       = el.querySelector('.eo-badge');
 
     supportBtn.addEventListener('click', () => {
-      if (window.api && typeof window.api.openExternalUrl === 'function') {
-        window.api.openExternalUrl('https://taager.com/').catch(() => {});
-      }
+      if (window.TaagerSupport && typeof window.TaagerSupport.open === 'function') window.TaagerSupport.open();
     });
 
     continueBtn.addEventListener('click', async () => {

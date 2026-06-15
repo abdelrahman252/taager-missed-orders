@@ -398,7 +398,7 @@ function _renderRealVsMissed(orders) {
         ctx2.textBaseline = "middle";
         ctx2.fillStyle    = _cssVar("--text") || "#ffffff";
         ctx2.font         = "bold 26px 'Inter', sans-serif";
-        ctx2.fillText(total.toLocaleString(), cx, cy - 8);
+        ctx2.fillText(total.toLocaleString("en-US"), cx, cy - 8);
         ctx2.fillStyle = _cssVar("--text3") || "#8892a4";
         ctx2.font      = "600 12px 'Inter', sans-serif";
         ctx2.fillText(window.t_anl('charts.total'), cx, cy + 16);
@@ -430,7 +430,7 @@ function _renderTopCities(orders, filterMode) {
     var c = o.city.trim();
     if (!counts[c]) counts[c] = { count: 0, revenue: 0 };
     counts[c].count++;
-    counts[c].revenue += (o.amountDue || o.subtotal || 0);
+    counts[c].revenue += analyticsDashboardRevenueValue(o);
   });
 
   var sorted = Object.keys(counts)
@@ -469,7 +469,7 @@ function _renderTopCities(orders, filterMode) {
       displayVal = c.revenue.toLocaleString("en-SA", { maximumFractionDigits: 0 }) + " SAR";
       pct = Math.round((c.revenue / maxVal) * 100);
     } else {
-      displayVal = c.count.toLocaleString() + " " + window.t_anl('charts.ordersLabel');
+      displayVal = c.count.toLocaleString("en-US") + " " + window.t_anl('charts.ordersLabel');
       pct = Math.round((c.count / maxVal) * 100);
     }
 
@@ -545,7 +545,7 @@ function _analyticsMiniPaginationHtml(prefix, currentPage, totalPages, start, en
   return `
     <div class="analytics-mini-pagination explorer-pagination">
       <div class="explorer-pagination-info">
-        ${window.t_anl('table.paginationInfo', { start: start.toLocaleString(), end: end.toLocaleString(), total: total.toLocaleString() })}
+        ${window.t_anl('table.paginationInfo', { start: start.toLocaleString("en-US"), end: end.toLocaleString("en-US"), total: total.toLocaleString("en-US") })}
       </div>
       <div class="explorer-pagination-controls">
         <button class="pagination-btn pagination-arrow-btn" ${dataPrev} ${currentPage <= 1 ? "disabled" : ""} aria-label="${window.t_anl('table.prev')}">←</button>
@@ -665,7 +665,7 @@ function _renderTopProducts(orders, filterMode) {
     var k = (o.productName || "Unknown").trim();
     if (!map[k]) map[k] = { name: k, count: 0, revenue: 0 };
     map[k].count++;
-    map[k].revenue += (o.amountDue || o.subtotal || 0);
+    map[k].revenue += analyticsDashboardRevenueValue(o);
   });
 
   var sorted = Object.values(map);
@@ -696,7 +696,7 @@ function _renderTopProducts(orders, filterMode) {
     var displayVal = "";
     var relativePct = 0;
     if (filterMode === "orders") {
-      displayVal = p.count.toLocaleString() + " " + window.t_anl('charts.ordersLabel');
+      displayVal = p.count.toLocaleString("en-US") + " " + window.t_anl('charts.ordersLabel');
       relativePct = Math.round((p.count / maxVal) * 100);
     } else {
       displayVal = p.revenue.toLocaleString("en-SA", { maximumFractionDigits: 0 }) + " SAR";
@@ -751,7 +751,7 @@ function _renderOrdersByHour(orders, filterMode) {
     if (hour >= 0 && hour < 24) {
       hasHourData = true;
       if (filterMode === "revenue") {
-        hourCounts[hour] += (o.amountDue || o.subtotal || 0);
+        hourCounts[hour] += analyticsDashboardRevenueValue(o);
       } else {
         hourCounts[hour]++;
       }

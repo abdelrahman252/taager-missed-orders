@@ -227,7 +227,7 @@ function _applyFiltersAndRender(container) {
   _renderPagination(container, results.length, totalPages);
 
   const badge = container.querySelector("#explorer-count-badge");
-  if (badge) badge.textContent = `(${results.length.toLocaleString()} ${window.t_anl('account.orders')})`;
+  if (badge) badge.textContent = `(${results.length.toLocaleString("en-US")} ${window.t_anl('account.orders')})`;
 
   container.querySelectorAll(".explorer-table th[data-sort]").forEach(th => {
     th.classList.remove("sort-asc", "sort-desc");
@@ -308,7 +308,7 @@ function _renderPagination(container, total, totalPages) {
 
   pag.innerHTML = `
     <div class="explorer-pagination-info">
-      ${window.t_anl('table.paginationInfo', { start: start.toLocaleString(), end: end.toLocaleString(), total: total.toLocaleString() })}
+      ${window.t_anl('table.paginationInfo', { start: start.toLocaleString("en-US"), end: end.toLocaleString("en-US"), total: total.toLocaleString("en-US") })}
     </div>
     <div class="explorer-pagination-controls">
       <button class="pagination-btn pagination-arrow-btn" id="pag-prev" ${s.page <= 1 ? "disabled" : ""} aria-label="${window.t_anl('table.prev')}">←</button>

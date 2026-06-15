@@ -2,8 +2,6 @@
   'use strict';
 
   const WARNING_DAYS = 3;
-  const SUPPORT_URL = 'https://taager.com/';
-
   let modalEl = null;
   let dismissedSignature = '';
   let visibleSignature = '';
@@ -44,9 +42,7 @@
   }
 
   function openSupport() {
-    if (window.api && typeof window.api.openExternalUrl === 'function') {
-      window.api.openExternalUrl(SUPPORT_URL).catch(() => {});
-    }
+    if (window.TaagerSupport && typeof window.TaagerSupport.open === 'function') window.TaagerSupport.open();
   }
 
   function buildModal(daysLeft, licenseKey) {

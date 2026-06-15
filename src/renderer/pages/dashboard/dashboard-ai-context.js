@@ -202,11 +202,16 @@
       ? Number(financials.adSpend || 0) * placed / Number(financials.totalPlaced || 1)
       : 0;
     var cpa = placed > 0 ? allocatedSpend / placed : 0;
-    var commissionInCurrency = convertCommissionFromSar(p.commission || 0, financials);
+    var actualCommission = p.actualCommission != null ? Number(p.actualCommission) : Number(p.commission || 0);
+    var displayedCommission = p.expectedTotalProfitBeforeAdSpend != null
+      ? Number(p.expectedTotalProfitBeforeAdSpend)
+      : Number(p.commission || 0);
+    var commissionInCurrency = convertCommissionFromSar(displayedCommission, financials);
     var profitLoss = commissionInCurrency - allocatedSpend;
     var delivered = Number(p.deliveredCount || p.units || 0);
+    var actualDelivered = Number(p.actualDeliveredCount != null ? p.actualDeliveredCount : delivered);
     var ndrPct = num(p.ndrPct || p.deliveryRate || 0, 1);
-    var avgCommissionSar = delivered > 0 ? Number(p.commission || 0) / delivered : 0;
+    var avgCommissionSar = actualDelivered > 0 ? actualCommission / actualDelivered : 0;
     var breakEvenSar = breakEvenCpaSar(avgCommissionSar, ndrPct);
     var breakEvenInCurrency = convertCommissionFromSar(breakEvenSar, financials);
     return {
@@ -215,10 +220,14 @@
       sku: p.sku || "",
       orders: placed,
       delivered: delivered,
+      actualDelivered: actualDelivered,
+      expectedDeliveriesExact: p.expectedDeliveriesExact != null ? num(p.expectedDeliveriesExact, 2) : null,
+      expectedTotalProfitBeforeAdSpend: p.expectedTotalProfitBeforeAdSpend != null ? num(p.expectedTotalProfitBeforeAdSpend, 2) : null,
       ndrPct: ndrPct,
       drPct: num(p.drRate || p.deliveryPct || 0, 1),
       cancelPct: num(p.cancelPct || 0, 1),
-      commission: num(p.commission || 0, 2),
+      commission: num(displayedCommission, 2),
+      actualCommission: num(actualCommission, 2),
       avgCommissionSar: num(avgCommissionSar, 2),
       allocatedAdSpend: num(allocatedSpend, 2),
       cpa: num(cpa, 2),
@@ -299,19 +308,28 @@
       var orders = window.DashboardOrderMetrics
         ? window.DashboardOrderMetrics.netOrders(p)
         : Number(p.netOrderCount || p.placedCount || 0);
-      var delivered = Number(p.deliveredCount || 0);
-      var avgCommission = delivered > 0 ? Number(p.commission || 0) / delivered : Number(roi && roi.avgCommission || 0);
-      var ndr = orders > 0 ? delivered / orders : 0;
-      var expectedRevenue = delivered * avgCommission;
-      var breakEvenCpa = avgCommission * ndr;
+      var actualDelivered = Number(p.actualDeliveredCount != null ? p.actualDeliveredCount : p.deliveredCount || 0);
+      var actualCommission = Number(p.actualCommission != null ? p.actualCommission : p.commission || 0);
+      var ndr = Math.max(0, Math.min(1, Number(p.ndrPct || 0) / 100));
+      var calculation = window.TaagerDashboardFinancialCore.calculate({
+        mode: 'expected',
+        netOrders: orders,
+        actualDeliveredOrders: actualDelivered,
+        actualEarnedProfitAfterTax: actualCommission,
+        currentTotalSales: Number(p.totalSales || p.revenue || 0),
+        expectedNdrRate: ndr,
+        adSpend: 0
+      });
       return {
         productId: String(p.key || p.sku || p.name || ""),
         name: p.name || p.key || "Unknown product",
         orders: orders,
         currentNdrPct: pct(ndr),
-        avgCommission: num(avgCommission, 2),
-        expectedRevenue: num(expectedRevenue, 2),
-        breakEvenCpaSar: num(breakEvenCpa, 2),
+        avgCommission: num(calculation.averageProfit, 2),
+        expectedDeliveriesExact: num(calculation.expectedDeliveriesExact, 2),
+        expectedTotalProfitBeforeAdSpend: num(calculation.expectedTotalProfitBeforeAdSpend, 2),
+        expectedRevenue: num(calculation.expectedTotalProfitBeforeAdSpend, 2),
+        breakEvenCpaSar: num(calculation.breakEvenCpa, 2),
         breakEvenFormula: "avgCommission * NDR",
         cpaBaseline: orders > 0 && adSpend > 0 ? num(adSpend / orders, 2) : 0,
       };
@@ -525,7 +543,7 @@
       pages: PAGE_MAP,
       dataset: datasetSummary(data, products, cities),
       account: data.meta || {},
-      deliveredAttributionMode: data.meta && data.meta.deliveredDateMode === "createdAt" ? "Created At" : "Last Updated",
+      deliveredAttributionMode: data.meta && data.meta.deliveredDateMode === "expected" ? "Expected NDR" : "Actual Delivered",
       productFinancials: {
         allocationRule: "Account ad spend allocated by product placed order share.",
         accountAdSpend: Number(productFinancials.adSpend || 0),

@@ -8,6 +8,7 @@ const { questionBank, smokeQuestionBank } = require("./ai-question-bank");
 const ROOT = path.resolve(__dirname, "..");
 const dashboardAiService = require(path.join(ROOT, "src/main/dashboard-ai-service.js"));
 const ENGINE_FILES = [
+  "src/renderer/pages/dashboard/dashboard-financial-core.js",
   "src/renderer/pages/dashboard/dashboard-ai-shared.js",
   "src/renderer/pages/dashboard/dashboard-ai-context.js",
   "src/renderer/pages/dashboard/dashboard-ai-mirror.js",
@@ -53,6 +54,8 @@ function createContext() {
   for (const file of ENGINE_FILES) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, file), "utf8"), context, { filename: file });
   }
+  context.window.TaagerDashboardFinancialCore =
+    context.window.TaagerDashboardFinancialCore || context.TaagerDashboardFinancialCore;
   context.window.TaagerAiScenarioDatabase = context.window.KhodAiScenarioDatabase;
   context.window.TaagerAiSessionMemory = context.window.KhodAiSessionMemory;
   context.window.TaagerAiIntentDetector = context.window.KhodAiIntentDetector;
@@ -734,11 +737,11 @@ function assertProductRankingAndCpaContinuity(win, failures) {
   assert(/Weak Product/.test(orchestrationText(cpa)) && /CPA 10/.test(orchestrationText(cpa)), "expected allocated CPA for remembered weakest product", failures, { id: "product-cpa-followup", category: "content", userMessage: "what is my cpa for it?" });
   assert(/break-even CPA/i.test(orchestrationText(cpa)) && /7\.5/.test(orchestrationText(cpa)), "expected product break-even CPA in AI context", failures, { id: "product-break-even-cpa", category: "content", userMessage: "what is my cpa for it?" });
   assert(cpa.context && cpa.context.selectedProduct && cpa.context.selectedProduct.breakEvenCpa === 7.5, "expected selected product context to expose break-even CPA", failures, { id: "product-break-even-cpa-context", category: "content", userMessage: "what is my cpa for it?" });
-  assert(/Last Updated mode/.test(orchestrationText(cpa)), "expected delivered attribution mode in product metric context", failures, { id: "product-cpa-followup", category: "mode", userMessage: "what is my cpa for it?" });
+  assert(/Actual Delivered mode/.test(orchestrationText(cpa)), "expected actual-delivered mode in product metric context", failures, { id: "product-cpa-followup", category: "mode", userMessage: "what is my cpa for it?" });
 
-  data.meta.deliveredDateMode = "createdAt";
-  const createdMode = win.TaagerAiBusinessOrchestrator.orchestrate("what is my cpa for it?", data);
-  assert(/Created At mode/.test(orchestrationText(createdMode)), "expected created-at delivered attribution mode in product metric context", failures, { id: "product-cpa-mode", category: "mode", userMessage: "what is my cpa for it?" });
+  data.meta.deliveredDateMode = "expected";
+  const expectedMode = win.TaagerAiBusinessOrchestrator.orchestrate("what is my cpa for it?", data);
+  assert(/Expected NDR mode/.test(orchestrationText(expectedMode)), "expected projected NDR mode in product metric context", failures, { id: "product-cpa-mode", category: "mode", userMessage: "what is my cpa for it?" });
 }
 
 function assertArabicFuzzyProductCpa(win, failures) {

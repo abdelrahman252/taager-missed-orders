@@ -309,16 +309,29 @@ textarea:focus-visible,
   align-items: center;
   justify-content: center;
   width: 17px;
+  min-width: 17px;
   height: 17px;
   margin-inline-start: 5px;
   border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
   border-radius: 50%;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
-  font-size: 11px;
+  font-size: 0;
   font-weight: 900;
+  line-height: 1;
   cursor: help;
   vertical-align: text-top;
+  flex: 0 0 auto;
+  user-select: none;
+}
+
+.taager-help::before {
+  content: "?";
+  display: block;
+  color: currentColor;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .s7-tip-badge {
@@ -333,11 +346,20 @@ textarea:focus-visible,
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
   box-shadow: 0 0 0 1px rgba(255,255,255,0.04) inset;
-  font-size: 11px;
+  font-size: 0;
   font-weight: 900;
   line-height: 1;
   cursor: help;
   flex: 0 0 auto;
+}
+
+.s7-tip-badge::before {
+  content: "?";
+  display: block;
+  color: currentColor;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .sv3-dashboard-fetch-status {
@@ -3781,4 +3803,494 @@ img {
 .route-loading-panel-error {
   border-color: rgba(255, 77, 109, 0.45);
   background: rgba(255, 77, 109, 0.08);
+}
+
+/* Small-laptop hardening for non-dashboard pages: account/setup/run/results. */
+@media (max-width: 1399px) {
+  #page-setup,
+  #page-run,
+  #page-results {
+    font-size: 12px;
+  }
+
+  #page-setup .sv3-sidebar,
+  #page-run .sv3-sidebar,
+  #page-results .sv3-sidebar {
+    width: 176px;
+    min-width: 176px;
+    padding-block: 18px 14px;
+  }
+
+  #page-setup .sv3-sb-logo,
+  #page-run .sv3-sb-logo,
+  #page-results .sv3-sb-logo {
+    padding: 0 14px 16px;
+    margin-bottom: 8px;
+  }
+
+  #page-setup .sv3-nav-item,
+  #page-run .sv3-nav-item,
+  #page-results .sv3-nav-item {
+    gap: 8px;
+    padding: 9px 14px;
+    font-size: 12px;
+  }
+
+  #page-setup .sv3-step-num,
+  #page-run .sv3-step-num,
+  #page-results .sv3-step-num {
+    width: 20px;
+    height: 20px;
+    font-size: 9px;
+  }
+
+  #page-setup .sv3-sidebar-footer,
+  #page-run .sv3-sidebar-footer,
+  #page-results .sv3-sidebar-footer {
+    padding: 12px 14px 0;
+  }
+
+  #page-setup .sv3-update-btn,
+  #page-setup .sv3-reset-btn,
+  #page-run .sv3-update-btn,
+  #page-run .sv3-reset-btn,
+  #page-results .sv3-update-btn,
+  #page-results .sv3-reset-btn {
+    min-height: 32px;
+    padding: 7px 8px;
+    font-size: 11px;
+  }
+
+  #page-setup .sv3-main,
+  #page-run .sv3-main,
+  #page-results .sv3-main {
+    min-width: 0 !important;
+  }
+
+  .page-wrap {
+    padding: 18px;
+    padding-bottom: 28px;
+  }
+
+  .page-inner {
+    padding-top: 4px;
+  }
+
+  .page-title,
+  .page-title-lg {
+    font-size: 20px !important;
+    line-height: 1.18;
+  }
+
+  .page-subtitle {
+    font-size: 12px;
+    margin-bottom: 18px;
+  }
+
+  .section-block,
+  .card,
+  .summary-box {
+    padding: 14px 16px;
+    min-width: 0;
+  }
+
+  .dash-section {
+    min-width: 0;
+  }
+
+  .grid-2,
+  .grid-3,
+  .grid-4,
+  .exec-layout {
+    gap: 10px;
+  }
+
+  .exec-layout {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+
+  .btn {
+    min-width: 0;
+    padding: 8px 13px;
+    font-size: 12px;
+    white-space: normal;
+    line-height: 1.25;
+  }
+
+  .btn-lg,
+  .run-btn {
+    padding: 11px 18px;
+    font-size: 13px;
+  }
+
+  .account-row {
+    gap: 8px;
+  }
+
+  .account-sel,
+  .acc-add-tile {
+    flex: 1 1 126px;
+    min-width: 112px;
+    min-height: 112px;
+    padding: 11px 9px;
+  }
+
+  .acc-avatar {
+    width: 38px;
+    height: 38px;
+    font-size: 12px;
+  }
+
+  .acc-name {
+    font-size: 11px;
+  }
+
+  .acc-email {
+    max-width: 100%;
+    font-size: 9px;
+  }
+
+  .date-options {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .date-option {
+    padding: 10px 8px;
+  }
+
+  .date-option .opt-icon {
+    font-size: 16px;
+  }
+
+  .date-option .opt-label {
+    font-size: 12px;
+  }
+
+  .date-option .opt-desc {
+    font-size: 10px;
+  }
+
+  .run-step-tab {
+    min-width: 0;
+    padding: 8px 12px;
+    font-size: 12px;
+    white-space: normal;
+  }
+
+  #page-run .sv3-main {
+    padding: 14px 18px !important;
+  }
+
+  #page-run .page-wrap {
+    overflow-y: auto;
+  }
+
+  #page-run .page-inner {
+    height: auto;
+    min-height: 100%;
+  }
+
+  #page-run [style*="grid-template-columns:300px 1fr"] {
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) !important;
+    gap: 12px !important;
+    overflow: visible !important;
+  }
+
+  #page-run [style*="width:120px;height:6px"] {
+    width: 86px !important;
+  }
+
+  .status-row {
+    gap: 8px;
+    padding: 9px 10px !important;
+  }
+
+  .notice-box {
+    gap: 9px;
+    padding: 11px 12px;
+  }
+
+  .notice-text {
+    font-size: 12px;
+  }
+
+  .log-terminal {
+    min-height: 220px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .upload-progress-large {
+    padding: 14px 16px;
+  }
+
+  .upload-progress-large .upl-header,
+  .upload-progress-large .upl-stats {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .upload-progress-large .upl-count {
+    font-size: 19px;
+  }
+
+  .upload-progress-large .upl-last {
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  .orders-preview-table th,
+  .orders-preview-table td,
+  .product-table th,
+  .product-table td {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .dash-stat-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .dash-stat-card {
+    padding: 13px 14px;
+    gap: 5px;
+  }
+
+  .dash-stat-card .ds-value,
+  .stat-card .stat-value {
+    font-size: 22px;
+  }
+
+  .dash-stat-card .ds-icon {
+    font-size: 16px;
+  }
+
+  .dash-section-header {
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 11px 14px;
+  }
+
+  .dash-section-body {
+    padding: 13px 14px;
+  }
+
+  .product-split-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .product-split-name {
+    min-width: min(260px, 100%);
+    white-space: normal;
+  }
+
+  .product-split-bar-wrap {
+    width: min(120px, 36vw);
+  }
+
+  #page-setup .sv3-main {
+    padding: 18px !important;
+    overflow-x: hidden !important;
+  }
+
+  #page-setup .sv3-page-title {
+    font-size: 22px !important;
+    line-height: 1.15 !important;
+    margin-bottom: 6px !important;
+  }
+
+  #page-setup .sv3-page-sub {
+    max-width: 760px !important;
+    margin-bottom: 18px !important;
+    font-size: 12px !important;
+    line-height: 1.45 !important;
+  }
+
+  #page-setup .sv3-section {
+    padding: 16px !important;
+    border-radius: 12px !important;
+    min-width: 0 !important;
+  }
+
+  #page-setup .sv3-grid,
+  #page-setup .sv3-run-accounts {
+    grid-template-columns: repeat(auto-fit, minmax(138px, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  #page-setup .sv3-acc-card,
+  #page-setup .sv3-add-card {
+    min-width: 0 !important;
+    min-height: 142px !important;
+    padding: 12px 10px !important;
+    overflow: hidden !important;
+  }
+
+  #page-setup .sv3-avatar {
+    width: 42px !important;
+    height: 42px !important;
+    font-size: 14px !important;
+  }
+
+  #page-setup .sv3-acc-name,
+  #page-setup .sv3-add-label {
+    font-size: 12px !important;
+    line-height: 1.25 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  #page-setup .sv3-acc-email,
+  #page-setup .sv3-section-desc,
+  #page-setup .sv3-field-hint {
+    font-size: 10.5px !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  #page-setup .sv3-run-stage {
+    width: 100% !important;
+    max-width: 980px !important;
+    margin-top: 14px !important;
+  }
+
+  #page-setup .sv3-run-hero,
+  #page-setup .sv3-section-top {
+    gap: 12px !important;
+    flex-wrap: wrap !important;
+  }
+
+  #page-setup .sv3-flow-stepper {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 1 1 360px !important;
+  }
+
+  #page-setup .sv3-flow-node-title {
+    font-size: 11px !important;
+  }
+
+  #page-setup .sv3-flow-node-sub,
+  #page-setup .sv3-section-copy,
+  #page-setup .sv3-setting-desc,
+  #page-setup .sv3-toggle-label {
+    font-size: 10.5px !important;
+  }
+
+  #page-setup .sv3-settings-dock,
+  #page-setup .sv3-review-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  #page-setup .sv3-setting-card,
+  #page-setup .sv3-review-metric {
+    min-width: 0 !important;
+    padding: 12px !important;
+  }
+
+  #page-setup .sv3-date-modes {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  #page-setup .sv3-date-mode-btn {
+    min-width: 0 !important;
+    padding: 9px 8px !important;
+    font-size: 11px !important;
+    white-space: normal !important;
+  }
+
+  #page-setup .sv3-launch-row {
+    grid-template-columns: minmax(118px, 150px) minmax(0, 1fr) !important;
+    margin-inline: 0 !important;
+    padding: 10px !important;
+  }
+
+  #page-setup .sv3-form-card {
+    width: min(520px, calc(100vw - 48px)) !important;
+    max-height: calc(100vh - 84px) !important;
+    overflow-y: auto !important;
+  }
+
+  #page-setup .sv3-tab-control,
+  #page-setup .sv3-country-grid {
+    grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)) !important;
+    gap: 7px !important;
+  }
+
+  #page-setup .sv3-tab-btn {
+    min-width: 0 !important;
+    padding: 8px 9px !important;
+    font-size: 11px !important;
+    white-space: normal !important;
+  }
+}
+
+@media (max-width: 1180px) {
+  #page-setup .sv3-sidebar,
+  #page-run .sv3-sidebar,
+  #page-results .sv3-sidebar {
+    width: 58px;
+    min-width: 58px;
+    padding: 16px 0;
+  }
+
+  #page-setup .sv3-sb-logo,
+  #page-run .sv3-sb-logo,
+  #page-results .sv3-sb-logo {
+    justify-content: center;
+    padding: 0 0 14px;
+  }
+
+  #page-setup .sv3-sb-logo > div:last-child,
+  #page-setup .sv3-nav-label,
+  #page-setup .sv3-nav-lock-icon,
+  #page-setup .sv3-sidebar-footer,
+  #page-run .sv3-sb-logo > div:last-child,
+  #page-run .sv3-nav-label,
+  #page-run .sv3-nav-lock-icon,
+  #page-run .sv3-sidebar-footer,
+  #page-results .sv3-sb-logo > div:last-child,
+  #page-results .sv3-nav-label,
+  #page-results .sv3-nav-lock-icon,
+  #page-results .sv3-sidebar-footer {
+    display: none !important;
+  }
+
+  #page-setup .sv3-nav-item,
+  #page-run .sv3-nav-item,
+  #page-results .sv3-nav-item {
+    justify-content: center;
+    padding: 10px 0;
+  }
+
+  .grid-4,
+  .grid-3,
+  .exec-layout,
+  .dash-stat-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #page-run [style*="grid-template-columns:300px 1fr"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .grid-2,
+  .grid-3,
+  .grid-4,
+  .exec-layout,
+  .dash-stat-row,
+  .date-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #page-setup .sv3-launch-row {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
 }

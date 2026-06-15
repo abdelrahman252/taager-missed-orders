@@ -130,9 +130,7 @@ window.renderLicense = function (onUnlocked) {
   input.addEventListener("input", clearError);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") btn.click(); });
   supportBtn?.addEventListener("click", () => {
-    if (window.api && typeof window.api.openExternalUrl === "function") {
-      window.api.openExternalUrl("https://taager.com/").catch(() => {});
-    }
+    if (window.TaagerSupport && typeof window.TaagerSupport.open === "function") window.TaagerSupport.open();
   });
 
   btn.addEventListener("click", async () => {

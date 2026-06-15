@@ -124,6 +124,9 @@ function _generateInsights(runs, dateRange, allRuns) {
   const insights = [];
   const orders   = flattenRuns(runs);
   if (orders.length === 0) return insights;
+  const insightEvidence = (label, n, d) => window.TaagerSmartInsights && window.TaagerSmartInsights.rateEvidence
+    ? window.TaagerSmartInsights.rateEvidence(label, n, d)
+    : `${label}: ${n}${d != null ? ` / ${d}` : ""}`;
 
   // 1. Order volume trend (vs prev 7 days) — use allRuns for wider history
   if (dateRange) {
@@ -159,6 +162,7 @@ function _generateInsights(runs, dateRange, allRuns) {
         type: "warning",
         icon: "⚠️",
         text: window.t_anl('insights.dynamic.failedCity', { city: topFail.key, count: topFail.count, rate: failRate }),
+        evidence: [insightEvidence("Failed orders", failedOrders.length, orders.length), `${topFail.key}: ${topFail.count}`],
       });
     }
   }
@@ -171,6 +175,7 @@ function _generateInsights(runs, dateRange, allRuns) {
       type: "info",
       icon: "🏆",
       text: window.t_anl('insights.dynamic.bestProduct', { product: top.key || window.t_anl('insights.dynamic.unknown'), count: top.count }),
+      evidence: [`${top.key || window.t_anl('insights.dynamic.unknown')}: ${top.count} / ${orders.length} orders`],
     });
   }
 
@@ -290,6 +295,7 @@ function _generateInsights(runs, dateRange, allRuns) {
         type: "negative",
         icon: "🚫",
         text: window.t_anl('insights.dynamic.canceled', { rate: cancelRate, count: canceled }),
+        evidence: [insightEvidence("Canceled by you", canceled, orders.length)],
       });
     }
   }
@@ -299,10 +305,16 @@ function _generateInsights(runs, dateRange, allRuns) {
 
 
 function _insightItemHtml(insight) {
+  const trust = window.TaagerSmartInsights && window.TaagerSmartInsights.trustLabel
+    ? window.TaagerSmartInsights.trustLabel(insight.trust || "measured")
+    : "Measured";
+  const evidence = Array.isArray(insight.evidence) && insight.evidence.length
+    ? `<div class="insight-evidence" style="font-size:10px;color:var(--text3);margin-top:4px">${insight.evidence.slice(0, 2).join(" · ")}</div>`
+    : "";
   return `
     <div class="insight-item ${insight.type}">
       <span class="insight-icon">${insight.icon}</span>
-      <div class="insight-text">${insight.text}</div>
+      <div class="insight-text"><span style="font-size:9px;font-weight:800;text-transform:uppercase;color:var(--text3);margin-inline-end:6px">${trust}</span>${insight.text}${evidence}</div>
     </div>`;
 }
 

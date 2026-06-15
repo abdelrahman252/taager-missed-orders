@@ -936,9 +936,6 @@
           console.log("[Taager AI] Diagnostics copied", snapshot);
           return;
         }
-        if (action === "logs" && window.api && typeof window.api.openAiLogFolder === "function") {
-          window.api.openAiLogFolder().catch(function () {});
-        }
       });
     });
     wireChatActionEvents(root);

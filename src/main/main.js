@@ -5,14 +5,12 @@
   const devLocalPath = path.join(__dirname, "../../.env.local");
   const devPath = path.join(__dirname, "../../.env");
   const prodPath = process.resourcesPath ? path.join(process.resourcesPath, ".env") : null;
-  const prodLocalPath = process.resourcesPath ? path.join(process.resourcesPath, ".env.local") : null;
   const dotenv = require("dotenv");
   const baseEnvPath = fs.existsSync(devPath)
     ? devPath
     : (prodPath && fs.existsSync(prodPath) ? prodPath : null);
   if (baseEnvPath) dotenv.config({ path: baseEnvPath });
   if (fs.existsSync(devLocalPath)) dotenv.config({ path: devLocalPath, override: true });
-  else if (prodLocalPath && fs.existsSync(prodLocalPath)) dotenv.config({ path: prodLocalPath, override: true });
 })();
 
 const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage } = require("electron");
@@ -28,6 +26,7 @@ const monitoring = require("../monitoring/sentry.main");
 const { normalizePhone } = require("../bot/phone");
 const { processDashboardSheets } = require("../bot/dashboard-sheet-processing");
 const { createDashboardQueryService } = require("./dashboard-query-service");
+const { findNewDuplicateConflict } = require("./account-duplicates");
 const {
   replaceRowsInDateRange,
   validateCurrentYearDashboardRange,
@@ -480,6 +479,64 @@ configureAiGateway({
 });
 
 let mainWindow, tray, autoRunTimer = null, autoRunEnabled = false, botRunning = false;
+
+const APP_ZOOM_LEVELS = [75, 90, 100, 110, 125, 150];
+const DEFAULT_APP_ZOOM = 100;
+
+function normalizeAppZoom(value) {
+  const numeric = Number(value);
+  return APP_ZOOM_LEVELS.includes(numeric) ? numeric : DEFAULT_APP_ZOOM;
+}
+
+function getSavedAppZoom() {
+  return normalizeAppZoom(store.get("appZoom", DEFAULT_APP_ZOOM));
+}
+
+function broadcastAppZoom(percent) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send("app-zoom-changed", percent);
+}
+
+function applyAppZoom(percent, options = {}) {
+  const next = normalizeAppZoom(percent);
+  if (!mainWindow || mainWindow.isDestroyed()) return next;
+  mainWindow.webContents.setZoomFactor(next / 100);
+  if (options.persist !== false) store.set("appZoom", next);
+  broadcastAppZoom(next);
+  return next;
+}
+
+function stepAppZoom(direction) {
+  const current = normalizeAppZoom(
+    Math.round((mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents.getZoomFactor() : 1) * 100)
+  );
+  const currentIndex = APP_ZOOM_LEVELS.indexOf(current);
+  const nextIndex = Math.max(0, Math.min(APP_ZOOM_LEVELS.length - 1, currentIndex + direction));
+  return applyAppZoom(APP_ZOOM_LEVELS[nextIndex]);
+}
+
+function installAppZoomControls(window) {
+  const contents = window.webContents;
+  contents.on("did-finish-load", () => {
+    applyAppZoom(getSavedAppZoom(), { persist: false });
+  });
+  contents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown" || (!input.control && !input.meta)) return;
+    const key = String(input.key || "").toLowerCase();
+    const code = String(input.code || "").toLowerCase();
+    if (key === "0" || code === "digit0" || code === "numpad0") {
+      event.preventDefault();
+      applyAppZoom(DEFAULT_APP_ZOOM);
+    } else if (key === "+" || key === "=" || key === "add" || code === "equal" || code === "numpadadd") {
+      event.preventDefault();
+      stepAppZoom(1);
+    } else if (key === "-" || key === "_" || key === "subtract" || code === "minus" || code === "numpadsubtract") {
+      event.preventDefault();
+      stepAppZoom(-1);
+    }
+  });
+}
+
 let lastExportTimestamp = 0;
 
 // ── Chrome path cache — resolved once at startup so dashboard fetch skips discovery ──
@@ -569,11 +626,23 @@ function taagerLoginMethodOf(acc) {
   return ["email", "phone", "google"].includes(method) ? method : "email";
 }
 
-function taagerLoginIdentityOf(acc) {
+function taagerMerchantIdentityOf(acc) {
   const merchantId = String(acc && acc.taagerAffiliateCode || "").trim().toLowerCase();
   const country = String(acc && acc.taagerCountry || "sa").trim().toLowerCase();
   if (merchantId) return `${country}:${merchantId}`;
+  return "";
+}
+
+function licenseRowMerchantIdentity(row) {
+  const rowEmail = String(row && row.taager_email || "").trim().toLowerCase();
+  return /^[a-z]{2}:[a-z0-9_-]+$/i.test(rowEmail) ? rowEmail : "";
+}
+
+function taagerLoginIdentityOf(acc) {
+  const merchantIdentity = taagerMerchantIdentityOf(acc);
+  if (merchantIdentity) return merchantIdentity;
   const method = taagerLoginMethodOf(acc);
+  const country = String(acc && acc.taagerCountry || "sa").trim().toLowerCase();
   if (method === "phone") return normalizePhone(acc && (acc.taagerPhone || acc.taagerPhone) || "", country);
   return (acc && (acc.taagerEmail || acc.taagerEmail) || "").toLowerCase().trim();
 }
@@ -612,6 +681,13 @@ function licenseRowMatchesAccount(row, acc) {
   const easy = (acc.easyEmail || "").toLowerCase().trim();
   const rowEasy = String(row.easy_email || "").toLowerCase().trim();
   if (easy && rowEasy && easy !== rowEasy) return false;
+  const easyStore = String(acc.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase();
+  const rowEasyStore = String(row.easy_store || "").replace(/\s+/g, " ").trim().toLowerCase();
+  if (easyStore && easy && rowEasyStore !== easyStore) return false;
+
+  const accountMerchant = taagerMerchantIdentityOf(acc);
+  const rowMerchant = licenseRowMerchantIdentity(row);
+  if (accountMerchant || rowMerchant) return !!accountMerchant && rowMerchant === accountMerchant;
 
   const method = taagerLoginMethodOf(acc);
   const rowMethod = String(row.taager_login_method || "").toLowerCase().trim();
@@ -1268,6 +1344,7 @@ async function isLicenseValid() {
       return false;
     }
     if (r.force_flush) _handleForceFlush();
+    if (r.reset_cache) _handleResetCache();
     _saveLastValidResult({ valid: true, key });
     return true;
   } catch {
@@ -1333,6 +1410,7 @@ function createWindow() {
     backgroundColor: bgColor, icon: getIconPath(), show: false,
   });
   monitoring.monitorWindow(mainWindow, "main");
+  installAppZoomControls(mainWindow);
   mainWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
     log.error("[Preload] preload-error:", preloadPath, error && error.stack ? error.stack : error);
     monitoring.captureException(error, { operation: "preload.error", extra: { preloadPath } });
@@ -1632,6 +1710,10 @@ ipcMain.handle("get-app-version", () => app.getVersion());
 ipcMain.on("window-minimize", () => mainWindow.minimize());
 ipcMain.on("window-maximize", () => { if (mainWindow.isMaximized()) mainWindow.unmaximize(); else mainWindow.maximize(); });
 ipcMain.on("window-close", () => mainWindow.hide());
+ipcMain.handle("get-app-zoom", () => getSavedAppZoom());
+ipcMain.on("increase-app-zoom", () => stepAppZoom(1));
+ipcMain.on("decrease-app-zoom", () => stepAppZoom(-1));
+ipcMain.on("reset-app-zoom", () => applyAppZoom(DEFAULT_APP_ZOOM));
 
 // ════════════════════════════════════════
 // IPC — License (server-based, auto device lock)
@@ -1696,6 +1778,18 @@ function _handleForceFlush() {
   }
 }
 
+function _handleResetCache() {
+  log.warn("[License] Reset cache received - wiping local metrics and dashboard cache.");
+  try { analyticsStore.clear(); } catch (_) {}
+  try { dashboardStore.clear(); } catch (_) {}
+  invalidateAnalyticsRunsCache();
+  analyticsSnapshotSyncCacheKey = "";
+  dashboardQueryService.clearCache();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("reset-cache");
+  }
+}
+
 async function _checkLicenseImpl(bustCache) {
   const key = licenseStore.get("licenseKey", "");
   if (!key) return { valid: false, reason: "No license key." };
@@ -1736,6 +1830,10 @@ async function _checkLicenseImpl(bustCache) {
     if (r.force_flush) {
       _handleForceFlush();
       return { valid: true, forceFlush: true };
+    }
+    if (r.reset_cache) {
+      _handleResetCache();
+      return { valid: true, resetCache: true };
     }
 
     const daysLeft = r.expires_at ? Math.max(0, Math.ceil((new Date(r.expires_at) - new Date()) / 86400000)) : null;
@@ -1924,6 +2022,7 @@ ipcMain.handle("get-startup-state", async () => {
     settings: {
       theme: store.get("theme", "dark"),
       lang:  store.get("lang",  "ar"),
+      appZoom: getSavedAppZoom(),
     },
     license,
     credentials,
@@ -2065,14 +2164,37 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
   const maxAccounts = await getMaxAccounts();
   const storedAccountsBeforeSave = store.get("accounts", []);
 
+  const duplicateConflict = findNewDuplicateConflict(storedAccountsBeforeSave, accounts);
+  if (duplicateConflict) {
+    return {
+      success: false,
+      reason: "duplicate_account",
+      conflictAccountId: duplicateConflict.conflict.id || "",
+      conflictAccountLabel: accountDisplayName(duplicateConflict.conflict, "Account"),
+    };
+  }
+
   if (accounts.length > maxAccounts)
     return { success: false, reason: "limit_reached" };
 
-  if (accounts.some(a => a.dashboardEnrichmentProvider === "easyorders" && !(a.easyStore || "").trim())) {
-    return { success: false, reason: "easy_store_required" };
-  }
-  if (accounts.some(a => !(a.taagerAffiliateCode || "").trim())) {
-    return { success: false, reason: "taager_merchant_id_required" };
+  const teamLeaderEnabled = licenseStore.get("teamLeaderEnabled", false) === true;
+  for (const a of accounts) {
+    const method = taagerLoginMethodOf(a);
+    const easyPassword = a.easyPassword || (a.id ? store.get(`pwd_easy_${a.id}`, "") : "");
+    const taagerPassword = a.taagerPassword || (a.id ? store.get(`pwd_taager_${a.id}`, "") : "");
+    const needsEasyOrdersCredentials = !teamLeaderEnabled || a.dashboardEnrichmentProvider === "easyorders";
+    if (needsEasyOrdersCredentials && (!(a.easyStore || "").trim() || !(a.easyEmail || "").trim() || !easyPassword)) {
+      return { success: false, reason: "easy_credentials_required" };
+    }
+    if (!(a.taagerAffiliateCode || "").trim()) {
+      return { success: false, reason: "taager_merchant_id_required" };
+    }
+    if (method === "phone" ? !(a.taagerPhone || "").trim() : !(a.taagerEmail || "").trim()) {
+      return { success: false, reason: method === "phone" ? "taager_phone_required" : "taager_email_required" };
+    }
+    if (method !== "google" && !taagerPassword) {
+      return { success: false, reason: "taager_password_required" };
+    }
   }
 
   // ── Per-account lock check via license_accounts table ──
@@ -2102,7 +2224,27 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
         const oldH = oldHashById[a.id]; // undefined for brand-new accounts
 
         // Case 1: hash unchanged — already in DB, nothing to do
-        if (newH === oldH) continue;
+        if (newH === oldH && dbHashes.includes(newH)) {
+          const oldAccount = storedAccountsBeforeSave.find(item => item.id === a.id);
+          const oldStore = String(oldAccount?.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase();
+          const newStore = String(a.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase();
+          if (oldStore !== newStore) {
+            const currentRow = dbRows.find(row => row.account_hash === newH);
+            const syncRes = await supabaseRpc("taager_insert_license_account", {
+              p_license_key: licKey,
+              p_account_hash: newH,
+              p_easy_email: (a.easyEmail || "").toLowerCase().trim() || null,
+              p_easy_store: newStore || null,
+              p_taager_email: taagerLoginIdentityOf(a) || null,
+              p_taager_login_method: taagerLoginMethodOf(a),
+              p_unlocked: !!currentRow?.unlocked,
+            });
+            if (syncRes && syncRes.success === false) {
+              return { success: false, reason: syncRes.reason || "license_account_sync_failed" };
+            }
+          }
+          continue;
+        }
 
         // Case 2: this is an edit that changed the email — swap old hash for new hash
         if (oldH && dbHashes.includes(oldH)) {
@@ -2111,22 +2253,21 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
           const wasUnlocked = oldRow ? !!oldRow.unlocked : false;
           // Server-side guard: reject the edit if the account is still locked
           if (!wasUnlocked) return { success: false, reason: "account_locked" };
-          // Delete old hash row
-          await supabaseRpc("taager_delete_license_account", { p_license_key: licKey, p_account_hash: oldH });
-          // Insert new hash row (keep unlocked state so admin unlock survives email edits)
+          // Replace atomically so a duplicate rejection cannot remove the old slot.
           const newAccObj = accounts.find(a => accountHash(a) === newH);
           const newTaagerIdentity = taagerLoginIdentityOf(newAccObj);
-          const insertRes = await supabaseRpc("taager_insert_license_account", {
+          const replaceRes = await supabaseRpc("taager_replace_license_account", {
             p_license_key:  licKey,
-            p_account_hash: newH,
+            p_old_account_hash: oldH,
+            p_new_account_hash: newH,
             p_easy_email:   (newAccObj?.easyEmail || "").toLowerCase().trim() || null,
+            p_easy_store:   String(newAccObj?.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase() || null,
             // RPC/column name is legacy; value is the Taager lock identity.
             p_taager_email:   newTaagerIdentity || null,
             p_taager_login_method: taagerLoginMethodOf(newAccObj),
-            p_unlocked:     wasUnlocked,
           });
-          if (insertRes && insertRes.success === false) {
-            return { success: false, reason: insertRes.reason || "save_failed" };
+          if (replaceRes && replaceRes.success === false) {
+            return { success: false, reason: replaceRes.reason || "license_account_sync_failed" };
           }
           continue;
         }
@@ -2146,13 +2287,14 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
             p_license_key:  licKey,
             p_account_hash: newH,
             p_easy_email:   (newAccForInsert?.easyEmail || "").toLowerCase().trim() || null,
+            p_easy_store:   String(newAccForInsert?.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase() || null,
             // RPC/column name is legacy; value is the Taager lock identity.
             p_taager_email:   newTaagerIdentity || null,
             p_taager_login_method: taagerLoginMethodOf(newAccForInsert),
             p_unlocked:     false,
           });
           if (insertRes && insertRes.success === false) {
-            return { success: false, reason: insertRes.reason || "save_failed" };
+            return { success: false, reason: insertRes.reason || "license_account_sync_failed" };
           }
         }
       }
@@ -2169,11 +2311,18 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
         const row = dbRows.find(r => r.account_hash === h);
         if (row && !row.unlocked) return { success: false, reason: "account_locked" };
         try {
-          await supabaseRpc("taager_delete_license_account", { p_license_key: licKey, p_account_hash: h });
-        } catch {}
+          const deleteRes = await supabaseRpc("taager_delete_license_account", { p_license_key: licKey, p_account_hash: h });
+          if (deleteRes && deleteRes.success === false) {
+            return { success: false, reason: deleteRes.reason || "license_account_sync_failed" };
+          }
+        } catch (error) {
+          log.warn("[Accounts] Could not delete license account slot:", error && error.message ? error.message : error);
+          return { success: false, reason: "license_account_sync_failed" };
+        }
       }
-    } catch {
-      // Offline: trust local
+    } catch (error) {
+      log.warn("[Accounts] Could not sync license account slots before save:", error && error.message ? error.message : error);
+      return { success: false, reason: "license_account_sync_failed" };
     }
   }
 
@@ -2289,6 +2438,7 @@ function bindTaagerAffiliateCode(accountId, code) {
 ipcMain.handle("get-settings", () => ({
   theme: store.get("theme", "dark"),
   lang:  store.get("lang",  "ar"),
+  appZoom: getSavedAppZoom(),
 }));
 ipcMain.handle("save-settings", (_, { theme, lang }) => {
   if (theme !== undefined) store.set("theme", theme);
@@ -2311,6 +2461,7 @@ ipcMain.handle("set-launch-minimized", (_, v) => { store.set("launchMinimized", 
 ipcMain.handle("set-auto-confirm", (_, v) => { store.set("autoConfirm", v); return true; });
 
 let currentBotChild = null;
+const pendingGoogleLoginRequests = new Map();
 ipcMain.on("bot-started", () => { botRunning = true; });
 ipcMain.on("bot-finished", () => { botRunning = false; currentBotChild = null; botChildren = []; });
 ipcMain.on("kill-bot", () => {
@@ -2320,6 +2471,80 @@ ipcMain.on("kill-bot", () => {
 });
 
 // ── Analytics IPC Handlers ─────────────────────────────────────────────────
+
+function openManualGoogleLoginChrome(message, child, fallback = {}) {
+  const requestId = String(message && message.requestId || "");
+  const profilePath = String(message && message.profilePath || "");
+  const loginUrl = String(message && message.loginUrl || "");
+  const chromePath = String(message && message.chromePath || getCachedChromePath() || "");
+  if (!requestId || !profilePath || !loginUrl || !chromePath) {
+    const error = "GOOGLE_LOGIN_OPEN_FAILED: missing requestId/profilePath/loginUrl/chromePath";
+    log.warn("[GoogleLogin] malformed manual Chrome request", {
+      requestId,
+      hasProfilePath: !!profilePath,
+      hasLoginUrl: !!loginUrl,
+      hasChromePath: !!chromePath,
+    });
+    if (requestId && child && !child.killed) {
+      try { child.send({ type: "google-login-failed", requestId, error }); } catch (_) {}
+    }
+    return null;
+  }
+
+  const { spawn } = require("child_process");
+  const accountLabel = message.accountLabel || fallback.accountLabel || "Taager account";
+  const args = [
+    `--user-data-dir=${profilePath}`,
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--new-window",
+    loginUrl,
+  ];
+  const chrome = spawn(chromePath, args, {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: false,
+  });
+  chrome.once("error", (error) => {
+    pendingGoogleLoginRequests.delete(requestId);
+    try {
+      child.send({ type: "google-login-failed", requestId, error: error && error.message || String(error) });
+    } catch (_) {}
+    mainWindow.webContents.send("bot-log", `[GoogleLogin] [${accountLabel}] Could not open Chrome for Google login: ${error && error.message || error}`);
+  });
+  chrome.unref();
+
+  const payload = {
+    ...message,
+    accountId: message.accountId || fallback.accountId || "__single__",
+    accountLabel,
+  };
+  const chromeStartedAt = Date.now();
+  pendingGoogleLoginRequests.set(requestId, { child, payload, chromeStartedAt });
+  chrome.once("exit", () => {
+    const pending = pendingGoogleLoginRequests.get(requestId);
+    if (!pending || pending.child !== child) return;
+    if (Date.now() - chromeStartedAt < 3000 || child.killed) return;
+    try {
+      child.send({ type: "google-login-finished", requestId });
+      pendingGoogleLoginRequests.delete(requestId);
+    } catch (_) {}
+  });
+  mainWindow.webContents.send("bot-google-login-needed", payload);
+  mainWindow.webContents.send("bot-log", `[GoogleLogin] [${payload.accountLabel}] Chrome opened with bot profile. Log in with Google, then close Chrome.`);
+  return payload;
+}
+
+ipcMain.handle("complete-google-login", async (_, requestId) => {
+  const id = String(requestId || "");
+  const pending = pendingGoogleLoginRequests.get(id);
+  if (!pending || !pending.child || pending.child.killed) {
+    return { ok: false, error: "GOOGLE_LOGIN_REQUEST_NOT_FOUND" };
+  }
+  pending.child.send({ type: "google-login-finished", requestId: id });
+  pendingGoogleLoginRequests.delete(id);
+  return { ok: true };
+});
 
 ipcMain.handle("save-run-analytics", async (_, payload) => {
   try {
@@ -2601,6 +2826,13 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo } 
         mainWindow.webContents.send("bot-cooldown", { ...msg, accountId: dashboardAccountId, accountLabel });
       } else if (msg.type === "2fa-needed") {
         mainWindow.webContents.send("bot-2fa-needed", { ...msg, accountId: dashboardAccountId, accountLabel });
+      } else if (msg.type === "google-login-needed") {
+        openManualGoogleLoginChrome({ ...msg, accountId: dashboardAccountId, accountLabel }, child, {
+          accountId: dashboardAccountId,
+          accountLabel,
+        });
+      } else if (msg.type === "google-login-complete") {
+        mainWindow.webContents.send("bot-google-login-complete", { ...msg, accountId: dashboardAccountId, accountLabel });
       } else if (msg.type === "session-event") {
         if (msg.site === "taager" && msg.event === "identity-verified") {
           bindTaagerAffiliateCode(dashboardAccountId, msg.affiliateCode);
@@ -3886,11 +4118,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
         }
         if (msg.type === "taager-restart")   mainWindow.webContents.send("bot-taager-restart", msg);
         if (msg.type === "google-login-needed") {
-          // Open Taager login in the user's real system browser (not the Playwright window).
-          // The user logs in with Google there → session cookies are saved to the shared
-          // persistent profile folder → runner.js detects them and continues automatically.
-          shell.openExternal(`https://taager.com/${(acc.taagerCountry || "sa").toLowerCase()}/auth/login`).catch(() => {});
-          mainWindow.webContents.send("bot-google-login-needed", {
+          openManualGoogleLoginChrome(msg, child, {
             accountId: acc.id || "__single__",
             accountLabel: accountDisplayName(acc, "Account 1"),
           });
@@ -4020,8 +4248,10 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
         if (msg.type === "order-progress") mainWindow.webContents.send("bot-order-progress", tagged);
         if (msg.type === "taager-restart")   mainWindow.webContents.send("bot-taager-restart",   tagged);
         if (msg.type === "google-login-needed") {
-          shell.openExternal(`https://taager.com/${(acc.taagerCountry || "sa").toLowerCase()}/auth/login`).catch(() => {});
-          mainWindow.webContents.send("bot-google-login-needed", tagged);
+          openManualGoogleLoginChrome(tagged, child, {
+            accountId,
+            accountLabel,
+          });
         }
         if (msg.type === "google-login-complete") {
           mainWindow.webContents.send("bot-google-login-complete", tagged);

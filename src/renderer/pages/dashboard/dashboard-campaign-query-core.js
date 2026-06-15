@@ -9,11 +9,14 @@
       : root && root.TaagerDashboardCurrencyCore,
     typeof module !== "undefined" && module.exports
       ? require("./dashboard-product-attribution-core")
-      : root && root.TaagerProductAttribution
+      : root && root.TaagerProductAttribution,
+    typeof module !== "undefined" && module.exports
+      ? require("./dashboard-financial-core")
+      : root && root.TaagerDashboardFinancialCore
   );
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (root) root.TaagerCampaignQueryCore = api;
-})(typeof window !== "undefined" ? window : null, function (decisionApi, currencyApi, attributionApi) {
+})(typeof window !== "undefined" ? window : null, function (decisionApi, currencyApi, attributionApi, financialApi) {
   "use strict";
 
 const evaluate = decisionApi && decisionApi.evaluate ? decisionApi.evaluate : function () {
@@ -425,11 +428,21 @@ function buildCampaignIntelligence(input) {
   });
 
   const groups = Array.from(productGroups.values()).map((group) => {
-    const taagerCpa = group.taagerOrders ? group.spend / group.taagerOrders : 0;
-    const deliveredCpa = group.taagerDelivered ? group.spend / group.taagerDelivered : 0;
-    const avgDeliveredProfit = group.taagerDelivered ? group.taagerProfit / group.taagerDelivered : 0;
+    const financials = financialApi.calculate({
+      mode: "actual",
+      netOrders: group.taagerOrders,
+      actualDeliveredOrders: group.taagerDelivered,
+      actualEarnedProfitAfterTax: group.taagerProfit,
+      actualDeliveredSales: group.deliveredSales,
+      currentTotalSales: group.totalSales,
+      expectedNdrRate: group.taagerNdrPct / 100,
+      adSpend: group.spend,
+    });
+    const taagerCpa = financials.cpa;
+    const deliveredCpa = financials.actualDeliveredCpa;
+    const avgDeliveredProfit = financials.averageProfit;
     const trafficViews = group.trafficViews;
-    const netProfit = group.taagerProfit - group.spend;
+    const netProfit = financials.actualNetProfit;
     const decisionMetadata = evaluate({
       orders: group.taagerOrders, delivered: group.taagerDelivered, ndrPct: group.taagerNdrPct,
       cancelPct: group.cancelPct, cpa: taagerCpa, breakEvenCpa: group.breakEvenCpa,
@@ -447,10 +460,10 @@ function buildCampaignIntelligence(input) {
       realConversionRatePct: trafficViews ? round(group.taagerOrders / trafficViews * 100) : 0,
       deliveredConversionRatePct: trafficViews ? round(group.taagerDelivered / trafficViews * 100) : 0,
       netProfit: round(netProfit),
-      roiPct: group.spend ? round(netProfit / group.spend * 100) : 0,
-      profitRoas: group.spend ? round(group.taagerProfit / group.spend) : 0,
+      roiPct: round(financials.actualRoi),
+      profitRoas: round(financials.actualProfitRoas),
       totalSalesRoas: group.spend ? round(group.totalSales / group.spend) : 0,
-      deliveredSalesRoas: group.spend ? round(group.deliveredSales / group.spend) : 0,
+      deliveredSalesRoas: round(financials.actualSalesRoas),
       decision: decisionMetadata.decision,
       decisionMetadata,
       searchHaystack: keyText([group.product, group.sku, group.accountId, group.country].join(" ")),
@@ -468,11 +481,21 @@ function buildCampaignIntelligence(input) {
   totals.taagerProfit = round(groups.reduce((sum, row) => sum + row.taagerProfit, 0));
   totals.deliveredSales = round(groups.reduce((sum, row) => sum + row.deliveredSales, 0));
   totals.totalSales = round(groups.reduce((sum, row) => sum + row.totalSales, 0));
-  totals.netProfit = round(totals.taagerProfit - totals.matchedSpend);
-  totals.taagerCpa = totals.taagerOrders ? round(totals.matchedSpend / totals.taagerOrders) : 0;
-  totals.roiPct = totals.matchedSpend ? round(totals.netProfit / totals.matchedSpend * 100) : 0;
-  totals.profitRoas = totals.matchedSpend ? round(totals.taagerProfit / totals.matchedSpend) : 0;
-  totals.deliveredSalesRoas = totals.matchedSpend ? round(totals.deliveredSales / totals.matchedSpend) : 0;
+  const totalFinancials = financialApi.calculate({
+    mode: "actual",
+    netOrders: totals.taagerOrders,
+    actualDeliveredOrders: totals.taagerDelivered,
+    actualEarnedProfitAfterTax: totals.taagerProfit,
+    actualDeliveredSales: totals.deliveredSales,
+    currentTotalSales: totals.totalSales,
+    expectedNdrRate: totals.taagerOrders ? totals.taagerDelivered / totals.taagerOrders : 0,
+    adSpend: totals.matchedSpend,
+  });
+  totals.netProfit = round(totalFinancials.actualNetProfit);
+  totals.taagerCpa = round(totalFinancials.cpa);
+  totals.roiPct = round(totalFinancials.actualRoi);
+  totals.profitRoas = round(totalFinancials.actualProfitRoas);
+  totals.deliveredSalesRoas = round(totalFinancials.actualSalesRoas);
   totals.totalSalesRoas = totals.matchedSpend ? round(totals.totalSales / totals.matchedSpend) : 0;
 
   return {

@@ -504,7 +504,7 @@
     var profitLine = summary.profit != null
       ? ", P&L " + summary.profit.toLocaleString("en-US") + (currency ? " " + currency : "")
       : "";
-    var mode = data && data.meta && data.meta.deliveredDateMode === "createdAt" ? "Created At" : "Last Updated";
+    var mode = data && data.meta && data.meta.deliveredDateMode === "expected" ? "Expected NDR" : "Actual Delivered";
     if (ar) {
       var arabicFinancial = summary.spend
         ? "، الإنفاق الإعلاني المخصص " + fmt(summary.spend.amount) + (currency ? " " + currency : "")
@@ -527,7 +527,7 @@
       fmt(summary.commission) + " SAR commission" +
       spendLine + cpaLine + breakEvenLine + profitLine + "." +
       "\n\nWhat it means: break-even CPA is the maximum CPA before this product loses money. It equals average commission per delivered order multiplied by NDR. If actual CPA is above break-even CPA, scaling this product will likely increase losses. If it is lower, then the next thing to check is delivery quality, because low NDR can still kill profit even when CPA looks acceptable." +
-      "\n\nNext steps:\n- Compare this product against your best product by CPA, NDR, and P&L.\n- If P&L is negative, reduce spend or pause until delivery quality improves.\n- Switch the top mode between Created At and Last Updated when you want the delivered numbers recalculated by that mode.";
+      "\n\nNext steps:\n- Compare this product against your best product by CPA, NDR, and P&L.\n- If P&L is negative, reduce spend or pause until delivery quality improves.\n- Switch the top mode between Actual Delivered and Expected NDR to compare realized and projected performance.";
   }
 
   function citySummary(city) {
@@ -744,7 +744,7 @@
         timeframe: getMemory().currentTimeframe || null,
         account: meta.activeAccountName || meta.activeAccountLabel || meta.activeAccountId || null,
         accountScope: meta.activeAccountId && meta.activeAccountId !== "__all__" ? "single_account" : "all_accounts",
-        deliveredDateMode: meta.deliveredDateMode === "createdAt" ? "Created At" : "Last Updated"
+        deliveredDateMode: meta.deliveredDateMode === "expected" ? "Expected NDR" : "Actual Delivered"
       },
       accountHealth: {
         revenue: accountHealth.metrics.revenue,
@@ -869,7 +869,7 @@
     if (h.breakEvenCpa) proof.push("break-even CPA " + Math.round(num(h.breakEvenCpa) * 100) / 100 + " " + (h.breakEvenCurrency || "SAR"));
     var focus = product ? "Product focus: " + product + "." : (city ? "City focus: " + city + "." : "Account focus: current selected dashboard scope.");
     var steps = [
-      "Step 1: Confirm the current scope: selected account/date range and delivered counted by " + ((strategicContext.sessionFocus && strategicContext.sessionFocus.deliveredDateMode) || "Last Updated") + ".",
+      "Step 1: Confirm the current scope: selected account/date range and mode " + ((strategicContext.sessionFocus && strategicContext.sessionFocus.deliveredDateMode) || "Actual Delivered") + ".",
       "Step 2: Read commercial health together: " + (proof.length ? proof.join(", ") : "delivered sales, delivered AOV, earned commission, lost commission, NDR, DR, CPA, and break-even CPA") + ".",
       "Step 3: Open the worst products or weakest cities and find the segment with order volume plus low delivery quality.",
       "Step 4: Pause or reduce traffic only on the dangerous segment while you check confirmation, product promise, and delivery issues.",

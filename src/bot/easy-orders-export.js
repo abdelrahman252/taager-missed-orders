@@ -3,10 +3,138 @@
 const os = require("os");
 const path = require("path");
 
+function parseEasyOrdersIdentityFromDocument() {
+  // IMPORTANT FOR FUTURE AI/CODEX PASSES:
+  // The active EasyOrders store must be read from the account identity header
+  // paired with the active email. Do not "simplify" this by reading the first
+  // item under the "Stores:" list; that list contains available stores and can
+  // be different from the currently active store.
+  const emailPattern = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+  const ignoredSectionLabels = new Set([
+    "stores",
+    "change to",
+    "switch account",
+    "switch accounts",
+    "accounts",
+  ]);
+  const ignoredActionLabels = new Set([
+    "add store",
+    "add new account",
+    "update info",
+    "update your info",
+    "sign out",
+    "log out",
+    "logout",
+    "exit",
+  ]);
+
+  const normalize = (value) => String(value || "")
+    .replace(/[\u200E\u200F\u061C]/g, "")
+    .replace(/[\u{1F300}-\u{1FAFF}\u2600-\u27BF\uFE0F\u200D]/gu, "")
+    .replace(/\s+(?:ð|â)[^\s]{1,8}\s*$/giu, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
+  const visible = (element) => {
+    if (!element || !element.isConnected) return false;
+    const style = window.getComputedStyle(element);
+    if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
+    return !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length);
+  };
+
+  const text = (element) => String(element && (element.innerText || element.textContent) || "").trim();
+  const normalizedText = (element) => normalize(text(element));
+  const isEmail = (value) => emailPattern.test(normalize(value));
+  const sectionLabel = (element) => normalizedText(element).replace(/:$/, "");
+
+  const isLeafTextElement = (element) => {
+    if (!visible(element) || !normalizedText(element)) return false;
+    return !Array.from(element.children).some((child) => visible(child) && normalizedText(child));
+  };
+
+  const isIgnoredAction = (element) => {
+    const action = element.closest("a, button, [role='button'], [role='menuitem']");
+    if (!action) return false;
+    return ignoredActionLabels.has(normalizedText(action));
+  };
+
+  const isAfterIgnoredSectionHeading = (element, surface) => {
+    for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      const headings = Array.from(ancestor.querySelectorAll(
+        "h1, h2, h3, h4, h5, h6, [role='heading'], p, span, strong, b"
+      ));
+      if (headings.some((heading) =>
+        visible(heading) &&
+        ignoredSectionLabels.has(sectionLabel(heading)) &&
+        !!(heading.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING)
+      )) {
+        return true;
+      }
+      if (ancestor === surface) break;
+    }
+    return false;
+  };
+
+  const findAdjacentLabel = (emailElement, surface) => {
+    for (let container = emailElement.parentElement; container; container = container.parentElement) {
+      const items = Array.from(container.querySelectorAll(
+        "p, span, h1, h2, h3, h4, h5, h6, strong, b, small, div"
+      )).filter(isLeafTextElement);
+      const emailIndex = items.indexOf(emailElement);
+      if (emailIndex >= 0) {
+        for (let distance = 1; distance < items.length; distance++) {
+          for (const index of [emailIndex - distance, emailIndex + distance]) {
+            const candidate = items[index];
+            if (!candidate) continue;
+            const label = normalizedText(candidate);
+            if (!label || isEmail(label) || ignoredSectionLabels.has(label.replace(/:$/, ""))) continue;
+            if (ignoredActionLabels.has(label) || isIgnoredAction(candidate)) continue;
+            return label;
+          }
+        }
+      }
+      if (container === surface) break;
+    }
+    return "";
+  };
+
+  const identitySurfaces = Array.from(document.querySelectorAll(
+    "[role='menu'], [role='dialog'], [class~='MuiPopover-paper']"
+  )).filter(visible);
+  const surfaces = identitySurfaces.length ? identitySurfaces : [document.body];
+
+  for (const surface of surfaces) {
+    const emailElements = Array.from(surface.querySelectorAll(
+      "p, span, h1, h2, h3, h4, h5, h6, strong, b, small, div, [data-email]"
+    )).filter((element) => isLeafTextElement(element) && isEmail(text(element)));
+
+    for (const emailElement of emailElements) {
+      if (isIgnoredAction(emailElement) || isAfterIgnoredSectionHeading(emailElement, surface)) continue;
+      const store = findAdjacentLabel(emailElement, surface);
+      if (store) {
+        return {
+          email: normalize(text(emailElement)),
+          store,
+          source: "account-popover-header",
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
 function createEasyOrdersExportFlow(options = {}) {
   const config = options.config || {};
   const log = typeof options.log === "function" ? options.log : () => {};
   const emit = typeof options.emit === "function" ? options.emit : () => {};
+  let identityCache = {
+    verified: false,
+    email: "",
+    store: "",
+    where: "",
+  };
 
   function normalizeEmail(value) {
     return String(value || "").trim().toLowerCase();
@@ -19,6 +147,24 @@ function createEasyOrdersExportFlow(options = {}) {
       .replace(/\s+/g, " ")
       .trim()
       .toLowerCase();
+  }
+
+  function clearIdentityCache(reason) {
+    if (identityCache.verified) {
+      log(`EasyOrders identity cache cleared: ${reason}`);
+    }
+    identityCache = {
+      verified: false,
+      email: "",
+      store: "",
+      where: "",
+    };
+  }
+
+  function identityCacheMatchesExpected() {
+    return identityCache.verified &&
+      identityCache.email === normalizeEmail(config.easyEmail) &&
+      identityCache.store === normalizeIdentityText(config.easyStore);
   }
 
   function formatDataDay(date) {
@@ -75,78 +221,52 @@ function createEasyOrdersExportFlow(options = {}) {
     }
   }
 
-  async function ensureEnglish(page) {
-    try {
-      let langLabel = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        langLabel = await page.$eval('[aria-label="language-switcher"] p', (el) => el.innerText.trim()).catch(() => null);
-        if (langLabel !== null) break;
-        if (attempt < 2) await page.waitForTimeout(1500);
-      }
-      if (langLabel && langLabel !== "en") {
-        await page.click('[aria-label="language-switcher"]');
-        await page.waitForTimeout(800);
-        const clicked =
-          await page.locator('[role="menuitem"][aria-label="english"]').click().then(() => true).catch(() => false) ||
-          await page.locator('[role="menuitem"]:has-text("English")').click().then(() => true).catch(() => false) ||
-          await page.locator('[role="menuitem"]:has-text("en")').click().then(() => true).catch(() => false);
-        if (clicked) await page.waitForTimeout(1500);
-        else await page.keyboard.press("Escape").catch(() => {});
-        return clicked;
-      }
-    } catch (error) {
-      log(`EasyOrders language check skipped: ${error.message}`);
-    }
-    return false;
+  async function readLanguageState(page) {
+    return page.evaluate(() => {
+      const switcher = document.querySelector('[aria-label="language-switcher"]');
+      const label = switcher && switcher.querySelector("p");
+      return {
+        label: String(label && (label.innerText || label.textContent) || "").trim().toLowerCase(),
+        documentLanguage: String(document.documentElement.lang || "").trim().toLowerCase(),
+      };
+    }).catch(() => ({ label: "", documentLanguage: "" }));
   }
 
-  async function collectIdentityEmails(page) {
-    return page.evaluate(() => {
-      const emailRe = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig;
-      const hits = [];
-      const seen = new Set();
-      const add = (source, text) => {
-        const matches = String(text || "").match(emailRe) || [];
-        matches.forEach((raw) => {
-          const email = raw.trim().toLowerCase();
-          const key = `${source}|${email}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            hits.push({ source, email });
-          }
-        });
-      };
-      const scanJwt = (source, text) => {
-        const tokens = String(text || "").match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g) || [];
-        tokens.forEach((token) => {
-          try {
-            const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-            add(`${source}:jwt`, atob(payload.padEnd(Math.ceil(payload.length / 4) * 4, "=")));
-          } catch (_) {}
-        });
-      };
-      add("document", document.body ? document.body.innerText : "");
-      add("title", document.title || "");
-      Array.from(document.querySelectorAll("[title], [aria-label], [data-email], [href]")).forEach((el) => {
-        add("dom-attr", [
-          el.getAttribute("title"),
-          el.getAttribute("aria-label"),
-          el.getAttribute("data-email"),
-          el.getAttribute("href"),
-        ].filter(Boolean).join(" "));
-      });
-      [localStorage, sessionStorage].forEach((storage) => {
-        for (let i = 0; i < storage.length; i++) {
-          const key = storage.key(i);
-          const value = `${key || ""} ${storage.getItem(key) || ""}`;
-          add("storage", value);
-          scanJwt("storage", value);
-        }
-      });
-      add("cookie", document.cookie || "");
-      scanJwt("cookie", document.cookie || "");
-      return hits;
-    });
+  async function ensureEnglish(page, options = {}) {
+    const force = options.force === true;
+    let state = { label: "", documentLanguage: "" };
+    for (let attempt = 0; attempt < 3; attempt++) {
+      state = await readLanguageState(page);
+      if (state.label || state.documentLanguage) break;
+      if (attempt < 2) await page.waitForTimeout(1500);
+    }
+
+    const alreadyEnglish = state.label === "en" || state.documentLanguage.startsWith("en");
+    if (alreadyEnglish && !force) return true;
+    if (!state.label && alreadyEnglish) return true;
+
+    const switcher = page.locator('[aria-label="language-switcher"]').first();
+    if (!await switcher.count().catch(() => 0)) {
+      throw new Error("EASY_ORDERS_ENGLISH_REQUIRED: language switcher was not available");
+    }
+
+    await switcher.click();
+    await page.waitForTimeout(800);
+    const clicked =
+      await page.locator('[role="menuitem"][aria-label="english"]').click().then(() => true).catch(() => false) ||
+      await page.locator('[role="menuitem"]:has-text("English")').click().then(() => true).catch(() => false) ||
+      await page.locator('[role="menuitem"]:has-text("en")').click().then(() => true).catch(() => false);
+    if (!clicked) {
+      await page.keyboard.press("Escape").catch(() => {});
+      throw new Error("EASY_ORDERS_ENGLISH_REQUIRED: English language option was not available");
+    }
+
+    await page.waitForTimeout(1500);
+    state = await readLanguageState(page);
+    if (state.label !== "en" && !state.documentLanguage.startsWith("en")) {
+      throw new Error(`EASY_ORDERS_ENGLISH_REQUIRED: detected language "${state.label || state.documentLanguage || "unknown"}"`);
+    }
+    return true;
   }
 
   async function revealIdentityMenu(page) {
@@ -171,92 +291,53 @@ function createEasyOrdersExportFlow(options = {}) {
     return false;
   }
 
-  async function readCurrentStore(page, expectedEmail) {
+  async function readActiveIdentity(page) {
     for (let attempt = 1; attempt <= 5; attempt++) {
       await revealIdentityMenu(page);
       await page.waitForTimeout(attempt === 1 ? 800 : 1500);
       try {
-        const currentStore = await page.evaluate((email) => {
-          const normalize = (value) => String(value || "")
-            .replace(/[\u{1F300}-\u{1FAFF}]/gu, "")
-            .replace(/[\u200E\u200F\u061C]/g, "")
-            .replace(/[\u2600-\u26FF\u2700-\u27BF]/gu, "") // strip status dots like 🟢
-            .replace(/\s+/g, " ").trim().toLowerCase();
-
-          const menuRoot = document.querySelector(
-            '[class*="MuiPopover-paper"], [role="menu"], [role="dialog"], [role="presentation"] [class*="MuiPaper-root"]'
-          );
-
-          const texts = Array.from((menuRoot || document).querySelectorAll("p, span, h1, h2, h3, h4, h5, h6, button"))
-            .map((el) => (el.innerText || el.textContent || "").trim())
-            .filter(Boolean);
-
-          const normEmail = normalize(email);
-
-          // Strategy 1: email in list, store name is immediately before it
-          const emailIndex = texts.findIndex((text) => normalize(text) === normEmail);
-          if (emailIndex > 0) return normalize(texts[emailIndex - 1]);
-
-          // Strategy 2: email in list, store name is immediately after it (some UI versions)
-          if (emailIndex >= 0 && emailIndex < texts.length - 1) {
-            const after = normalize(texts[emailIndex + 1]);
-            if (after && !after.includes("@") && after !== "add store" && after !== "stores") {
-              return after;
-            }
-          }
-
-          // Strategy 3: look for "Stores:" label then take first non-email, non-"add store" text
-          const storesIndex = texts.findIndex((text) => normalize(text).replace(/:$/, "") === "stores");
-          if (storesIndex >= 0) {
-            const candidate = texts.slice(storesIndex + 1).find(
-              (text) => !/@/.test(text) && normalize(text) !== "add store" && normalize(text) !== "stores"
-            );
-            if (candidate) return normalize(candidate);
-          }
-
-          // Strategy 4: caption text inside the avatar button (new EasyOrders UI)
-          const avatarBtn = document.querySelector("button:has(.MuiAvatar-root)");
-          if (avatarBtn) {
-            const caption = avatarBtn.querySelector('[class*="caption"], [class*="Caption"]');
-            if (caption) {
-              const txt = normalize(caption.innerText || caption.textContent || "");
-              if (txt && txt !== "add store") return txt;
-            }
-          }
-
-          return "";
-        }, expectedEmail);
-        if (currentStore) return currentStore;
+        const identity = await page.evaluate(parseEasyOrdersIdentityFromDocument);
+        if (identity && identity.email && identity.store) return identity;
       } finally {
         await page.keyboard.press("Escape").catch(() => {});
         await page.waitForTimeout(300).catch(() => {});
       }
     }
-    return "";
+    return null;
+  }
+
+  async function readCurrentStore(page, identity) {
+    const activeIdentity = identity === undefined ? await readActiveIdentity(page) : identity;
+    return activeIdentity ? normalizeIdentityText(activeIdentity.store) : "";
   }
 
   async function selectExpectedStore(page) {
     const expectedStore = normalizeIdentityText(config.easyStore);
     const returnUrl = page.url();
+    const shouldReturn = returnUrl &&
+      returnUrl.startsWith("https://app.easy-orders.net/") &&
+      !returnUrl.includes("store-selection") &&
+      !returnUrl.includes("login");
     await gotoWithNetworkRetries(page, "https://app.easy-orders.net/#/store-selection", "EasyOrders store selection");
     await page.waitForTimeout(1500);
     if (page.url().includes("login")) return false;
 
-    const cards = page.locator(".MuiCard-root");
+    const cards = page.locator(
+      ":is(.MuiCard-root, button, [role='button']):has(h1, h2, h3, h4, h5, h6, [role='heading'])"
+    );
     await cards.first().waitFor({ state: "visible", timeout: 12000 }).catch(() => {});
     for (let i = 0; i < await cards.count(); i++) {
       const card = cards.nth(i);
-      // Try multiple selectors — EasyOrders has used h6, p, and span across UI versions
-      const nameEl = card.locator("h6, p, span").first();
+      const nameEl = card.locator("h1, h2, h3, h4, h5, h6, [role='heading']").first();
       const rawName = await nameEl.innerText().catch(() => "");
       if (normalizeIdentityText(rawName) !== expectedStore) continue;
       await card.click();
       await page.waitForFunction(() => !window.location.href.includes("store-selection"), { timeout: 15000 });
-      await ensureEnglish(page);
-      if (returnUrl && returnUrl.startsWith("https://app.easy-orders.net/") && returnUrl !== page.url()) {
+      if (shouldReturn && returnUrl !== page.url()) {
         await gotoWithNetworkRetries(page, returnUrl, "EasyOrders return after store verification");
         await page.waitForTimeout(1200);
       }
+      await ensureEnglish(page, { force: true });
       return true;
     }
     return false;
@@ -267,23 +348,30 @@ function createEasyOrdersExportFlow(options = {}) {
     const expectedStore = normalizeIdentityText(config.easyStore);
     if (!expectedEmail) throw new Error("EASY_ORDERS_IDENTITY_CONFIG_MISSING: easyEmail is not set");
     if (!expectedStore) throw new Error("EASY_ORDERS_STORE_CONFIG_MISSING: easyStore is required");
-    let hits = await collectIdentityEmails(page).catch(() => []);
-    let detected = [...new Set(hits.map((hit) => normalizeEmail(hit.email)).filter(Boolean))];
-    if (!detected.includes(expectedEmail) && await revealIdentityMenu(page).catch(() => false)) {
-      hits = hits.concat(await collectIdentityEmails(page).catch(() => []));
-      detected = [...new Set(hits.map((hit) => normalizeEmail(hit.email)).filter(Boolean))];
-      await page.keyboard.press("Escape").catch(() => {});
-    }
-    if (!detected.includes(expectedEmail)) {
+    let activeIdentity = await readActiveIdentity(page).catch(() => null);
+    if (activeIdentity && normalizeEmail(activeIdentity.email) !== expectedEmail) {
       await debugScreenshot(page, `easy-orders-identity-${where}`);
-      throw new Error(detected.length
-        ? `EASY_ORDERS_IDENTITY_MISMATCH: expected ${expectedEmail}, detected ${detected.join(", ")}`
-        : `EASY_ORDERS_IDENTITY_UNVERIFIED: expected ${expectedEmail}`);
+      throw new Error(
+        `EASY_ORDERS_IDENTITY_MISMATCH: expected ${expectedEmail}, detected ${normalizeEmail(activeIdentity.email)}`
+      );
     }
-    let currentStore = await readCurrentStore(page, expectedEmail).catch(() => "");
-    if (!currentStore) {
-      log(`EasyOrders store label was not readable at ${where}; selecting configured store "${config.easyStore}" explicitly.`);
-      if (await selectExpectedStore(page).catch(() => false)) currentStore = expectedStore;
+    let currentStore = await readCurrentStore(page, activeIdentity).catch(() => "");
+    if (!activeIdentity || !currentStore || currentStore !== expectedStore) {
+      const reason = currentStore
+        ? `active store "${currentStore}" did not match`
+        : "active store header was not readable";
+      log(`EasyOrders ${reason} at ${where}; selecting configured store "${config.easyStore}" explicitly.`);
+      const selected = await selectExpectedStore(page).catch(() => false);
+      if (selected) {
+        activeIdentity = await readActiveIdentity(page).catch(() => null);
+        currentStore = await readCurrentStore(page, activeIdentity).catch(() => "");
+      }
+    }
+    if (activeIdentity && normalizeEmail(activeIdentity.email) !== expectedEmail) {
+      await debugScreenshot(page, `easy-orders-identity-${where}`);
+      throw new Error(
+        `EASY_ORDERS_IDENTITY_MISMATCH: expected ${expectedEmail}, detected ${normalizeEmail(activeIdentity.email)}`
+      );
     }
     if (currentStore !== expectedStore) {
       await debugScreenshot(page, `easy-orders-store-mismatch-${where}`);
@@ -291,14 +379,35 @@ function createEasyOrdersExportFlow(options = {}) {
         ? `EASY_ORDERS_STORE_MISMATCH: expected "${expectedStore}", detected "${currentStore}"`
         : `EASY_ORDERS_STORE_UNVERIFIED: could not verify or select expected store "${expectedStore}"`);
     }
+    identityCache = {
+      verified: true,
+      email: expectedEmail,
+      store: expectedStore,
+      where,
+    };
+    log(`EasyOrders identity verified for this session: ${expectedEmail} / ${config.easyStore} at ${where}`);
     emit({ type: "session-event", site: "easy-orders", event: "identity-verified", email: expectedEmail, store: config.easyStore, where });
   }
 
   async function assertSession(page) {
     const url = page.url();
-    if (url.includes("login")) throw new Error(`SESSION_EXPIRED: on login page (${url})`);
+    if (url.includes("login")) {
+      clearIdentityCache("login page detected");
+      throw new Error(`SESSION_EXPIRED: on login page (${url})`);
+    }
+    if (url.includes("store-selection")) {
+      clearIdentityCache("store selection page detected");
+      throw new Error(`SESSION_STORE_SELECTION: on store selection page (${url})`);
+    }
     const authDomPresent = await page.$('.MuiAppBar-root, [aria-label="language-switcher"], [class*="Dashboard"], [class*="OrderList"], .MuiDrawer-root, .MuiCard-root') !== null;
-    if (!authDomPresent) throw new Error(`SESSION_UNVERIFIED: no authenticated EasyOrders DOM at ${url}`);
+    if (!authDomPresent) {
+      clearIdentityCache("authenticated DOM missing");
+      throw new Error(`SESSION_UNVERIFIED: no authenticated EasyOrders DOM at ${url}`);
+    }
+    if (identityCacheMatchesExpected()) {
+      log(`EasyOrders identity already verified at ${identityCache.where || "login"}; skipping repeated identity check.`);
+      return;
+    }
     await verifyIdentity(page, "assert");
   }
 
@@ -353,30 +462,22 @@ function createEasyOrdersExportFlow(options = {}) {
   }
 
   async function login(page) {
+    clearIdentityCache("login/session check started");
     await gotoWithNetworkRetries(page, "https://app.easy-orders.net/", "EasyOrders root");
     await page.waitForTimeout(2000);
     const verificationVisible = await verificationCodeVisible(page);
     if (verificationVisible) await waitForLoginCompletion(page);
     else if (!await authenticatedLanding(page)) await doLogin(page);
-    await ensureEnglish(page);
     await page.waitForTimeout(1500);
     if (page.url().includes("store-selection")) {
-      const expectedStore = normalizeIdentityText(config.easyStore);
-      if (!expectedStore) throw new Error("EASY_ORDERS_STORE_CONFIG_MISSING: easyStore is required");
-      const cards = page.locator(".MuiCard-root");
-      let found = false;
-      for (let i = 0; i < await cards.count(); i++) {
-        const card = cards.nth(i);
-        if (normalizeIdentityText(await card.locator("h6").innerText().catch(() => "")) === expectedStore) {
-          await card.click();
-          found = true;
-          break;
-        }
+      if (!normalizeIdentityText(config.easyStore)) {
+        throw new Error("EASY_ORDERS_STORE_CONFIG_MISSING: easyStore is required");
       }
-      if (!found) throw new Error(`EasyOrders store not found: ${config.easyStore}`);
-      await page.waitForFunction(() => !window.location.href.includes("store-selection"), { timeout: 15000 });
-      await ensureEnglish(page);
+      if (!await selectExpectedStore(page)) {
+        throw new Error(`EasyOrders store not found: ${config.easyStore}`);
+      }
     }
+    await ensureEnglish(page, { force: true });
     await verifyIdentity(page, "login");
   }
 
@@ -433,7 +534,7 @@ function createEasyOrdersExportFlow(options = {}) {
         await login(page);
         await gotoWithNetworkRetries(page, pageUrl, `EasyOrders ${keyword} after login`);
       }
-      await ensureEnglish(page);
+      await ensureEnglish(page, { force: true });
       const exportButton = page.locator('button.MuiButton-outlined:has-text("Export"), main button:has-text("Export"), button:has-text("Export")').first();
       await exportButton.waitFor({ state: "visible", timeout: 15000 });
       await exportButton.click();
@@ -455,7 +556,8 @@ function createEasyOrdersExportFlow(options = {}) {
       await page.waitForTimeout(2500);
       await reloadWithNetworkRetries(page, "EasyOrders notifications");
       await page.waitForTimeout(2500);
-      const result = rateLimited ? null : await findExportLink(page, keyword);
+      await ensureEnglish(page);
+      let result = rateLimited ? null : await findExportLink(page, keyword);
       if (result && result.href) {
         emit({ type: "export-timestamp", timestamp: Date.now() });
         return result.href;
@@ -497,4 +599,7 @@ function createEasyOrdersExportFlow(options = {}) {
   };
 }
 
-module.exports = { createEasyOrdersExportFlow };
+module.exports = {
+  createEasyOrdersExportFlow,
+  parseEasyOrdersIdentityFromDocument,
+};

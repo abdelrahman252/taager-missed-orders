@@ -100,6 +100,12 @@ function _opsInsightsPaginationHtml(currentPage, totalPages) {
 }
 
 function _opsInsightHTML(insight, index) {
+  const trust = window.TaagerSmartInsights && window.TaagerSmartInsights.trustLabel
+    ? window.TaagerSmartInsights.trustLabel(insight.trust || "measured")
+    : "Measured";
+  const evidence = Array.isArray(insight.evidence) && insight.evidence.length
+    ? `<div class="ops-insight-evidence" style="font-size:10px;color:var(--text3);margin-top:4px">${insight.evidence.slice(0, 2).join(" · ")}</div>`
+    : "";
   return `
     <div class="ops-insight-row ${insight.type}">
       <div class="ops-insight-icon-col">
@@ -107,7 +113,7 @@ function _opsInsightHTML(insight, index) {
       </div>
       <div class="ops-insight-body">
         <div class="ops-insight-kicker">${window.t_ops('insights.cardLabel', { index })}</div>
-        <div class="ops-insight-text">${insight.text}</div>
+        <div class="ops-insight-text"><span style="font-size:9px;font-weight:800;text-transform:uppercase;color:var(--text3);margin-inline-end:6px">${trust}</span>${insight.text}${evidence}</div>
         ${insight.action ? `<button class="ops-insight-action" data-action="${insight.actionType || ""}">${insight.action} →</button>` : ""}
       </div>
       <div class="ops-insight-arrow">›</div>
@@ -118,6 +124,9 @@ function _opsGenerateInsights(allRuns) {
   const insights = [];
   const orders   = _opsFlattenRuns(allRuns);
   if (!orders.length) return insights;
+  const insightEvidence = (label, n, d) => window.TaagerSmartInsights && window.TaagerSmartInsights.rateEvidence
+    ? window.TaagerSmartInsights.rateEvidence(label, n, d)
+    : `${label}: ${n}${d != null ? ` / ${d}` : ""}`;
 
   const now  = Date.now();
   const week = 7 * 24 * 3600 * 1000;
@@ -144,6 +153,7 @@ function _opsGenerateInsights(allRuns) {
       insights.push({
         type: "warning", icon: "⚠️",
         text: window.t_ops('insights.failedCity', { city: topCity.key || window.t_ops('orderDetails.unknown'), pct: failPct, count: topCity.count }),
+        evidence: [insightEvidence("Failed orders", failed.length, orders.length), `${topCity.key || window.t_ops('orderDetails.unknown')}: ${topCity.count}`],
         action: window.t_ops('insights.actions.viewDetails'),
         actionType: "history",
       });
@@ -155,6 +165,7 @@ function _opsGenerateInsights(allRuns) {
     insights.push({
       type: "info", icon: "🏆",
       text: window.t_ops('insights.bestProduct', { product: byProd[0].key || window.t_ops('orderDetails.unknown'), count: byProd[0].count }),
+      evidence: [`${byProd[0].key || window.t_ops('orderDetails.unknown')}: ${byProd[0].count} / ${orders.length} orders`],
       action: window.t_ops('insights.actions.viewProducts'),
       actionType: "products",
     });
@@ -207,6 +218,7 @@ function _opsGenerateInsights(allRuns) {
     insights.push({
       type: pct >= 50 ? "positive" : "warning", icon: "✓",
       text: window.t_ops('insights.deliveryRate', { pct, count: delivered }),
+      evidence: [insightEvidence("Delivered", delivered, eligibleOrders.length)],
       action: null,
     });
   }
@@ -227,6 +239,7 @@ function _opsGenerateInsights(allRuns) {
     insights.push({
       type: failedRate > 10 ? "negative" : "warning", icon: "!",
       text: window.t_ops('insights.failedRate', { pct: failedRate, count: failed.length }),
+      evidence: [insightEvidence("Failed orders", failed.length, orders.length)],
       action: window.t_ops('insights.actions.viewDetails'),
       actionType: "history",
     });

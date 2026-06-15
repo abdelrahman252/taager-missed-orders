@@ -238,12 +238,12 @@ async function renderOperations(onBack) {
     const label = (window.t_anl && window.t_anl('account.label')) || window.t_ops('orderDetails.fields.account').replace(' (Data Entry)', '');
     const allLabel = (window.t_anl && window.t_anl('account.allAccounts')) || window.t_ops('productPerf.allAccounts');
     const ordersLabel = window.t_ops('history.ordersCount');
-    const allCountLabel = `${allLabel}  ${countFor("").toLocaleString()} ${ordersLabel}`;
+    const allCountLabel = `${allLabel}  ${countFor("").toLocaleString("en-US")} ${ordersLabel}`;
     const options = [{ value: "", label: allCountLabel, labelHtml: '<span style="display:inline-flex;align-items:center;gap:7px">' + allAccountsCountryFlagsHtml(_allRuns) + '<span>' + analyticsEscapeHtml(allCountLabel) + '</span></span>' }]
       .concat(accounts.map(a => ({
         value: a.key,
-        label: `${a.label || a.email || a.key}  ${countFor(a.key).toLocaleString()} ${ordersLabel}`,
-        labelHtml: accountOptionLabelHtml(`${a.label || a.email || a.key}  ${countFor(a.key).toLocaleString()} ${ordersLabel}`, a.country),
+        label: `${a.label || a.email || a.key}  ${countFor(a.key).toLocaleString("en-US")} ${ordersLabel}`,
+        labelHtml: accountOptionLabelHtml(`${a.label || a.email || a.key}  ${countFor(a.key).toLocaleString("en-US")} ${ordersLabel}`, a.country),
         subLabel: [a.email && a.email !== a.label ? a.email : "", accountCountryLabel({ taagerCountry: a.country })].filter(Boolean).join(" - "),
         searchText: [a.label, a.email, a.country, accountCountryLabel({ taagerCountry: a.country })].filter(Boolean).join(" "),
       })));
@@ -494,11 +494,11 @@ async function renderOperations(onBack) {
           <div class="ops-od-meta-row">
             <div class="ops-od-meta-block">
               <div class="ops-od-meta-label">${window.t_ops('orderDetails.fields.submitted')}</div>
-              <div class="ops-od-meta-val">${(run.ordersSubmitted || 0).toLocaleString()}</div>
+              <div class="ops-od-meta-val">${(run.ordersSubmitted || 0).toLocaleString("en-US")}</div>
             </div>
             <div class="ops-od-meta-block">
               <div class="ops-od-meta-label">${window.t_ops('orderDetails.fields.failed')}</div>
-              <div class="ops-od-meta-val">${(run.ordersFailed || 0).toLocaleString()}</div>
+              <div class="ops-od-meta-val">${(run.ordersFailed || 0).toLocaleString("en-US")}</div>
             </div>
             <div class="ops-od-meta-block">
               <div class="ops-od-meta-label">${window.t_ops('orderDetails.fields.runTime')}</div>

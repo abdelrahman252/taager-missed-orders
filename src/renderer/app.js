@@ -21,6 +21,10 @@ const _STRINGS = {
     "titlebar.sync_tooltip": "Sync license and account permissions from the admin panel.",
     "titlebar.lang_tooltip": "Switch between English and Arabic.",
     "titlebar.theme_tooltip": "Switch between light and dark theme.",
+    "titlebar.zoom_group": "Application zoom",
+    "titlebar.zoom_in": "Zoom in",
+    "titlebar.zoom_out": "Zoom out",
+    "titlebar.zoom_reset": "Reset zoom to 100%",
     "titlebar.minimize": "Minimize window",
     "titlebar.maximize": "Maximize or restore window",
     "titlebar.close": "Close Taager Bot",
@@ -480,6 +484,10 @@ const _STRINGS = {
     "calendar.days":   ["Su","Mo","Tu","We","Th","Fr","Sa"],
   },
   ar: {
+    "titlebar.zoom_group": "تكبير وتصغير التطبيق",
+    "titlebar.zoom_in": "تكبير العرض",
+    "titlebar.zoom_out": "تصغير العرض",
+    "titlebar.zoom_reset": "إعادة العرض إلى 100%",
     "topbar.welcome": (n) => n ? `أهلاً، ${n}` : "أهلاً",
     "topbar.days":    (d) => d != null ? `متبقي ${d} ${d === 1 ? "يوم" : "أيام"}` : "",
     "topbar.expires": "الترخيص ينتهي قريباً",
@@ -1676,6 +1684,9 @@ function updateTopBarText() {
     ["btn-admin-refresh", "titlebar.sync_tooltip"],
     ["toggle-lang", "titlebar.lang_tooltip"],
     ["toggle-theme", "titlebar.theme_tooltip"],
+    ["btn-zoom-out", "titlebar.zoom_out"],
+    ["btn-zoom-reset", "titlebar.zoom_reset"],
+    ["btn-zoom-in", "titlebar.zoom_in"],
     ["btn-minimize", "titlebar.minimize"],
     ["btn-maximize", "titlebar.maximize"],
     ["btn-close", "titlebar.close"],
@@ -1693,7 +1704,47 @@ function updateTopBarText() {
     themeLabel.setAttribute("data-tooltip", window._t("titlebar.theme_tooltip"));
     if (themeLabel.dataset) delete themeLabel.dataset.taagerTooltipReady;
   }
+  const zoomGroup = document.querySelector(".tb-zoom-control");
+  if (zoomGroup) zoomGroup.setAttribute("aria-label", window._t("titlebar.zoom_group"));
   if (window.TaagerUI) window.TaagerUI.enhance(document.querySelector(".titlebar") || document);
+}
+
+const APP_ZOOM_LEVELS = [75, 90, 100, 110, 125, 150];
+
+function updateAppZoomDisplay(percent) {
+  const normalized = APP_ZOOM_LEVELS.includes(Number(percent)) ? Number(percent) : 100;
+  const value = document.getElementById("btn-zoom-reset");
+  const out = document.getElementById("btn-zoom-out");
+  const zoomIn = document.getElementById("btn-zoom-in");
+  if (value) value.textContent = normalized + "%";
+  if (out) out.disabled = normalized === APP_ZOOM_LEVELS[0];
+  if (zoomIn) zoomIn.disabled = normalized === APP_ZOOM_LEVELS[APP_ZOOM_LEVELS.length - 1];
+}
+
+function installAppZoomShortcuts() {
+  let lastWheelZoomAt = 0;
+  document.addEventListener("keydown", (event) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    if (event.key === "0") {
+      event.preventDefault();
+      window.api.resetAppZoom();
+    } else if (event.key === "+" || event.key === "=") {
+      event.preventDefault();
+      window.api.increaseAppZoom();
+    } else if (event.key === "-" || event.key === "_") {
+      event.preventDefault();
+      window.api.decreaseAppZoom();
+    }
+  });
+  document.addEventListener("wheel", (event) => {
+    if ((!event.ctrlKey && !event.metaKey) || event.deltaY === 0) return;
+    event.preventDefault();
+    const now = Date.now();
+    if (now - lastWheelZoomAt < 80) return;
+    lastWheelZoomAt = now;
+    if (event.deltaY < 0) window.api.increaseAppZoom();
+    else window.api.decreaseAppZoom();
+  }, { passive: false });
 }
 
 // ── Top bar visibility ──
@@ -1740,6 +1791,7 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/taager-product-names.js",
     "pages/taager-status.js",
     "pages/smart-insights-core.js",
+    "pages/dashboard/dashboard-financial-core.js",
     "pages/dashboard/dashboard-campaign-decision.js",
     "pages/dashboard/dashboard-ai-shared.js",
     "pages/ai-intelligence/ai-intelligence-data.js",
@@ -1765,6 +1817,7 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/dashboard/locales/en/dashboard-locale.js",
     "pages/dashboard/dashboard-i18n.js",
     "pages/dashboard/dashboard-currency-core.js",
+    "pages/dashboard/dashboard-financial-core.js",
     "pages/dashboard/dashboard-product-attribution-core.js",
     "pages/dashboard/dashboard-campaign-decision.js",
     "pages/dashboard/dashboard-aggregator.js",
@@ -1781,10 +1834,12 @@ const FEATURE_SCRIPT_GROUPS = {
   dashboardMaster: ["pages/dashboard/sections/section8-master.js"],
   dashboardProducts: [
     "pages/smart-insights-core.js",
+    "pages/dashboard/dashboard-financial-core.js",
     "pages/dashboard/sections/section5-products.js",
   ],
   dashboardCampaigns: [
     "pages/smart-insights-core.js",
+    "pages/dashboard/dashboard-financial-core.js",
     "pages/dashboard/dashboard-campaign-decision.js",
     "pages/dashboard/dashboard-campaign-query-core.js",
     "pages/dashboard/dashboard-campaign-intelligence.js",
@@ -1801,19 +1856,20 @@ const FEATURE_SCRIPT_GROUPS = {
   ],
   dashboardCommission: ["pages/dashboard/sections/section6-commission.js"],
   dashboardMarketing: ["pages/dashboard/sections/section-marketing-connections.js"],
-  dashboardCalculator: ["pages/smart-insights-core.js", "pages/dashboard/sections/section7-calculator.js"],
+  dashboardCalculator: ["pages/smart-insights-core.js", "pages/dashboard/dashboard-financial-core.js", "pages/dashboard/sections/section7-calculator.js"],
   dashboardCities: [
     "pages/dashboard/sections/section-product-matrix.js",
     "pages/dashboard/sections/section-city-drawer.js",
     "pages/dashboard/sections/section-cities.js",
   ],
   dashboardPrepaid: ["pages/smart-insights-core.js", "pages/dashboard/sections/section-prepaid.js"],
-  dashboardForecast: ["pages/smart-insights-core.js", "pages/dashboard/sections/section9-product-forecast.js"],
+  dashboardForecast: ["pages/smart-insights-core.js", "pages/dashboard/dashboard-financial-core.js", "pages/dashboard/sections/section9-product-forecast.js"],
   dashboardStaticUpdate: [
     "../../node_modules/xlsx/dist/xlsx.full.min.js",
     "pages/dashboard/sections/section-static-update.js",
   ],
   dashboardAi: [
+    "pages/dashboard/dashboard-financial-core.js",
     "pages/dashboard/dashboard-campaign-decision.js",
     "pages/dashboard/dashboard-campaign-intelligence.js",
     "pages/dashboard/dashboard-ai-shared.js",
@@ -2702,14 +2758,33 @@ async function adminRefresh() {
   }
 }
 
+function handleAdminCacheReset() {
+  if (window.invalidateDashboardCache) window.invalidateDashboardCache("admin-cache-reset");
+  if (window.invalidateDashboardAiContextCache) window.invalidateDashboardAiContextCache();
+  invalidatePage("page-dashboard", "admin-cache-reset");
+  invalidatePage("page-analytics", "admin-cache-reset");
+  invalidatePage("page-operations", "admin-cache-reset");
+  const activePage = document.querySelector(".page.active");
+  if (activePage && ["page-dashboard", "page-analytics", "page-operations"].includes(activePage.id)) {
+    reRenderCurrentPage();
+  }
+}
+
 async function init() {
   document.getElementById("btn-minimize").addEventListener("click", () => window.api.minimize());
   document.getElementById("btn-maximize").addEventListener("click", () => window.api.maximize());
   document.getElementById("btn-close").addEventListener("click",    () => window.api.close());
+  document.getElementById("btn-zoom-out").addEventListener("click", () => window.api.decreaseAppZoom());
+  document.getElementById("btn-zoom-reset").addEventListener("click", () => window.api.resetAppZoom());
+  document.getElementById("btn-zoom-in").addEventListener("click", () => window.api.increaseAppZoom());
+  if (window.api.onAppZoomChanged) window.api.onAppZoomChanged(updateAppZoomDisplay);
+  installAppZoomShortcuts();
 
   // Wire up admin sync button (shown only after license is validated below)
   const _refreshBtn = document.getElementById("btn-admin-refresh");
   if (_refreshBtn) _refreshBtn.addEventListener("click", adminRefresh);
+  window.api.removeAllListeners("reset-cache");
+  window.api.on("reset-cache", handleAdminCacheReset);
 
   // Load saved settings then apply — do both in parallel where possible
   let startupState = null;
@@ -2724,9 +2799,11 @@ async function init() {
     creds = startupState && startupState.credentials ? startupState.credentials : null;
     applyTheme(settings.theme || "dark");
     applyLang(settings.lang  || "ar");
+    updateAppZoomDisplay(settings.appZoom || 100);
   } catch(e) {
     applyTheme("dark");
     applyLang("ar");
+    updateAppZoomDisplay(100);
   }
 
   document.getElementById("toggle-theme").addEventListener("change", (e) => {
@@ -3037,6 +3114,7 @@ function _renderLockedPage(pageId, featureNameEn, featureNameAr) {
   const sub   = isAr
     ? `ميزة "${name}" غير مضمّنة في ترخيصك الحالي. تواصل مع الدعم للترقية.`
     : `"${name}" is not included in your current license. Contact support to upgrade.`;
+  const supportLabel = isAr ? "تواصل مع الدعم" : "Contact Support";
   el.innerHTML = `
     <div style="
       display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -3046,7 +3124,11 @@ function _renderLockedPage(pageId, featureNameEn, featureNameAr) {
       <div style="font-size:48px; opacity:.4">🔒</div>
       <div style="font-size:18px; font-weight:700; color:var(--text)">${title}</div>
       <div style="font-size:14px; max-width:360px; line-height:1.6">${sub}</div>
+      <button class="btn btn-primary" id="${pageId}-support-btn" type="button">${supportLabel}</button>
     </div>`;
+  document.getElementById(`${pageId}-support-btn`)?.addEventListener("click", () => {
+    if (window.TaagerSupport && typeof window.TaagerSupport.open === "function") window.TaagerSupport.open();
+  });
 }
 
 async function goToAnalytics() {

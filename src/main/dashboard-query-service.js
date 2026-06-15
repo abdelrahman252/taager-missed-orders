@@ -3,6 +3,7 @@
 const { buildCampaignIntelligence, filterAndPage } = require("../renderer/pages/dashboard/dashboard-campaign-query-core");
 const productAttribution = require("../renderer/pages/dashboard/dashboard-product-attribution-core");
 const currencyCore = require("../renderer/pages/dashboard/dashboard-currency-core");
+const financialCore = require("../renderer/pages/dashboard/dashboard-financial-core");
 
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
@@ -781,13 +782,6 @@ function createDashboardQueryService(options) {
         ...(input || {}),
         egpRate: number(input && (input.productFinancialEgpRate || input.egpRate)) || (input && input.egpRate),
       };
-      console.log('[DIAGNOSTIC][QueryService] productRows called. Resolved currencies:', {
-        inputReportingCurrency: input && input.reportingCurrency,
-        inputFinancialCurrency: input && input.productFinancialCurrency,
-        resolvedReportingCurrency: reportingCurrency,
-        resolvedFinancialCurrency: financialCurrency,
-        egpRate: financialInput.egpRate
-      });
       // Bug B fix: extract ndrPeriod from input so we can filter the DR base
       // using a separate cohort range (matching "Expected NDR" mode in the frontend).
       const ndrFrom = dateKey((input && (input.ndrDateFrom || input.ndrFrom)) || "");
@@ -922,13 +916,19 @@ function createDashboardQueryService(options) {
         const drRate = drBase > 0
           ? Math.max(0, Math.min(1, drDelivered / drBase))
           : (isExpected ? globalExpectedDrRate : 0);
-        const avgCommission = product.deliveredCount ? (product.commission / product.deliveredCount) : 0;
+        const projection = financialCore.calculate({
+          mode: isExpected ? "expected" : "actual",
+          netOrders: product.netOrderCount,
+          actualDeliveredOrders: product.deliveredCount,
+          actualEarnedProfitAfterTax: product.commission,
+          currentTotalSales: product.revenue,
+          expectedNdrRate: ndrRate,
+          adSpend: 0,
+          insufficientHistory: isExpected && productNdrBase <= 0 && globalNdrBase <= 0,
+        });
 
-        const expectedDeliveries = boundedExpectedDeliveries(product.netOrderCount, ndrRate, product.key);
-        const expectedCommission = expectedDeliveries * avgCommission;
-
-        const deliveriesVal = isExpected ? expectedDeliveries : product.deliveredCount;
-        const commissionVal = isExpected ? expectedCommission : product.commission;
+        const deliveriesVal = isExpected ? projection.expectedDeliveriesDisplay : product.deliveredCount;
+        const commissionVal = isExpected ? projection.expectedTotalProfitBeforeAdSpend : product.commission;
 
         const ndrPctVal = boundedProductRatePct(ndrDelivered, ndrBase, product.key + ":ndr") ||
           (isExpected && ndrBase <= 0 ? Math.round(globalExpectedNdrRate * 1000) / 10 : 0);
@@ -943,10 +943,17 @@ function createDashboardQueryService(options) {
           totalOrderCount: product.totalOrderCount,
           actualDeliveredCount: product.deliveredCount,
           actualCommission: product.commission,
+          actualEarnedProfitAfterTax: product.commission,
           deliveries: deliveriesVal,
           deliveredCount: deliveriesVal,
+          expectedDeliveriesExact: projection.expectedDeliveriesExact,
+          expectedDeliveriesDisplay: projection.expectedDeliveriesDisplay,
+          expectedTotalProfitBeforeAdSpend: projection.expectedTotalProfitBeforeAdSpend,
+          expectedDeliveredSales: projection.expectedDeliveredSales,
+          expectedNdrRate: ndrRate,
           revenue: commissionVal,
           commission: commissionVal,
+          totalSales: product.revenue,
           ndrPct: ndrPctVal,
           drRate: drRateVal,
           deliveryPct: deliveryPctVal,
@@ -955,7 +962,8 @@ function createDashboardQueryService(options) {
           drBaseOrders: drBase,
           drDeliveredOrders: drDelivered,
           rateMode: isExpected ? "historical_cohort" : "actual",
-          rateSource: usesGlobalNdrFallback || usesGlobalDrFallback ? "global_fallback" : "product",
+          rateSource: productNdrBase <= 0 && globalNdrBase <= 0 ? "insufficient_history" : (usesGlobalNdrFallback || usesGlobalDrFallback ? "global_fallback" : "product"),
+          insufficientHistory: isExpected && productNdrBase <= 0 && globalNdrBase <= 0,
           netOrderCount: product.netOrderCount,
           confirmationPct: statusRates.confirmationPct,
           cancelPct: statusRates.cancelPct,
@@ -983,20 +991,30 @@ function createDashboardQueryService(options) {
         const financialSpend = convertMoney(product.adSpend, reportingCurrency, financialCurrency, financialInput);
         const financialCommission = convertMoney(product.commission, reportingCurrency, financialCurrency, financialInput);
         const actualFinancialCommission = convertMoney(product.actualCommission, reportingCurrency, financialCurrency, financialInput);
+        const financialSales = convertMoney(product.totalSales, reportingCurrency, financialCurrency, financialInput);
+        const productFinancials = financialCore.calculate({
+          mode: isExpected ? "expected" : "actual",
+          netOrders: product.netOrderCount,
+          actualDeliveredOrders: product.actualDeliveredCount,
+          actualEarnedProfitAfterTax: actualFinancialCommission,
+          currentTotalSales: financialSales,
+          expectedNdrRate: product.expectedNdrRate,
+          adSpend: financialSpend,
+          insufficientHistory: product.insufficientHistory,
+        });
         product.allocatedAdSpend = financialSpend;
-        product.cpa = product.netOrderCount ? financialSpend / product.netOrderCount : 0;
-        product.averageProfit = product.actualDeliveredCount ? actualFinancialCommission / product.actualDeliveredCount : 0;
-        product.breakEvenCpa = product.averageProfit * (product.ndrPct / 100);
-        product.netProfit = financialCommission - financialSpend;
+        product.cpa = productFinancials.cpa;
+        product.averageProfit = productFinancials.averageProfit;
+        product.breakEvenCpa = productFinancials.breakEvenCpa;
+        product.expectedDeliveredCpa = productFinancials.expectedDeliveredCpa;
+        product.expectedNetProfit = productFinancials.expectedNetProfit;
+        product.expectedProfitRoas = productFinancials.expectedProfitRoas;
+        product.expectedRoi = productFinancials.expectedRoi;
+        product.expectedSalesRoas = productFinancials.expectedSalesRoas;
+        product.netProfit = isExpected ? productFinancials.expectedNetProfit : financialCommission - financialSpend;
         product.profitLoss = product.netProfit;
         product.scalingScore = Math.round(Math.max(0, Math.min(100, product.ndrPct + product.drRate)));
       });
-      if (list.length > 0) {
-        console.log('[DIAGNOSTIC][QueryService] Converted sample products (first 3):');
-        list.slice(0, 3).forEach((product) => {
-          console.log(` - Product [${product.sku || product.name || product.key}]: adSpend=${product.adSpend} ${reportingCurrency} -> financialSpend=${product.allocatedAdSpend} ${financialCurrency} | profitLoss=${product.profitLoss} ${financialCurrency}`);
-        });
-      }
       const query = lower(input.filters && input.filters.search);
       if (query) list = list.filter((product) => lower(product.name + " " + product.sku).includes(query));
       const statusKey = text(input.filters && input.filters.statusKey);
@@ -1600,16 +1618,32 @@ function createDashboardQueryService(options) {
         }
       });
 
+      const citiesExpectedMode = text(input && input.deliveredDateMode) === "expected";
+      const globalCityNdrBase = Object.values(cityStats).reduce((sum, stat) => sum + number(stat.ndrBaseOrders), 0);
+      const globalCityNdrDelivered = Object.values(cityStats).reduce((sum, stat) => sum + number(stat.ndrDeliveredOrders), 0);
       const sortedCities = Object.keys(cityStats).map((keyName) => {
         const stat = cityStats[keyName];
         delete stat._seenKeys;
 
-        const cityNdrBase = stat.ndrBaseOrders || stat.count;
-        const cityNdrDelivered = stat.ndrDeliveredOrders;
-        const ndrPctCity = cityNdrBase ? (cityNdrDelivered / cityNdrBase * 100) : 0;
+        const rateResolution = citiesExpectedMode
+          ? financialCore.resolveExpectedRate(stat.ndrDeliveredOrders, stat.ndrBaseOrders, globalCityNdrDelivered, globalCityNdrBase)
+          : { rate: stat.count > 0 ? stat.deliveredOrders / stat.count : 0, source: "actual", insufficientHistory: false };
+        const cityNdrBase = citiesExpectedMode ? stat.ndrBaseOrders : stat.count;
+        const cityNdrDelivered = citiesExpectedMode ? stat.ndrDeliveredOrders : stat.deliveredOrders;
+        const ndrPctCity = rateResolution.rate * 100;
         const drPctCity = stat.drBaseOrders > 0
           ? (stat.drDeliveredOrders / stat.drBaseOrders * 100)
           : 0;
+        const cityProjection = financialCore.calculate({
+          mode: citiesExpectedMode ? "expected" : "actual",
+          netOrders: stat.count,
+          actualDeliveredOrders: stat.deliveredOrders,
+          actualEarnedProfitAfterTax: stat.earnedProfitAfterTax,
+          currentTotalSales: stat.totalRevenue,
+          expectedNdrRate: rateResolution.rate,
+          adSpend: 0,
+          insufficientHistory: rateResolution.insufficientHistory,
+        });
 
         const prepaidPctCity = stat.count > 0 ? (stat.prepaidCount / stat.count * 100) : 0;
         const codPctCity = stat.count > 0 ? (stat.codCount / stat.count * 100) : 0;
@@ -1646,7 +1680,10 @@ function createDashboardQueryService(options) {
           cancelPct: cityStatusRates.cancelPct,
           pendingPct: cityStatusRates.pendingPct,
           ndrBaseOrders: cityNdrBase,
-          deliveredOrders: stat.deliveredOrders,
+          deliveredOrders: citiesExpectedMode ? cityProjection.expectedDeliveriesDisplay : stat.deliveredOrders,
+          actualDeliveredOrders: stat.deliveredOrders,
+          expectedDeliveriesExact: cityProjection.expectedDeliveriesExact,
+          expectedDeliveriesDisplay: cityProjection.expectedDeliveriesDisplay,
           ndrDeliveredOrders: cityNdrDelivered,
           drBaseOrders: stat.drBaseOrders,
           drDeliveredOrders: stat.drDeliveredOrders,
@@ -1654,8 +1691,11 @@ function createDashboardQueryService(options) {
           provinceId: stat.provinceId,
           totalRevenue: stat.totalRevenue,
           avgOrderValue,
-          earnedProfitAfterTax: stat.earnedProfitAfterTax,
-          earnedCommission: stat.earnedProfitAfterTax,
+          earnedProfitAfterTax: citiesExpectedMode ? cityProjection.expectedTotalProfitBeforeAdSpend : stat.earnedProfitAfterTax,
+          earnedCommission: citiesExpectedMode ? cityProjection.expectedTotalProfitBeforeAdSpend : stat.earnedProfitAfterTax,
+          actualEarnedProfitAfterTax: stat.earnedProfitAfterTax,
+          expectedTotalProfitBeforeAdSpend: cityProjection.expectedTotalProfitBeforeAdSpend,
+          expectedDeliveredSales: cityProjection.expectedDeliveredSales,
           averageProfit: stat.deliveredOrders > 0 ? stat.earnedProfitAfterTax / stat.deliveredOrders : 0,
           incomingCommission: stat.incomingCommission,
           lostCommission: stat.lostCommission,
@@ -1664,6 +1704,8 @@ function createDashboardQueryService(options) {
           confirmedCount: stat.confirmedCount,
           processingCount: stat.processingCount,
           ndrPct: ndrPctCity,
+          rateSource: rateResolution.source,
+          insufficientHistory: rateResolution.insufficientHistory,
           drPct: drPctCity,
           avgDeliveryDays,
           deliveryDurationOrders: stat.deliveryDays.length,

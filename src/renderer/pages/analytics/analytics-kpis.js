@@ -40,7 +40,7 @@ function renderKpiSection(container, runs, dateRange, settings, activeFilter) {
   const runtimeMs   = _sumRunRuntimeMs(runs);
 
   const totalOrders  = orders.length;
-  const totalRevenue = sumField(orders, "subtotal");
+  const totalRevenue = sumDashboardRevenue(orders);
   const totalCOD     = sumField(orders, "amountDue");
 
   // Delivered % and Failed % — based on orderStatus field
@@ -74,7 +74,7 @@ function renderKpiSection(container, runs, dateRange, settings, activeFilter) {
   var periodLabel = _prevPeriodLabel(activeFilter);
 
   var prevTotal   = prevOrders.length;
-  var prevRevenue = sumField(prevOrders, "subtotal");
+  var prevRevenue = sumDashboardRevenue(prevOrders);
   var prevCOD     = sumField(prevOrders, "amountDue");
   var prevRuntimeMs = _sumRunRuntimeMs(prevRuns || []);
   var prevEligibleOrders = prevOrders.filter(_analyticsIsNdrEligible);
@@ -117,7 +117,7 @@ function renderKpiSection(container, runs, dateRange, settings, activeFilter) {
       icon: "🛍️",
       iconClass: "purple",
       label: window.t_anl('kpi.totalOrders'),
-      displayValue: totalOrders.toLocaleString(),
+      displayValue: totalOrders.toLocaleString("en-US"),
       delta: calcDelta(totalOrders, prevTotal),
       periodLabel: periodLabel,
       color: "purple",
@@ -280,7 +280,7 @@ function _animateCounter(el, target, prefix, isLarge) {
     var progress = Math.min((now - startTs) / duration, 1);
     var eased    = 1 - Math.pow(1 - progress, 3);
     var current  = Math.round(target * eased);
-    el.textContent = prefix ? (prefix + current.toLocaleString()) : current.toLocaleString();
+    el.textContent = prefix ? (prefix + current.toLocaleString("en-US")) : current.toLocaleString("en-US");
     if (progress < 1) requestAnimationFrame(frame);
     else el.textContent = origText;
   }

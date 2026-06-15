@@ -932,43 +932,6 @@ window.renderSection4 = function (mountEl, data, ctx) {
         window._kbotTheme) === "light";
     const _s4MapUid = Date.now();
     const _s4BgId = "s4mapfill_" + _s4MapUid;
-    // DEBUG
-    const _s4ThemeAttr = document.documentElement.getAttribute("data-theme");
-    const _s4KbotTheme = window._kbotTheme;
-    const _s4BodyBg = window.getComputedStyle(document.body).backgroundColor;
-    console.log(
-      "[S4][cityBreakdownHTML] data-theme:",
-      JSON.stringify(_s4ThemeAttr),
-      "| _kbotTheme:",
-      JSON.stringify(_s4KbotTheme),
-      "| lightMode:",
-      lightMode,
-      "| body bg:",
-      _s4BodyBg,
-      "| _s4BgId:",
-      _s4BgId,
-    );
-    console.log(
-      "[S4][cityBreakdownHTML] mapStop1:",
-      lightMode ? "#eef4ff" : "#0d1628",
-      "| mapStop2:",
-      lightMode ? "#dbeafe" : "#060d1a",
-      "| mapStop3:",
-      lightMode ? "#e8f0fb" : "#020508",
-    );
-
-    // Also check if old gradient IDs are still in DOM
-    const _oldGrad = document.getElementById("s4mapfill");
-    console.log(
-      "[S4][cityBreakdownHTML] old #s4mapfill still in DOM:",
-      !!_oldGrad,
-      _oldGrad ? _oldGrad.outerHTML.slice(0, 120) : "none",
-    );
-    console.log(
-      "[S4][cityBreakdownHTML] new gradient ID:",
-      _s4BgId,
-      "— will be injected now",
-    );
     const mapStop1 = lightMode ? "#eef4ff" : "#0f1e3d";
     const mapStop2 = lightMode ? "#dbeafe" : "#0a1528";
     const mapStop3 = lightMode ? "#e8f0fb" : "#060e1c";

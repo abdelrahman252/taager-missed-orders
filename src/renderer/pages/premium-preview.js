@@ -273,9 +273,7 @@
       overlay.remove();
     });
     overlay.querySelector(".premium-preview-secondary").addEventListener("click", function () {
-      if (window.api && typeof window.api.openExternalUrl === "function") {
-        window.api.openExternalUrl("https://taager.com/").catch(function () {});
-      }
+      if (window.TaagerSupport && typeof window.TaagerSupport.open === "function") window.TaagerSupport.open();
     });
   }
 

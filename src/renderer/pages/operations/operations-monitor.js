@@ -198,8 +198,8 @@ function _opsSyncMonitorUI(container) {
   const subDelta  = container.querySelector("#ops-submitted-delta");
   const failDelta = container.querySelector("#ops-failed-delta");
 
-  if (subEl)  subEl.textContent  = live.submitted.toLocaleString();
-  if (failEl) failEl.textContent = live.failed.toLocaleString();
+  if (subEl)  subEl.textContent  = live.submitted.toLocaleString("en-US");
+  if (failEl) failEl.textContent = live.failed.toLocaleString("en-US");
   if (accEl)  accEl.textContent  = _opsShortEmail(live.currentAccount) || "—";
   if (accDelta && live.totalAccounts > 1) accDelta.textContent = `${live.currentAccountIdx + 1} / ${live.totalAccounts}`;
   if (subDelta && live.submitted > 0) subDelta.textContent = `+${live.submitted} ${window.t_ops('liveMonitor.vsLast15m')}`;

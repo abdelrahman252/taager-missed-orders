@@ -122,6 +122,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
   }
 
   function logProductNameEdit(step, payload) {
+    if (window.__TAAGER_PERF_DIAGNOSTICS !== true) return;
     try {
       console.log('[S5 EditName] ' + step, payload || {});
     } catch (_) {}
@@ -254,18 +255,14 @@ window.renderSection5 = function (mountEl, data, ctx) {
   }
 
   function setProductCurrency(currency) {
-    console.log('[DIAGNOSTIC][S5] setProductCurrency called with:', currency, 'Current selected currency:', selectedCurrency());
     var nextCurrency = String(currency || selectedCurrency()).toUpperCase();
     if (window.TaagerCurrency && window.TaagerCurrency.cleanCurrency) {
       nextCurrency = window.TaagerCurrency.cleanCurrency(nextCurrency, selectedCurrency());
     }
-    console.log('[DIAGNOSTIC][S5] Cleaned nextCurrency:', nextCurrency);
     if (supportedProductCurrencies().indexOf(nextCurrency) === -1) {
-      console.log('[DIAGNOSTIC][S5] Currency not supported:', nextCurrency, supportedProductCurrencies());
       return;
     }
     if (nextCurrency === selectedCurrency()) {
-      console.log('[DIAGNOSTIC][S5] nextCurrency matches selectedCurrency. No change.');
       return;
     }
 
@@ -275,17 +272,13 @@ window.renderSection5 = function (mountEl, data, ctx) {
         productAccountId,
         productFinancialSettings
       );
-      console.log('[DIAGNOSTIC][S5] Updated productFinancialSettings via DashboardRoiState:', productFinancialSettings);
     } else {
       productFinancialSettings = Object.assign({}, productFinancialSettings, { currency: nextCurrency });
-      console.log('[DIAGNOSTIC][S5] Updated productFinancialSettings locally:', productFinancialSettings);
     }
 
     if (backendProductsEnabled) {
-      console.log('[DIAGNOSTIC][S5] Backend products enabled. Refreshing backend products...');
       refreshBackendProducts(true);
     } else {
-      console.log('[DIAGNOSTIC][S5] Backend products not enabled. Running local applyProductFinancials...');
       applyProductFinancials();
     }
     listCache = null;
@@ -967,6 +960,15 @@ window.renderSection5 = function (mountEl, data, ctx) {
       deliveredCount: deliveriesVal,
       actualDeliveredCount: Number(row.actualDeliveredCount != null ? row.actualDeliveredCount : deliveriesVal),
       actualCommission: Number(row.actualCommission != null ? row.actualCommission : commissionVal),
+      actualDeliveredSales: Number(row.actualDeliveredSales || 0),
+      totalSales: Number(row.totalSales || 0),
+      expectedDeliveriesExact: Number(row.expectedDeliveriesExact != null ? row.expectedDeliveriesExact : deliveriesVal),
+      expectedDeliveriesDisplay: Number(row.expectedDeliveriesDisplay != null ? row.expectedDeliveriesDisplay : deliveriesVal),
+      expectedTotalProfitBeforeAdSpend: Number(row.expectedTotalProfitBeforeAdSpend != null ? row.expectedTotalProfitBeforeAdSpend : commissionVal),
+      expectedDeliveredSales: Number(row.expectedDeliveredSales || 0),
+      expectedDeliveredCpa: row.expectedDeliveredCpa != null ? Number(row.expectedDeliveredCpa) : null,
+      expectedNetProfit: row.expectedNetProfit != null ? Number(row.expectedNetProfit) : null,
+      expectedNdrRate: row.expectedNdrRate != null ? Number(row.expectedNdrRate) : null,
       totalPieces: Number(row.totalPieces || 0),
       failedCount: failedCountVal,
       canceledCount: canceledCountVal,
@@ -1009,7 +1011,6 @@ window.renderSection5 = function (mountEl, data, ctx) {
   function backendProductParams() {
     var currency = selectedCurrency();
     var egpRate = Number(productFinancialSettings.egpRate) || 52;
-    console.log('[DIAGNOSTIC][S5] Generating backendProductParams. Selected currency:', currency, 'EGP rate:', egpRate);
     return {
       page: currentPage,
       pageSize: PAGE_SIZE,
@@ -3714,7 +3715,9 @@ window.renderSection5 = function (mountEl, data, ctx) {
     var existingCompare = document.getElementById(COMPARE_ID);
     if (existingCompare) existingCompare.remove();
 
-    var compareState = { leftKey: '', rightKey: '' };
+    var compareState = { mode: 'products', leftKey: '', rightKey: '' };
+    var expectedCompareCache = new Map();
+    var expectedComparePending = new Map();
     var compareModal = document.createElement('div');
     compareModal.id = COMPARE_ID;
     compareModal.className = 'dash-overlay-scope';
@@ -3727,6 +3730,18 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
     function productKeyOf(product, idx) {
       return String(product && (product.key || product.sku || product.name) || idx || '');
+    }
+    function productIdentityMatches(product, candidate) {
+      if (!product || !candidate) return false;
+      var productKeys = [product.key, product.sku, product.legacyKey, product.name].map(function (value) {
+        return textKey(value || '');
+      }).filter(Boolean);
+      var candidateKeys = [candidate.key, candidate.sku, candidate.legacyKey, candidate.name].map(function (value) {
+        return textKey(value || '');
+      }).filter(Boolean);
+      return productKeys.some(function (key) {
+        return candidateKeys.indexOf(key) !== -1;
+      });
     }
     function cmpNum(value, decimals) {
       return (Number(value) || 0).toLocaleString(isAr ? 'ar-EG-u-nu-latn' : 'en-US', {
@@ -3742,6 +3757,215 @@ window.renderSection5 = function (mountEl, data, ctx) {
     }
     function headroom(product) {
       return (Number(product && product.breakEvenCpa) || 0) - (Number(product && product.cpa) || 0);
+    }
+    function deliveredCpa(product) {
+      if (product && product.expectedDeliveredCpa != null) {
+        return Number(product.expectedDeliveredCpa) || 0;
+      }
+      var delivered = Number(product && product.expectedDeliveriesExact) || Number(product && product.deliveredCount) || 0;
+      var spend = Number(product && product.allocatedAdSpend) || 0;
+      return delivered > 0 ? spend / delivered : 0;
+    }
+    function salesValue(product) {
+      return Number(product && (
+        product.deliveredSales != null ? product.deliveredSales :
+        product.actualDeliveredSales != null ? product.actualDeliveredSales :
+        product.totalDeliveredSales != null ? product.totalDeliveredSales : 0
+      )) || 0;
+    }
+    function totalSalesValue(product) {
+      return Number(product && (
+        product.totalSales != null ? product.totalSales :
+        product.revenue != null ? product.revenue :
+        product.sales != null ? product.sales :
+        salesValue(product)
+      )) || 0;
+    }
+    function expectedRangeKey() {
+      var range = window.DashboardExpectedNdrRangeState && typeof window.DashboardExpectedNdrRangeState.get === 'function'
+        ? window.DashboardExpectedNdrRangeState.get()
+        : (data && data.meta && data.meta.ndrPeriod) || {};
+      return String(range.dateFrom || range.from || '') + ':' + String(range.dateTo || range.to || '');
+    }
+    function expectedRangeSnapshot() {
+      return window.DashboardExpectedNdrRangeState && typeof window.DashboardExpectedNdrRangeState.get === 'function'
+        ? window.DashboardExpectedNdrRangeState.get()
+        : (data && data.meta && data.meta.ndrPeriod) || {};
+    }
+    function compareShortDate(value) {
+      value = String(value || '');
+      if (!value) return '--';
+      var parts = value.split('-');
+      if (parts.length === 3) return parts[1] + '/' + parts[2];
+      return value;
+    }
+    function setExpectedCompareRangeDate(edge, nextDate) {
+      if (!nextDate || !window.DashboardExpectedNdrRangeState || typeof window.DashboardExpectedNdrRangeState.setRange !== 'function') return;
+      var current = expectedRangeSnapshot();
+      var nextFrom = edge === 'from' ? nextDate : (current.dateFrom || current.from || nextDate);
+      var nextTo = edge === 'to' ? nextDate : (current.dateTo || current.to || nextDate);
+      if (nextFrom > nextTo) {
+        if (edge === 'from') nextTo = nextFrom;
+        else nextFrom = nextTo;
+      }
+      window.DashboardExpectedNdrRangeState.setRange(nextFrom, nextTo);
+      refreshCompare();
+    }
+    function openExpectedCompareDatePicker(button, edge) {
+      var range = expectedRangeSnapshot();
+      var currentValue = edge === 'from' ? (range.dateFrom || range.from || '') : (range.dateTo || range.to || '');
+      if (window.openDashboardDatePicker && window.DashboardPeriodState) {
+        window.openDashboardDatePicker(button, currentValue, function (nextDate) {
+          setExpectedCompareRangeDate(edge, nextDate);
+        });
+        return;
+      }
+      var input = document.createElement('input');
+      input.type = 'date';
+      input.value = currentValue;
+      if (window.DashboardPeriodState) {
+        if (typeof window.DashboardPeriodState.minDate === 'function') input.min = window.DashboardPeriodState.minDate();
+        if (typeof window.DashboardPeriodState.maxDate === 'function') input.max = window.DashboardPeriodState.maxDate();
+      }
+      input.style.position = 'fixed';
+      input.style.left = '-9999px';
+      document.body.appendChild(input);
+      input.addEventListener('change', function () {
+        setExpectedCompareRangeDate(edge, input.value);
+        input.remove();
+      });
+      input.addEventListener('blur', function () {
+        setTimeout(function () { if (input.parentNode) input.remove(); }, 120);
+      });
+      input.click();
+    }
+    function expectedCompareKey(product) {
+      return [
+        productAccountId,
+        productKeyOf(product, ''),
+        selectedCurrency(),
+        expectedRangeKey(),
+        Number(productFinancialSettings.adSpend || 0),
+        String(productFinancialSettings.egpRate || '')
+      ].join('|');
+    }
+    function cloneActualProduct(product) {
+      var clone = Object.assign({}, product || {});
+      clone.deliveredCount = Number(product && (
+        product.actualDeliveredCount != null ? product.actualDeliveredCount : product.deliveredCount
+      )) || 0;
+      clone.expectedDeliveriesExact = clone.deliveredCount;
+      clone.commission = Number(product && (
+        product.actualCommission != null ? product.actualCommission : product.commission
+      )) || 0;
+      clone.revenue = clone.commission;
+      clone.deliveredSales = Number(product && (
+        product.actualDeliveredSales != null ? product.actualDeliveredSales : product.deliveredSales
+      )) || salesValue(product);
+      clone.profitLoss = commissionInCurrency(clone.commission) - (Number(product && product.allocatedAdSpend) || 0);
+      clone.deliveredCpa = deliveredCpa(clone);
+      clone.breakEvenCpa = Number(product && product.breakEvenCpa) || 0;
+      return clone;
+    }
+    function projectExpectedProduct(product) {
+      product = product || {};
+      var placed = window.DashboardOrderMetrics
+        ? window.DashboardOrderMetrics.netOrders(product)
+        : (Number(product.netOrderCount) || Number(product.placedCount) || 0);
+      var ndrRate = Math.max(0, Math.min(1, product.expectedNdrRate != null
+        ? Number(product.expectedNdrRate)
+        : (Number(product.ndrPct) || 0) / 100));
+      var actualDelivered = Number(product.actualDeliveredCount != null ? product.actualDeliveredCount : product.deliveredCount) || 0;
+      var actualCommission = Number(product.actualCommission != null ? product.actualCommission : product.commission) || 0;
+      var calculation = window.TaagerDashboardFinancialCore.calculate({
+        mode: 'expected',
+        netOrders: placed,
+        actualDeliveredOrders: actualDelivered,
+        actualEarnedProfitAfterTax: actualCommission,
+        currentTotalSales: totalSalesValue(product),
+        expectedNdrRate: ndrRate,
+        adSpend: Number(product.allocatedAdSpend) || 0
+      });
+      var clone = Object.assign({}, product, {
+        _expectedProjected: true,
+        deliveredCount: calculation.expectedDeliveriesDisplay,
+        deliveries: calculation.expectedDeliveriesDisplay,
+        expectedDeliveriesExact: calculation.expectedDeliveriesExact,
+        commission: calculation.expectedTotalProfitBeforeAdSpend,
+        expectedTotalProfitBeforeAdSpend: calculation.expectedTotalProfitBeforeAdSpend,
+        revenue: calculation.expectedTotalProfitBeforeAdSpend,
+        deliveredSales: calculation.expectedDeliveredSales,
+        expectedDeliveredSales: calculation.expectedDeliveredSales,
+        expectedDeliveredCpa: calculation.expectedDeliveredCpa,
+        ndrPct: Number(product.ndrPct) || 0,
+        drRate: Number(product.drRate || product.deliveryPct || product.ndrPct || 0),
+        breakEvenCpa: sarToSelectedCurrency(calculation.breakEvenCpa),
+        profitLoss: commissionInCurrency(calculation.expectedTotalProfitBeforeAdSpend) - (Number(product.allocatedAdSpend) || 0)
+      });
+      clone.deliveredCpa = deliveredCpa(clone);
+      return clone;
+    }
+    function normalizeExpectedProduct(product, expectedRow) {
+      var expected = Object.assign({}, product || {}, expectedRow || {});
+      expected.key = (product && product.key) || expected.key;
+      expected.sku = (product && product.sku) || expected.sku;
+      expected.name = (product && product.name) || expected.name;
+      expected.cat = (product && product.cat) || expected.cat;
+      expected.rank = (product && product.rank) || expected.rank;
+      expected.allocatedAdSpend = Number(product && product.allocatedAdSpend) || Number(expected.allocatedAdSpend) || 0;
+      expected.cpa = Number(product && product.cpa) || Number(expected.cpa) || 0;
+      expected.profitLoss = Number(expected.profitLoss != null ? expected.profitLoss : (commissionInCurrency(expected.commission || 0) - expected.allocatedAdSpend));
+      if (expected.expectedDeliveredCpa == null && expected.expectedDeliveriesExact != null) {
+        var exactDeliveries = Number(expected.expectedDeliveriesExact) || 0;
+        expected.expectedDeliveredCpa = exactDeliveries > 0 ? expected.allocatedAdSpend / exactDeliveries : 0;
+      }
+      expected.deliveredCpa = deliveredCpa(expected);
+      expected._expectedProjected = false;
+      return expected;
+    }
+    function loadExpectedProductComparison(product) {
+      if (!product) return Promise.resolve(null);
+      var cacheKey = expectedCompareKey(product);
+      if (expectedCompareCache.has(cacheKey)) return Promise.resolve(expectedCompareCache.get(cacheKey));
+      if (expectedComparePending.has(cacheKey)) return expectedComparePending.get(cacheKey);
+      var fallback = projectExpectedProduct(product);
+      if (!window.DashboardQueryRuntime || typeof window.DashboardQueryRuntime.query !== 'function') {
+        expectedCompareCache.set(cacheKey, fallback);
+        return Promise.resolve(fallback);
+      }
+      var range = window.DashboardExpectedNdrRangeState && typeof window.DashboardExpectedNdrRangeState.get === 'function'
+        ? window.DashboardExpectedNdrRangeState.get()
+        : (data && data.meta && data.meta.ndrPeriod) || {};
+      var params = Object.assign({}, backendProductParams(), {
+        page: 1,
+        pageSize: 25,
+        sortBy: 'rank',
+        sortDir: 'asc',
+        deliveredDateMode: 'expected',
+        ndrDateFrom: range.dateFrom || range.from || '',
+        ndrDateTo: range.dateTo || range.to || '',
+        requestChannel: 'expected-product-compare',
+        filters: {
+          search: product.sku || product.legacyKey || product.name || product.key || '',
+          statusKey: 'all'
+        }
+      });
+      var pending = window.DashboardQueryRuntime.query('products', params, data).then(function (result) {
+        var rows = result && result.ok && Array.isArray(result.rows) ? result.rows : [];
+        var match = rows.map(backendProductRow).find(function (row) {
+          return productIdentityMatches(product, row);
+        }) || null;
+        var expected = match ? normalizeExpectedProduct(product, match) : fallback;
+        expectedCompareCache.set(cacheKey, expected);
+        expectedComparePending.delete(cacheKey);
+        return expected;
+      }).catch(function () {
+        expectedCompareCache.set(cacheKey, fallback);
+        expectedComparePending.delete(cacheKey);
+        return fallback;
+      });
+      expectedComparePending.set(cacheKey, pending);
+      return pending;
     }
     function topCity(product) {
       var rows = product && product.cityBreakdown && product.cityBreakdown.length ? product.cityBreakdown.slice() : [];
@@ -3779,6 +4003,20 @@ window.renderSection5 = function (mountEl, data, ctx) {
       { group: s5Txt('Financials', 'الماليات'), label: 'CPA', fmt: function (p) { return cmpMoney(p.cpa); }, get: function (p) { return p.cpa; }, compare: 'low' },
       { group: s5Txt('Financials', 'الماليات'), label: s5Txt('CPA vs Break-even', 'CPA مقابل التعادل'), fmt: function (p) { return cmpMoney(p.cpa) + ' / ' + cmpMoney(p.breakEvenCpa); }, get: headroom, compare: 'high' },
       { group: s5Txt('Geography', 'المناطق'), label: s5Txt('Top city', 'أفضل مدينة'), fmt: function (p) { return esc(topCity(p)); }, get: function () { return 0; }, compare: 'none' }
+    ];
+    var scenarioMetrics = [
+      { group: s5Txt('Volume', 'Volume'), label: s5Txt('Net Orders', 'Net Orders'), fmt: function (p) { return cmpNum(p.netOrderCount || p.placedCount); }, get: function (p) { return p.netOrderCount || p.placedCount; }, compare: 'none' },
+      { group: s5Txt('Volume', 'Volume'), label: s5Txt('Delivered', 'Delivered'), fmt: function (p) { return cmpNum(p.deliveredCount); }, get: function (p) { return p.deliveredCount; }, compare: 'high' },
+      { group: s5Txt('Rates', 'Rates'), label: 'NDR', fmt: function (p) { return cmpPct(p.ndrPct); }, get: function (p) { return p.ndrPct; }, compare: 'high' },
+      { group: s5Txt('Rates', 'Rates'), label: 'DR', fmt: function (p) { return cmpPct(p.drRate || p.deliveryPct); }, get: function (p) { return p.drRate || p.deliveryPct; }, compare: 'high' },
+      { group: s5Txt('Financials', 'Financials'), label: s5Txt('Average Profit', 'Average Profit'), fmt: function (p) { return cmpMoney(p.averageProfit); }, get: function (p) { return p.averageProfit; }, compare: 'none' },
+      { group: s5Txt('Financials', 'Financials'), label: p5Txt('adSpend'), fmt: function (p) { return cmpMoney(p.allocatedAdSpend); }, get: function (p) { return p.allocatedAdSpend; }, compare: 'none' },
+      { group: s5Txt('Financials', 'Financials'), label: 'CPA', fmt: function (p) { return cmpMoney(p.cpa); }, get: function (p) { return p.cpa; }, compare: 'none' },
+      { group: s5Txt('Financials', 'Financials'), label: s5Txt('Delivered CPA', 'Delivered CPA'), fmt: function (p) { return cmpMoney(p.deliveredCpa || deliveredCpa(p)); }, get: function (p) { return p.deliveredCpa || deliveredCpa(p); }, compare: 'low' },
+      { group: s5Txt('Financials', 'Financials'), label: s5Txt('Break-even CPA', 'Break-even CPA'), fmt: function (p) { return cmpMoney(p.breakEvenCpa); }, get: function (p) { return p.breakEvenCpa; }, compare: 'high' },
+      { group: s5Txt('Financials', 'Financials'), label: s5Txt('Profit After Tax', 'Profit After Tax'), fmt: function (p) { return cmpMoney(commissionInCurrency(p.commission)); }, get: function (p) { return commissionInCurrency(p.commission); }, compare: 'high' },
+      { group: s5Txt('Financials', 'Financials'), label: p5Txt('pnl'), fmt: function (p) { return cmpMoney(p.profitLoss); }, get: function (p) { return p.profitLoss; }, compare: 'high' },
+      { group: s5Txt('Sales', 'Sales'), label: s5Txt('SP Sales', 'SP Sales'), fmt: function (p) { return cmpMoney(commissionInCurrency(salesValue(p))); }, get: function (p) { return commissionInCurrency(salesValue(p)); }, compare: 'high' }
     ];
     function comparisonSummary(left, right) {
       var leftWins = [];
@@ -3823,6 +4061,33 @@ window.renderSection5 = function (mountEl, data, ctx) {
         color: '#00e676',
         title: winnerLabel + ' ' + s5Txt('is better', 'هو الأفضل'),
         text: esc(winnerProduct.name || '') + ' ' + s5Txt('beats', 'يتفوق على') + ' ' + esc(loserProduct.name || '') + ' ' + s5Txt('by winning', 'في') + ' ' + cmpNum(summary.wins) + ' / ' + cmpNum(summary.total) + ' ' + s5Txt('metric checks. Strongest edges:', 'من المؤشرات. أقوى النقاط:') + ' ' + summary.reasons.map(esc).join(' | ') + '.'
+      };
+    }
+    function scenarioVerdict(actual, expected, isLoading) {
+      if (!actual) {
+        return {
+          color: '#f59e0b',
+          title: s5Txt('Select one product', 'Select one product'),
+          text: s5Txt('Choose a product to compare its actual cycle with the expected NDR cycle.', 'Choose a product to compare its actual cycle with the expected NDR cycle.')
+        };
+      }
+      if (isLoading) {
+        return {
+          color: '#3b82f6',
+          title: s5Txt('Loading expected cycle', 'Loading expected cycle'),
+          text: s5Txt('Pulling the historical NDR version for this same product without changing the dashboard mode.', 'Pulling the historical NDR version for this same product without changing the dashboard mode.')
+        };
+      }
+      var actualProfit = Number(actual.profitLoss) || 0;
+      var expectedProfit = Number(expected && expected.profitLoss) || 0;
+      var diff = expectedProfit - actualProfit;
+      var deliveredDiff = (Number(expected && expected.deliveredCount) || 0) - (Number(actual.deliveredCount) || 0);
+      var color = diff >= 0 ? '#00e676' : '#ef4444';
+      return {
+        color: color,
+        title: diff >= 0 ? s5Txt('Expected NDR improves this product', 'Expected NDR improves this product') : s5Txt('Expected NDR weakens this product', 'Expected NDR weakens this product'),
+        text: s5Txt('Expected cycle delta:', 'Expected cycle delta:') + ' ' + cmpMoney(diff) + ' ' + s5Txt('profit/loss and', 'profit/loss and') + ' ' + (deliveredDiff >= 0 ? '+' : '') + cmpNum(deliveredDiff) + ' ' + s5Txt('delivered orders versus the actual cycle.', 'delivered orders versus the actual cycle.') +
+          (expected && expected._expectedProjected ? ' ' + s5Txt('Fallback projection is shown until backend expected data is available.', 'Fallback projection is shown until backend expected data is available.') : '')
       };
     }
     function getMetricColor(metric, value) {
@@ -3919,6 +4184,67 @@ window.renderSection5 = function (mountEl, data, ctx) {
         (metric.compare === 'none' ? '' : '<div style="height:5px;background:rgba(255,255,255,0.07);border-radius:99px;overflow:hidden;margin-top:7px"><div style="height:100%;width:' + barWidth + '%;background:' + barColor + ';border-radius:99px"></div></div>') +
       '</div>';
     }
+    function tabsHTML() {
+      var tabs = [
+        { id: 'products', label: s5Txt('Product vs Product', 'Product vs Product') },
+        { id: 'ndr', label: s5Txt('Actual vs Expected NDR', 'Actual vs Expected NDR') }
+      ];
+      return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">' + tabs.map(function (tab) {
+        var active = compareState.mode === tab.id;
+        return '<button type="button" class="s5-compare-tab" data-mode="' + tab.id + '" style="border:1px solid ' + (active ? 'rgba(245,158,11,0.55)' : 'rgba(255,255,255,0.10)') + ';background:' + (active ? 'rgba(245,158,11,0.14)' : 'rgba(255,255,255,0.04)') + ';color:' + (active ? '#fbbf24' : 'rgba(255,255,255,0.62)') + ';border-radius:10px;padding:7px 11px;font-size:11px;font-weight:900;font-family:inherit;cursor:pointer">' + tab.label + '</button>';
+      }).join('') + '</div>';
+    }
+    function scenarioSelectorHTML(product) {
+      var range = expectedRangeSnapshot();
+      return '<div class="s5-compare-card" style="margin-bottom:12px">' +
+        '<div style="display:grid;grid-template-columns:minmax(240px,1fr) minmax(260px,auto);gap:12px;align-items:end">' +
+          '<div>' + selectorHTML('left', product) + '</div>' +
+          '<div style="border:1px solid rgba(20,184,166,0.22);background:rgba(20,184,166,0.075);border-radius:14px;padding:10px 11px">' +
+            '<div style="font-size:9px;color:#5eead4;font-weight:950;text-transform:uppercase;letter-spacing:.4px;margin-bottom:7px">' + s5Txt('Expected NDR period', 'Expected NDR period') + '</div>' +
+            '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+              '<button type="button" class="s5-expected-range-date" data-edge="from" title="' + attr(s5Txt('Expected NDR from date', 'Expected NDR from date')) + '" style="border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.20);color:#fff;border-radius:10px;padding:8px 10px;font-size:12px;font-weight:900;font-family:inherit;cursor:pointer;min-width:82px;text-align:center">' + esc(compareShortDate(range.dateFrom || range.from)) + '</button>' +
+              '<span style="font-size:11px;color:rgba(255,255,255,0.35);font-weight:900">to</span>' +
+              '<button type="button" class="s5-expected-range-date" data-edge="to" title="' + attr(s5Txt('Expected NDR to date', 'Expected NDR to date')) + '" style="border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.20);color:#fff;border-radius:10px;padding:8px 10px;font-size:12px;font-weight:900;font-family:inherit;cursor:pointer;min-width:82px;text-align:center">' + esc(compareShortDate(range.dateTo || range.to)) + '</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="font-size:11px;line-height:1.65;color:rgba(255,255,255,0.48);font-weight:700;margin-top:10px">' +
+          s5Txt('Same product, two calculation cycles. Actual uses the current dashboard product metrics; Expected uses the selected Expected NDR period without switching the whole dashboard.', 'Same product, two calculation cycles. Actual uses the current dashboard product metrics; Expected uses the selected Expected NDR period without switching the whole dashboard.') +
+        '</div>' +
+      '</div>';
+    }
+    function scenarioColumnHTML(title, color, product, other, isExpected) {
+      if (!product) {
+        return '<div class="s5-compare-card" style="border-style:dashed;min-height:360px;display:flex;align-items:center;justify-content:center;text-align:center;color:rgba(255,255,255,0.32);font-size:13px;font-weight:800">' +
+          s5Txt('Choose a product to load metrics', 'Choose a product to load metrics') +
+        '</div>';
+      }
+      var groups = {};
+      var order = [];
+      scenarioMetrics.forEach(function (metric) {
+        if (!groups[metric.group]) {
+          groups[metric.group] = [];
+          order.push(metric.group);
+        }
+        groups[metric.group].push(metric);
+      });
+      var sections = order.map(function (group) {
+        return '<div style="display:flex;align-items:center;gap:6px;margin:14px 0 8px">' +
+          '<div style="width:3px;height:12px;border-radius:99px;background:' + color + '"></div>' +
+          '<div style="font-size:9px;font-weight:950;color:' + color + ';text-transform:uppercase;letter-spacing:.6px">' + group + '</div>' +
+        '</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">' +
+          groups[group].map(function (metric) { return metricHTML(isExpected ? 'right' : 'left', product, other, metric); }).join('') +
+        '</div>';
+      }).join('');
+      return '<div class="s5-compare-card">' +
+        '<div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:' + color + '10;border:1px solid ' + color + '44;margin-bottom:4px">' +
+          '<div style="width:36px;height:36px;border-radius:10px;flex-shrink:0;background:' + color + '22;border:1px solid ' + color + '55;color:' + color + ';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:950">' + (isExpected ? 'EXP' : 'ACT') + '</div>' +
+          '<div style="min-width:0"><div style="font-size:13px;font-weight:950;color:#fff">' + title + '</div>' +
+          '<div data-i18n-preserve style="font-size:10px;color:rgba(255,255,255,0.38);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(product.name || '') + (product.sku ? ' - SKU: ' + esc(product.sku) : '') + '</div></div>' +
+        '</div>' +
+        sections +
+      '</div>';
+    }
     function columnHTML(side, product, other) {
       var sideColor = side === 'left' ? '#f59e0b' : '#14b8a6';
       if (!product) {
@@ -3960,22 +4286,54 @@ window.renderSection5 = function (mountEl, data, ctx) {
       var left = PRODUCT_BY_KEY[compareState.leftKey] || null;
       var right = PRODUCT_BY_KEY[compareState.rightKey] || null;
       var v = verdict(left, right);
+      var actual = left ? cloneActualProduct(left) : null;
+      var expectedKey = left ? expectedCompareKey(left) : '';
+      var expected = left && expectedCompareCache.has(expectedKey) ? expectedCompareCache.get(expectedKey) : (left ? projectExpectedProduct(left) : null);
+      var expectedLoading = !!(left && expectedComparePending.has(expectedKey));
+      var sv = scenarioVerdict(actual, expected, expectedLoading);
+      var productsBodyHtml = '<div style="padding:18px 20px 20px"><div class="s5-compare-grid">' +
+        columnHTML('left', left, right) +
+        '<div class="s5-compare-divider" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:rgba(255,255,255,0.32);align-self:stretch"><div class="s5-compare-divider-line" style="width:1px;flex:1;background:linear-gradient(180deg,transparent,rgba(245,158,11,0.45),transparent)"></div><div style="width:34px;height:34px;border-radius:50%;border:1px solid rgba(245,158,11,0.32);background:rgba(245,158,11,0.10);color:#fbbf24;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:950;flex-shrink:0">VS</div><div class="s5-compare-divider-line" style="width:1px;flex:1;background:linear-gradient(180deg,transparent,rgba(20,184,166,0.45),transparent)"></div></div>' +
+        columnHTML('right', right, left) +
+        '</div><div class="s5-compare-verdict" style="margin-top:16px;border-radius:18px;border:1px solid ' + v.color + '66;background:' + v.color + '12;padding:18px 20px;display:flex;align-items:flex-start;gap:13px">' +
+        '<div style="width:38px;height:38px;border-radius:12px;background:' + v.color + '22;border:1px solid ' + v.color + '66;color:' + v.color + ';display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>' +
+        '<div><div style="font-size:15px;font-weight:950;color:#fff;margin-bottom:5px">' + v.title + '</div><div style="font-size:12px;line-height:1.75;color:rgba(255,255,255,0.72);font-weight:700">' + v.text + '</div></div>' +
+        '</div></div>';
+      var scenarioBodyHtml = '<div style="padding:18px 20px 20px">' +
+        scenarioSelectorHTML(left) +
+        '<div class="s5-compare-grid">' +
+        scenarioColumnHTML(s5Txt('Actual cycle', 'Actual cycle'), '#f59e0b', actual, expected, false) +
+        '<div class="s5-compare-divider" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:rgba(255,255,255,0.32);align-self:stretch"><div class="s5-compare-divider-line" style="width:1px;flex:1;background:linear-gradient(180deg,transparent,rgba(245,158,11,0.45),transparent)"></div><div style="width:34px;height:34px;border-radius:50%;border:1px solid rgba(245,158,11,0.32);background:rgba(245,158,11,0.10);color:#fbbf24;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:950;flex-shrink:0">VS</div><div class="s5-compare-divider-line" style="width:1px;flex:1;background:linear-gradient(180deg,transparent,rgba(20,184,166,0.45),transparent)"></div></div>' +
+        scenarioColumnHTML(s5Txt('Expected NDR cycle', 'Expected NDR cycle'), '#14b8a6', expected, actual, true) +
+        '</div><div class="s5-compare-verdict" style="margin-top:16px;border-radius:18px;border:1px solid ' + sv.color + '66;background:' + sv.color + '12;padding:18px 20px;display:flex;align-items:flex-start;gap:13px">' +
+        '<div style="width:38px;height:38px;border-radius:12px;background:' + sv.color + '22;border:1px solid ' + sv.color + '66;color:' + sv.color + ';display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>' +
+        '<div><div style="font-size:15px;font-weight:950;color:#fff;margin-bottom:5px">' + sv.title + '</div><div style="font-size:12px;line-height:1.75;color:rgba(255,255,255,0.72);font-weight:700">' + sv.text + '</div></div>' +
+        '</div></div>';
+      var bodyHtml = compareState.mode === 'ndr' ? scenarioBodyHtml : productsBodyHtml;
       return '<div class="s5-compare-modal-panel" style="width:min(1180px,96vw);max-height:92vh;overflow:auto;border-radius:22px;background:#0b1120;border:1px solid rgba(255,255,255,0.11);position:relative">' +
         '<div style="position:sticky;top:0;z-index:5;padding:18px 22px;border-bottom:1px solid rgba(255,255,255,0.075);background:#0b1120;display:flex;align-items:center;justify-content:space-between;gap:16px;border-radius:22px 22px 0 0">' +
           '<div style="display:flex;align-items:center;gap:12px"><div style="width:42px;height:42px;border-radius:13px;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.35);color:#fbbf24;display:flex;align-items:center;justify-content:center"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 7h14"/><path d="M6 7l-4 7h8L6 7z"/><path d="M18 7l-4 7h8l-4-7z"/></svg></div>' +
           '<div><div style="font-size:18px;font-weight:950;color:#fff">' + s5Txt('Product Comparison', 'مقارنة المنتجات') + '</div><div style="font-size:11px;color:rgba(255,255,255,0.38);font-weight:700;margin-top:3px">' + s5Txt('Volumes, rates, financials, and scale verdict', 'الحجم والنسب والماليات وحكم الأداء') + '</div></div></div>' +
+          tabsHTML() +
           '<button id="s5-compare-close" style="width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.65);cursor:pointer;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;font-family:inherit">&times;</button>' +
         '</div>' +
-        '<div style="padding:18px 20px 20px"><div class="s5-compare-grid">' +
-          columnHTML('left', left, right) +
-          '<div class="s5-compare-divider" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:rgba(255,255,255,0.32);align-self:stretch"><div class="s5-compare-divider-line" style="width:1px;flex:1;background:linear-gradient(180deg,transparent,rgba(245,158,11,0.45),transparent)"></div><div style="width:34px;height:34px;border-radius:50%;border:1px solid rgba(245,158,11,0.32);background:rgba(245,158,11,0.10);color:#fbbf24;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:950;flex-shrink:0">VS</div><div class="s5-compare-divider-line" style="width:1px;flex:1;background:linear-gradient(180deg,transparent,rgba(20,184,166,0.45),transparent)"></div></div>' +
-          columnHTML('right', right, left) +
-        '</div><div class="s5-compare-verdict" style="margin-top:16px;border-radius:18px;border:1px solid ' + v.color + '66;background:' + v.color + '12;padding:18px 20px;display:flex;align-items:flex-start;gap:13px">' +
-          '<div style="width:38px;height:38px;border-radius:12px;background:' + v.color + '22;border:1px solid ' + v.color + '66;color:' + v.color + ';display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>' +
-          '<div><div style="font-size:15px;font-weight:950;color:#fff;margin-bottom:5px">' + v.title + '</div><div style="font-size:12px;line-height:1.75;color:rgba(255,255,255,0.72);font-weight:700">' + v.text + '</div></div>' +
-        '</div></div></div>';
+        bodyHtml +
+      '</div>';
     }
     function bindCompareInputs() {
+      compareModal.querySelectorAll('.s5-compare-tab').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          compareState.mode = btn.getAttribute('data-mode') || 'products';
+          refreshCompare();
+        });
+      });
+      compareModal.querySelectorAll('.s5-expected-range-date').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          openExpectedCompareDatePicker(btn, btn.getAttribute('data-edge') || 'from');
+        });
+      });
       compareModal.querySelectorAll('.s5-cmp-dd-wrap').forEach(function (wrap) {
         var side = wrap.dataset.side;
         var trigger = wrap.querySelector('.s5-cmp-dd-trigger');
@@ -4038,7 +4396,10 @@ window.renderSection5 = function (mountEl, data, ctx) {
               else compareState.rightKey = option.getAttribute('data-key') || '';
               closePanel();
               refreshCompare();
-              loadBackendProductDetails([compareState.leftKey, compareState.rightKey]).then(function () {
+              var selectedProduct = PRODUCT_BY_KEY[compareState.leftKey] || null;
+              var compareLoads = [loadBackendProductDetails([compareState.leftKey, compareState.rightKey])];
+              if (compareState.mode === 'ndr' && selectedProduct) compareLoads.push(loadExpectedProductComparison(selectedProduct));
+              Promise.all(compareLoads).then(function () {
                 if (compareModal.style.display !== 'none') refreshCompare();
               });
             });
@@ -4058,6 +4419,15 @@ window.renderSection5 = function (mountEl, data, ctx) {
     function refreshCompare() {
       compareModal.innerHTML = compareHTML();
       bindCompareInputs();
+      if (compareState.mode === 'ndr') {
+        var selectedProduct = PRODUCT_BY_KEY[compareState.leftKey] || null;
+        var expectedKey = selectedProduct ? expectedCompareKey(selectedProduct) : '';
+        if (selectedProduct && !expectedCompareCache.has(expectedKey) && !expectedComparePending.has(expectedKey)) {
+          loadExpectedProductComparison(selectedProduct).then(function () {
+            if (compareModal.style.display !== 'none' && compareState.mode === 'ndr') refreshCompare();
+          });
+        }
+      }
     }
     refreshProductCompareModal = function () {
       if (compareModal.style.display !== 'none') refreshCompare();

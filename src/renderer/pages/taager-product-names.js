@@ -10,20 +10,23 @@
   function write(map) {
     try { localStorage.setItem(KEY, JSON.stringify(map || {})); } catch (_) {}
   }
+  var cache = read();
   window.TaagerProductNames = {
     get: function (sku) {
       var key = String(sku || "").trim();
-      return key ? String(read()[key] || "").trim() : "";
+      return key ? String(cache[key] || "").trim() : "";
     },
     set: function (sku, name) {
       var key = String(sku || "").trim();
       if (!key) return;
-      var map = read();
       var value = String(name || "").trim();
-      if (value) map[key] = value; else delete map[key];
-      write(map);
+      if (value) cache[key] = value; else delete cache[key];
+      write(cache);
       window.dispatchEvent(new CustomEvent("taager-product-names-change", { detail: { sku: key, name: value } }));
     },
-    all: read
+    all: function () { return Object.assign({}, cache); }
   };
+  window.addEventListener("storage", function (event) {
+    if (event && event.key === KEY) cache = read();
+  });
 })();

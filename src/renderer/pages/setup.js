@@ -3682,6 +3682,8 @@ window.renderSetup = function (onComplete, initialStep) {
     const selectedTaagerCountry = (acc?.taagerCountry || "sa").toLowerCase();
     const selectedTaagerMerchantId = acc?.taagerAffiliateCode || "";
     const selectedDashboardProvider = acc?.dashboardEnrichmentProvider === "easyorders" ? "easyorders" : "none";
+    const isTeamLeaderMode = window._teamLeaderEnabled === true;
+    const easyRequiredMark = '<span data-easy-required-mark style="color:var(--danger)">*</span>';
     const taagerMethodOptions = [
       { value: "email", label: t("setup.taager_login_email") },
       { value: "phone", label: t("setup.taager_login_phone") },
@@ -3733,15 +3735,15 @@ window.renderSetup = function (onComplete, initialStep) {
           }</div>
         </div>
         <div class="form-group">
-          <label>${t("setup.store_label")}</label>
+          <label>${t("setup.store_label")} ${easyRequiredMark}</label>
           <input type="text" id="sv3-easy-store" placeholder="${t("setup.store_ph")}" value="${esc(acc?.easyStore||"")}" ${isLockedEdit ? "disabled" : ""} />
         </div>
         <div class="form-group">
-          <label>${t("setup.email_label")}</label>
+          <label>${t("setup.email_label")} ${easyRequiredMark}</label>
           <input type="email" id="sv3-easy-email" placeholder="${t("setup.email_ph")}" value="${esc(acc?.easyEmail||"")}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
         </div>
         <div class="form-group">
-          <label>${t("setup.pass_label")}</label>
+          <label>${t("setup.pass_label")} ${easyRequiredMark}</label>
           <div style="position:relative;display:flex;align-items:center">
             <input type="password" id="sv3-easy-pass" placeholder="••••••••" autocomplete="new-password" required ${isLockedEdit ? "disabled" : ""} style="padding-right:42px;width:100%" />
             <button type="button" class="password-toggle-btn" data-target="sv3-easy-pass" style="position:absolute;right:10px;background:none;border:none;cursor:pointer;color:var(--text3);padding:4px;display:flex;align-items:center;justify-content:center;transition:color 0.2s;outline:none" tabindex="-1">
@@ -3749,6 +3751,7 @@ window.renderSetup = function (onComplete, initialStep) {
             </button>
           </div>
           ${isEdit ? `<div class="sv3-field-hint">${t("setup.keep_pass")}</div>` : ""}
+          <div class="sv3-field-hint" id="sv3-easy-requirement-hint"></div>
         </div>
 
           </div>
@@ -3817,7 +3820,7 @@ window.renderSetup = function (onComplete, initialStep) {
       const emailInput = document.getElementById("sv3-taager-email");
       const phoneInput = document.getElementById("sv3-taager-phone");
       const passInput = document.getElementById("sv3-taager-pass");
-      const usesEmail = method === "email";
+      const usesEmail = method === "email" || method === "google";
       const usesPhone = method === "phone";
       const usesPassword = method !== "google";
       if (emailGroup) emailGroup.style.display = usesEmail ? "" : "none";
@@ -3834,6 +3837,28 @@ window.renderSetup = function (onComplete, initialStep) {
       if (passInput) {
         passInput.required = usesPassword;
         if (!isLockedEdit) passInput.disabled = !usesPassword;
+      }
+    };
+    const easyOrdersRequired = () => {
+      const provider = document.getElementById("sv3-dashboard-enrichment-provider")?.value === "easyorders" ? "easyorders" : "none";
+      return !isTeamLeaderMode || provider === "easyorders";
+    };
+    const syncEasyOrderFields = () => {
+      const required = easyOrdersRequired();
+      const storeInput = document.getElementById("sv3-easy-store");
+      const emailInput = document.getElementById("sv3-easy-email");
+      const passInput = document.getElementById("sv3-easy-pass");
+      const hint = document.getElementById("sv3-easy-requirement-hint");
+      overlay.querySelectorAll("[data-easy-required-mark]").forEach(mark => {
+        mark.style.display = required ? "" : "none";
+      });
+      if (storeInput) storeInput.required = required;
+      if (emailInput) emailInput.required = required;
+      if (passInput) passInput.required = required && !isEdit;
+      if (hint) {
+        hint.textContent = required
+          ? setupText("setup.easy_required_hint", "EasyOrders store, email, and password are required for this account.")
+          : setupText("setup.easy_optional_team_leader_hint", "Optional in Team Leader mode.");
       }
     };
     overlay.querySelectorAll("[data-taager-method]").forEach(btn => {
@@ -3871,9 +3896,11 @@ window.renderSetup = function (onComplete, initialStep) {
             ? setupText("setup.dashboard_enrichment_hint_easyorders", "Your dashboard will pull orders and profits from Taager, and also connect to EasyOrders to enrich product names and payment data. Best choice if you use both platforms.")
             : setupText("setup.dashboard_enrichment_hint_taager", "Your dashboard will use Taager as the only data source for orders, profits, and product info. Simple and fast — recommended if you don't use EasyOrders.");
         }
+        syncEasyOrderFields();
       });
     });
     syncTaagerLoginFields();
+    syncEasyOrderFields();
 
     overlay.querySelectorAll(".password-toggle-btn").forEach(btn => {
       btn.addEventListener("click", (e) => {
@@ -3926,9 +3953,9 @@ window.renderSetup = function (onComplete, initialStep) {
 
       const needsPhone = taagerLoginMethod === "phone";
       const needsPassword = taagerLoginMethod !== "google";
-      const hasTaagerLoginIdentity = taagerLoginMethod === "google" ? true : (needsPhone ? !!nextTaagerPhone : !!nextTaagerEmail);
-      const needsEasyOrdersForDashboard = dashboardEnrichmentProvider === "easyorders";
-      if (!nextTaagerMerchantId || (needsEasyOrdersForDashboard && (!nextEasyStore || !nextEasyEmail || (!isEdit && !easyPassword))) || (!isEdit && (!hasTaagerLoginIdentity || (needsPassword && !taagerPassword)))) {
+      const hasTaagerLoginIdentity = needsPhone ? !!nextTaagerPhone : !!nextTaagerEmail;
+      const needsEasyOrdersCredentials = !isTeamLeaderMode || dashboardEnrichmentProvider === "easyorders";
+      if (!nextTaagerMerchantId || (needsEasyOrdersCredentials && (!nextEasyStore || !nextEasyEmail || (!isEdit && !easyPassword))) || (!isEdit && (!hasTaagerLoginIdentity || (needsPassword && !taagerPassword)))) {
         errText.innerHTML = t("setup.err_missing");
         errEl.style.display = "flex";
         return;
@@ -3983,7 +4010,7 @@ window.renderSetup = function (onComplete, initialStep) {
         saveBtn.disabled = false;
         errText.innerHTML = result.reason === "account_locked"
           ? t("setup.err_locked")
-          : result.reason === "easy_store_required"
+          : result.reason === "easy_store_required" || result.reason === "easy_credentials_required" || result.reason === "taager_email_required" || result.reason === "taager_phone_required" || result.reason === "taager_password_required"
           ? t("setup.err_missing")
           : result.reason === "taager_merchant_id_required"
           ? setupText("setup.taager_merchant_id_required", "Taager merchant ID is required.")

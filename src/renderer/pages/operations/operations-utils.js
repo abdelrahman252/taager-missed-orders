@@ -148,6 +148,11 @@ function _opsFmtElapsed(ms) {
   const s = Math.floor(ms / 1000);
   return [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60].map(v => String(v).padStart(2, "0")).join(":");
 }
+function _opsDashboardRevenueValue(order) {
+  return typeof analyticsDashboardRevenueValue === "function"
+    ? analyticsDashboardRevenueValue(order)
+    : 0;
+}
 function _opsShortEmail(e) {
   if (!e || e === "__single__") return "—";
   return e.length > 26 ? e.slice(0, 24) + "…" : e;
@@ -181,7 +186,7 @@ function _opsGroupBy(arr, key) {
   for (const item of arr) {
     const k = item[key] || "";
     if (!map[k]) map[k] = { key: k, items: [], count: 0, total: 0 };
-    map[k].items.push(item); map[k].count++; map[k].total += Number(item.subtotal || 0);
+    map[k].items.push(item); map[k].count++; map[k].total += _opsDashboardRevenueValue(item);
   }
   return Object.values(map).sort((a, b) => b.count - a.count);
 }

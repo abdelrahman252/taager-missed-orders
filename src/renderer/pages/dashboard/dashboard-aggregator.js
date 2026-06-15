@@ -598,11 +598,23 @@
 
     if (mode === 'expected') {
       var expectedNdrRate = ndrBase > 0 ? (ndrDelivered / ndrBase) : 0;
-      summary.deliveredCount = Math.round(summary.totalOrders * expectedNdrRate);
-      summary.earnedCommission = totalPlacedCommission * expectedNdrRate;
-      summary.totalDeliveredSales = summary.totalSales * expectedNdrRate;
-      summary.incomingCommission = 0;
-      summary.lostCommission = totalPlacedCommission * (1 - expectedNdrRate);
+      var expectedSummary = dashboardFinancials({
+        mode: 'expected',
+        netOrders: summary.totalOrders,
+        actualDeliveredOrders: summary.deliveredCount,
+        actualEarnedProfitAfterTax: summary.earnedCommission,
+        actualDeliveredSales: summary.totalDeliveredSales,
+        currentTotalSales: summary.totalSales,
+        expectedNdrRate: expectedNdrRate,
+        adSpend: 0
+      });
+      summary.actualDeliveredCount = summary.deliveredCount;
+      summary.actualEarnedCommission = summary.earnedCommission;
+      summary.actualTotalDeliveredSales = summary.totalDeliveredSales;
+      summary.expectedDeliveriesExact = expectedSummary.expectedDeliveriesExact;
+      summary.deliveredCount = expectedSummary.expectedDeliveriesDisplay;
+      summary.earnedCommission = expectedSummary.expectedTotalProfitBeforeAdSpend;
+      summary.totalDeliveredSales = expectedSummary.expectedDeliveredSales;
     }
 
     summary.overallAov = summary.totalOrders > 0
@@ -671,6 +683,36 @@
   function roundMoney(value) {
     var n = Number(value || 0);
     return isFinite(n) ? parseFloat(n.toFixed(2)) : 0;
+  }
+
+  function dashboardFinancials(input) {
+    var core = window.TaagerDashboardFinancialCore;
+    if (core && typeof core.calculate === 'function') return core.calculate(input);
+    input = input || {};
+    var netOrders = Math.max(0, Number(input.netOrders) || 0);
+    var actualDelivered = Math.max(0, Number(input.actualDeliveredOrders) || 0);
+    var actualProfit = Number(input.actualEarnedProfitAfterTax) || 0;
+    var totalSales = Math.max(0, Number(input.currentTotalSales) || 0);
+    var ndr = Math.max(0, Math.min(1, Number(input.expectedNdrRate) || 0));
+    var spend = Math.max(0, Number(input.adSpend) || 0);
+    var averageProfit = actualDelivered > 0 ? actualProfit / actualDelivered : 0;
+    var exact = netOrders * ndr;
+    var profit = exact * averageProfit;
+    var sales = totalSales * ndr;
+    return {
+      averageProfit: averageProfit,
+      cpa: netOrders > 0 ? spend / netOrders : 0,
+      breakEvenCpa: averageProfit * ndr,
+      expectedDeliveriesExact: exact,
+      expectedDeliveriesDisplay: Math.round(exact),
+      expectedTotalProfitBeforeAdSpend: profit,
+      expectedNetProfit: profit - spend,
+      expectedDeliveredSales: sales,
+      expectedDeliveredCpa: exact > 0 ? spend / exact : 0,
+      expectedRoi: spend > 0 ? ((profit - spend) / spend) * 100 : 0,
+      expectedProfitRoas: spend > 0 ? profit / spend : 0,
+      expectedSalesRoas: spend > 0 ? sales / spend : 0
+    };
   }
 
   function isCodActiveBucket(bucket) {
@@ -2302,48 +2344,85 @@
       }
     });
 
-    var actualAvgCommission = deliveredCount > 0
-      ? parseFloat((earnedCommission / deliveredCount).toFixed(2))
-      : 0;
+    var actualAvgCommission = deliveredCount > 0 ? earnedCommission / deliveredCount : 0;
+    var actualDeliveredCount = deliveredCount;
+    var actualEarnedCommission = earnedCommission;
+    var actualTotalDeliveredSales = totalDeliveredSales;
+    var accountFinancials = null;
 
     if (meta.deliveredDateMode === 'expected') {
       var globalExpectedNdrRate = ndrBaseOrders > 0 ? (ndrDeliveredOrders / ndrBaseOrders) : 0;
       var globalExpectedDrRate = drBaseOrders > 0 ? (drDeliveredOrders / drBaseOrders) : 0;
-      
-      // Override global counts
-      deliveredCount = Math.round(placedCount * globalExpectedNdrRate);
-      earnedCommission = totalPlacedCommission * globalExpectedNdrRate;
-      totalDeliveredSales = totalSales * globalExpectedNdrRate;
-      
-      // Override dailyStats
-      dayKeys.forEach(function (key) {
-        var stat = dailyStats[key];
-        stat.earned = stat.placedCommission * globalExpectedNdrRate;
+      var financialCore = { calculate: dashboardFinancials };
+      accountFinancials = financialCore.calculate({
+        mode: 'expected',
+        netOrders: placedCount,
+        actualDeliveredOrders: actualDeliveredCount,
+        actualEarnedProfitAfterTax: actualEarnedCommission,
+        actualDeliveredSales: actualTotalDeliveredSales,
+        currentTotalSales: totalSales,
+        expectedNdrRate: globalExpectedNdrRate,
+        adSpend: roiAdSpend
       });
       
-      // Override cityStats
+      deliveredCount = accountFinancials.expectedDeliveriesDisplay;
+      earnedCommission = accountFinancials.expectedTotalProfitBeforeAdSpend;
+      totalDeliveredSales = accountFinancials.expectedDeliveredSales;
+      
+      dayKeys.forEach(function (key) {
+        var stat = dailyStats[key];
+        stat.actualEarned = stat.earned;
+        stat.expectedDeliveriesExact = stat.orders * globalExpectedNdrRate;
+        stat.earned = stat.expectedDeliveriesExact * actualAvgCommission;
+      });
+      
       Object.keys(cityStats).forEach(function (cityKey) {
         var cs = cityStats[cityKey];
         var cityExpectedNdrRate = cs.ndrBaseOrders > 0 ? (cs.ndrDeliveredOrders / cs.ndrBaseOrders) : globalExpectedNdrRate;
+        var cityFinancials = financialCore.calculate({
+          mode: 'expected',
+          netOrders: cs.count,
+          actualDeliveredOrders: cs.deliveredOrders,
+          actualEarnedProfitAfterTax: cs.earnedProfitAfterTax,
+          currentTotalSales: cs.totalRevenue,
+          expectedNdrRate: cityExpectedNdrRate,
+          adSpend: 0
+        });
         
-        cs.deliveredOrders = Math.round(cs.count * cityExpectedNdrRate);
-        cs.earnedProfitAfterTax = cs.totalPlacedCommission * cityExpectedNdrRate;
+        cs.actualDeliveredOrders = cs.deliveredOrders;
+        cs.actualEarnedProfitAfterTax = cs.earnedProfitAfterTax;
+        cs.expectedNdrRate = cityExpectedNdrRate;
+        cs.rateSource = cs.ndrBaseOrders > 0 ? 'city' : (ndrBaseOrders > 0 ? 'global_fallback' : 'insufficient_history');
+        cs.insufficientHistory = cs.ndrBaseOrders <= 0 && ndrBaseOrders <= 0;
+        cs.expectedDeliveriesExact = cityFinancials.expectedDeliveriesExact;
+        cs.expectedTotalProfitBeforeAdSpend = cityFinancials.expectedTotalProfitBeforeAdSpend;
+        cs.expectedDeliveredSales = cityFinancials.expectedDeliveredSales;
+        cs.deliveredOrders = cityFinancials.expectedDeliveriesDisplay;
+        cs.earnedProfitAfterTax = cityFinancials.expectedTotalProfitBeforeAdSpend;
         cs.earnedCommission = cs.earnedProfitAfterTax;
-        cs.collected = cs.due = cs.totalRevenue * cityExpectedNdrRate;
-        cs.gap = 0;
         
-        // Product map in city
         Object.keys(cs.productMap).forEach(function (cpKey) {
           var cp = cs.productMap[cpKey];
           var prod = productStats[cpKey];
           var prodExpectedNdrRate = (prod && prod.ndrBaseCount > 0) ? (prod.ndrDeliveredCount / prod.ndrBaseCount) : cityExpectedNdrRate;
-          
-          cp.delivered = Math.round(cp.orders * prodExpectedNdrRate);
-          cp.commission = cp.totalPlacedCommission * prodExpectedNdrRate;
+          var cpFinancials = financialCore.calculate({
+            mode: 'expected',
+            netOrders: cp.orders,
+            actualDeliveredOrders: cp.delivered,
+            actualEarnedProfitAfterTax: cp.commission,
+            currentTotalSales: cp.revenue,
+            expectedNdrRate: prodExpectedNdrRate,
+            adSpend: 0
+          });
+          cp.actualDelivered = cp.delivered;
+          cp.actualCommission = cp.commission;
+          cp.expectedDeliveriesExact = cpFinancials.expectedDeliveriesExact;
+          cp.expectedTotalProfitBeforeAdSpend = cpFinancials.expectedTotalProfitBeforeAdSpend;
+          cp.delivered = cpFinancials.expectedDeliveriesDisplay;
+          cp.commission = cpFinancials.expectedTotalProfitBeforeAdSpend;
         });
       });
       
-      // Override productStats
       Object.keys(productStats).forEach(function (prodKey) {
         var p = productStats[prodKey];
         var prodExpectedNdrRate = p.ndrBaseCount > 0 ? (p.ndrDeliveredCount / p.ndrBaseCount) : globalExpectedNdrRate;
@@ -2357,24 +2436,47 @@
         p.actualDeliveredSales = p.deliveredSales;
         p.actualNdrDeliveredCount = p.ndrDeliveredCount;
 
-        p.deliveredCount = boundedExpectedDeliveries(p.placedCount, prodExpectedNdrRate, prodKey);
-        p.commission = p.totalPlacedCommission * prodExpectedNdrRate;
-        p.deliveredSales = p.revenue * prodExpectedNdrRate;
+        var productFinancials = financialCore.calculate({
+          mode: 'expected',
+          netOrders: p.placedCount,
+          actualDeliveredOrders: p.actualDeliveredCount,
+          actualEarnedProfitAfterTax: p.actualCommission,
+          actualDeliveredSales: p.actualDeliveredSales,
+          currentTotalSales: p.revenue,
+          expectedNdrRate: prodExpectedNdrRate,
+          adSpend: 0
+        });
+        p.expectedDeliveriesExact = productFinancials.expectedDeliveriesExact;
+        p.expectedTotalProfitBeforeAdSpend = productFinancials.expectedTotalProfitBeforeAdSpend;
+        p.expectedDeliveredSales = productFinancials.expectedDeliveredSales;
+        p.deliveredCount = productFinancials.expectedDeliveriesDisplay;
+        p.commission = productFinancials.expectedTotalProfitBeforeAdSpend;
+        p.deliveredSales = productFinancials.expectedDeliveredSales;
         p.deliveredQty = Math.round(p.qty * prodExpectedNdrRate);
         
-        // City map in product
         Object.keys(p.cityMap).forEach(function (pcmKey) {
           var pcm = p.cityMap[pcmKey];
           var pcmExpectedNdrRate = pcm.ndrBaseOrders > 0 ? (pcm.delivered / pcm.ndrBaseOrders) : prodExpectedNdrRate;
-          
-          pcm.delivered = Math.round(pcm.orders * pcmExpectedNdrRate);
+          var pcmFinancials = financialCore.calculate({
+            mode: 'expected',
+            netOrders: pcm.orders,
+            actualDeliveredOrders: pcm.delivered,
+            actualEarnedProfitAfterTax: pcm.commission,
+            currentTotalSales: pcm.revenue,
+            expectedNdrRate: pcmExpectedNdrRate,
+            adSpend: 0
+          });
+          pcm.actualDelivered = pcm.delivered;
+          pcm.actualCommission = pcm.commission;
+          pcm.expectedDeliveriesExact = pcmFinancials.expectedDeliveriesExact;
+          pcm.expectedTotalProfitBeforeAdSpend = pcmFinancials.expectedTotalProfitBeforeAdSpend;
+          pcm.delivered = pcmFinancials.expectedDeliveriesDisplay;
           pcm.ndrDelivered = Math.round(pcm.ndrBaseOrders * pcmExpectedNdrRate);
-          pcm.commission = pcm.totalPlacedCommission * pcmExpectedNdrRate;
-          pcm.revenue = pcm.revenue * pcmExpectedNdrRate;
+          pcm.commission = pcmFinancials.expectedTotalProfitBeforeAdSpend;
+          pcm.revenue = pcmFinancials.expectedDeliveredSales;
         });
       });
       
-      // Override campaignProductStats
       Object.keys(campaignProductStats).forEach(function (cpKey) {
         var cp = campaignProductStats[cpKey];
         var cpExpectedNdrRate = cp.ndrBaseCount > 0 ? (cp.ndrDeliveredCount / cp.ndrBaseCount) : globalExpectedNdrRate;
@@ -2382,9 +2484,25 @@
         cp.expectedNdrRate = cpExpectedNdrRate;
         cp.expectedDrRate = cp.ndrConfirmedCount > 0 ? (cp.ndrDeliveredCount / cp.ndrConfirmedCount) : globalExpectedDrRate;
         cp.rateUsesGlobalFallback = cp.ndrBaseCount <= 0 || cp.ndrConfirmedCount <= 0;
-        cp.deliveredCount = boundedExpectedDeliveries(cp.placedCount, cpExpectedNdrRate, cpKey);
-        cp.commission = cp.totalPlacedCommission * cpExpectedNdrRate;
-        cp.deliveredSales = cp.totalPlacedSales * cpExpectedNdrRate;
+        cp.actualDeliveredCount = cp.deliveredCount;
+        cp.actualCommission = cp.commission;
+        cp.actualDeliveredSales = cp.deliveredSales;
+        var campaignFinancials = financialCore.calculate({
+          mode: 'expected',
+          netOrders: cp.placedCount,
+          actualDeliveredOrders: cp.actualDeliveredCount,
+          actualEarnedProfitAfterTax: cp.actualCommission,
+          actualDeliveredSales: cp.actualDeliveredSales,
+          currentTotalSales: cp.totalPlacedSales,
+          expectedNdrRate: cpExpectedNdrRate,
+          adSpend: 0
+        });
+        cp.expectedDeliveriesExact = campaignFinancials.expectedDeliveriesExact;
+        cp.expectedTotalProfitBeforeAdSpend = campaignFinancials.expectedTotalProfitBeforeAdSpend;
+        cp.expectedDeliveredSales = campaignFinancials.expectedDeliveredSales;
+        cp.deliveredCount = campaignFinancials.expectedDeliveriesDisplay;
+        cp.commission = campaignFinancials.expectedTotalProfitBeforeAdSpend;
+        cp.deliveredSales = campaignFinancials.expectedDeliveredSales;
       });
     }
 
@@ -2416,10 +2534,18 @@
       }
     });
 
-    var totalCommissionAll = earnedCommission + incomingCommission + lostCommission || 1;
-    var healthEarnedPct   = parseFloat(((earnedCommission   / totalCommissionAll) * 100).toFixed(1));
-    var healthIncomingPct = parseFloat(((incomingCommission / totalCommissionAll) * 100).toFixed(1));
-    var healthLostPct     = parseFloat((Math.max(0, 100 - healthEarnedPct - healthIncomingPct)).toFixed(1));
+    var totalCommissionAll = meta.deliveredDateMode === 'expected'
+      ? (earnedCommission || 1)
+      : (earnedCommission + incomingCommission + lostCommission || 1);
+    var healthEarnedPct = meta.deliveredDateMode === 'expected'
+      ? (earnedCommission ? 100 : 0)
+      : parseFloat(((earnedCommission / totalCommissionAll) * 100).toFixed(1));
+    var healthIncomingPct = meta.deliveredDateMode === 'expected'
+      ? 0
+      : parseFloat(((incomingCommission / totalCommissionAll) * 100).toFixed(1));
+    var healthLostPct = meta.deliveredDateMode === 'expected'
+      ? 0
+      : parseFloat((Math.max(0, 100 - healthEarnedPct - healthIncomingPct)).toFixed(1));
     var collectedSar = collected;
     // COD collection should describe money that can still be collected from
     // active pipeline orders. Failed/lost orders are tracked separately and
@@ -2437,15 +2563,24 @@
       : 0;
 
     var overallAov = placedCount > 0 ? parseFloat((totalSales / placedCount).toFixed(2)) : 0;
-    var deliveredAov = deliveredCount > 0 ? parseFloat((totalDeliveredSales / deliveredCount).toFixed(2)) : 0;
+    var deliveredAovBase = meta.deliveredDateMode === 'expected' && accountFinancials
+      ? accountFinancials.expectedDeliveriesExact
+      : deliveredCount;
+    var deliveredAov = deliveredAovBase > 0 ? parseFloat((totalDeliveredSales / deliveredAovBase).toFixed(2)) : 0;
 
     var sortedCities = Object.keys(cityStats).map(function (keyName) {
       var stat = cityStats[keyName];
       var displayName = stat.name || keyName;
       // T-09/T-10: Compute derived rates from extended fields
-      var cityNdrBase = stat.ndrBaseOrders || stat.count;
-      var cityNdrDelivered = stat.ndrDeliveredOrders != null ? stat.ndrDeliveredOrders : stat.deliveredOrders;
-      var ndrPctCity = netDeliveryRatePct(cityNdrDelivered, cityNdrBase);
+      var cityNdrBase = meta.deliveredDateMode === 'expected'
+        ? (stat.ndrBaseOrders > 0 ? stat.ndrBaseOrders : ndrBaseOrders)
+        : (stat.ndrBaseOrders || stat.count);
+      var cityNdrDelivered = meta.deliveredDateMode === 'expected' && stat.ndrBaseOrders <= 0
+        ? ndrDeliveredOrders
+        : (stat.ndrDeliveredOrders != null ? stat.ndrDeliveredOrders : stat.deliveredOrders);
+      var ndrPctCity = meta.deliveredDateMode === 'expected' && stat.expectedNdrRate !== undefined
+        ? parseFloat((stat.expectedNdrRate * 100).toFixed(1))
+        : netDeliveryRatePct(cityNdrDelivered, cityNdrBase);
       var drPctCity = stat.drBaseOrders > 0
         ? parseFloat(((stat.drDeliveredOrders / stat.drBaseOrders) * 100).toFixed(1))
         : 0;
@@ -2477,8 +2612,10 @@
       stat.codPct = codPctCity;
       stat.avgOrderValue = avgOrderValue;
       stat.netOrderCount = stat.count;
-      stat.averageProfit = stat.deliveredOrders > 0
-        ? parseFloat(((stat.earnedProfitAfterTax || 0) / stat.deliveredOrders).toFixed(2))
+      var cityAverageDelivered = stat.actualDeliveredOrders !== undefined ? stat.actualDeliveredOrders : stat.deliveredOrders;
+      var cityAverageProfit = stat.actualEarnedProfitAfterTax !== undefined ? stat.actualEarnedProfitAfterTax : stat.earnedProfitAfterTax;
+      stat.averageProfit = cityAverageDelivered > 0
+        ? parseFloat(((cityAverageProfit || 0) / cityAverageDelivered).toFixed(2))
         : 0;
       stat.avgDeliveryDays = avgDeliveryDays;
       stat.deliveryDurationOrders = stat.deliveryDays.length;
@@ -2523,6 +2660,11 @@
         totalRevenue: stat.totalRevenue, avgOrderValue: avgOrderValue,
         earnedProfitAfterTax: stat.earnedProfitAfterTax != null ? stat.earnedProfitAfterTax : stat.earnedCommission,
         earnedCommission: stat.earnedProfitAfterTax != null ? stat.earnedProfitAfterTax : stat.earnedCommission,
+        actualDeliveredOrders: stat.actualDeliveredOrders !== undefined ? stat.actualDeliveredOrders : stat.deliveredOrders,
+        actualEarnedProfitAfterTax: stat.actualEarnedProfitAfterTax !== undefined ? stat.actualEarnedProfitAfterTax : stat.earnedProfitAfterTax,
+        expectedDeliveriesExact: stat.expectedDeliveriesExact !== undefined ? stat.expectedDeliveriesExact : stat.deliveredOrders,
+        expectedTotalProfitBeforeAdSpend: stat.expectedTotalProfitBeforeAdSpend !== undefined ? stat.expectedTotalProfitBeforeAdSpend : stat.earnedProfitAfterTax,
+        expectedDeliveredSales: stat.expectedDeliveredSales !== undefined ? stat.expectedDeliveredSales : 0,
         averageProfit: stat.averageProfit,
         incomingCommission: stat.incomingCommission,
         lostCommission: stat.lostCommission,
@@ -2531,6 +2673,9 @@
         confirmedCount: stat.confirmedCount, processingCount: stat.processingCount,
         confirmationPct: stat.confirmationPct,
         ndrPct: ndrPctCity, drPct: drPctCity,
+        expectedNdrRate: stat.expectedNdrRate !== undefined ? stat.expectedNdrRate : (cityNdrBase > 0 ? cityNdrDelivered / cityNdrBase : 0),
+        rateSource: stat.rateSource || 'actual',
+        insufficientHistory: !!stat.insufficientHistory,
         avgDeliveryDays: avgDeliveryDays, deliveryDurationOrders: stat.deliveryDays.length,
         // T-10: Prepaid/COD
         prepaidCount: stat.prepaidCount, codCount: stat.codCount,
@@ -2576,7 +2721,9 @@
     var nationalPrepaidPct = placedCount > 0
       ? parseFloat((totalPrepaidCount / placedCount).toFixed(4))
       : 0;
-    var taagerProfitAfterTax = earnedCommission + incomingCommission + lostCommission;
+    var taagerProfitAfterTax = meta.deliveredDateMode === 'expected'
+      ? earnedCommission
+      : earnedCommission + incomingCommission + lostCommission;
     var avgCommission = actualAvgCommission;
 
     var nationalAverages = {
@@ -2621,8 +2768,9 @@
       var productDrDelivered = productUsesGlobalDr ? drDeliveredOrders : (expectedRateMode ? p.ndrDeliveredCount : p.deliveredCount);
       var ndrPct = boundedProductRatePct(productNdrDelivered, productNdrBase, key + ':ndr');
       var deliveryPct = boundedProductRatePct(p.deliveredCount, p.placedCount, key + ':display-delivery');
-      var productDeliveredAov = p.deliveredCount > 0
-        ? parseFloat((p.deliveredSales / p.deliveredCount).toFixed(2))
+      var productDeliveredAovBase = p.expectedDeliveriesExact !== undefined ? p.expectedDeliveriesExact : p.deliveredCount;
+      var productDeliveredAov = productDeliveredAovBase > 0
+        ? parseFloat((p.deliveredSales / productDeliveredAovBase).toFixed(2))
         : 0;
 
       var activeTotal = confirmationBase;
@@ -2785,12 +2933,17 @@
         actualCommission: p.actualCommission !== undefined ? p.actualCommission : p.commission,
         actualDeliveredQty: p.actualDeliveredQty !== undefined ? p.actualDeliveredQty : p.deliveredQty,
         actualDeliveredSales: p.actualDeliveredSales !== undefined ? p.actualDeliveredSales : p.deliveredSales,
+        expectedDeliveriesExact: p.expectedDeliveriesExact !== undefined ? p.expectedDeliveriesExact : p.deliveredCount,
+        expectedTotalProfitBeforeAdSpend: p.expectedTotalProfitBeforeAdSpend !== undefined ? p.expectedTotalProfitBeforeAdSpend : p.commission,
+        expectedDeliveredSales: p.expectedDeliveredSales !== undefined ? p.expectedDeliveredSales : p.deliveredSales,
+        expectedNdrRate: p.expectedNdrRate !== undefined ? p.expectedNdrRate : (productNdrBase > 0 ? productNdrDelivered / productNdrBase : 0),
         ndrBaseOrders: productNdrBase,
         ndrDeliveredOrders: productNdrDelivered,
         drBaseOrders: activeTotal,
         drDeliveredOrders: productDrDelivered,
         rateMode: meta.deliveredDateMode === 'expected' ? 'historical_cohort' : 'actual',
-        rateSource: productUsesGlobalNdr || productUsesGlobalDr ? 'global_fallback' : 'product',
+        rateSource: productUsesGlobalNdr && ndrBaseOrders <= 0 ? 'insufficient_history' : (productUsesGlobalNdr || productUsesGlobalDr ? 'global_fallback' : 'product'),
+        insufficientHistory: productUsesGlobalNdr && ndrBaseOrders <= 0,
         deliveryRate: deliveryPct,
         drRate: drPct,
         totalPieces:      p.qty,
@@ -2821,25 +2974,6 @@
       return (b.deliveredCount - a.deliveredCount) || (b.commission - a.commission) || String(a.key || '').localeCompare(String(b.key || ''));
     });
 
-    // DEBUG: verify all counters are correct for top 3 products
-    console.log('[Dashboard][products] Counter check for top 3:');
-    rankedProducts.slice(0, 3).forEach(function (p, i) {
-      console.log('[#' + (i + 1) + '] ' + p.name, {
-        placed: p.placedCount,
-        delivered: p.deliveredCount,
-        canceled: p.canceledCount,
-        confirmed: p.confirmedCount,
-        shipping: p.shippingCount,
-        processing: p.processingCount,
-        waiting: p.waitingCount,
-        pending: p.pendingCount,
-        confirmationPct: p.confirmationPct,
-        cancelPct: p.cancelPct,
-        ndrPct: p.ndrPct,
-        deliveryPct: p.deliveryPct
-      });
-    });
-
     var productsWithEmojis = rankedProducts.map(function (p, idx) {
       return Object.assign({}, p, { rank: idx + 1, emoji: '📦' });
     });
@@ -2866,6 +3000,13 @@
         orders: p.placedCount,
         netOrderCount: p.placedCount,
         delivered: p.deliveredCount,
+        actualDeliveredCount: p.actualDeliveredCount !== undefined ? p.actualDeliveredCount : p.deliveredCount,
+        actualCommission: p.actualCommission !== undefined ? p.actualCommission : p.commission,
+        actualDeliveredSales: p.actualDeliveredSales !== undefined ? p.actualDeliveredSales : p.deliveredSales,
+        expectedDeliveriesExact: p.expectedDeliveriesExact !== undefined ? p.expectedDeliveriesExact : p.deliveredCount,
+        expectedTotalProfitBeforeAdSpend: p.expectedTotalProfitBeforeAdSpend !== undefined ? p.expectedTotalProfitBeforeAdSpend : p.commission,
+        expectedDeliveredSales: p.expectedDeliveredSales !== undefined ? p.expectedDeliveredSales : p.deliveredSales,
+        expectedNdrRate: p.expectedNdrRate !== undefined ? p.expectedNdrRate : (ndrBase > 0 ? ndrDelivered / ndrBase : 0),
         confirmationPct: campaignStatusRates.confirmationPct,
         cancelPct: campaignStatusRates.cancelPct,
         pendingPct: campaignStatusRates.pendingPct,
@@ -2876,7 +3017,8 @@
         drBaseOrders: confirmed,
         drDeliveredOrders: campaignDrDelivered,
         rateMode: meta.deliveredDateMode === 'expected' ? 'historical_cohort' : 'actual',
-        rateSource: campaignUsesGlobalNdr || campaignUsesGlobalDr ? 'global_fallback' : 'product'
+        rateSource: campaignUsesGlobalNdr && ndrBaseOrders <= 0 ? 'insufficient_history' : (campaignUsesGlobalNdr || campaignUsesGlobalDr ? 'global_fallback' : 'product'),
+        insufficientHistory: campaignUsesGlobalNdr && ndrBaseOrders <= 0
       });
     }).sort(function (a, b) {
       return (b.placedCount - a.placedCount) || (b.commission - a.commission) || String(a.key || '').localeCompare(String(b.key || ''));
@@ -3021,6 +3163,16 @@
     var previousDeliveredSalesInRoiCurrency = convertDashboardCurrency(previousOverview.totalDeliveredSales, meta.reportingCurrency || meta.activeCurrency || 'SAR', roiCurrency, roiEgpRate, meta.exchangeRates);
     var netRoas = roiAdSpend > 0 ? parseFloat((deliveredSalesInRoiCurrency / roiAdSpend).toFixed(4)) : 0;
     var previousNetRoas = roiAdSpend > 0 ? parseFloat((previousDeliveredSalesInRoiCurrency / roiAdSpend).toFixed(4)) : 0;
+    accountFinancials = dashboardFinancials({
+      mode: meta.deliveredDateMode === 'expected' ? 'expected' : 'actual',
+      netOrders: placedCount,
+      actualDeliveredOrders: actualDeliveredCount,
+      actualEarnedProfitAfterTax: actualEarnedCommission,
+      actualDeliveredSales: actualTotalDeliveredSales,
+      currentTotalSales: totalSales,
+      expectedNdrRate: meta.deliveredDateMode === 'expected' ? globalExpectedNdrRate : (ndrPct / 100),
+      adSpend: roiAdSpend
+    });
     // Taager dashboard/status/NDR migration: dashboard rows are created-date based.
     var createdOrders = filterCreatedOrders(displayRows, meta.period);
     var outcomeOrders = filterOutcomeOrders(displayRows, meta.period, meta.deliveredDateMode || 'actual');
@@ -3037,6 +3189,9 @@
       meta: meta,
       overview: {
         earnedCommission:   { value: earnedCommission,   delta: calcDelta(earnedCommission, previousOverview.earnedCommission),        unit: meta.activeCurrency || 'SAR', color: 'green'  },
+        actualEarnedCommission: { value: actualEarnedCommission, unit: meta.activeCurrency || 'SAR', color: 'green' },
+        expectedTotalProfitBeforeAdSpend: { value: accountFinancials.expectedTotalProfitBeforeAdSpend, unit: meta.activeCurrency || 'SAR', color: 'green' },
+        expectedNetProfit: { value: accountFinancials.expectedNetProfit, unit: roiCurrency, color: accountFinancials.expectedNetProfit >= 0 ? 'green' : 'red' },
         incomingCommission: { value: incomingCommission, delta: calcDelta(incomingCommission, previousOverview.incomingCommission),    unit: meta.activeCurrency || 'SAR', color: 'orange' },
         lostCommission:     { value: lostCommission,     delta: calcDelta(lostCommission, previousOverview.lostCommission),            unit: meta.activeCurrency || 'SAR', color: 'red'    },
         totalOrders:        { value: placedCount, netOrderCount: placedCount, totalOrderCount: rawTotalOrders, rawValue: rawTotalOrders, canceledByYou: canceledByYouCount, delta: calcDelta(placedCount, previousOverview.totalOrders), unit: raw('طلب'), color: 'blue' },
@@ -3174,8 +3329,19 @@
         averageProfit: avgCommission, avgCommission: avgCommission,
         taagerProfitAfterTax: taagerProfitAfterTax,
         deliveredCount: deliveredCount, totalDeliveredSales: totalDeliveredSales,
+        actualDeliveredCount: actualDeliveredCount, actualEarnedProfitAfterTax: actualEarnedCommission, actualDeliveredSales: actualTotalDeliveredSales,
+        expectedDeliveriesExact: accountFinancials.expectedDeliveriesExact,
+        expectedDeliveriesDisplay: accountFinancials.expectedDeliveriesDisplay,
+        expectedTotalProfitBeforeAdSpend: accountFinancials.expectedTotalProfitBeforeAdSpend,
+        expectedNetProfit: accountFinancials.expectedNetProfit,
+        expectedDeliveredSales: accountFinancials.expectedDeliveredSales,
+        expectedDeliveredCpa: accountFinancials.expectedDeliveredCpa,
+        breakEvenCpa: accountFinancials.breakEvenCpa,
+        expectedRoi: accountFinancials.expectedRoi,
+        expectedProfitRoas: accountFinancials.expectedProfitRoas,
+        expectedSalesRoas: accountFinancials.expectedSalesRoas,
         netRoas: netRoas,
-        avgCPA: placedCount > 0 ? parseFloat((roiAdSpend / placedCount).toFixed(2)) : 0
+        avgCPA: accountFinancials.cpa
       },
 
       // ── T-18: GEO Intelligence layer ────────────────────────────────────────

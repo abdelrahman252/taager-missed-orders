@@ -853,6 +853,46 @@ select.ops-field-sm option {
   --danger: #ef4444;
 }
 
+[data-theme="light"] .ops-order-details-panel,
+[data-theme="light"] .ops-monitor-card,
+[data-theme="light"] .ops-perf-card,
+[data-theme="light"] .ops-insights-card,
+[data-theme="light"] .ops-product-card,
+[data-theme="light"] .ops-history-card {
+  background: var(--bg2);
+  border-color: var(--border);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+[data-theme="light"] .ops-order-details-panel:hover,
+[data-theme="light"] .ops-monitor-card:hover,
+[data-theme="light"] .ops-perf-card:hover,
+[data-theme="light"] .ops-insights-card:hover,
+[data-theme="light"] .ops-product-card:hover,
+[data-theme="light"] .ops-history-card:hover {
+  border-color: rgba(79,142,247,.22);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="light"] .ops-counter-block,
+[data-theme="light"] .ops-current-order-box,
+[data-theme="light"] .ops-feed-item,
+[data-theme="light"] .ops-history-row,
+[data-theme="light"] .ops-perf-row {
+  background: var(--bg3);
+  border-color: var(--border);
+}
+
+[data-theme="light"] .ops-insight-row {
+  background: var(--bg3);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+[data-theme="light"] .ops-insight-icon-col {
+  background: rgba(79,142,247,.08);
+}
+
 [data-theme="light"] .ops-insight-action {
   color: var(--text);
   background: var(--bg2);
@@ -867,8 +907,35 @@ select.ops-field-sm option {
   color: #1e2535;
 }
 
+[data-theme="light"] .ops-field,
+[data-theme="light"] .ops-field-sm,
+[data-theme="light"] .ops-cs-trigger,
+[data-theme="light"] .ops-cs-search-wrap input {
+  background: var(--bg2);
+  border-color: var(--border);
+  color: var(--text);
+  box-shadow: none;
+}
+
+[data-theme="light"] .ops-field::placeholder,
+[data-theme="light"] .ops-field-sm::placeholder,
+[data-theme="light"] .ops-cs-search-wrap input::placeholder {
+  color: var(--text3);
+}
+
+[data-theme="light"] .ops-cs-trigger:hover,
+[data-theme="light"] .ops-cs-trigger:focus-within,
+[data-theme="light"] .ops-field:focus,
+[data-theme="light"] .ops-field-sm:focus,
+[data-theme="light"] .ops-cs-search-wrap input:focus {
+  border-color: rgba(79,142,247,.48);
+  background: #ffffff;
+}
+
 [data-theme="light"] .ops-cs-menu {
   background: var(--bg2);
+  border-color: var(--border);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.12);
 }
 
 [data-theme="light"] .ops-cs-search-wrap {
@@ -882,7 +949,7 @@ select.ops-field-sm option {
 
 [data-theme="light"] .ops-cs-option.selected {
   background: rgba(79,142,247,.1);
-  color: var(--accent);
+  color: #1d4ed8;
 }
 
 [data-theme="light"] .ops-history-row.active {
@@ -941,4 +1008,233 @@ select.ops-field-sm option {
 .ops-grid > * {
   content-visibility: auto;
   contain-intrinsic-size: auto 240px;
+}
+
+/* Small-laptop hardening: operations page. */
+@media (max-width: 1399px) {
+  #page-operations {
+    font-size: 12px;
+  }
+
+  #page-operations .sv3-sidebar {
+    width: 176px;
+    min-width: 176px;
+    padding-block: 18px 14px;
+  }
+
+  #page-operations .sv3-sb-logo {
+    padding: 0 14px 16px;
+    margin-bottom: 8px;
+  }
+
+  #page-operations .sv3-nav-item {
+    gap: 8px;
+    padding: 9px 14px;
+    font-size: 12px;
+  }
+
+  #page-operations .sv3-sidebar-footer {
+    padding: 12px 14px 0;
+  }
+
+  .ops-page {
+    padding: 18px !important;
+  }
+
+  .ops-account-tabs {
+    justify-content: flex-start;
+  }
+
+  .ops-account-filter {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .ops-account-select-wrap {
+    min-width: 0;
+    width: min(360px, 100%);
+  }
+
+  .ops-account-select-wrap .custom-select-dropdown {
+    min-width: min(300px, 100%);
+  }
+
+  .ops-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  #ops-order-details-panel,
+  #ops-monitor-mount,
+  #ops-product-mount,
+  #ops-history-mount {
+    grid-column: 1 / 3;
+    grid-row: auto;
+  }
+
+  #ops-perf-mount {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  #ops-insights-mount {
+    grid-column: 2;
+    grid-row: auto;
+  }
+
+  .ops-order-details-panel,
+  .ops-monitor-card,
+  .ops-perf-card,
+  .ops-insights-card,
+  .ops-product-card,
+  .ops-history-card {
+    min-width: 0;
+    padding: 14px;
+    gap: 10px;
+  }
+
+  .ops-section-title,
+  .ops-od-topbar-title,
+  .ops-insights-title {
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  .ops-od-body {
+    min-width: 0;
+  }
+
+  .ops-od-left-nav {
+    width: 120px;
+  }
+
+  .ops-od-nav-item {
+    gap: 6px;
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+
+  .ops-od-right {
+    padding: 12px;
+  }
+
+  .ops-od-meta-row,
+  .ops-monitor-stat-grid,
+  .ops-counter-grid {
+    gap: 7px;
+  }
+
+  .ops-od-field-label {
+    width: 104px;
+  }
+
+  .ops-counter-val {
+    font-size: 17px;
+  }
+
+  .ops-monitor-stat-value,
+  .ops-current-order-num {
+    font-size: 13px;
+  }
+
+  .ops-feed-row {
+    grid-template-columns: 44px minmax(0, 1fr) 14px;
+  }
+
+  .ops-product-header,
+  .ops-history-topbar {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .ops-product-header-right {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .ops-product-search-wrap {
+    min-width: 0;
+    width: min(260px, 100%);
+  }
+
+  .ops-product-account-select {
+    min-width: 0;
+    width: min(280px, 100%);
+  }
+
+  .ops-product-account-select .custom-select-dropdown {
+    min-width: min(280px, 100%);
+  }
+
+  .ops-product-table-wrap {
+    overflow-x: auto;
+  }
+
+  .ops-product-table {
+    min-width: 680px;
+    font-size: 11px;
+  }
+
+  .ops-product-table th,
+  .ops-product-table td {
+    padding: 7px 8px;
+  }
+
+  .ops-product-name-cell {
+    max-width: 260px;
+  }
+
+  .ops-history-row {
+    gap: 8px;
+  }
+
+  .ops-history-row-meta {
+    white-space: normal;
+  }
+
+  .ops-history-pagination,
+  .ops-insights-pagination {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 1180px) {
+  #page-operations .sv3-sidebar {
+    width: 58px;
+    min-width: 58px;
+    padding: 16px 0;
+  }
+
+  #page-operations .sv3-sb-logo {
+    justify-content: center;
+    padding: 0 0 14px;
+  }
+
+  #page-operations .sv3-sb-logo > div:last-child,
+  #page-operations .sv3-nav-label,
+  #page-operations .sv3-nav-lock-icon,
+  #page-operations .sv3-sidebar-footer {
+    display: none !important;
+  }
+
+  #page-operations .sv3-nav-item {
+    justify-content: center;
+    padding: 10px 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .ops-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #ops-order-details-panel,
+  #ops-monitor-mount,
+  #ops-perf-mount,
+  #ops-insights-mount,
+  #ops-product-mount,
+  #ops-history-mount {
+    grid-column: 1;
+  }
 }

@@ -159,6 +159,9 @@ window.renderSection7 = function (mountEl, data, ctx) {
     d.deliveredCount != null && !(window.isExpectedNdrMode && window.isExpectedNdrMode())
       ? Number(d.deliveredCount || 0)
       : Math.round((realNdrPct / 100) * realTotalOrders);
+  var realExpectedDvlExact = d.expectedDeliveriesExact != null
+    ? Number(d.expectedDeliveriesExact || 0)
+    : (realNdrPct / 100) * realTotalOrders;
 
   // -- 2. State ----------------------------------------------------------------
   var nativeCurrency = window.dashboardActiveCurrency || (d && d.currency) || "SAR";
@@ -722,7 +725,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     var actualDelivered = d.deliveredCount != null ? Number(d.deliveredCount) : 0;
     if (window.isExpectedNdrMode && window.isExpectedNdrMode()) {
       if (actualDelivered > 0) {
-        deliveredSalesSAR = deliveredSalesSAR * (realExpectedDvl / actualDelivered);
+        deliveredSalesSAR = deliveredSalesSAR * (realExpectedDvlExact / actualDelivered);
       } else {
         var totalSales = (ctx && ctx.data && ctx.data.overview && ctx.data.overview.totalSales && ctx.data.overview.totalSales.value != null)
           ? Number(ctx.data.overview.totalSales.value)
@@ -731,7 +734,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       }
     }
 
-    var revSAR = realAvgCommission * realExpectedDvl;
+    var revSAR = realAvgCommission * realExpectedDvlExact;
     var netSAR = revSAR - spendSAR;
     var roi = spendSAR > 0 ? (netSAR / spendSAR) * 100 : 0;
     var returnPerSar = spendSAR > 0 ? revSAR / spendSAR : 0;
@@ -758,15 +761,22 @@ window.renderSection7 = function (mountEl, data, ctx) {
 
   function computeProjection(budgetSAR, cpaSAR) {
     var projOrders = cpaSAR > 0 ? budgetSAR / cpaSAR : 0;
-    var projDvl = Math.round((realNdrPct / 100) * projOrders);
-    var projRevSAR = projDvl * realAvgCommission;
-    var projNetSAR = projRevSAR - budgetSAR;
-    var projRoi = budgetSAR > 0 ? (projNetSAR / budgetSAR) * 100 : 0;
+    var projection = window.TaagerDashboardFinancialCore.calculate({
+      mode: "expected",
+      netOrders: projOrders,
+      actualDeliveredOrders: 1,
+      actualEarnedProfitAfterTax: realAvgCommission,
+      currentTotalSales: 0,
+      expectedNdrRate: realNdrPct / 100,
+      adSpend: budgetSAR,
+    });
     return {
       orders: projOrders,
-      revenue: projRevSAR,
-      net: projNetSAR,
-      roi: projRoi,
+      deliveredOrders: projection.expectedDeliveriesDisplay,
+      expectedDeliveriesExact: projection.expectedDeliveriesExact,
+      revenue: projection.expectedTotalProfitBeforeAdSpend,
+      net: projection.expectedNetProfit,
+      roi: projection.expectedRoi,
     };
   }
 
@@ -776,31 +786,51 @@ window.renderSection7 = function (mountEl, data, ctx) {
   }
   function computeSim() {
     var s = simState;
-    var deliveredOrders = Math.round(s.totalOrders * s.ndr);
-    var revenue = deliveredOrders * s.avgCommission;
-    var netProfit = revenue - s.adSpend;
-    var roi = s.adSpend > 0 ? (netProfit / s.adSpend) * 100 : 0;
-    var cpa = s.totalOrders > 0 ? s.adSpend / s.totalOrders : 0;
-    var returnPerSar = s.adSpend > 0 ? revenue / s.adSpend : 0;
-    var revenuePerDel = deliveredOrders > 0 ? revenue / deliveredOrders : 0;
+    var calculation = window.TaagerDashboardFinancialCore.calculate({
+      mode: "expected",
+      netOrders: s.totalOrders,
+      actualDeliveredOrders: 1,
+      actualEarnedProfitAfterTax: s.avgCommission,
+      currentTotalSales: 0,
+      expectedNdrRate: s.ndr,
+      adSpend: s.adSpend,
+    });
+    var deliveredOrders = calculation.expectedDeliveriesDisplay;
+    var expectedDeliveriesExact = calculation.expectedDeliveriesExact;
+    var revenue = calculation.expectedTotalProfitBeforeAdSpend;
+    var netProfit = calculation.expectedNetProfit;
+    var roi = calculation.expectedRoi;
+    var cpa = calculation.cpa;
+    var returnPerSar = calculation.expectedProfitRoas;
+    var revenuePerDel = calculation.averageProfit;
     var ndrRequired =
       s.totalOrders > 0 && s.avgCommission > 0
         ? s.adSpend / (s.totalOrders * s.avgCommission)
         : null;
-    var commRequired = deliveredOrders > 0 ? s.adSpend / deliveredOrders : null;
+    var commRequired = expectedDeliveriesExact > 0 ? s.adSpend / expectedDeliveriesExact : null;
     var delivRequired =
       s.avgCommission > 0 ? Math.ceil(s.adSpend / s.avgCommission) : null;
 
     // Projected scenario at 2× budget
     var projBudget = s.adSpend * 2;
     var projOrders = cpa > 0 ? Math.round(projBudget / cpa) : 0;
-    var projDelivered = Math.round(projOrders * s.ndr);
-    var projRevenue = projDelivered * s.avgCommission;
-    var projNet = projRevenue - projBudget;
-    var projRoi = projBudget > 0 ? (projNet / projBudget) * 100 : 0;
+    var projected = window.TaagerDashboardFinancialCore.calculate({
+      mode: "expected",
+      netOrders: projOrders,
+      actualDeliveredOrders: 1,
+      actualEarnedProfitAfterTax: s.avgCommission,
+      currentTotalSales: 0,
+      expectedNdrRate: s.ndr,
+      adSpend: projBudget,
+    });
+    var projDelivered = projected.expectedDeliveriesDisplay;
+    var projRevenue = projected.expectedTotalProfitBeforeAdSpend;
+    var projNet = projected.expectedNetProfit;
+    var projRoi = projected.expectedRoi;
 
     return {
       deliveredOrders,
+      expectedDeliveriesExact,
       revenue,
       netProfit,
       roi,
@@ -1367,7 +1397,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
           "Total expected income from delivered orders multiplied by the average profit per delivered order.",
           "?????? ????? ??????? ?? ??????? ??????? ?????? ?? ????? ??? ????.",
         ),
-        "revenue = deliveredOrders * taagerProfitPerDeliveredOrder",
+        "totalProfitBeforeAdSpend = expectedDeliveriesExact * averageProfitPerDeliveredOrder",
         "??",
       ) +
       card(
@@ -2966,16 +2996,16 @@ window.renderSection7 = function (mountEl, data, ctx) {
       state.viewCurrency +
       "</div></div>" +
       '<div class="s7-card"><div style="font-size:12px;color:#3b82f6;font-weight:700;display:flex;align-items:center;gap:5px">' +
-      s7Txt("Total Revenue", "?????? ?????????") +
+      s7Txt("Total Profit Before Ad Spend", "?????? ????? ??? ???????") +
       " " +
       _tip(
         "??",
-        s7Txt("Total Revenue", "?????? ?????????"),
+        s7Txt("Total Profit Before Ad Spend", "?????? ????? ??? ???????"),
         s7Txt(
-          "Expected income from delivered orders multiplied by the editable Taager profit per delivered order assumption.",
+          "Expected delivered orders multiplied by the editable average profit per delivered order.",
           "????? ??????? ?? ??????? ??????? × ????? ??? ????.",
         ),
-        "revenue = deliveredOrders * taagerProfitPerDeliveredOrder",
+        "totalProfitBeforeAdSpend = expectedDeliveriesExact * averageProfitPerDeliveredOrder",
       ) +
       '</div><div style="display:flex;align-items:center;gap:8px;font-size:22px;font-weight:900"><span style="color:#3b82f6">??</span><span id="s7-out-revenue">--</span></div><div class="s7-curr-lbl" style="font-size:10px;color:' +
       (document.documentElement.getAttribute("data-theme") === "light"

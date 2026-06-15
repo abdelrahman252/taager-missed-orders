@@ -104,6 +104,11 @@ contextBridge.exposeInMainWorld("api", {
   minimize: () => ipcRenderer.send("window-minimize"),
   maximize: () => ipcRenderer.send("window-maximize"),
   close:    () => ipcRenderer.send("window-close"),
+  getAppZoom:      () => monitoredInvoke("get-app-zoom"),
+  increaseAppZoom: () => ipcRenderer.send("increase-app-zoom"),
+  decreaseAppZoom: () => ipcRenderer.send("decrease-app-zoom"),
+  resetAppZoom:    () => ipcRenderer.send("reset-app-zoom"),
+  onAppZoomChanged: (cb) => ipcRenderer.on("app-zoom-changed", (_, percent) => cb(percent)),
 
   // License
   checkLicense:        () => monitoredInvoke("check-license"),
@@ -133,6 +138,7 @@ contextBridge.exposeInMainWorld("api", {
 
   // Bot
   runBot:          (params) => monitoredInvoke("run-bot", params),
+  completeGoogleLogin: (requestId) => monitoredInvoke("complete-google-login", requestId),
   botStarted:      () => ipcRenderer.send("bot-started"),
   botFinished:     () => ipcRenderer.send("bot-finished"),
   onBotLog:        (cb) => ipcRenderer.on("bot-log",           (_, msg)  => cb(msg)),

@@ -50,6 +50,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       : (p.netOrderCount !== undefined ? p.netOrderCount : (p.placedCount || 0));
     var delivered = p.deliveredCount || p.units || 0;
     var realNdr   = orders > 0 ? (delivered / orders) : 0;
+    var expectedDeliveriesExact = p.expectedDeliveriesExact != null ? Number(p.expectedDeliveriesExact || 0) : null;
     var actDelivered = p.actualDeliveredCount !== undefined ? p.actualDeliveredCount : delivered;
     var actCommission = p.actualCommission !== undefined ? p.actualCommission : (p.commission || 0);
     var realComm = actDelivered > 0 ? (actCommission / actDelivered) : 0;
@@ -75,21 +76,22 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       var expectedNdrRate = (p.ndrPct != null) ? (p.ndrPct / 100) : globalExpectedNdrRate;
       
       realNdr = expectedNdrRate;
-      delivered = Math.min(orders, Math.max(0, Math.round(Number(delivered) || 0)));
-      realTaagerProfitAfterTax = delivered * realComm;
+      expectedDeliveriesExact = expectedDeliveriesExact != null
+        ? Math.min(orders, Math.max(0, expectedDeliveriesExact))
+        : Math.min(orders, Math.max(0, orders * expectedNdrRate));
+      delivered = Math.min(orders, Math.max(0, Math.round(expectedDeliveriesExact)));
+      realTaagerProfitAfterTax = expectedDeliveriesExact * realComm;
       
-      var originalDelivered = p.deliveredCount || p.units || 0;
-      if (originalDelivered > 0) {
-        realDeliveredSales = realDeliveredSales * (delivered / originalDelivered);
+      if (p.expectedDeliveredSales != null) {
+        realDeliveredSales = Number(p.expectedDeliveredSales || 0);
       } else {
-        var totalSales = Number(p.revenue || p.sales || p.totalSales || 0);
-        var placedOrders = orders;
-        var avgAov = placedOrders > 0 ? totalSales / placedOrders : 0;
-        realDeliveredSales = delivered * (realDeliveredAov || avgAov);
+        var totalSales = Number(p.totalSales || p.sales || p.revenue || 0);
+        realDeliveredSales = totalSales * expectedNdrRate;
       }
-      realDeliveredAov = delivered > 0 ? realDeliveredSales / delivered : 0;
+      realDeliveredAov = expectedDeliveriesExact > 0 ? realDeliveredSales / expectedDeliveriesExact : 0;
     } else {
       if (realNdr  === 0) realNdr  = 0.30;
+      expectedDeliveriesExact = delivered;
     }
 
     var pId = p.key || p.sku || p.name;
@@ -101,6 +103,8 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       name:          p.name || p9Txt('Unknown Product', 'منتج غير معروف'),
       realOrders:    orders,
       realDelivered: delivered,
+      realExpectedDeliveriesExact: expectedDeliveriesExact,
+      expectedDeliveriesExact: expectedDeliveriesExact,
       realConfirmed: Math.max(0, Math.round(Number(realConfirmed) || 0)),
       realNdr:       realNdr,
       realCommission:realComm,
@@ -115,6 +119,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       adSpend:       realAdSpend,
       totalOrders:   orders,
       deliveredOrders: delivered,
+      expectedDeliveriesExact: expectedDeliveriesExact,
       ndr:           realNdr,
       avgCommission: realComm,
       isModified:    false
@@ -376,22 +381,43 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     var totalOrders     = Math.max(0, Math.round(Number(s.totalOrders) || 0));
     var deliveredOrders = Math.max(0, Math.round(Number(s.deliveredOrders) || 0));
     if (deliveredOrders > totalOrders && totalOrders > 0) deliveredOrders = totalOrders;
-    var revenue         = deliveredOrders * s.avgCommission;
-    var netProfit       = revenue - s.adSpend;
-    var roi             = s.adSpend > 0 ? (netProfit / s.adSpend) * 100 : 0;
-    var cpa             = totalOrders > 0 ? s.adSpend / totalOrders : 0;
-    var breakEvenCpa    = s.avgCommission * (totalOrders > 0 ? (deliveredOrders / totalOrders) : (Number(s.ndr) || 0));
-    var returnPerSar    = s.adSpend > 0 ? revenue / s.adSpend : 0;
-    var revenuePerDel   = deliveredOrders > 0 ? revenue / deliveredOrders : 0;
+    var ndr             = Number(s.ndr) || (totalOrders > 0 ? deliveredOrders / totalOrders : 0);
+    var calculation     = window.TaagerDashboardFinancialCore.calculate({
+      mode: 'expected',
+      netOrders: totalOrders,
+      actualDeliveredOrders: 1,
+      actualEarnedProfitAfterTax: s.avgCommission,
+      currentTotalSales: 0,
+      expectedNdrRate: ndr,
+      adSpend: s.adSpend
+    });
+    var revenue         = calculation.expectedTotalProfitBeforeAdSpend;
+    var netProfit       = calculation.expectedNetProfit;
+    var expectedDeliveriesExact = calculation.expectedDeliveriesExact;
+    deliveredOrders     = calculation.expectedDeliveriesDisplay;
+    var roi             = calculation.expectedRoi;
+    var cpa             = calculation.cpa;
+    var breakEvenCpa    = calculation.breakEvenCpa;
+    var returnPerSar    = calculation.expectedProfitRoas;
+    var revenuePerDel   = calculation.averageProfit;
     var ndrRequired     = (totalOrders > 0 && s.avgCommission > 0) ? s.adSpend / (totalOrders * s.avgCommission) : null;
-    var commRequired    = deliveredOrders > 0 ? s.adSpend / deliveredOrders : null;
+    var commRequired    = expectedDeliveriesExact > 0 ? s.adSpend / expectedDeliveriesExact : null;
     var delivRequired   = s.avgCommission > 0 ? Math.ceil(s.adSpend / s.avgCommission) : null;
     var projBudget      = s.adSpend * 2;
     var projOrders      = cpa > 0 ? Math.round(projBudget / cpa) : 0;
-    var projNet         = (Math.round(projOrders * s.ndr) * s.avgCommission) - projBudget;
-    var projRoi         = projBudget > 0 ? (projNet / projBudget) * 100 : 0;
+    var projected       = window.TaagerDashboardFinancialCore.calculate({
+      mode: 'expected',
+      netOrders: projOrders,
+      actualDeliveredOrders: 1,
+      actualEarnedProfitAfterTax: s.avgCommission,
+      currentTotalSales: 0,
+      expectedNdrRate: s.ndr,
+      adSpend: projBudget
+    });
+    var projNet         = projected.expectedNetProfit;
+    var projRoi         = projected.expectedRoi;
     return {
-      totalOrders, deliveredOrders, revenue, netProfit, roi, cpa, breakEvenCpa, returnPerSar, revenuePerDel,
+      totalOrders, deliveredOrders, expectedDeliveriesExact, revenue, netProfit, roi, cpa, breakEvenCpa, returnPerSar, revenuePerDel,
       ndrRequired, commRequired, delivRequired, projNet, projRoi, projBudget
     };
   }
@@ -400,7 +426,8 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     s.adSpend = Math.max(0, Number(s.realAdSpend) || 0);
     s.totalOrders = Math.max(0, Math.round(Number(s.realOrders) || 0));
     s.deliveredOrders = Math.max(0, Math.round(Number(s.realDelivered) || 0));
-    s.ndr = s.totalOrders > 0 ? (s.deliveredOrders / s.totalOrders) : s.realNdr;
+    s.expectedDeliveriesExact = Math.max(0, Number(s.realExpectedDeliveriesExact != null ? s.realExpectedDeliveriesExact : s.realDelivered) || 0);
+    s.ndr = Number(s.realNdr) || (s.totalOrders > 0 ? (s.deliveredOrders / s.totalOrders) : 0);
     s.avgCommission = Math.max(0, Number(s.realCommission) || 0);
     s.isModified = false;
   }
@@ -408,12 +435,14 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   function setSimTotalOrders(s, orders) {
     s.totalOrders = Math.max(0, Math.round(Number(orders) || 0));
     s.deliveredOrders = Math.round(s.totalOrders * s.ndr);
+    s.expectedDeliveriesExact = s.totalOrders * s.ndr;
     s.isModified = true;
   }
 
   function setSimDeliveredOrders(s, delivered) {
     s.deliveredOrders = Math.max(0, Math.round(Number(delivered) || 0));
     if (s.ndr > 0) s.totalOrders = Math.max(s.deliveredOrders, Math.ceil(s.deliveredOrders / s.ndr));
+    s.expectedDeliveriesExact = s.deliveredOrders;
     s.isModified = true;
   }
 
@@ -421,6 +450,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     var pct = Math.min(100, Math.max(1, Number(ndrPct) || 1));
     s.ndr = pct / 100;
     s.deliveredOrders = Math.round((Number(s.totalOrders) || 0) * s.ndr);
+    s.expectedDeliveriesExact = (Number(s.totalOrders) || 0) * s.ndr;
     s.isModified = true;
   }
 
@@ -973,7 +1003,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
             _tip('💵',
               p9Txt('Average Profit / Delivered Order', 'متوسط الربح لكل طلب مسلم'),
               p9Txt('Editable average profit assumption used for forecast math. The real KPI above is average profit from the sheet.', 'افتراض متوسط الربح المستخدم في المحاكاة. المؤشر الحقيقي أعلاه هو متوسط الربح من الشيت.'),
-              'revenue = deliveredOrders * averageProfitPerDeliveredOrder') +
+              'totalProfitBeforeAdSpend = expectedDeliveriesExact * averageProfitPerDeliveredOrder') +
           '</label>' +
           '<span style="font-size:11px;color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + toDisplay(s.realCommission).toFixed(2) + ' ' + viewCurrency + '</span>' +
         '</div>' +
@@ -1058,13 +1088,13 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       '<div class="s9-kpi-cards-grid">' +
         // Net Profit
         '<div class="s7-card">' +
-          '<div style="font-size:11px;color:#00e676;font-weight:700;display:flex;align-items:center;gap:4px;">' + p9Txt('Net Profit', 'صافي الربح') + ' ' + _tip('🪙', p9Txt('Net Profit', 'الربح الصافي'), p9Txt('Net profit after deducting ad spend from revenue.', 'الربح بعد خصم الإنفاق من الإيراد.'), 'netProfit = revenue - adSpend') + '</div>' +
+          '<div style="font-size:11px;color:#00e676;font-weight:700;display:flex;align-items:center;gap:4px;">' + p9Txt('Net Profit After Ad Spend', 'صافي الربح بعد الإنفاق الإعلاني') + ' ' + _tip('🪙', p9Txt('Net Profit After Ad Spend', 'صافي الربح بعد الإنفاق الإعلاني'), p9Txt('Total profit before ad spend minus ad spend.', 'إجمالي الربح قبل الإنفاق الإعلاني ناقص الإنفاق الإعلاني.'), 'netProfit = totalProfitBeforeAdSpend - adSpend') + '</div>' +
           '<div class="s9-kpi-netprofit ' + npClass + '" style="font-size:17px;font-weight:900;color:' + npColor + ' !important;" dir="ltr">' + formatMoney(c.netProfit) + window.supposedBadgeHtml('profit') + '</div>' +
           '<div style="font-size:10px;color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;">' + viewCurrency + '</div>' +
         '</div>' +
         // Revenue
         '<div class="s7-card">' +
-          '<div style="font-size:11px;color:#3b82f6;font-weight:700;display:flex;align-items:center;gap:4px;">' + p9Txt('Revenue', 'الإيرادات') + ' ' + _tip('💰', p9Txt('Expected Revenue', 'الإيرادات المتوقعة'), p9Txt('Expected revenue from delivered orders × average profit per delivered order.', 'الدخل المتوقع من الطلبات المسلمة × متوسط الربح لكل طلب مسلم.'), 'revenue = deliveredOrders * averageProfitPerDeliveredOrder') + '</div>' +
+          '<div style="font-size:11px;color:#3b82f6;font-weight:700;display:flex;align-items:center;gap:4px;">' + p9Txt('Total Profit Before Ad Spend', 'إجمالي الربح قبل الإنفاق الإعلاني') + ' ' + _tip('💰', p9Txt('Total Profit Before Ad Spend', 'إجمالي الربح قبل الإنفاق الإعلاني'), p9Txt('Exact expected deliveries multiplied by average profit per delivered order.', 'الطلبات المتوقع تسليمها بدقة مضروبة في متوسط الربح لكل طلب مسلم.'), 'totalProfitBeforeAdSpend = expectedDeliveriesExact * averageProfitPerDeliveredOrder') + '</div>' +
           '<div style="font-size:17px;font-weight:900;color:#fff;" dir="ltr">' + formatMoney(c.revenue) + window.supposedBadgeHtml('revenue') + '</div>' +
           '<div style="font-size:10px;color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;">' + viewCurrency + '</div>' +
         '</div>' +

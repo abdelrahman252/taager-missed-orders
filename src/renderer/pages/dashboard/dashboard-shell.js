@@ -550,6 +550,7 @@
     render();
     position();
   }
+  window.openDashboardDatePicker = openDashboardDatePicker;
 
   function closeDashboardDatePicker() {
     var old = document.querySelector('.dashboard-date-popover');
@@ -557,6 +558,7 @@
     if (old._dashOutside) document.removeEventListener('pointerdown', old._dashOutside);
     old.remove();
   }
+  window.closeDashboardDatePicker = closeDashboardDatePicker;
 
   function applyNavBtnState(btn, active) {
     var id = btn.getAttribute('data-section');

@@ -683,7 +683,31 @@ async function verifyLiveTaagerAiPerformance(page) {
     if (typeof window.applyLang === "function") window.applyLang("en");
   });
   await page.locator('.dash-nav-btn[data-section="taagerAi"]').evaluate((button) => button.click());
-  await page.waitForFunction(() => !!document.querySelector("#aii-chat-input"), null, { timeout: 15000 });
+  try {
+    await page.waitForFunction(() => !!document.querySelector("#aii-chat-input"), null, { timeout: 15000 });
+  } catch (error) {
+    const snapshot = await page.evaluate(() => {
+      const shell = document.getElementById("db-shell-mount");
+      const pane = document.getElementById("dash-section-pane");
+      const form = document.querySelector("#aii-chat-form");
+      return {
+        activeSection: shell && shell._dashboardActiveSection,
+        renderFunctionReady: typeof window.renderSectionTaagerAi === "function",
+        preloaderPresent: !!document.querySelector('[data-dashboard-preloader="true"]'),
+        formPresent: !!form,
+        formHtml: form ? form.innerHTML.slice(0, 1200) : "",
+        inputs: Array.from(document.querySelectorAll("input")).map((input) => ({
+          id: input.id,
+          type: input.type,
+          disabled: input.disabled,
+          placeholder: input.placeholder,
+        })).slice(0, 30),
+        paneText: pane ? pane.textContent.trim().slice(0, 1000) : "",
+        paneHtml: pane ? pane.innerHTML.slice(0, 1200) : "",
+      };
+    });
+    throw new Error(`AI section mount timeout: ${JSON.stringify(snapshot)}`);
+  }
 
   async function measure(prompt, expectedRoute, maxFirstMs, maxFinalMs) {
     const beforeUsers = await page.locator(".aii-chat-msg.user").count();
@@ -739,11 +763,27 @@ async function verifyLiveTaagerAiPerformance(page) {
       return result;
     }, { question: prompt, beforeAssistantText });
     await page.waitForFunction((count) => document.querySelectorAll(".aii-chat-msg.user").length > count, beforeUsers, { timeout: 15000 });
-    await page.waitForFunction((previousText) => {
-      const assistants = Array.from(document.querySelectorAll(".aii-chat-msg.assistant"));
-      const last = assistants[assistants.length - 1];
-      return !!(last && !last.classList.contains("pending") && last.textContent.trim().length > 20 && last.textContent.trim() !== String(previousText || "").trim());
-    }, beforeAssistantText, { timeout: maxFirstMs, polling: 50 });
+    try {
+      await page.waitForFunction((previousText) => {
+        const assistants = Array.from(document.querySelectorAll(".aii-chat-msg.assistant"));
+        const last = assistants[assistants.length - 1];
+        return !!(last && !last.classList.contains("pending") && last.textContent.trim().length > 20 && last.textContent.trim() !== String(previousText || "").trim());
+      }, beforeAssistantText, { timeout: maxFirstMs, polling: 50 });
+    } catch (error) {
+      const snapshot = await page.evaluate(() => {
+        const assistants = Array.from(document.querySelectorAll(".aii-chat-msg.assistant"));
+        const last = assistants[assistants.length - 1];
+        const input = document.querySelector("#aii-chat-input");
+        return {
+          assistantCount: assistants.length,
+          lastClassName: last ? last.className : "",
+          lastText: last ? last.textContent.trim().slice(0, 1200) : "",
+          inputDisabled: input ? input.disabled : null,
+          inputPresent: !!input,
+        };
+      });
+      throw new Error(`AI first answer timeout for "${prompt}": ${JSON.stringify(snapshot)}`);
+    }
     await page.waitForFunction(() => {
       const input = document.querySelector("#aii-chat-input");
       return !!(input && !input.disabled);

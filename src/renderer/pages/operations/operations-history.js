@@ -68,7 +68,7 @@ function _opsHistoryListHTML(runs, selectedRunId) {
           <div class="ops-history-row-status ${statusCls}">
             ${hasFail ? "✗ " + window.t_ops('history.failed') : "✓ " + window.t_ops('history.completed')}
           </div>
-          <div class="ops-history-row-count">${(r.ordersSubmitted || 0).toLocaleString()} ${window.t_ops('history.ordersCount')}</div>
+          <div class="ops-history-row-count">${(r.ordersSubmitted || 0).toLocaleString("en-US")} ${window.t_ops('history.ordersCount')}</div>
         </div>
       </div>`;
   }).join("");

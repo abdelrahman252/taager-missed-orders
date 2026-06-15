@@ -1,6 +1,6 @@
 {
   "name": "taager-orders",
-  "version": "1.0.28",
+  "version": "1.0.29",
   "description": "Taager Orders Automation Bot",
   "repository": {
     "type": "git",
@@ -21,10 +21,16 @@
     "qa:ai:full": "node scripts/qa-ai-scenarios.js --full",
     "qa:ai:live": "node scripts/qa-ai-live-smoke.js",
     "qa:ai:perf": "node scripts/qa-ai-perf.js",
-    "verify:dashboard": "node scripts/verify-dashboard-april.js",
+    "verify:dashboard": "node scripts/verify-dashboard-may-profit.js",
     "verify:dashboard:countries": "node scripts/verify-dashboard-countries.js",
     "verify:country-flow": "node scripts/verify-country-order-flow.js",
     "verify:taager-dates": "node scripts/verify-taager-date-range.js",
+    "verify:taager-recovery": "node scripts/verify-taager-recovery.js",
+    "verify:stage1-recovery": "node scripts/verify-stage1-account-recovery.js",
+    "verify:stage2-recovery": "node scripts/verify-stage2-zoom-sync-recovery.js",
+    "verify:stage3-recovery": "node scripts/verify-stage3-support-recovery.js",
+    "verify:admin-cache-reset": "node scripts/verify-admin-cache-reset.js",
+    "verify:app-zoom": "node scripts/verify-app-zoom.js",
     "verify:dashboard-year": "node scripts/verify-dashboard-current-year.js",
     "verify:license-warning": "node scripts/verify-license-expiry-warning.js",
     "verify:static-update": "node scripts/verify-static-dashboard-update.js",
@@ -161,10 +167,6 @@
       {
         "from": ".env",
         "to": ".env"
-      },
-      {
-        "from": ".env.local",
-        "to": ".env.local"
       }
     ],
     "publish": {

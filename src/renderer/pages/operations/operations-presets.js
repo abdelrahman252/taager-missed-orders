@@ -12,7 +12,7 @@ function renderOpsAccountPerf(container, allRuns) {
       const runs   = allRuns.filter(r => _opsAccountMatches(r, account.key));
       const orders = _opsFlattenRuns(runs);
       const total  = orders.length;
-      const rev    = orders.reduce((s, o) => s + (Number(o.subtotal) || 0), 0);
+      const rev    = orders.reduce((s, o) => s + _opsDashboardRevenueValue(o), 0);
       // Taager dashboard/status/NDR migration: Operations performance cards use
       // Taager Arabic delivered/failed buckets when the shared helper is loaded.
       const failed = orders.filter(o => typeof _opsIsFailed === "function" && _opsIsFailed(o)).length;
@@ -51,12 +51,12 @@ function renderOpsAccountPerf(container, allRuns) {
                     <div class="ops-perf-rank-num">${rank}</div>
                     <div class="ops-perf-info">
                       <div class="ops-perf-email">${s.label || s.key || "-"}</div>
-                      <div class="ops-perf-meta">${_opsAcctPerfState.sortBy === "orders" ? _opsFmtSAR(s.rev) : `${s.total.toLocaleString()} ${window.t_ops('accountPerf.ordersCount')}`}</div>
+                      <div class="ops-perf-meta">${_opsAcctPerfState.sortBy === "orders" ? _opsFmtSAR(s.rev) : `${s.total.toLocaleString("en-US")} ${window.t_ops('accountPerf.ordersCount')}`}</div>
                       <div class="ops-perf-bar-track">
                         <div class="ops-perf-bar ops-animated-bar" style="width:${barW}%"></div>
                       </div>
                     </div>
-                    <div class="ops-perf-rev">${_opsAcctPerfState.sortBy === "orders" ? `${s.total.toLocaleString()} <span style="font-size:10px;font-weight:500;color:var(--text3)">${window.t_ops('accountPerf.ordersCount')}</span>` : _opsFmtSAR(s.rev)}</div>
+                    <div class="ops-perf-rev">${_opsAcctPerfState.sortBy === "orders" ? `${s.total.toLocaleString("en-US")} <span style="font-size:10px;font-weight:500;color:var(--text3)">${window.t_ops('accountPerf.ordersCount')}</span>` : _opsFmtSAR(s.rev)}</div>
                   </div>`;
               }).join("")
           }
@@ -148,12 +148,12 @@ function renderOpsProductPerf(container, allRuns) {
     const start = (_opsProdPerfState.page - 1) * _opsProdPerfState.perPage;
     const pageGroups = grouped.slice(start, start + _opsProdPerfState.perPage);
     const allOrderCount = _opsFlattenRuns(allRuns || []).length;
-    const accountOptions = [{ value: "", label: `${window.t_ops('productPerf.allAccounts')}  ${allOrderCount.toLocaleString()} ${window.t_ops('accountPerf.ordersCount')}` }]
+    const accountOptions = [{ value: "", label: `${window.t_ops('productPerf.allAccounts')}  ${allOrderCount.toLocaleString("en-US")} ${window.t_ops('accountPerf.ordersCount')}` }]
       .concat(accounts.map(a => {
         const count = _opsFlattenRuns((allRuns || []).filter(r => _opsAccountMatches(r, a.key))).length;
         return {
           value: a.key,
-          label: `${a.label || a.email || a.key}  ${count.toLocaleString()} ${window.t_ops('accountPerf.ordersCount')}`,
+          label: `${a.label || a.email || a.key}  ${count.toLocaleString("en-US")} ${window.t_ops('accountPerf.ordersCount')}`,
           subLabel: a.email && a.email !== a.label ? a.email : "",
         };
       }));
@@ -352,7 +352,7 @@ async function renderOpsPresets(container, allRuns, onApplyPreset) {
         ${allPresets.map(p => `
           <div class="ops-preset-chip" data-preset-id="${p.id}" style="border-color:${p.color || "var(--border)"}44">
             <div class="ops-preset-chip-name" style="color:${p.color || "var(--text)"}">${p.name}</div>
-            <div class="ops-preset-chip-count">${(p.orderCount || 0).toLocaleString()} orders</div>
+            <div class="ops-preset-chip-count">${(p.orderCount || 0).toLocaleString("en-US")} orders</div>
             ${!p.builtin ? `<button class="ops-preset-chip-del" data-preset-id="${p.id}">✕</button>` : ""}
           </div>`).join("")}
       </div>

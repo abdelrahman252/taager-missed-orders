@@ -391,7 +391,7 @@ async function renderAnalytics(onBack) {
       if (banner) banner.style.display = "flex";
       if (label && runs[0]) {
         const ts = runs[0].runTimestamp;
-        label.textContent = window.t_anl('runBanner.singleRun') + " " + (ts ? new Date(ts).toLocaleString() : "—");
+        label.textContent = window.t_anl('runBanner.singleRun') + " " + (ts ? new Date(ts).toLocaleString("en-US") : "—");
       }
     } else {
       const banner = document.getElementById("analytics-run-banner");
@@ -547,7 +547,7 @@ async function renderAnalytics(onBack) {
     const options = [{ key: "", label: window.t_anl('account.allAccounts'), country: "", email: "" }].concat(accounts).map(a => {
       const email = a.key ? (uniqueAccounts(_allRuns).find(r => accountKey(r) === a.key)?.accountEmail || "") : "";
       const text = a.key ? (a.label || email || a.key) : a.label;
-      const countText = `${countFor(a.key).toLocaleString()} ${window.t_anl('account.orders')}`;
+      const countText = `${countFor(a.key).toLocaleString("en-US")} ${window.t_anl('account.orders')}`;
       return {
         value: a.key,
         label: `${text}  ${countText}`,
@@ -674,7 +674,7 @@ async function renderAnalytics(onBack) {
                     <div class="status-breakdown-bar-wrap">
                       <div class="status-breakdown-bar" style="width:${pct}%;background:${sc.bg}"></div>
                     </div>
-                    <span class="status-breakdown-count">${count.toLocaleString()} <span style="color:var(--text3);font-size:10px">(${pct}%)</span></span>
+                    <span class="status-breakdown-count">${count.toLocaleString("en-US")} <span style="color:var(--text3);font-size:10px">(${pct}%)</span></span>
                   </div>`;
               }).join("")}
         </div>

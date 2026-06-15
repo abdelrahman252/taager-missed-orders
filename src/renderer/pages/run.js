@@ -174,7 +174,8 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
               <span class="notice-icon">🌐</span>
               <div class="notice-text">
                 <strong>Google Login Required</strong>
-                <span>A browser window has opened — please log in with Google, then return here. The bot will continue automatically.</span>
+                <span id="notice-google-login-text">Chrome opened with this bot profile. Log in with Google, then close Chrome. The app will auto-check; Done is backup.</span>
+                <button class="btn-primary" id="btn-google-login-done" type="button" style="margin-top:8px;width:max-content;padding:8px 12px;font-size:12px">I finished Google login</button>
               </div>
             </div>
 
@@ -580,17 +581,39 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       playSound("confirm");
     });
 
-    window.api.onGoogleLoginNeeded(() => {
-      document.getElementById("notice-google-login").style.display = "flex";
+    let pendingGoogleLoginRequestId = "";
+    window.api.onGoogleLoginNeeded((data) => {
+      pendingGoogleLoginRequestId = data && data.requestId || "";
+      const box = document.getElementById("notice-google-login");
+      if (box) box.style.display = "flex";
+      const text = document.getElementById("notice-google-login-text");
+      if (text) text.textContent = `${data && data.accountLabel ? data.accountLabel + ": " : ""}Chrome opened with this bot profile. Log in with Google, then close Chrome. The app will auto-check; Done is backup.`;
+      const btn = document.getElementById("btn-google-login-done");
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "I finished Google login";
+        btn.onclick = async () => {
+          if (!pendingGoogleLoginRequestId) return;
+          btn.disabled = true;
+          btn.textContent = "Checking login...";
+          const result = await window.api.completeGoogleLogin(pendingGoogleLoginRequestId).catch((error) => ({ ok: false, error: error && error.message || String(error) }));
+          if (!result || !result.ok) {
+            btn.disabled = false;
+            btn.textContent = "I finished Google login";
+            appendLog(`Google login resume failed: ${result && result.error || "unknown error"}`);
+          }
+        };
+      }
       playSound("confirm");
       if (Notification.permission === "granted") {
-        new Notification("Google Login Required", { body: "Please log in with Google in the browser window that just opened." });
+        new Notification("Google Login Required", { body: "Log in with Google in Chrome, then close Chrome. The app will auto-check; Done is backup." });
       }
     });
 
     window.api.onGoogleLoginComplete(() => {
       const box = document.getElementById("notice-google-login");
       if (box) box.style.display = "none";
+      pendingGoogleLoginRequestId = "";
     });
 
     window.api.onNeedsConfirm(() => {
@@ -1541,6 +1564,32 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       const titleFn = t("run.notif_2fa_title");
       new Notification(typeof titleFn === "function" ? titleFn(tag) : titleFn, { body: t("run.notif_2fa_body") });
     }
+  });
+
+  window.api.onGoogleLoginNeeded(async (msg) => {
+    const acc = msg?.accountId ? accountStates.find(a => a.id === msg.accountId) : null;
+    const accName = acc ? accountDisplayName(acc) : (msg && msg.accountLabel) || "";
+    const tag = accName ? ` [${accName}]` : "";
+    const txt = `Google login required${tag}. Chrome opened with this bot profile. Log in with Google, then close Chrome. The app will auto-check; click OK only as backup.`;
+    allLogLines.push({ text: txt, cls: "log-warn" });
+    if (selectedPane === "__all__") liveAppendLog("log-output", txt, "log-warn");
+    playSound("confirm");
+    window.alert(txt);
+    const result = await window.api.completeGoogleLogin(msg && msg.requestId).catch((error) => ({ ok: false, error: error && error.message || String(error) }));
+    if (!result || !result.ok) {
+      const err = `Google login resume failed${tag}: ${result && result.error || "unknown error"}`;
+      allLogLines.push({ text: err, cls: "log-warn" });
+      if (selectedPane === "__all__") liveAppendLog("log-output", err, "log-warn");
+    }
+  });
+
+  window.api.onGoogleLoginComplete((msg) => {
+    const acc = msg?.accountId ? accountStates.find(a => a.id === msg.accountId) : null;
+    const accName = acc ? accountDisplayName(acc) : (msg && msg.accountLabel) || "";
+    const tag = accName ? ` [${accName}]` : "";
+    const txt = `Google login verified${tag}.`;
+    allLogLines.push({ text: txt, cls: "log-ok" });
+    if (selectedPane === "__all__") liveAppendLog("log-output", txt, "log-ok");
   });
 
   // ── NEEDS CONFIRM ──

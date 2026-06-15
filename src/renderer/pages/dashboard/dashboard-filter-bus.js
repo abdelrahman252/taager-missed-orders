@@ -1047,12 +1047,8 @@
       if (status.lastSyncAt && (!latestSyncAt || new Date(status.lastSyncAt) > new Date(latestSyncAt))) {
         latestSyncAt = status.lastSyncAt;
       }
-      if (summary) {
-        console.log('[DIAGNOSTIC][FilterBus] Checking platform status:', status.platform, 'connected:', status.status, 'hasSummary:', !!status.summary, 'manualOverride:', status.manualOverride);
-      }
       if (!summary || !(status.status === 'connected' && status.summary && !status.manualOverride)) return;
       var source = status.summary || {};
-      console.log('[DIAGNOSTIC][FilterBus] Accumulating adSpend from', status.platform, ':', source.adSpend, 'sourceCurrency:', source.currency, 'summary.currency:', summary.currency);
       summary.adSpend += Number(source.adSpend || 0);
       summary.impressions += Number(source.impressions || 0);
       summary.clicks += Number(source.clicks || 0);

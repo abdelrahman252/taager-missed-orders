@@ -32,9 +32,18 @@ const STATUS_COLORS_LIGHT = {
 // Analytics and Operations share TaagerStatus so Arabic statuses, labels, and
 // color buckets match the dashboard and AI data model.
 function getStatusColor(status) {
+  const isLight = document.documentElement.getAttribute("data-theme") === "light";
   if (window.TaagerStatus) {
     const bucket = window.TaagerStatus.normalize(status).bucket;
-    const palette = {
+    const palette = isLight ? {
+      delivered: { bg: "#ecfdf5", text: "#166534", border: "#6ee7b7" },
+      failed: { bg: "#fef2f2", text: "#991b1b", border: "#fca5a5" },
+      return_verified: { bg: "#fff1f2", text: "#9f1239", border: "#fda4af" },
+      canceled_by_you: { bg: "#f5f5f5", text: "#555555", border: "#d4d4d4" },
+      received: { bg: "#eff6ff", text: "#1d5fad", border: "#93c5fd" },
+      confirmed: { bg: "#edfaf3", text: "#1a7a4a", border: "#7ddba8" },
+      shipping: { bg: "#fff7ed", text: "#9a4c0a", border: "#fbb97a" }
+    } : {
       delivered: { bg: "#0f2a1e", text: "#2dd98a", border: "#0f4a2e" },
       failed: { bg: "#2a1010", text: "#ff5c5c", border: "#5a1010" },
       return_verified: { bg: "#2a1010", text: "#ff8a8a", border: "#5a1010" },
@@ -43,9 +52,10 @@ function getStatusColor(status) {
       confirmed: { bg: "#0f2218", text: "#34c97a", border: "#0d3d22" },
       shipping: { bg: "#2a1f10", text: "#e8963a", border: "#5a3a10" }
     };
-    return palette[bucket] || { bg: "#1e1e1e", text: "#888780", border: "#333" };
+    return palette[bucket] || (isLight
+      ? { bg: "#f5f5f5", text: "#555555", border: "#d4d4d4" }
+      : { bg: "#1e1e1e", text: "#888780", border: "#333" });
   }
-  const isLight = document.documentElement.getAttribute("data-theme") === "light";
   const map = isLight ? STATUS_COLORS_LIGHT : STATUS_COLORS;
   return map[status] || map[""];
 }
@@ -58,6 +68,43 @@ function formatSAR(amount) {
     style: "currency", currency: "SAR",
     minimumFractionDigits: 0, maximumFractionDigits: 0,
   }).format(n);
+}
+
+function analyticsMoneyValue(value) {
+  if (value == null || value === "") return 0;
+  if (typeof value === "number") return isFinite(value) ? value : 0;
+  const n = Number(String(value).replace(/[^\d.-]/g, ""));
+  return isNaN(n) ? 0 : n;
+}
+
+function analyticsTaagerProfit(order) {
+  if (!order) return 0;
+  if (window.TaagerStatus && typeof window.TaagerStatus.taagerProfit === "function") {
+    return analyticsMoneyValue(window.TaagerStatus.taagerProfit(order));
+  }
+  return analyticsMoneyValue(
+    order.profitAfterTax != null ? order.profitAfterTax :
+    order.taagerProfit != null ? order.taagerProfit :
+    order.profitAfterFees != null ? order.profitAfterFees :
+    order.commission != null ? order.commission :
+    order.marketerCommission
+  );
+}
+
+function analyticsIsDeliveredOrder(order) {
+  const status = order && order.orderStatus;
+  if (window.TaagerStatus && typeof window.TaagerStatus.isDelivered === "function") {
+    return window.TaagerStatus.isDelivered(status);
+  }
+  return String(status || "").toLowerCase() === "delivered";
+}
+
+function analyticsDashboardRevenueValue(order) {
+  return analyticsIsDeliveredOrder(order) ? analyticsTaagerProfit(order) : 0;
+}
+
+function sumDashboardRevenue(orders) {
+  return (orders || []).reduce((acc, order) => acc + analyticsDashboardRevenueValue(order), 0);
 }
 
 function formatTimeSaved(totalOrders, minutesPerOrder) {
@@ -621,32 +668,29 @@ function renderSharedSidebar(activeNav) {
   );
 }
 
-// Applies live sidebar state: done checkmarks on accounts/run, correct reset btn disable.
+// Applies live sidebar state shared by app-level pages.
 // Called by wireSharedSidebar for analytics / operations / dashboard pages.
 function refreshSharedSidebarState(container) {
-  var t = window._t || function(k) { return k; };
   function qs(id) {
     return container && container.querySelector
       ? container.querySelector('#' + id)
       : document.getElementById(id);
   }
 
-  // Accounts step — always done when user has reached analytics/ops/dashboard
+  // Keep setup entries in their normal nav state on app-level pages.
   var accountsItem = qs('nav-accounts');
   if (accountsItem) {
-    accountsItem.classList.remove('active');
-    accountsItem.classList.add('done');
+    accountsItem.classList.remove('done');
     var an = accountsItem.querySelector('.sv3-step-num');
-    if (an) an.textContent = '✓';
+    if (an) an.textContent = '👤';
   }
 
-  // Run step — always done when there is data to view
+  // Run should look like a regular destination, not a completed checklist item.
   var runItem = qs('nav-run');
   if (runItem) {
-    runItem.classList.remove('active');
-    runItem.classList.add('done');
+    runItem.classList.remove('done');
     var rn = runItem.querySelector('.sv3-step-num');
-    if (rn) rn.textContent = '✓';
+    if (rn) rn.textContent = '🚀';
   }
 
 }

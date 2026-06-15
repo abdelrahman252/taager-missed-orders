@@ -212,6 +212,64 @@
         flex-shrink: 0;
       }
 
+      .tb-zoom-control {
+        display: inline-flex;
+        align-items: center;
+        height: 28px;
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        background: color-mix(in srgb, var(--bg2) 84%, var(--accent) 16%);
+        overflow: hidden;
+        -webkit-app-region: no-drag;
+        flex-shrink: 0;
+      }
+      .tb-zoom-btn,
+      .tb-zoom-value {
+        height: 27px;
+        border: 0;
+        background: transparent;
+        color: var(--text2);
+        cursor: pointer;
+        font-family: "Segoe UI", Arial, sans-serif;
+        font-weight: 800;
+        line-height: 1;
+      }
+      .tb-zoom-btn { width: 27px; font-size: 16px; }
+      .tb-zoom-value {
+        min-width: 48px;
+        padding: 0 6px;
+        border-inline: 1px solid var(--border);
+        font-size: 10px;
+      }
+      .tb-zoom-btn:hover,
+      .tb-zoom-value:hover {
+        background: color-mix(in srgb, var(--accent) 18%, transparent);
+        color: var(--text);
+      }
+      .tb-zoom-btn:disabled { cursor: default; opacity: .35; }
+
+      @media (max-width: 1100px) {
+        #top-bar-info,
+        #top-bar-accounts,
+        #btn-copy-license,
+        #btn-admin-refresh .refresh-label,
+        .titlebar-left .app-name {
+          display: none !important;
+        }
+        #btn-admin-refresh { width: 28px; padding: 0; }
+        .tb-divider-secondary,
+        .tb-lang-switch,
+        .tb-theme-switch {
+          display: none !important;
+        }
+        .titlebar { padding-inline: 8px !important; gap: 4px !important; }
+      }
+      @media (max-width: 560px) {
+        .titlebar-left,
+        .tb-divider-brand { display: none !important; }
+        .tb-zoom-value { min-width: 44px; }
+      }
+
       /* ── Lang toggle (pill) ── */
       .tb-lang-switch {
         position: relative;
@@ -506,7 +564,7 @@
         <span class="app-icon">⚡</span>
         <span class="app-name">Taager Bot</span>
       </div>
-      <div class="titlebar-divider"></div>
+      <div class="titlebar-divider tb-divider-brand"></div>
 
       <!-- User info (hidden until licensed) -->
       <div id="top-bar-center">
@@ -533,7 +591,7 @@
         </button>
       </div>
       <!-- Toggles -->
-      <div class="titlebar-divider"></div>
+      <div class="titlebar-divider tb-divider-secondary"></div>
 
       <!-- Admin Refresh button — syncs license + account state from Supabase -->
       <button
@@ -550,7 +608,7 @@
         </span>
         <span class="refresh-label">Sync</span>
       </button>
-      <div class="titlebar-divider"></div>
+      <div class="titlebar-divider tb-divider-secondary"></div>
 
       <!-- Lang toggle: EN ↔ AR -->
       <div class="tb-lang-switch">
@@ -565,7 +623,7 @@
         <span class="lang-on">AR</span>
         <span class="lang-off">EN</span>
       </div>
-      <div class="titlebar-divider"></div>
+      <div class="titlebar-divider tb-divider-secondary"></div>
 
       <!-- Theme toggle: light ↔ dark -->
       <label class="tb-theme-switch" title="Switch theme" data-tooltip="Switch between light and dark theme.">
@@ -591,6 +649,12 @@
       <!-- Spacer: drags the window, pushes controls right -->
       <div class="titlebar-spacer"></div>
 
+      <div class="tb-zoom-control" role="group" aria-label="Application zoom">
+        <button class="tb-zoom-btn" id="btn-zoom-out" type="button" aria-label="Zoom out" data-tooltip="Zoom out">-</button>
+        <button class="tb-zoom-value" id="btn-zoom-reset" type="button" aria-label="Reset zoom" data-tooltip="Reset zoom to 100%">100%</button>
+        <button class="tb-zoom-btn" id="btn-zoom-in" type="button" aria-label="Zoom in" data-tooltip="Zoom in">+</button>
+      </div>
+
       <div class="titlebar-right">
         <div class="titlebar-controls">
           <button class="tb-btn" id="btn-minimize" aria-label="Minimize window" title="Minimize" data-tooltip="Minimize window">&#8212;</button>
@@ -613,6 +677,7 @@
     </div>
 
     <script src="../monitoring/sentry.renderer.js"></script>
+    <script src="support.js"></script>
     <script src="pages/license.js"></script>
     <script src="pages/expired-overlay.js"></script>
     <script src="pages/license-expiry-warning.js"></script>
