@@ -1,6 +1,6 @@
 {
   "name": "taager-orders",
-  "version": "1.0.42",
+  "version": "1.0.43",
   "description": "Taager Orders Automation Bot",
   "repository": {
     "type": "git",
@@ -75,7 +75,7 @@
     "electron-builder": "^24.13.3"
   },
   "build": {
-    "appId": "com.taagerbot.app",
+    "appId": "com.taagerbot.orders",
     "productName": "Taager Orders",
     "copyright": "Copyright © 2025",
     "icon": "assets/icon",

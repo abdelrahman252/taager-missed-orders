@@ -14,7 +14,7 @@
 })();
 
 const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage } = require("electron");
-app.setAppUserModelId("com.taagerbot.app");
+app.setAppUserModelId("com.taagerbot.orders");
 const path = require("path");
 const Store = require("electron-store");
 const fs = require("fs");
