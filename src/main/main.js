@@ -4396,6 +4396,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
   botChildren = [];
 
   const INTER_ACCOUNT_COOLDOWN_MS = 6 * 60 * 1000; // Launch the next account 6 minutes after the previous account starts
+  const INTER_ACCOUNT_COOLDOWN_LOG_INTERVAL_MS = 60 * 1000;
 
   async function waitForExportCooldown(previousAccountIndex, nextAccountIndex, previousResultPromise) {
     const previousLabel = accountDisplayName(accountsToRun[previousAccountIndex], `Account ${previousAccountIndex + 1}`);
@@ -4409,6 +4410,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
         mainWindow.webContents.send("bot-log",
           `\n⏸️  [Account schedule] Waiting ${Math.floor(remainingSec / 60)} min ${remainingSec % 60}s before starting ${label} after ${previousLabel}...`);
 
+        let nextLogAt = Date.now() + INTER_ACCOUNT_COOLDOWN_LOG_INTERVAL_MS;
         while (remainingMs > 0 && botRunning) {
           const elapsed = Date.now() - launchTimestamp;
           if (elapsed >= INTER_ACCOUNT_COOLDOWN_MS) break;
@@ -4417,9 +4419,13 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
           remainingMs = INTER_ACCOUNT_COOLDOWN_MS - (Date.now() - launchTimestamp);
 
           if (!botRunning) break;
-          const remSec = Math.max(0, Math.ceil(remainingMs / 1000));
-          mainWindow.webContents.send("bot-log",
-            `⏸️  [Account schedule] Waiting ${Math.floor(remSec / 60)} min ${remSec % 60}s before starting ${label}...`);
+          const now = Date.now();
+          if (now >= nextLogAt) {
+            while (nextLogAt <= now) nextLogAt += INTER_ACCOUNT_COOLDOWN_LOG_INTERVAL_MS;
+            const remSec = Math.max(0, Math.ceil(remainingMs / 1000));
+            mainWindow.webContents.send("bot-log",
+              `⏸️  [Account schedule] Waiting ${Math.floor(remSec / 60)} min ${remSec % 60}s before starting ${label}...`);
+          }
         }
       }
       return;
@@ -4453,14 +4459,19 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
         mainWindow.webContents.send("bot-log",
           `\n⏸️  [تجنب حد التصدير] ${previousLabel} فشل قبل التصدير بسبب الشبكة — الانتظار ${Math.floor(remainingSec / 60)} دقيقة و ${remainingSec % 60} ثانية قبل بدء ${label}...`);
 
+        let nextLogAt = Date.now() + INTER_ACCOUNT_COOLDOWN_LOG_INTERVAL_MS;
         while (remainingMs > 0 && botRunning) {
           const tick = Math.min(1000, remainingMs);
           await new Promise(resolve => setTimeout(resolve, tick));
           remainingMs -= tick;
           if (!botRunning) break;
-          const remSec = Math.ceil(remainingMs / 1000);
-          mainWindow.webContents.send("bot-log",
-            `⏸️  [تجنب حد التصدير] الانتظار لمدة ${Math.floor(remSec / 60)} دقيقة و ${remSec % 60} ثانية قبل بدء ${label}...`);
+          const now = Date.now();
+          if (now >= nextLogAt) {
+            while (nextLogAt <= now) nextLogAt += INTER_ACCOUNT_COOLDOWN_LOG_INTERVAL_MS;
+            const remSec = Math.ceil(remainingMs / 1000);
+            mainWindow.webContents.send("bot-log",
+              `⏸️  [تجنب حد التصدير] الانتظار لمدة ${Math.floor(remSec / 60)} دقيقة و ${remSec % 60} ثانية قبل بدء ${label}...`);
+          }
         }
         return;
       }
@@ -4476,6 +4487,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
       mainWindow.webContents.send("bot-log",
         `\n⏸️  [تجنب حد التصدير] الانتظار لمدة ${Math.floor(remainingSec / 60)} دقيقة و ${remainingSec % 60} ثانية قبل بدء ${label}...`);
 
+      let nextLogAt = Date.now() + INTER_ACCOUNT_COOLDOWN_LOG_INTERVAL_MS;
       while (remainingMs > 0 && botRunning) {
         const currentElapsed = Date.now() - exportTimestamp;
         if (currentElapsed >= INTER_ACCOUNT_COOLDOWN_MS) break;
@@ -4484,9 +4496,13 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
         remainingMs = INTER_ACCOUNT_COOLDOWN_MS - (Date.now() - exportTimestamp);
         if (!botRunning) break;
 
-        const remSec = Math.ceil(remainingMs / 1000);
-        mainWindow.webContents.send("bot-log",
-          `⏸️  [تجنب حد التصدير] الانتظار لمدة ${Math.floor(remSec / 60)} دقيقة و ${remSec % 60} ثانية قبل بدء ${label}...`);
+        const now = Date.now();
+        if (now >= nextLogAt) {
+          while (nextLogAt <= now) nextLogAt += INTER_ACCOUNT_COOLDOWN_LOG_INTERVAL_MS;
+          const remSec = Math.ceil(remainingMs / 1000);
+          mainWindow.webContents.send("bot-log",
+            `⏸️  [تجنب حد التصدير] الانتظار لمدة ${Math.floor(remSec / 60)} دقيقة و ${remSec % 60} ثانية قبل بدء ${label}...`);
+        }
       }
     }
   }

@@ -341,6 +341,11 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     const badge  = document.getElementById("run-status-badge");
     let botDone  = false;
 
+    function isInlineCountdownLog(text) {
+      return String(text || "").includes("[تجنب حد التصدير]") ||
+        String(text || "").includes("[Account schedule]");
+    }
+
     let _logQueue = [];
     let _logRafPending = false;
     function _flushLog() {
@@ -348,9 +353,9 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       if (!_logQueue.length) return;
 
       const firstItem = _logQueue[0];
-      if (firstItem && firstItem.text.includes("[تجنب حد التصدير]") && logEl) {
+      if (firstItem && isInlineCountdownLog(firstItem.text) && logEl) {
         const lastChild = logEl.lastElementChild;
-        if (lastChild && lastChild.textContent.includes("[تجنب حد التصدير]")) {
+        if (lastChild && isInlineCountdownLog(lastChild.textContent)) {
           lastChild.textContent = firstItem.text;
           _logQueue.shift();
         }
@@ -388,10 +393,10 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     });
 
     function appendLog(msg) {
-      if (msg.includes("[تجنب حد التصدير]")) {
+      if (isInlineCountdownLog(msg)) {
         const cleanMsg = msg.trim();
         const lastQueueItem = _logQueue[_logQueue.length - 1];
-        if (lastQueueItem && lastQueueItem.text.includes("[تجنب حد التصدير]")) {
+        if (lastQueueItem && isInlineCountdownLog(lastQueueItem.text)) {
           lastQueueItem.text = cleanMsg;
           if (!_logRafPending) { _logRafPending = true; requestAnimationFrame(_flushLog); }
           return;
@@ -399,7 +404,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
         
         if (_logQueue.length === 0 && logEl) {
           const lastChild = logEl.lastElementChild;
-          if (lastChild && lastChild.textContent.includes("[تجنب حد التصدير]")) {
+          if (lastChild && isInlineCountdownLog(lastChild.textContent)) {
             lastChild.textContent = cleanMsg;
             return;
           }
@@ -1388,17 +1393,22 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
   }
   cleanup();
 
+  function isInlineCountdownLog(text) {
+    return String(text || "").includes("[تجنب حد التصدير]") ||
+      String(text || "").includes("[Account schedule]");
+  }
+
   // ── BOT LOG — route to correct account by [Label] prefix ──
   window.api.onBotLog((rawMsg) => {
     // Check if it's a cooldown countdown
-    const isCountdown = rawMsg.includes("[تجنب حد التصدير]");
+    const isCountdown = isInlineCountdownLog(rawMsg);
     if (isCountdown) {
       const cleanMsg = rawMsg.trim();
       const cls = "log-warn";
 
       // 1. Update in allLogLines
       const lastAllItem = allLogLines[allLogLines.length - 1];
-      if (lastAllItem && lastAllItem.text.includes("[تجنب حد التصدير]")) {
+      if (lastAllItem && isInlineCountdownLog(lastAllItem.text)) {
         lastAllItem.text = cleanMsg;
       } else {
         allLogLines.push({ text: cleanMsg, cls });
@@ -1407,7 +1417,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       // 2. Update in all accounts' logLines
       for (const a of accountStates) {
         const lastAccItem = a.logLines[a.logLines.length - 1];
-        if (lastAccItem && lastAccItem.text.includes("[تجنب حد التصدير]")) {
+        if (lastAccItem && isInlineCountdownLog(lastAccItem.text)) {
           lastAccItem.text = cleanMsg;
         } else {
           a.logLines.push({ text: cleanMsg, cls });
@@ -1419,7 +1429,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
         const logEl = document.getElementById("log-output");
         if (logEl) {
           const lastChild = logEl.lastElementChild;
-          if (lastChild && lastChild.textContent.includes("[تجنب حد التصدير]")) {
+          if (lastChild && isInlineCountdownLog(lastChild.textContent)) {
             lastChild.textContent = cleanMsg;
             return;
           }
