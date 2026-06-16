@@ -125,6 +125,34 @@
   max-width: 100%;
 }
 
+#page-dashboard .s7-kpi-grid {
+  grid-template-columns: repeat(auto-fit, minmax(176px, 1fr)) !important;
+}
+
+#page-dashboard .dash-size-md .s7-body .s7-kpi-grid[style*="grid-template-columns:repeat(5,1fr)"],
+#page-dashboard .dash-size-sm .s7-body .s7-kpi-grid[style*="grid-template-columns:repeat(5,1fr)"],
+#page-dashboard .dash-size-xs .s7-body .s7-kpi-grid[style*="grid-template-columns:repeat(5,1fr)"] {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(176px, 1fr)) !important;
+}
+
+#page-dashboard .s7-kpi-grid .s7-card {
+  min-width: 0;
+}
+
+#page-dashboard .s7-expected-value-stack,
+#page-dashboard .sfe-metric-val .expected-value-stack {
+  width: 100%;
+  color: inherit;
+}
+
+#page-dashboard .s7-expected-value-stack .supposed-badge,
+#page-dashboard .sfe-metric-val .supposed-badge {
+  margin-inline-start: 0 !important;
+  color: #fbbf24 !important;
+  -webkit-text-fill-color: #fbbf24 !important;
+}
+
 #page-dashboard .dash-size-md .sfe-metrics-strip {
   grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
 }

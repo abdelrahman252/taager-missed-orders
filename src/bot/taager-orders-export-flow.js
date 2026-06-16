@@ -9,6 +9,7 @@ function createTaagerOrdersExportFlow(options = {}) {
   const safeTaagerClick = options.safeTaagerClick;
   const pickDateRange = options.pickDateRange;
   const gotoOrders = options.gotoOrders;
+  const stabilizeBeforeDateRange = options.stabilizeBeforeDateRange;
   const recoverForRetry = options.recoverForRetry;
   const readDownloadToBuffer = options.readDownloadToBuffer;
   const maxAttempts = Number(options.maxAttempts || 3);
@@ -56,6 +57,14 @@ function createTaagerOrdersExportFlow(options = {}) {
       log,
     });
     stage("taager.orders.ready", "ok", "Orders search button is visible");
+
+    if (attempt === 1 && typeof stabilizeBeforeDateRange === "function") {
+      stage("taager.orders.stabilize", "started", "Reloading orders page before date selection");
+      log(`Taager orders export attempt ${attempt}/${maxAttempts}: stabilization reload before date selection`);
+      page = await stabilizeBeforeDateRange(page, { attempt, maxAttempts }) || page;
+      stage("taager.orders.stabilize", "ok", "Orders page stabilized before date selection");
+      log(`Taager orders export attempt ${attempt}/${maxAttempts}: stabilization reload complete`);
+    }
 
     const fromText = formatDataDay(dateFrom);
     const toText = formatDataDay(dateTo);

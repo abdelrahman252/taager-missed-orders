@@ -110,6 +110,9 @@ function statusBucket(row) {
   const status = lower(row.orderStatus || row.status);
   if (status.includes("canceled_by_you")) return "canceled_by_you";
   if (status.includes("delivered")) return "delivered";
+  if (status.includes("delivery_suspended") || status.includes("delivery suspended") || status.includes("\u062a\u0645 \u062a\u0639\u0644\u064a\u0642 \u0627\u0644\u062a\u0648\u0635\u064a\u0644")) return "delivery_suspended";
+  if (status.includes("awaiting shipment") || status.includes("\u0641\u064a \u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u0634\u062d\u0646")) return "waiting";
+  if (status.includes("out for delivery") || status.includes("\u0642\u064a\u062f \u0627\u0644\u062a\u0648\u0635\u064a\u0644")) return "shipping";
   if (status.includes("shipping")) return "shipping";
   if (status.includes("confirmed")) return "confirmed";
   if (status.includes("received") || status.includes("pending")) return "received";
@@ -139,7 +142,7 @@ function isConfirmedBucket(bucket) {
 }
 
 function isIncomingBucket(bucket) {
-  return ["shipping", "confirmed", "processing", "waiting", "pending", "received"].includes(bucket);
+  return ["shipping", "delivery_suspended", "after_sales_progress", "confirmed", "processing", "waiting", "pending", "received"].includes(bucket);
 }
 
 const PRODUCT_CONFIRMATION_BUCKETS = new Set([
@@ -408,10 +411,7 @@ function normalizeScope(input, allowedIds) {
 }
 
 function inRange(row, scope) {
-  const bucket = statusBucket(row);
-  const key = bucket === "delivered" && scope.deliveredDateMode === "actual"
-    ? dateKey(row.deliveredAt || row.lastUpdatedAt || row.updatedAt || row.dashboardDate || row.createdAt || row.date)
-    : dateKey(row.createdAt || row.date || row.dashboardDate);
+  const key = dateKey(row.createdAt || row.date || row.dashboardDate);
   if (scope.dateFrom && (!key || key < scope.dateFrom)) return false;
   if (scope.dateTo && (!key || key > scope.dateTo)) return false;
   return true;
@@ -534,6 +534,7 @@ function createDashboardQueryService(options) {
     const ndrFrom = dateKey((input && (input.ndrDateFrom || input.ndrFrom)) || "");
     const ndrTo = dateKey((input && (input.ndrDateTo || input.ndrTo)) || "");
     const rows = [];
+    const ndrRows = [];
     scope.accountIds.forEach((accountId) => {
       const snapshot = accounts[accountId] && accounts[accountId].snapshot;
       (Array.isArray(snapshot) ? snapshot : []).forEach((row) => {
@@ -542,15 +543,17 @@ function createDashboardQueryService(options) {
         const inExpectedNdrRange = includeNdrUnion && deliveredDateMode === "expected" && !!(ndrFrom && ndrTo) && inNdrRange(row, ndrFrom, ndrTo);
         if (!inPrimaryRange && !inCreatedDateRange && !inExpectedNdrRange) return;
         const account = accounts[accountId] || {};
-        rows.push(normalizeOrderMoney({
+        const normalized = normalizeOrderMoney({
           ...row,
           accountId,
           dashboardAccountId: accountId,
           accountLabel: text(row.accountLabel || row.accountEmail || account.label || account.easyEmail || accountId),
-        }, account, input || {}));
+        }, account, input || {});
+        if (inPrimaryRange || inCreatedDateRange) rows.push(normalized);
+        if (inExpectedNdrRange) ndrRows.push(normalized);
       });
     });
-    return { rows, scope, accounts };
+    return { rows, ndrRows, scope, accounts };
   }
 
   function scopedCampaigns(scope, accounts, requestedPlatform, input) {
@@ -654,6 +657,9 @@ function createDashboardQueryService(options) {
           shippingCount: 0,
           processingCount: 0,
           waitingCount: 0,
+          outForDeliveryCount: 0,
+          deliverySuspendedCount: 0,
+          awaitingShipmentCount: 0,
           commission: 0,
           totalSales: 0,
           deliveredSales: 0,
@@ -687,6 +693,9 @@ function createDashboardQueryService(options) {
           else if (bucket === "processing") product.processingCount += 1;
           else if (bucket === "waiting") product.waitingCount += 1;
           else if (bucket === "pending" || bucket === "received") product.pendingCount += 1;
+          if (bucket === "shipping") product.outForDeliveryCount += 1;
+          else if (bucket === "delivery_suspended") product.deliverySuspendedCount += 1;
+          else if (bucket === "waiting") product.awaitingShipmentCount += 1;
         }
       }
       if (netOrder && !seen.has("campaignNdr:" + uniqueOrderKey)) {
@@ -840,7 +849,7 @@ function createDashboardQueryService(options) {
 
   function productRows(input) {
     return cached("products", input, () => {
-      const { rows, scope, accounts } = scopedRows(input, { includeNdrUnion: true, includeCreatedUnion: true });
+      const { rows, ndrRows, scope, accounts } = scopedRows(input, { includeNdrUnion: true, includeCreatedUnion: true });
       const products = new Map();
       const globalOrderKeys = new Set();
       const globalNetOrderKeys = new Set();
@@ -861,7 +870,7 @@ function createDashboardQueryService(options) {
       const ndrFrom = dateKey((input && (input.ndrDateFrom || input.ndrFrom)) || "");
       const ndrTo   = dateKey((input && (input.ndrDateTo   || input.ndrTo))   || "");
 
-      rows.forEach((row, index) => {
+      function productIdentity(row) {
         const sku = rowSku(row);
         const name = productNameOverride(
           sku,
@@ -872,6 +881,15 @@ function createDashboardQueryService(options) {
         // Key matches country-aware SKU scheme to keep countries separate
         // while combining same-country duplicate accounts.
         const key = sku ? country + "|sku:" + lower(sku) : row.accountId + "|name:" + lower(name);
+        return { sku, name, country, key };
+      }
+
+      rows.forEach((row, index) => {
+        const identity = productIdentity(row);
+        const sku = identity.sku;
+        const name = identity.name;
+        const country = identity.country;
+        const key = identity.key;
         if (!products.has(key)) {
           products.set(key, {
             key, legacyKey: sku || name, sku, name, country,
@@ -880,6 +898,7 @@ function createDashboardQueryService(options) {
             statusTotalCount: 0, confirmationStatusCount: 0, cancelStatusCount: 0, pendingStatusCount: 0,
             failedCount: 0, canceledCount: 0, confirmedCount: 0, shippingCount: 0,
             processingCount: 0, waitingCount: 0, pendingCount: 0,
+            outForDeliveryCount: 0, deliverySuspendedCount: 0, awaitingShipmentCount: 0,
             // Bug B fix: track ndr-cohort counts separately from total counts
             ndrBaseCount: 0, ndrConfirmedCount: 0, ndrDeliveredCount: 0,
             accounts: {}, cities: {}, orderKeys: new Set(), deliveredOrderKeys: new Set(),
@@ -917,6 +936,9 @@ function createDashboardQueryService(options) {
           if (bucket === "processing") product.processingCount += 1;
           if (bucket === "waiting") product.waitingCount += 1;
           if (bucket === "received" || bucket === "pending") product.pendingCount += 1;
+          if (bucket === "shipping") product.outForDeliveryCount += 1;
+          if (bucket === "delivery_suspended") product.deliverySuspendedCount += 1;
+          if (bucket === "waiting") product.awaitingShipmentCount += 1;
         }
         if (inPrimaryPeriod && bucket === "delivered" && !product.deliveredOrderKeys.has(productOrderKey)) {
           product.deliveredOrderKeys.add(productOrderKey);
@@ -949,6 +971,25 @@ function createDashboardQueryService(options) {
         const city = rowCity(row);
         if (city) product.cities[city] = (product.cities[city] || 0) + 1;
       });
+
+      if (text(input && input.deliveredDateMode) === "expected" && ndrRows.length) {
+        ndrRows.forEach((row, index) => {
+          const bucket = statusBucket(row);
+          if (bucket === "canceled_by_you") return;
+          const productOrderKey = orderKey(row, index);
+          globalNdrOrderKeys.add(productOrderKey);
+          if (isConfirmedBucket(bucket)) globalNdrConfirmedOrderKeys.add(productOrderKey);
+          if (bucket === "delivered") globalNdrDeliveredOrderKeys.add(productOrderKey);
+
+          const key = productIdentity(row).key;
+          const product = products.get(key);
+          if (!product || product.ndrOrderKeys.has(productOrderKey)) return;
+          product.ndrOrderKeys.add(productOrderKey);
+          product.ndrBaseCount += 1;
+          if (isConfirmedBucket(bucket)) product.ndrConfirmedCount += 1;
+          if (bucket === "delivered") product.ndrDeliveredCount += 1;
+        });
+      }
       const isExpected = text(input && input.deliveredDateMode) === "expected";
       let globalExpectedNdrRate = 0;
       let globalExpectedDrRate = 0;
@@ -1478,9 +1519,12 @@ function createDashboardQueryService(options) {
 
   function citiesQuery(input) {
       return cached("cities", input, () => {
-        const { rows, scope, accounts } = scopedRows(input, { includeNdrUnion: true });
+        const { rows, ndrRows, scope, accounts } = scopedRows(input, { includeNdrUnion: true });
         const cityStats = {};
         const reportingCurrency = cleanCurrency(input && (input.reportingCurrency || input.currency) || "SAR", "SAR");
+        const citiesExpectedMode = text(input && input.deliveredDateMode) === "expected";
+        const globalCityNdrOrderKeys = new Set();
+        const globalCityNdrDeliveredOrderKeys = new Set();
       
       const ndrFrom = dateKey((input && (input.ndrDateFrom || input.ndrFrom)) || "");
       const ndrTo   = dateKey((input && (input.ndrDateTo   || input.ndrTo))   || "");
@@ -1572,7 +1616,7 @@ function createDashboardQueryService(options) {
           else cs.codNdrBaseOrders++;
         }
 
-        if (rowInConfirmedBase && addOnce('dr:' + uniqueOrderKey)) {
+        if ((citiesExpectedMode ? inNdrCohort : inPrimaryPeriod) && rowInConfirmedBase && addOnce('dr:' + uniqueOrderKey)) {
           cs.drBaseOrders++;
           if (rowIsPrepaid) cs.prepaidDrBaseOrders++;
           else cs.codDrBaseOrders++;
@@ -1679,7 +1723,7 @@ function createDashboardQueryService(options) {
             if (rowIsPrepaid) cp.prepaidNdrBaseOrders++;
             else cp.codNdrBaseOrders++;
           }
-          if (rowInConfirmedBase && addOnce('cityProductDr:' + cityProductKey + ':' + uniqueOrderKey)) {
+          if ((citiesExpectedMode ? inNdrCohort : inPrimaryPeriod) && rowInConfirmedBase && addOnce('cityProductDr:' + cityProductKey + ':' + uniqueOrderKey)) {
             cp.activeOrders++;
             if (rowIsPrepaid) cp.prepaidDrBaseOrders++;
             else cp.codDrBaseOrders++;
@@ -1707,9 +1751,71 @@ function createDashboardQueryService(options) {
         }
       });
 
-      const citiesExpectedMode = text(input && input.deliveredDateMode) === "expected";
-      const globalCityNdrBase = Object.values(cityStats).reduce((sum, stat) => sum + number(stat.ndrBaseOrders), 0);
-      const globalCityNdrDelivered = Object.values(cityStats).reduce((sum, stat) => sum + number(stat.ndrDeliveredOrders), 0);
+      if (citiesExpectedMode && ndrRows.length) {
+        ndrRows.forEach((row, index) => {
+          const rowCountry = lower(row.taagerCountry || row.country || "sa");
+          const cityName = text(row.city || row.customerCity || row.province || "");
+          const bucket = statusBucket(row);
+          if (!cityName || bucket === "canceled_by_you") return;
+
+          const uniqueOrderKey = orderKey(row, index);
+          globalCityNdrOrderKeys.add(uniqueOrderKey);
+          if (bucket === "delivered") globalCityNdrDeliveredOrderKeys.add(uniqueOrderKey);
+
+          const cityKeyName = input.isMixedCountry ? (rowCountry + '|' + cityName) : cityName;
+          const cs = cityStats[cityKeyName];
+          if (!cs) return;
+          if (!cs._seenKeys) cs._seenKeys = new Set();
+          const addOnce = (lbl) => {
+            if (cs._seenKeys.has(lbl)) return false;
+            cs._seenKeys.add(lbl);
+            return true;
+          };
+          const rowIsPrepaid = isRowPrepaid(row);
+          const rowInConfirmedBase = isConfirmedBucket(bucket);
+
+          if (addOnce('ndr:' + uniqueOrderKey)) {
+            cs.ndrBaseOrders++;
+            if (rowIsPrepaid) cs.prepaidNdrBaseOrders++;
+            else cs.codNdrBaseOrders++;
+          }
+          if (rowInConfirmedBase && addOnce('dr:' + uniqueOrderKey)) {
+            cs.drBaseOrders++;
+            if (rowIsPrepaid) cs.prepaidDrBaseOrders++;
+            else cs.codDrBaseOrders++;
+          }
+          if (bucket === "delivered" && addOnce('ndrDelivered:' + uniqueOrderKey)) {
+            cs.ndrDeliveredOrders++;
+            if (rowInConfirmedBase) {
+              cs.drDeliveredOrders++;
+              if (rowIsPrepaid) cs.prepaidDrDeliveredOrders++;
+              else cs.codDrDeliveredOrders++;
+            }
+          }
+
+          const cityProductName = rowProduct(row) || "Unknown Product";
+          const cityProductSku = rowSku(row);
+          const cityProductKey = (cityProductSku || cityProductName || "").toLowerCase();
+          const cp = cityProductKey && cs.productMap ? cs.productMap[cityProductKey] : null;
+          if (cp) {
+            if (addOnce('cityProductNdr:' + cityProductKey + ':' + uniqueOrderKey)) {
+              cp.ndrBaseOrders++;
+              if (rowIsPrepaid) cp.prepaidNdrBaseOrders++;
+              else cp.codNdrBaseOrders++;
+            }
+            if (rowInConfirmedBase && addOnce('cityProductDr:' + cityProductKey + ':' + uniqueOrderKey)) {
+              cp.activeOrders++;
+              if (rowIsPrepaid) cp.prepaidDrBaseOrders++;
+              else cp.codDrBaseOrders++;
+            }
+          }
+        });
+      }
+
+      const visibleGlobalCityNdrBase = Object.values(cityStats).reduce((sum, stat) => sum + number(stat.ndrBaseOrders), 0);
+      const visibleGlobalCityNdrDelivered = Object.values(cityStats).reduce((sum, stat) => sum + number(stat.ndrDeliveredOrders), 0);
+      const globalCityNdrBase = ndrRows.length ? globalCityNdrOrderKeys.size : visibleGlobalCityNdrBase;
+      const globalCityNdrDelivered = ndrRows.length ? globalCityNdrDeliveredOrderKeys.size : visibleGlobalCityNdrDelivered;
       const sortedCities = Object.keys(cityStats).map((keyName) => {
         const stat = cityStats[keyName];
         delete stat._seenKeys;
@@ -1794,6 +1900,7 @@ function createDashboardQueryService(options) {
           confirmedCount: stat.confirmedCount,
           processingCount: stat.processingCount,
           ndrPct: ndrPctCity,
+          expectedNdrRate: rateResolution.rate,
           rateSource: rateResolution.source,
           insufficientHistory: rateResolution.insufficientHistory,
           drPct: drPctCity,

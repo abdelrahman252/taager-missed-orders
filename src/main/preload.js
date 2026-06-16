@@ -120,6 +120,7 @@ contextBridge.exposeInMainWorld("api", {
   getStartupState:     () => monitoredInvoke("get-startup-state"),
   saveCredentials:     (creds) => monitoredInvoke("save-credentials", creds),
   saveAllAccounts:     (accounts) => monitoredInvoke("save-all-accounts", accounts),
+  updateAccount:       (data) => monitoredInvoke("update-account", data),
   unlockSingleAccount: (data) => monitoredInvoke("unlock-single-account", data),
   relockAccount:       (data) => monitoredInvoke("relock-account", data),
   clearAllData:        () => monitoredInvoke("clear-all-data"),

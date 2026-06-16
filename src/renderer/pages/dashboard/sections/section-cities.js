@@ -45,9 +45,31 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   }
   var citiesSearchTimer = null;
 
-  // Track query state for this account/period key
-  var currentQueryKey = (data && data.meta && data.meta.activeAccountId || "__all__") + "|" +
-    (window.DashboardPeriodState && typeof window.DashboardPeriodState.get === "function" ? JSON.stringify(window.DashboardPeriodState.get()) : "");
+  function citiesScopeSignature() {
+    var meta = data && data.meta ? data.meta : {};
+    var period = window.DashboardPeriodState && typeof window.DashboardPeriodState.get === "function"
+      ? window.DashboardPeriodState.get()
+      : (meta.period || {});
+    var mode = window.DashboardDeliveredDateState && typeof window.DashboardDeliveredDateState.get === "function"
+      ? (window.DashboardDeliveredDateState.get() === "expected" ? "expected" : "actual")
+      : (meta.deliveredDateMode === "expected" ? "expected" : "actual");
+    var ndrPeriod = mode === "expected" && window.DashboardExpectedNdrRangeState && typeof window.DashboardExpectedNdrRangeState.get === "function"
+      ? window.DashboardExpectedNdrRangeState.get()
+      : (meta.ndrPeriod || period || {});
+    return JSON.stringify({
+      dataVersion: data && data._version != null ? data._version : "",
+      accountId: meta.activeAccountId || "__all__",
+      dateFrom: period.dateFrom || period.from || "",
+      dateTo: period.dateTo || period.to || "",
+      deliveredDateMode: mode,
+      ndrDateFrom: ndrPeriod.dateFrom || ndrPeriod.from || "",
+      ndrDateTo: ndrPeriod.dateTo || ndrPeriod.to || "",
+      reportingCurrency: meta.reportingCurrency || meta.activeCurrency || window.dashboardActiveCurrency || activeCurrency
+    });
+  }
+
+  // Track query state for this account/period/NDR cohort key.
+  var currentQueryKey = citiesScopeSignature();
   if (mountEl._citiesQueryKey !== currentQueryKey) {
     mountEl._citiesQueryKey = currentQueryKey;
     mountEl._citiesQueryDone = false;

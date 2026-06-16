@@ -42,6 +42,89 @@ const {
   debugGeminiPing,
 } = require("./dashboard-ai-service");
 
+function pathEquals(left, right) {
+  return path.resolve(String(left || "")).toLowerCase() === path.resolve(String(right || "")).toLowerCase();
+}
+
+function copyIfMissing(source, target) {
+  try {
+    if (!source || !target || !fs.existsSync(source) || fs.existsSync(target)) return false;
+    const stat = fs.statSync(source);
+    if (stat.isDirectory()) {
+      fs.cpSync(source, target, { recursive: true, errorOnExist: false });
+    } else {
+      fs.copyFileSync(source, target);
+    }
+    return true;
+  } catch (error) {
+    log.warn("[UserData] Could not migrate item:", source, "->", target, error && error.message ? error.message : error);
+    return false;
+  }
+}
+
+function migrateUserDataSource(sourceDir, targetDir) {
+  try {
+    if (!sourceDir || !targetDir || pathEquals(sourceDir, targetDir) || !fs.existsSync(sourceDir)) return 0;
+    fs.mkdirSync(targetDir, { recursive: true });
+
+    let copied = 0;
+    const encryptedStoreNames = ["machine-id.json", "license.json", "credentials.json"];
+    const targetHasMachineId = fs.existsSync(path.join(targetDir, "machine-id.json"));
+    const sourceHasMachineId = fs.existsSync(path.join(sourceDir, "machine-id.json"));
+
+    // Encrypted stores are only useful with their matching machine-id.json.
+    if (!targetHasMachineId && sourceHasMachineId) {
+      for (const name of encryptedStoreNames) {
+        if (copyIfMissing(path.join(sourceDir, name), path.join(targetDir, name))) copied++;
+      }
+    }
+
+    for (const name of ["analytics.json", "dashboard.json", "bot-profile"]) {
+      if (copyIfMissing(path.join(sourceDir, name), path.join(targetDir, name))) copied++;
+    }
+
+    for (const name of fs.readdirSync(sourceDir)) {
+      if (!name.startsWith("bot-profile-")) continue;
+      if (copyIfMissing(path.join(sourceDir, name), path.join(targetDir, name))) copied++;
+    }
+
+    if (copied > 0) log.info(`[UserData] Migrated ${copied} item(s) from ${sourceDir} to ${targetDir}`);
+    return copied;
+  } catch (error) {
+    log.warn("[UserData] Migration failed:", error && error.message ? error.message : error);
+    return 0;
+  }
+}
+
+function configureStableUserDataPath() {
+  if (!app.isPackaged || process.env.TAAGER_QA_USER_DATA_DIR) return;
+  try {
+    const appData = app.getPath("appData");
+    const currentUserData = app.getPath("userData");
+    const stableUserData = path.join(appData, "Taager Orders");
+    const candidates = Array.from(new Set([
+      currentUserData,
+      path.join(appData, "taager-orders"),
+      path.join(appData, "Taager.Orders"),
+      path.join(appData, "com.taagerbot.orders"),
+    ].filter(Boolean)));
+
+    for (const candidate of candidates) {
+      migrateUserDataSource(candidate, stableUserData);
+    }
+
+    if (!pathEquals(currentUserData, stableUserData)) {
+      fs.mkdirSync(stableUserData, { recursive: true });
+      app.setPath("userData", stableUserData);
+      log.info("[UserData] Using stable userData path:", stableUserData);
+    }
+  } catch (error) {
+    log.warn("[UserData] Could not configure stable userData path:", error && error.message ? error.message : error);
+  }
+}
+
+configureStableUserDataPath();
+
 if (process.env.TAAGER_QA_USER_DATA_DIR) {
   try {
     fs.mkdirSync(process.env.TAAGER_QA_USER_DATA_DIR, { recursive: true });
@@ -684,7 +767,7 @@ function licenseRowMatchesAccount(row, acc) {
   if (easy && rowEasy && easy !== rowEasy) return false;
   const easyStore = String(acc.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase();
   const rowEasyStore = String(row.easy_store || "").replace(/\s+/g, " ").trim().toLowerCase();
-  if (easyStore && easy && rowEasyStore !== easyStore) return false;
+  if (easyStore && easy && rowEasyStore && rowEasyStore !== easyStore) return false;
 
   const accountMerchant = taagerMerchantIdentityOf(acc);
   const rowMerchant = licenseRowMerchantIdentity(row);
@@ -700,6 +783,21 @@ function licenseRowMatchesAccount(row, acc) {
   const rowPhone = normalizePhone(row.taager_phone || "", country);
   const identityPhone = normalizePhone(identity || "", country);
   return !!identity && (rowEmail === identity || rowPhone === identityPhone);
+}
+
+function summarizeRemoteLicenseAccounts(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  return {
+    count: list.length,
+    lockedCount: list.filter(row => !row || row.unlocked !== true).length,
+    accounts: list.slice(0, 10).map((row) => ({
+      easyEmail: String(row && row.easy_email || "").trim(),
+      easyStore: String(row && row.easy_store || "").trim(),
+      taagerIdentity: String(row && (row.taager_email || row.taager_phone) || "").trim(),
+      taagerLoginMethod: String(row && row.taager_login_method || "").trim() || "email",
+      unlocked: row && row.unlocked === true,
+    })),
+  };
 }
 
 function _buildAccountIdents() {
@@ -1056,6 +1154,42 @@ function mergeDashboardSkuNameCache(accountId, learnedMap) {
   });
   dashboardStore.set(dashboardSkuNameCacheKey(accountId), existing);
   return { added, updated, total: Object.keys(existing).length };
+}
+
+function dashboardRowSku(row) {
+  return String(row && (row.sku || row.products) || "").trim();
+}
+
+function cleanDashboardProductName(value) {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function hasExplicitDashboardProductName(row) {
+  const sku = dashboardRowSku(row);
+  const name = cleanDashboardProductName(row && row.productName);
+  const products = cleanDashboardProductName(row && row.products);
+  return !!name && name !== sku && name !== products;
+}
+
+function productNameMapFromDashboardRows(rows) {
+  const map = {};
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const sku = dashboardRowSku(row);
+    if (!sku || map[sku] || !hasExplicitDashboardProductName(row)) return;
+    map[sku] = cleanDashboardProductName(row.productName);
+  });
+  return map;
+}
+
+function preserveExistingDashboardProductNames(rows, existingRows) {
+  const existingNames = productNameMapFromDashboardRows(existingRows);
+  if (!Object.keys(existingNames).length) return rows;
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    if (hasExplicitDashboardProductName(row)) return row;
+    const sku = dashboardRowSku(row);
+    const name = sku ? existingNames[sku] : "";
+    return name ? { ...row, productName: name } : row;
+  });
 }
 
 function normalizeDashboardAccountSnapshot(snapshot) {
@@ -2023,6 +2157,7 @@ function getLocalCredentialsSnapshot() {
   return {
     hasCredentials:   hasAny,
     accounts:         accountsWithStatus,
+    remoteAccountSlots: null,
     maxAccounts:      licenseStore.get("maxAccounts", 1),
     analyticsEnabled:  licenseStore.get("analyticsEnabled",  true),
     operationsEnabled: licenseStore.get("operationsEnabled", true),
@@ -2071,6 +2206,7 @@ ipcMain.handle("get-credentials", async () => {
   const maxAccounts = await getMaxAccounts();
   const legacyEmail = store.get("easyEmail", "");
   let accounts = rawAccounts || [];
+  let remoteAccountSlots = null;
 
   // Fetch per-account lock status from license_accounts table
   let licenseRows = null;
@@ -2082,6 +2218,9 @@ ipcMain.handle("get-credentials", async () => {
       const rows = await supabaseRpc("taager_get_license_accounts", { p_license_key: licKey });
       if (Array.isArray(rows)) {
         licenseRows = rows;
+        if (accounts.length === 0 && rows.length > 0) {
+          remoteAccountSlots = summarizeRemoteLicenseAccounts(rows);
+        }
         if (accounts.length > 0) {
           const keptAccounts = [];
           const deletedAccounts = [];
@@ -2145,6 +2284,7 @@ ipcMain.handle("get-credentials", async () => {
   const result = {
     hasCredentials:   accountsWithStatus.length > 0 || !!legacyEmail,
     accounts:         accountsWithStatus,
+    remoteAccountSlots,
     maxAccounts,
     analyticsEnabled:  licenseStore.get("analyticsEnabled",  true),
     operationsEnabled: licenseStore.get("operationsEnabled", true),
@@ -2187,6 +2327,224 @@ ipcMain.handle("save-credentials", async (_, creds) => {
   store.set("taagerCountry",  creds.taagerCountry  || creds.taagerCountry  || "sa");
   store.set("taagerAffiliateCode", creds.taagerAffiliateCode || "");
   invalidateAnalyticsRunsCache();
+  return { success: true };
+});
+
+function validateAccountCredentialsForSave(a) {
+  const method = taagerLoginMethodOf(a);
+  const easyPassword = a.easyPassword || (a.id ? store.get(`pwd_easy_${a.id}`, "") : "");
+  const taagerPassword = a.taagerPassword || (a.id ? store.get(`pwd_taager_${a.id}`, "") : "");
+  const teamLeaderEnabled = licenseStore.get("teamLeaderEnabled", false) === true;
+  const needsEasyOrdersCredentials = !teamLeaderEnabled || a.dashboardEnrichmentProvider === "easyorders";
+  if (needsEasyOrdersCredentials && (!(a.easyStore || "").trim() || !(a.easyEmail || "").trim() || !easyPassword)) {
+    return { success: false, reason: "easy_credentials_required" };
+  }
+  if (!(a.taagerAffiliateCode || "").trim()) {
+    return { success: false, reason: "taager_merchant_id_required" };
+  }
+  if (method === "phone" ? !(a.taagerPhone || "").trim() : !(a.taagerEmail || "").trim()) {
+    return { success: false, reason: method === "phone" ? "taager_phone_required" : "taager_email_required" };
+  }
+  if (method !== "google" && !taagerPassword) {
+    return { success: false, reason: "taager_password_required" };
+  }
+  return { success: true };
+}
+
+function safeAccountForStorage(a) {
+  return {
+    id:         a.id,
+    memberName: String(a.memberName || "").trim(),
+    label:      a.label || a.easyStore || a.easyEmail || a.taagerEmail || a.taagerEmail || a.taagerPhone || "",
+    licenseAccountHash: a.licenseAccountHash && a.licenseIdentityKey === accountIdentityKey(a) ? a.licenseAccountHash : "",
+    licenseIdentityKey: a.licenseAccountHash && a.licenseIdentityKey === accountIdentityKey(a) ? a.licenseIdentityKey : "",
+    easyEmail:  a.easyEmail,
+    easyStore:  a.easyStore  || "",
+    dashboardEnrichmentProvider: a.dashboardEnrichmentProvider === "easyorders" ? "easyorders" : "none",
+    easyOrdersLookbackDays: Number(a.easyOrdersLookbackDays || 60),
+    taagerEmail:  a.taagerEmail,
+    taagerAffiliateCode: a.taagerAffiliateCode || "",
+    taagerCountry: a.taagerCountry || "sa",
+    taagerLoginMethod: a.taagerLoginMethod || "email",
+    taagerEmail: a.taagerEmail || a.taagerEmail || "",
+    taagerPhone: a.taagerPhone || "",
+    taagerCountry: a.taagerCountry || a.taagerCountry || "sa",
+  };
+}
+
+function persistAccountsWithoutDeleting(accounts, maxAccounts) {
+  store.set("accounts", accounts.map(safeAccountForStorage));
+
+  const remainingIds = accounts.map(a => a.id);
+  const savedAutoRunIds = store.get("autoRunAccountIds", []);
+  if (Array.isArray(savedAutoRunIds)) {
+    store.set("autoRunAccountIds", savedAutoRunIds.filter(id => remainingIds.includes(id)));
+  }
+  const cachedUnlocked = store.get("unlockedAccountIds", []).filter(id => remainingIds.includes(id));
+  store.set("unlockedAccountIds", cachedUnlocked);
+
+  for (const a of accounts) {
+    if (a.easyPassword) store.set(`pwd_easy_${a.id}`, a.easyPassword);
+    if (a.taagerPassword) store.set(`pwd_taager_${a.id}`, a.taagerPassword);
+    if (a.taagerPassword || a.taagerPassword) store.set(`pwd_taager_${a.id}`, a.taagerPassword || a.taagerPassword);
+  }
+
+  if (accounts[0]) {
+    store.set("easyEmail",    accounts[0].easyEmail    || "");
+    store.set("easyPassword", accounts[0].easyPassword || store.get(`pwd_easy_${accounts[0].id}`, ""));
+    store.set("easyStore",    accounts[0].easyStore    || "");
+    store.set("taagerEmail",    accounts[0].taagerEmail    || "");
+    store.set("taagerPassword", accounts[0].taagerPassword || store.get(`pwd_taager_${accounts[0].id}`, ""));
+    store.set("taagerCountry",  accounts[0].taagerCountry  || "sa");
+    store.set("taagerLoginMethod", accounts[0].taagerLoginMethod || "email");
+    store.set("taagerEmail",    accounts[0].taagerEmail    || accounts[0].taagerEmail || "");
+    store.set("taagerPhone",    accounts[0].taagerPhone    || "");
+    store.set("taagerPassword", accounts[0].taagerPassword || accounts[0].taagerPassword || store.get(`pwd_taager_${accounts[0].id}`, ""));
+    store.set("taagerCountry",  accounts[0].taagerCountry  || accounts[0].taagerCountry || "sa");
+  } else {
+    ["easyEmail", "easyPassword", "easyStore", "taagerEmail", "taagerPassword",
+     "taagerCountry", "taagerLoginMethod", "taagerPhone", "taagerAffiliateCode"].forEach(k => store.delete(k));
+  }
+
+  licenseStore.set("maxAccounts", maxAccounts);
+  _credCache = null;
+  _credCacheAt = 0;
+  invalidateAnalyticsRunsCache();
+}
+
+async function syncSingleEditedAccountLicenseSlot(oldAccount, newAccount, maxAccounts) {
+  const licKey = licenseStore.get("licenseKey", "");
+  if (!licKey) return { success: true };
+
+  try {
+    const dbRows = await supabaseRpc("taager_get_license_accounts", { p_license_key: licKey }) || [];
+    const dbHashes = dbRows.map(r => r.account_hash);
+    const oldH = accountHash(oldAccount);
+
+    if (!(newAccount.licenseAccountHash && dbHashes.includes(newAccount.licenseAccountHash))) {
+      const matchingRow = dbRows.find(r => licenseRowMatchesAccount(r, newAccount));
+      if (matchingRow && matchingRow.account_hash) {
+        newAccount.licenseAccountHash = matchingRow.account_hash;
+        newAccount.licenseIdentityKey = accountIdentityKey(newAccount);
+      }
+    }
+
+    const newH = accountHash(newAccount);
+
+    if (newH === oldH && dbHashes.includes(newH)) {
+      const oldStore = String(oldAccount?.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase();
+      const newStore = String(newAccount?.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase();
+      if (oldStore !== newStore) {
+        const currentRow = dbRows.find(row => row.account_hash === newH);
+        const syncRes = await supabaseRpc("taager_insert_license_account", {
+          p_license_key: licKey,
+          p_account_hash: newH,
+          p_easy_email: (newAccount.easyEmail || "").toLowerCase().trim() || null,
+          p_easy_store: newStore || null,
+          p_taager_email: taagerLoginIdentityOf(newAccount) || null,
+          p_taager_login_method: taagerLoginMethodOf(newAccount),
+          p_unlocked: !!currentRow?.unlocked,
+        });
+        if (syncRes && syncRes.success === false) {
+          return { success: false, reason: syncRes.reason || "license_account_sync_failed" };
+        }
+      }
+      return { success: true };
+    }
+
+    if (oldH && dbHashes.includes(oldH)) {
+      const oldRow = dbRows.find(r => r.account_hash === oldH);
+      const wasUnlocked = oldRow ? !!oldRow.unlocked : false;
+      if (!wasUnlocked) return { success: false, reason: "account_locked" };
+      const newTaagerIdentity = taagerLoginIdentityOf(newAccount);
+      const replaceRes = await supabaseRpc("taager_replace_license_account", {
+        p_license_key: licKey,
+        p_old_account_hash: oldH,
+        p_new_account_hash: newH,
+        p_easy_email: (newAccount.easyEmail || "").toLowerCase().trim() || null,
+        p_easy_store: String(newAccount.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase() || null,
+        p_taager_email: newTaagerIdentity || null,
+        p_taager_login_method: taagerLoginMethodOf(newAccount),
+      });
+      if (replaceRes && replaceRes.success === false) {
+        return { success: false, reason: replaceRes.reason || "license_account_sync_failed" };
+      }
+      return { success: true };
+    }
+
+    if (!dbHashes.includes(newH)) {
+      if (dbHashes.length + 1 > maxAccounts) {
+        return { success: false, reason: "limit_reached", remoteAccountSlots: summarizeRemoteLicenseAccounts(dbRows) };
+      }
+      const insertRes = await supabaseRpc("taager_insert_license_account", {
+        p_license_key: licKey,
+        p_account_hash: newH,
+        p_easy_email: (newAccount.easyEmail || "").toLowerCase().trim() || null,
+        p_easy_store: String(newAccount.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase() || null,
+        p_taager_email: taagerLoginIdentityOf(newAccount) || null,
+        p_taager_login_method: taagerLoginMethodOf(newAccount),
+        p_unlocked: false,
+      });
+      if (insertRes && insertRes.success === false) {
+        return { success: false, reason: insertRes.reason || "license_account_sync_failed", remoteAccountSlots: summarizeRemoteLicenseAccounts(dbRows) };
+      }
+    }
+    return { success: true };
+  } catch (error) {
+    log.warn("[Accounts] Could not sync edited license account slot:", error && error.message ? error.message : error);
+    return { success: false, reason: "license_account_sync_failed" };
+  }
+}
+
+function buildAccountPatchForUpdate(patch) {
+  const src = patch && typeof patch === "object" ? patch : {};
+  const next = {};
+  [
+    "memberName", "label", "easyEmail", "easyStore", "dashboardEnrichmentProvider",
+    "easyOrdersLookbackDays", "taagerLoginMethod", "taagerEmail", "taagerPhone",
+    "taagerCountry", "taagerAffiliateCode"
+  ].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(src, key)) next[key] = src[key];
+  });
+  if (src.easyPassword) next.easyPassword = src.easyPassword;
+  if (src.taagerPassword) next.taagerPassword = src.taagerPassword;
+  return next;
+}
+
+ipcMain.handle("update-account", async (_, data = {}) => {
+  const accountId = String(data.accountId || "").trim();
+  if (!accountId) return { success: false, reason: "account_not_found" };
+
+  const accounts = store.get("accounts", []) || [];
+  const idx = accounts.findIndex(a => a.id === accountId);
+  if (idx < 0) return { success: false, reason: "account_not_found" };
+
+  const maxAccounts = await getMaxAccounts();
+  const oldAccount = { ...accounts[idx] };
+  const updatedAccount = {
+    ...oldAccount,
+    ...buildAccountPatchForUpdate(data.patch || {}),
+    id: oldAccount.id,
+  };
+  const nextAccounts = accounts.map((a, i) => i === idx ? updatedAccount : { ...a });
+
+  const duplicateConflict = findNewDuplicateConflict(accounts, nextAccounts);
+  if (duplicateConflict) {
+    return {
+      success: false,
+      reason: "duplicate_account",
+      conflictAccountId: duplicateConflict.conflict.id || "",
+      conflictAccountLabel: accountDisplayName(duplicateConflict.conflict, "Account"),
+    };
+  }
+
+  const validation = validateAccountCredentialsForSave(updatedAccount);
+  if (!validation.success) return validation;
+
+  const licenseSync = await syncSingleEditedAccountLicenseSlot(oldAccount, updatedAccount, maxAccounts);
+  if (!licenseSync.success) return licenseSync;
+
+  persistAccountsWithoutDeleting(nextAccounts, maxAccounts);
   return { success: true };
 });
 
@@ -2311,8 +2669,13 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
             .filter(b => { const bOld = oldHashById[b.id]; return bOld && dbHashes.includes(bOld); })
             .map(b => accountHash(b));
           const genuinelyNew = newHashes.filter(h => !dbHashes.includes(h) && !alreadyKnownOrSwapped.includes(h));
-          if (dbHashes.length + genuinelyNew.length > maxAccounts)
-            return { success: false, reason: "limit_reached" };
+          if (dbHashes.length + genuinelyNew.length > maxAccounts) {
+            return {
+              success: false,
+              reason: storedAccountsBeforeSave.length === 0 && dbHashes.length > 0 ? "remote_slots_full" : "limit_reached",
+              remoteAccountSlots: summarizeRemoteLicenseAccounts(dbRows),
+            };
+          }
           const newAccForInsert = accounts.find(a => accountHash(a) === newH);
           const newTaagerIdentity = taagerLoginIdentityOf(newAccForInsert);
           const insertRes = await supabaseRpc("taager_insert_license_account", {
@@ -2326,7 +2689,13 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
             p_unlocked:     false,
           });
           if (insertRes && insertRes.success === false) {
-            return { success: false, reason: insertRes.reason || "license_account_sync_failed" };
+            return {
+              success: false,
+              reason: insertRes.reason === "limit_reached" && storedAccountsBeforeSave.length === 0 && dbHashes.length > 0
+                ? "remote_slots_full"
+                : (insertRes.reason || "license_account_sync_failed"),
+              remoteAccountSlots: summarizeRemoteLicenseAccounts(dbRows),
+            };
           }
         }
       }
@@ -2829,7 +3198,7 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo } 
           forwardDashboardLog(`[stage:${msg.status || "info"}] ${msg.stage || lastStage} - ${msg.message}`);
         }
       } else if (msg.type === "dashboard-result") {
-        const rows = normalizeDashboardProfitRows(msg.rows || []);
+        let rows = normalizeDashboardProfitRows(msg.rows || []);
         try {
           const rangeFrom = msg.dateFrom || dateFrom || "";
           const rangeTo = msg.dateTo || dateTo || "";
@@ -2846,6 +3215,7 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo } 
             }
           }
           const existingRows = dashboardStore.get(`accounts.${dashboardAccountId}.snapshot`, []);
+          rows = preserveExistingDashboardProductNames(rows, existingRows);
           const existingDebugSummary = dashboardDebugSummaryForRange(existingRows, rangeFrom, rangeTo, null);
           const incomingDebugSummary = dashboardDebugSummaryForRange(rows, rangeFrom, rangeTo, msg.parseDiagnostics);
           const persisted = persistDashboardSnapshot(dashboardAccountId, {
@@ -2959,8 +3329,9 @@ function prepareStaticDashboardUpdate(payload = {}) {
     easyOrdersLookbackDays: Number(account.easyOrdersLookbackDays || 60),
     skuNameCache: getDashboardSkuNameCache(accountId),
   });
-  const normalizedRows = normalizeDashboardProfitRows(processed.rows);
+  let normalizedRows = normalizeDashboardProfitRows(processed.rows);
   const existingRows = dashboardStore.get("accounts", {})[accountId]?.snapshot || [];
+  normalizedRows = preserveExistingDashboardProductNames(normalizedRows, existingRows);
   const validation = validateDashboardSnapshotReplacement(existingRows, normalizedRows, processed.dateFrom, processed.dateTo, processed.parseDiagnostics);
   const periodMismatch = staticDashboardPeriodMismatch({ ...processed, rows: normalizedRows });
   if (periodMismatch) {

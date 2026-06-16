@@ -466,7 +466,7 @@
     var isAr = window.dashboardI18n ? window.dashboardI18n.currentLocale === 'ar' : true;
     var badgeText = isAr ? 'مفترض' : 'supposed';
     
-    return ' <span class="supposed-badge" style="font-size: 11px; font-weight: 700; color: #fbbf24; margin-inline-start: 4px; vertical-align: middle;">(' + badgeText + ')</span>';
+    return ' <span class="supposed-badge">(' + badgeText + ')</span>';
   };
 
   (function() {
@@ -476,7 +476,10 @@
       style.id = styleId;
       style.textContent = 
         '@keyframes supposed-pulse { 0% { opacity: 0.95; } 50% { opacity: 0.6; } 100% { opacity: 0.95; } }\n' +
-        '.supposed-badge { display: inline-block; animation: supposed-pulse 2s infinite ease-in-out; }';
+        '.supposed-badge { display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:850;line-height:1.1;color:#fbbf24;margin-inline-start:4px;vertical-align:middle;white-space:nowrap;animation:supposed-pulse 2s infinite ease-in-out;unicode-bidi:isolate; }\n' +
+        '.expected-value-stack { display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:0;max-width:100%;line-height:1.05;vertical-align:middle;text-align:center;unicode-bidi:isolate; }\n' +
+        '.expected-value-stack .expected-value-main { display:block;max-width:100%;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }\n' +
+        '.expected-value-stack > .supposed-badge { margin-inline-start:0;font-size:9.5px;max-width:100%;white-space:normal;text-align:center;overflow-wrap:anywhere; }';
       document.head.appendChild(style);
     }
   })();
@@ -530,8 +533,8 @@
       '<div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:12px 0;">' +
         /* value */
         '<div class="dash-kpi-value" title="' + fullValue + (unit ? ' ' + unit : '') + '" style="font-size:' + numSize + ';font-weight:900;color:#fff;line-height:1;letter-spacing:0;' +
-          'position:relative;z-index:2;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">' +
-          '<span class="' + ((hideDelta || staticDisplay) ? '' : 'kpi-num') + '" data-id="' + id + '" data-decimals="' + decimals + '" data-compact="true" ' + ((hideDelta || staticDisplay) ? '' : 'data-to="' + value + '"') + '>' + ((hideDelta || staticDisplay) ? displayValue : '0') + '</span>' + window.supposedBadgeHtml(opts.label) +
+          'position:relative;z-index:2;text-align:center;max-width:100%;min-width:0;">' +
+          '<span class="expected-value-stack dash-expected-value-stack"><span class="' + ((hideDelta || staticDisplay) ? 'expected-value-main' : 'expected-value-main kpi-num') + '" data-id="' + id + '" data-decimals="' + decimals + '" data-compact="true" ' + ((hideDelta || staticDisplay) ? '' : 'data-to="' + value + '"') + '>' + ((hideDelta || staticDisplay) ? displayValue : '0') + '</span>' + window.supposedBadgeHtml(opts.label) + '</span>' +
         '</div>' +
         /* unit */
         '<div style="font-size:' + unitSize + ';color:' + accent + ';font-weight:700;margin-top:8px;' +

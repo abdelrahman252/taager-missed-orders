@@ -17,6 +17,7 @@ window.renderSetup = function (onComplete, initialStep) {
 
   let accounts    = [];
   let maxAccounts = 1;
+  let remoteAccountSlots = null;
   let editingId   = null;
 
   // Step state: "accounts" | "run"
@@ -43,6 +44,7 @@ window.renderSetup = function (onComplete, initialStep) {
       const creds = await window.api.getCredentials();
       accounts    = creds.accounts || [];
       maxAccounts = creds.maxAccounts || 1;
+      remoteAccountSlots = creds.remoteAccountSlots || null;
 
       if (!accounts.length && creds.easyEmail) {
         accounts = [{
@@ -95,6 +97,7 @@ window.renderSetup = function (onComplete, initialStep) {
     accounts = fresh.accounts || [];
     window._kbotAccounts = accounts;
     maxAccounts = fresh.maxAccounts || maxAccounts;
+    remoteAccountSlots = fresh.remoteAccountSlots || null;
 
     if (window.invalidateDashboardCache) window.invalidateDashboardCache(reason);
     if (typeof invalidatePage === "function") {
@@ -207,6 +210,41 @@ window.renderSetup = function (onComplete, initialStep) {
 
         .sv3-page-title { font-size: 24px; font-weight: 800; color: var(--text); letter-spacing: -.4px; margin-bottom: 4px; }
         .sv3-page-sub   { font-size: 13px; color: var(--text2); margin-bottom: 28px; }
+        .sv3-recovery-note {
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          padding: 14px 16px;
+          margin-bottom: 18px;
+          border-radius: 8px;
+          background: rgba(245, 158, 11, .12);
+          border: 1px solid rgba(245, 158, 11, .34);
+          color: var(--text);
+          font-size: 13px;
+          line-height: 1.45;
+        }
+        .sv3-recovery-note strong {
+          display: block;
+          margin-bottom: 3px;
+          font-size: 13px;
+        }
+        .sv3-recovery-note span {
+          color: var(--text2);
+        }
+        .sv3-recovery-note-badge {
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex: 0 0 auto;
+          background: rgba(245, 158, 11, .2);
+          border: 1px solid rgba(245, 158, 11, .4);
+          color: #fbbf24;
+          font-weight: 900;
+          font-size: 13px;
+        }
 
         .sv3-run-title-lockup {
           display: flex;
@@ -2099,6 +2137,30 @@ window.renderSetup = function (onComplete, initialStep) {
             0 0 0 1px rgba(255, 255, 255, 0.02);
           animation: sv3-slide-up .35s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
+        .sv3-member-card {
+          width: min(460px, calc(100vw - 32px));
+          max-width: 460px;
+          padding: 24px;
+          border-radius: 14px;
+          max-height: min(90vh, 520px);
+        }
+        .sv3-member-card .form-group input {
+          width: 100%;
+          min-height: 44px;
+          font-size: 13px;
+        }
+        .sv3-member-card .sv3-member-actions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          margin-top: 18px;
+        }
+        .sv3-member-card .sv3-member-actions .btn {
+          width: 100%;
+          min-height: 42px;
+          padding: 0 14px;
+          font-size: 12px;
+        }
         @keyframes sv3-slide-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
         [data-theme="light"] .sv3-form-card {
           background-image: radial-gradient(circle at 100% 0%, rgba(124,106,247,0.03) 0%, transparent 60%);
@@ -2331,6 +2393,12 @@ window.renderSetup = function (onComplete, initialStep) {
         @media (max-width: 620px) {
           .sv3-settings-dock,
           .sv3-flow-stepper {
+            grid-template-columns: 1fr;
+          }
+          .sv3-member-card {
+            padding: 20px;
+          }
+          .sv3-member-card .sv3-member-actions {
             grid-template-columns: 1fr;
           }
           .sv3-launch-row {
@@ -2852,10 +2920,27 @@ window.renderSetup = function (onComplete, initialStep) {
     const disabledReason = !canAdd
       ? (maxAccounts <= 1 ? t("setup.license_one") : t("setup.license_max")(maxAccounts))
       : null;
+    const remoteCount = remoteAccountSlots && remoteAccountSlots.count ? Number(remoteAccountSlots.count) : 0;
+    const showRecoveryNotice = accounts.length === 0 && remoteCount > 0;
+    const recoveryTitle = setupText("setup.remote_slots_title", "This license already has accounts on the server");
+    const recoveryBodyFn = t("setup.remote_slots_body");
+    const recoveryBody = typeof recoveryBodyFn === "function"
+      ? recoveryBodyFn(remoteCount)
+      : `We found ${remoteCount} saved license slot(s) in the admin panel, but local credentials are missing on this install. Re-add the same Taager merchant/account details to re-link them, or ask admin to clear stale slots if this is a new setup.`;
 
     content.innerHTML = `
       <div class="sv3-page-title">${t("setup.manage_title")}</div>
       <div class="sv3-page-sub">${t("setup.manage_sub")}</div>
+
+      ${showRecoveryNotice ? `
+        <div class="sv3-recovery-note">
+          <div class="sv3-recovery-note-badge">i</div>
+          <div>
+            <strong>${esc(recoveryTitle)}</strong>
+            <span>${esc(recoveryBody)}</span>
+          </div>
+        </div>
+      ` : ""}
 
       <div class="sv3-section">
         <div class="sv3-section-hd">
@@ -3623,7 +3708,7 @@ window.renderSetup = function (onComplete, initialStep) {
     const overlay = document.createElement("div");
     overlay.className = "sv3-form-overlay";
     overlay.innerHTML = `
-      <div class="sv3-form-card">
+      <div class="sv3-form-card sv3-member-card">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
           <button id="sv3-member-back" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);font-size:15px;flex-shrink:0;transition:all .15s">←</button>
           <div>
@@ -3645,7 +3730,7 @@ window.renderSetup = function (onComplete, initialStep) {
           <div class="notice-text" id="sv3-member-err-text">${t("setup.save_failed")}</div>
         </div>
 
-        <div class="mt-20" style="display:flex;gap:10px">
+        <div class="sv3-member-actions">
           <button class="btn full-width" id="sv3-member-clear" style="border:1px solid var(--border);background:var(--bg2);color:var(--text2)">${t("setup.clear_member_name")}</button>
           <button class="btn btn-primary full-width btn-lg" id="sv3-member-save">${t("setup.save_member_name")}</button>
         </div>
@@ -3671,7 +3756,9 @@ window.renderSetup = function (onComplete, initialStep) {
       }
       const nextAccounts = accounts.map(a => ({ ...a }));
       nextAccounts[idx] = { ...nextAccounts[idx], memberName: String(value || "").trim() };
-      const result = await window.api.saveAllAccounts(nextAccounts);
+      const result = window.api.updateAccount
+        ? await window.api.updateAccount({ accountId, patch: { memberName: String(value || "").trim() } })
+        : await window.api.saveAllAccounts(nextAccounts);
       if (result && result.success === false) {
         if (saveBtn) {
           saveBtn.textContent = t("setup.save_member_name");
@@ -3986,25 +4073,29 @@ window.renderSetup = function (onComplete, initialStep) {
 
       const nextAccounts = accounts.map(a => ({ ...a }));
       let newAccountId = "";
+      let accountPatch = null;
 
       if (isEdit) {
+        accountPatch = {
+          easyEmail: nextEasyEmail,
+          easyStore: nextEasyStore,
+          taagerLoginMethod,
+          taagerEmail: nextTaagerEmail,
+          taagerPhone: nextTaagerPhone,
+          taagerCountry,
+          taagerAffiliateCode: nextTaagerMerchantId,
+          dashboardEnrichmentProvider,
+          ...(easyPassword ? { easyPassword } : {}),
+          ...(taagerPassword ? { taagerPassword } : {}),
+        };
         const idx = nextAccounts.findIndex(a => a.id === editId);
         if (idx !== -1) {
           nextAccounts[idx] = {
             ...nextAccounts[idx],
-            easyEmail: nextEasyEmail,
-            easyStore: nextEasyStore,
-            taagerLoginMethod,
-            taagerEmail: nextTaagerEmail,
-            taagerPhone: nextTaagerPhone,
-            taagerCountry,
-            taagerAffiliateCode: nextTaagerMerchantId,
-            dashboardEnrichmentProvider,
-            ...(easyPassword ? { easyPassword } : {}),
-            ...(taagerPassword ? { taagerPassword } : {}),
+            ...accountPatch,
           };
         }
-        // NOTE: relockAccount is called AFTER saveAllAccounts so that main.js
+        // NOTE: relockAccount is called AFTER save so that main.js
         // reads the already-updated credentials from store when computing the hash.
       } else {
         newAccountId = "account_" + Date.now();
@@ -4025,7 +4116,9 @@ window.renderSetup = function (onComplete, initialStep) {
         });
       }
 
-      const result = await window.api.saveAllAccounts(nextAccounts);
+      const result = isEdit && window.api.updateAccount
+        ? await window.api.updateAccount({ accountId: editId, patch: accountPatch })
+        : await window.api.saveAllAccounts(nextAccounts);
 
       if (result && result.success === false) {
         saveBtn.textContent = isEdit ? t("setup.save_btn2") : t("setup.add_btn");
@@ -4036,6 +4129,8 @@ window.renderSetup = function (onComplete, initialStep) {
           ? t("setup.err_missing")
           : result.reason === "taager_merchant_id_required"
           ? setupText("setup.taager_merchant_id_required", "Taager merchant ID is required.")
+          : result.reason === "remote_slots_full"
+          ? setupText("setup.remote_slots_full", "This license already has account slots on the server. Re-add the same Taager merchant/account details to re-link them, or ask admin to clear stale slots.")
           : result.reason === "limit_reached"
           ? t("setup.limit_reached")
           : (result.reason || t("setup.save_failed"));

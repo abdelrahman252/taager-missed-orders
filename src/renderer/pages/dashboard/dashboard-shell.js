@@ -618,6 +618,28 @@
     return data && data._version != null ? data._version : (data && data._loaded ? 'loaded' : 'pending');
   }
 
+  function getDashboardScopeKey(data) {
+    var meta = data && data.meta ? data.meta : {};
+    var period = window.DashboardPeriodState && typeof window.DashboardPeriodState.get === 'function'
+      ? window.DashboardPeriodState.get()
+      : (meta.period || {});
+    var mode = window.DashboardDeliveredDateState && typeof window.DashboardDeliveredDateState.get === 'function'
+      ? (window.DashboardDeliveredDateState.get() === 'expected' ? 'expected' : 'actual')
+      : (meta.deliveredDateMode === 'expected' ? 'expected' : 'actual');
+    var ndrPeriod = mode === 'expected' && window.DashboardExpectedNdrRangeState && typeof window.DashboardExpectedNdrRangeState.get === 'function'
+      ? window.DashboardExpectedNdrRangeState.get()
+      : (meta.ndrPeriod || period || {});
+    return JSON.stringify({
+      accountId: meta.activeAccountId || (window.getActiveAccountId ? window.getActiveAccountId() : '__all__'),
+      dateFrom: period.dateFrom || period.from || '',
+      dateTo: period.dateTo || period.to || '',
+      deliveredDateMode: mode,
+      ndrDateFrom: mode === 'expected' ? (ndrPeriod.dateFrom || ndrPeriod.from || '') : '',
+      ndrDateTo: mode === 'expected' ? (ndrPeriod.dateTo || ndrPeriod.to || '') : '',
+      reportingCurrency: meta.reportingCurrency || meta.activeCurrency || window.dashboardActiveCurrency || ''
+    });
+  }
+
   function scheduleSectionRender(shellEl, render) {
     var token = (shellEl._dashboardRenderToken || 0) + 1;
     shellEl._dashboardRenderToken = token;
@@ -1429,7 +1451,8 @@
     var container = shellEl.querySelector('#dash-section-pane');
     if (!container) return;
     var version = getDataVersion(data);
-    var renderKey = sectionId + '|' + version + '|' + (window._kbotLang || '') + '|' + (window._kbotTheme || '');
+    var scopeKey = getDashboardScopeKey(data);
+    var renderKey = sectionId + '|' + version + '|' + scopeKey + '|' + (window._kbotLang || '') + '|' + (window._kbotTheme || '');
     var pane = shellEl._dashboardActivePane || container;
     if (!skipDelay && pane._dashboardRenderKey === renderKey && pane.children.length && !(data && data._loading)) {
       finishSectionSwitch({ ok: true, cacheHit: true, renderKey: renderKey });
@@ -1600,6 +1623,8 @@
     };
     mountEl._dashboardCurrentData = data;
     mountEl._dashboardCurrentCtx = ctx;
+    mountEl._dashboardPaneDataVersion = getDataVersion(data);
+    mountEl._dashboardPaneScopeKey = getDashboardScopeKey(data);
 
     mountEl.classList.add('dash-shell');
     mountEl.setAttribute('dir', isRtl() ? 'rtl' : 'ltr');
@@ -1716,6 +1741,14 @@
     if (!mountEl) return;
     syncDashboardCountryState(data);
     applyResponsiveState(mountEl);
+    var incomingDataVersion = getDataVersion(data);
+    var incomingScopeKey = getDashboardScopeKey(data);
+    if (mountEl._dashboardPaneDataVersion !== incomingDataVersion ||
+        mountEl._dashboardPaneScopeKey !== incomingScopeKey) {
+      destroyDashboardPaneCache(mountEl);
+      mountEl._dashboardPaneDataVersion = incomingDataVersion;
+      mountEl._dashboardPaneScopeKey = incomingScopeKey;
+    }
     var active = normalizeSection(mountEl._dashboardActiveSection || 'master');
     var ctx = {
       options: mountEl._dashboardOptions || {},

@@ -101,6 +101,10 @@
     return !!key && key >= period.dateFrom && key <= period.dateTo;
   }
 
+  function createdDashboardDate(row) {
+    return normalizeDateKey(row && (row.createdAt || row.date || row.dashboardDate));
+  }
+
   function deliveredDateMode() {
     // Taager dashboard/status/NDR migration: delivery and NDR counts are anchored
     // to the selected created-date period so every section uses the same range.
@@ -112,24 +116,16 @@
 
   function isDeliveredRowInPeriod(row, period, mode) {
     if (getStatusBucket(row && (row.orderStatus || row.status)) !== 'delivered') return false;
-    return isDateKeyInPeriod(deliveredDashboardDate(row, mode), period);
+    return isDateKeyInPeriod(createdDashboardDate(row), period);
   }
 
   function deliveredDashboardDate(row, mode) {
-    if ((mode || deliveredDateMode()) === 'actual') {
-      return normalizeDateKey(row && (row.deliveredAt || row.lastUpdatedAt || row.updatedAt || row.dashboardDate || row.createdAt || row.date));
-    }
-    return normalizeDateKey(row && (row.createdAt || row.date || row.dashboardDate));
+    return createdDashboardDate(row);
   }
 
   function rowDashboardDate(row, mode) {
     if (!row) return '';
-    var bucket = getStatusBucket(row.orderStatus || row.status);
-    if (bucket === 'delivered') {
-      return deliveredDashboardDate(row, mode);
-    } else {
-      return normalizeDateKey(row.createdAt || row.date || row.dashboardDate);
-    }
+    return createdDashboardDate(row);
   }
 
   function activePeriod() {
@@ -151,9 +147,8 @@
 
   function filterRowsByPeriod(rows, period, mode) {
     if (!period || !period.dateFrom || !period.dateTo) return rows;
-    mode = mode || deliveredDateMode();
     return rows.filter(function (row) {
-      return isRowCreatedInPeriod(row, period) || isDeliveredRowInPeriod(row, period, mode);
+      return isRowCreatedInPeriod(row, period);
     });
   }
 
@@ -192,9 +187,8 @@
 
   function filterOutcomeOrders(rows, period, mode) {
     if (!period || !period.dateFrom || !period.dateTo) return rows.slice();
-    mode = mode || deliveredDateMode();
     return rows.filter(function (row) {
-      return isRowCreatedInPeriod(row, period) || isDeliveredRowInPeriod(row, period, mode);
+      return isRowCreatedInPeriod(row, period);
     });
   }
 
@@ -1451,9 +1445,10 @@
         ? filterRowsByPeriod(allRowsForAccount, previousPeriod, activeDeliveredDateMode)
         : [];
       var periodRows = filterRowsByPeriod(allRowsForAccount, period, activeDeliveredDateMode);
-      rows = activeDeliveredDateMode === 'expected' && requestedNdrPeriod
-        ? unionRows(periodRows, filterRowsByPeriod(allRowsForAccount, requestedNdrPeriod, activeDeliveredDateMode))
+      var ndrSourceRows = activeDeliveredDateMode === 'expected' && requestedNdrPeriod
+        ? filterCreatedOrders(allRowsForAccount, requestedNdrPeriod)
         : periodRows;
+      rows = periodRows;
 
       var snapshotMonth = chooseSnapshotMonth(accounts, activeId);
       var lastUpdatedAt = latestTimestamp(accounts, activeId);
@@ -1546,6 +1541,7 @@
       meta.countryGroups = Object.keys(countryGroups).map(function (key) { return countryGroups[key]; });
       rows = prepareReportingRows(rows, meta);
       meta.previousRows = prepareReportingRows(previousRows, meta);
+      meta.ndrSourceRows = prepareReportingRows(ndrSourceRows, meta);
 
       var result = processSnapshotRows(rows, activeId, meta);
       // T-04: Validate hash AFTER rows assembled. If hash matches, old cache is still good.
@@ -2143,6 +2139,7 @@
             canceledCount: 0, canceledByYouCount: 0, failedCount: 0, confirmedCount: 0, ndrConfirmedCount: 0,
             shippingCount: 0, processingCount: 0,
             waitingCount: 0, pendingCount: 0,
+            outForDeliveryCount: 0, deliverySuspendedCount: 0, awaitingShipmentCount: 0,
             realFailedCount: 0,
             cityMap: {}, piecesMap: {}, quantityCityMap: {}, accountMap: {}
           };
@@ -2194,6 +2191,9 @@
             else if (bucket === 'processing') productStats[productKey].processingCount++;
             else if (bucket === 'waiting') productStats[productKey].waitingCount++;
             else if (bucket === 'pending') productStats[productKey].pendingCount++;
+            if (exactBucket === 'shipping') productStats[productKey].outForDeliveryCount++;
+            else if (exactBucket === 'delivery_suspended') productStats[productKey].deliverySuspendedCount++;
+            else if (exactBucket === 'waiting') productStats[productKey].awaitingShipmentCount++;
           }
         }
         if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'accountPlaced:' + productAccountOrderKey)) {
@@ -2364,6 +2364,176 @@
         }
       }
     });
+
+    function resetExpectedRateCountersFromSource() {
+      if (meta.deliveredDateMode !== 'expected') return;
+      var sourceRows = Array.isArray(meta.ndrSourceRows) ? meta.ndrSourceRows : [];
+      if (!sourceRows.length) return;
+
+      ndrBaseOrders = 0;
+      ndrDeliveredOrders = 0;
+      drBaseOrders = 0;
+      drDeliveredOrders = 0;
+
+      Object.keys(cityStats).forEach(function (cityKey) {
+        var city = cityStats[cityKey];
+        city.ndrBaseOrders = 0;
+        city.ndrDeliveredOrders = 0;
+        city.drBaseOrders = 0;
+        city.drDeliveredOrders = 0;
+        city.prepaidNdrBaseOrders = 0;
+        city.codNdrBaseOrders = 0;
+        city.prepaidDrBaseOrders = 0;
+        city.prepaidDrDeliveredOrders = 0;
+        city.codDrBaseOrders = 0;
+        city.codDrDeliveredOrders = 0;
+        Object.keys(city.accountMap || {}).forEach(function (accountKey) {
+          city.accountMap[accountKey].ndrBaseOrders = 0;
+          city.accountMap[accountKey].ndrDeliveredOrders = 0;
+        });
+        Object.keys(city.productMap || {}).forEach(function (productKey) {
+          var cp = city.productMap[productKey];
+          cp.ndrBaseOrders = 0;
+          cp.activeOrders = 0;
+          cp.confirmed = 0;
+          cp.prepaidNdrBaseOrders = 0;
+          cp.codNdrBaseOrders = 0;
+        });
+      });
+
+      Object.keys(productStats).forEach(function (productKey) {
+        var product = productStats[productKey];
+        product.ndrBaseCount = 0;
+        product.ndrConfirmedCount = 0;
+        product.ndrDeliveredCount = 0;
+        Object.keys(product.accountMap || {}).forEach(function (accountKey) {
+          product.accountMap[accountKey].ndrBaseOrders = 0;
+          product.accountMap[accountKey].ndrDeliveredOrders = 0;
+        });
+        Object.keys(product.cityMap || {}).forEach(function (cityKey) {
+          product.cityMap[cityKey].ndrBaseOrders = 0;
+          product.cityMap[cityKey].ndrDelivered = 0;
+          product.cityMap[cityKey].confirmed = 0;
+        });
+      });
+
+      Object.keys(campaignProductStats).forEach(function (productKey) {
+        var product = campaignProductStats[productKey];
+        product.ndrBaseCount = 0;
+        product.ndrConfirmedCount = 0;
+        product.ndrDeliveredCount = 0;
+      });
+
+      var rateSeen = {};
+      sourceRows.forEach(function (row, rowIndex) {
+        var bucket = getStatusBucket(row.orderStatus || row.status);
+        var exactBucket = exactStatusBucket(row);
+        var ndrEligible = window.TaagerStatus ? window.TaagerStatus.isEligibleForNdr(row.orderStatus || row.status) : !isNdrCanceledBucket(exactBucket);
+        var rowIsCanceledByYou = isCanceledByYouBucket(exactBucket);
+        var rowIsNetOrder = !rowIsCanceledByYou;
+        var rowInConfirmedBase = rowIsNetOrder && !isConfirmedBaseExcludedBucket(exactBucket);
+        var rowIsPrepaid = isRowPrepaid(row);
+        var orderKey = orderOnlyKey(row, rowIndex);
+
+        if (ndrEligible && addOnce(rateSeen, 'globalNdr:' + orderKey)) ndrBaseOrders++;
+        if (bucket === 'delivered' && rowIsNetOrder && addOnce(rateSeen, 'globalNdrDelivered:' + orderKey)) ndrDeliveredOrders++;
+        if (rowInConfirmedBase && addOnce(rateSeen, 'globalDr:' + orderKey)) drBaseOrders++;
+        if (bucket === 'delivered' && rowInConfirmedBase && addOnce(rateSeen, 'globalDrDelivered:' + orderKey)) drDeliveredOrders++;
+
+        var rowCountry = effectiveCountry(row.taagerCountry || row.country, meta, 'sa');
+        var cityName = (row.city || '').toString().trim();
+        var cityKeyName = meta.isMixedCountry ? (rowCountry + '|' + cityName) : cityName;
+        var city = cityName ? cityStats[cityKeyName] : null;
+        if (city) {
+          var cityOrderKey = cityKeyName + ':' + (row.accountId || meta.activeAccountId || '') + ':' + orderKey;
+          var cityAccountId = String(row.accountId || meta.activeAccountId || '');
+          var cityAccountKey = cityAccountId || '__unknown__';
+          var cityAccount = city.accountMap && city.accountMap[cityAccountKey];
+          if (ndrEligible && addOnce(rateSeen, 'cityNdr:' + cityOrderKey)) {
+            city.ndrBaseOrders++;
+            if (rowIsPrepaid) city.prepaidNdrBaseOrders++;
+            else city.codNdrBaseOrders++;
+          }
+          if (ndrEligible && cityAccount && addOnce(rateSeen, 'cityAccountNdr:' + cityKeyName + ':' + cityAccountKey + ':' + orderKey)) {
+            cityAccount.ndrBaseOrders++;
+          }
+          if (rowInConfirmedBase && addOnce(rateSeen, 'cityDr:' + cityOrderKey)) {
+            city.drBaseOrders++;
+            if (rowIsPrepaid) city.prepaidDrBaseOrders++;
+            else city.codDrBaseOrders++;
+          }
+          if (bucket === 'delivered' && rowIsNetOrder && addOnce(rateSeen, 'cityNdrDelivered:' + cityOrderKey)) {
+            city.ndrDeliveredOrders++;
+            if (rowInConfirmedBase) {
+              city.drDeliveredOrders++;
+              if (rowIsPrepaid) city.prepaidDrDeliveredOrders++;
+              else city.codDrDeliveredOrders++;
+            }
+          }
+          if (bucket === 'delivered' && rowIsNetOrder && cityAccount && addOnce(rateSeen, 'cityAccountNdrDelivered:' + cityKeyName + ':' + cityAccountKey + ':' + orderKey)) {
+            cityAccount.ndrDeliveredOrders++;
+          }
+        }
+
+        var productName = window.TaagerStatus ? window.TaagerStatus.productName(row) : (row.products || row.productName || row.product || '');
+        var productKey = (row.sku || productName || '').toLowerCase();
+        var product = productStats[productKey];
+        if (product) {
+          var productOrderKey = productKey + ':' + orderKey;
+          var productAccountId = String(row.accountId || meta.activeAccountId || '');
+          var productAccountKey = productAccountId || '__unknown__';
+          var productAccount = product.accountMap && product.accountMap[productAccountKey];
+          if (ndrEligible && addOnce(rateSeen, 'productNdr:' + productOrderKey)) product.ndrBaseCount++;
+          if (ndrEligible && productAccount && addOnce(rateSeen, 'productAccountNdr:' + productKey + ':' + productAccountKey + ':' + orderKey)) productAccount.ndrBaseOrders++;
+          if (rowInConfirmedBase && addOnce(rateSeen, 'productDr:' + productOrderKey)) product.ndrConfirmedCount++;
+          if (bucket === 'delivered' && rowIsNetOrder && addOnce(rateSeen, 'productNdrDelivered:' + productOrderKey)) product.ndrDeliveredCount++;
+          if (bucket === 'delivered' && rowIsNetOrder && productAccount && addOnce(rateSeen, 'productAccountNdrDelivered:' + productKey + ':' + productAccountKey + ':' + orderKey)) productAccount.ndrDeliveredOrders++;
+
+          if (cityName) {
+            var cityKey = meta.isMixedCountry ? (rowCountry + '|' + cityName) : cityName;
+            var pcm = product.cityMap && product.cityMap[cityKey];
+            if (pcm) {
+              var pcmOrderKey = productKey + ':' + cityKey + ':' + orderKey;
+              if (ndrEligible && addOnce(rateSeen, 'productCityNdr:' + pcmOrderKey)) pcm.ndrBaseOrders++;
+              if (rowInConfirmedBase && addOnce(rateSeen, 'productCityDr:' + pcmOrderKey)) pcm.confirmed++;
+              if (bucket === 'delivered' && rowIsNetOrder && addOnce(rateSeen, 'productCityNdrDelivered:' + pcmOrderKey)) pcm.ndrDelivered++;
+            }
+          }
+        }
+
+        var campaignProductKey = [
+          String(row.accountId || meta.activeAccountId || ''),
+          rowCountry,
+          productKey
+        ].join('|');
+        var campaignProduct = campaignProductStats[campaignProductKey];
+        if (campaignProduct) {
+          var campaignOrderKey = campaignProductKey + ':' + orderKey;
+          if (ndrEligible && addOnce(rateSeen, 'campaignNdr:' + campaignOrderKey)) campaignProduct.ndrBaseCount++;
+          if (rowInConfirmedBase && addOnce(rateSeen, 'campaignDr:' + campaignOrderKey)) campaignProduct.ndrConfirmedCount++;
+          if (bucket === 'delivered' && rowIsNetOrder && addOnce(rateSeen, 'campaignNdrDelivered:' + campaignOrderKey)) campaignProduct.ndrDeliveredCount++;
+        }
+
+        if (city) {
+          var cityProductKey = (row.sku || productName || '').toLowerCase();
+          var cityProduct = city.productMap && city.productMap[cityProductKey];
+          if (cityProduct) {
+            var cpOrderKey = cityKeyName + ':' + cityProductKey + ':' + orderKey;
+            if (ndrEligible && addOnce(rateSeen, 'cityProductNdr:' + cpOrderKey)) {
+              cityProduct.ndrBaseOrders++;
+              if (rowIsPrepaid) cityProduct.prepaidNdrBaseOrders++;
+              else cityProduct.codNdrBaseOrders++;
+            }
+            if (rowInConfirmedBase && addOnce(rateSeen, 'cityProductDr:' + cpOrderKey)) {
+              cityProduct.activeOrders++;
+              cityProduct.confirmed++;
+            }
+          }
+        }
+      });
+    }
+
+    resetExpectedRateCountersFromSource();
 
     var actualAvgCommission = calculatorDeliveredCount > 0 ? calculatorEarnedProfitAfterTax / calculatorDeliveredCount : 0;
     var actualDeliveredCount = calculatorDeliveredCount;
@@ -2978,6 +3148,9 @@
         shippingCount:    p.shippingCount,
         processingCount:  p.processingCount,
         waitingCount:     p.waitingCount,
+        outForDeliveryCount: p.outForDeliveryCount || 0,
+        deliverySuspendedCount: p.deliverySuspendedCount || 0,
+        awaitingShipmentCount: p.awaitingShipmentCount || 0,
         pendingCount:     p.pendingCount,
         confirmationStatusCount: p.confirmationStatusCount || 0,
         cancelStatusCount: p.cancelStatusCount || 0,

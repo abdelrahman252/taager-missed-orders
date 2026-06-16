@@ -307,7 +307,6 @@
     }
 
     function handleDeliveredDateModeChange() {
-      triggerMarketingSync();
       runAggregator(true);
     }
 

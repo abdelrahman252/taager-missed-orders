@@ -768,6 +768,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
   let backendProductsRefreshRevision = 0;
   let backendProductDetailsCache = new Map();
   let backendProductOptions = [];
+  let backendProductOptionsKey = '';
 
   const STATUS_PILLS = [
     { key:'all',        label: s5Txt('All', 'الكل'),          color:'#fff'     },
@@ -1026,12 +1027,39 @@ window.renderSection5 = function (mountEl, data, ctx) {
     };
   }
 
+  function backendProductScopeSignature() {
+    var meta = data && data.meta ? data.meta : {};
+    var period = window.DashboardPeriodState && typeof window.DashboardPeriodState.get === 'function'
+      ? window.DashboardPeriodState.get()
+      : (meta.period || {});
+    var mode = window.DashboardDeliveredDateState && typeof window.DashboardDeliveredDateState.get === 'function'
+      ? (window.DashboardDeliveredDateState.get() === 'expected' ? 'expected' : 'actual')
+      : (meta.deliveredDateMode === 'expected' ? 'expected' : 'actual');
+    var ndrPeriod = mode === 'expected' && window.DashboardExpectedNdrRangeState && typeof window.DashboardExpectedNdrRangeState.get === 'function'
+      ? window.DashboardExpectedNdrRangeState.get()
+      : (meta.ndrPeriod || period || {});
+    return JSON.stringify({
+      dataVersion: data && data._version != null ? data._version : '',
+      accountId: productAccountId,
+      dateFrom: period.dateFrom || period.from || '',
+      dateTo: period.dateTo || period.to || '',
+      deliveredDateMode: mode,
+      ndrDateFrom: ndrPeriod.dateFrom || ndrPeriod.from || '',
+      ndrDateTo: ndrPeriod.dateTo || ndrPeriod.to || '',
+      reportingCurrency: meta.reportingCurrency || meta.activeCurrency || window.dashboardActiveCurrency || 'SAR'
+    });
+  }
+
+  function backendProductQueryKey(params) {
+    return backendProductScopeSignature() + '|' + JSON.stringify(params || {});
+  }
+
   function requestBackendProductPage(force) {
     if (!backendProductsEnabled || !window.DashboardQueryRuntime || typeof window.DashboardQueryRuntime.query !== 'function') {
       return Promise.resolve(false);
     }
     const params = backendProductParams();
-    const key = JSON.stringify(params);
+    const key = backendProductQueryKey(params);
     if (!force && backendProductsActive && backendProductsQueryKey === key) return Promise.resolve(true);
     if (!force && backendProductsPendingPromise && backendProductsPendingKey === key) return backendProductsPendingPromise;
     const requestId = ++backendProductsRequest;
@@ -1116,7 +1144,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
   function loadBackendProductOptions() {
     if (!backendProductsEnabled || !window.DashboardQueryRuntime || typeof window.DashboardQueryRuntime.query !== 'function') return Promise.resolve(false);
-    if (backendProductOptions.length) return Promise.resolve(true);
+    var optionsKey = backendProductScopeSignature();
+    if (backendProductOptions.length && backendProductOptionsKey === optionsKey) return Promise.resolve(true);
     return window.DashboardQueryRuntime.query('product-options', {}, data).then(function (result) {
       if (!result || !result.ok) return;
       backendProductOptions = (result.rows || []).map(function (row) {
@@ -1126,6 +1155,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         if (row.sku && !PRODUCT_BY_KEY[row.sku]) PRODUCT_BY_KEY[row.sku] = product;
         return product;
       });
+      backendProductOptionsKey = optionsKey;
       return true;
     });
   }
@@ -1157,6 +1187,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
     backendProductsQueryKey = '';
     backendProductsPendingKey = '';
     backendProductsPendingPromise = null;
+    backendProductOptionsKey = '';
+    backendProductOptions = [];
     backendProductDetailsCache.clear();
     requestBackendProductPage(force !== false).then(function (ok) {
       if (ok && mountEl.isConnected && mountEl._s5RenderToken === renderToken) {
@@ -2772,7 +2804,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
     options = options || {};
     if (backendProductsEnabled && !options.backendReady) {
       const params = backendProductParams();
-      const key = JSON.stringify(params);
+      const key = backendProductQueryKey(params);
       const isCached = backendProductsActive && backendProductsQueryKey === key;
       if (isCached) {
         options.backendReady = true;

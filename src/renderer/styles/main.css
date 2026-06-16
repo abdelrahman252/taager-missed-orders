@@ -4121,6 +4121,73 @@ img {
     gap: 10px !important;
   }
 
+  #page-setup .sv3-run-accounts {
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)) !important;
+  }
+
+  #page-setup .sv3-run-accounts .sv3-acc-card {
+    min-height: 176px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    padding: 18px 14px !important;
+    text-align: center !important;
+  }
+
+  #page-setup .sv3-run-accounts .sv3-card-meta-stack {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    order: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  #page-setup .sv3-run-accounts .sv3-country-badge,
+  #page-setup .sv3-run-accounts .sv3-lock-badge {
+    position: static !important;
+    max-width: calc((100% - 6px) / 2) !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    transform: none !important;
+    white-space: nowrap !important;
+  }
+
+  #page-setup .sv3-run-accounts .sv3-avatar {
+    order: 2 !important;
+    margin-top: 0 !important;
+  }
+
+  #page-setup .sv3-run-accounts .sv3-check {
+    position: absolute !important;
+    top: 50% !important;
+    right: 12px !important;
+    transform: translateY(-50%) !important;
+  }
+
+  #page-setup .sv3-run-accounts .sv3-acc-name {
+    max-width: 100% !important;
+    order: 3 !important;
+    margin-top: 0 !important;
+    text-align: center !important;
+  }
+
+  #page-setup .sv3-run-accounts .sv3-acc-email {
+    max-width: 100% !important;
+    order: 4 !important;
+    text-align: center !important;
+  }
+
+  #page-setup .sv3-run-accounts .sv3-status-pill {
+    order: 5 !important;
+  }
+
   #page-setup .sv3-acc-card,
   #page-setup .sv3-add-card {
     min-width: 0 !important;
@@ -4291,6 +4358,10 @@ img {
   }
 
   #page-setup .sv3-launch-row {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  #page-setup .sv3-run-accounts {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 }

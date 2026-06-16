@@ -2893,6 +2893,49 @@ async function taagerGoto(page, pathnameOrUrl) {
   return page;
 }
 
+async function stabilizeTaagerOrdersBeforeDateRange(page, meta = {}) {
+  assertUsableTaagerPage(page, "orders-stabilize-before-date-range");
+  const attempt = Number(meta.attempt || 1);
+  const maxAttempts = Number(meta.maxAttempts || MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS);
+  log(`Taager orders stabilization attempt ${attempt}/${maxAttempts}: reloading /orders before date selection`);
+
+  await clearTaagerInterruptionBounded(page, "orders-stabilize-before-reload");
+  await reloadWithNetworkRetries(page, "Taager orders stabilization", {
+    attempts: 1,
+    timeout: 45000,
+    waitMs: 3000,
+  }).catch(async (error) => {
+    log(`Taager orders stabilization reload failed (${error.message}); reopening /orders`);
+    await gotoWithNetworkRetries(page, taagerCountryUrl("/orders"), "Taager orders stabilization fallback", {
+      attempts: 2,
+      timeout: 45000,
+      waitMs: 5000,
+    });
+  });
+  await page.waitForTimeout(1000).catch(() => {});
+
+  if (isOnLoginPage(page.url())) {
+    log("Taager orders stabilization landed on login - re-logging in");
+    page = await taagerLogin(page);
+    await gotoWithNetworkRetries(page, taagerCountryUrl("/orders"), "Taager orders stabilization after re-login", {
+      attempts: 2,
+      timeout: 45000,
+      waitMs: 5000,
+    });
+    await page.waitForTimeout(1000).catch(() => {});
+  }
+
+  await clearTaagerInterruptionBounded(page, "orders-stabilize-after-reload");
+  await waitForTaagerTarget(
+    page,
+    TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR,
+    "Taager orders page ready after stabilization reload",
+    { timeout: 15000, blockingOverlayTimeout: 5000, log }
+  );
+  log("Taager orders stabilization complete: orders controls visible");
+  return page;
+}
+
 async function waitBeforeTaagerOrdersRetry(page, error, attempt, maxAttempts, options = {}) {
   const waitSeconds = Math.ceil(TAAGER_POPUP_RETRY_WAIT_MS / 1000);
   const reason = error && error.message ? error.message : String(error || "unknown error");
@@ -3033,6 +3076,7 @@ function createRunnerTaagerOrdersExportFlow() {
     safeTaagerClick,
     pickDateRange: pickTaagerDateRange,
     gotoOrders: (page) => taagerGoto(page, "/orders"),
+    stabilizeBeforeDateRange: stabilizeTaagerOrdersBeforeDateRange,
     recoverForRetry: (page, error, attempt, maxAttempts) =>
       recoverTaagerForRetry(page, "orders-export", "/orders", error, attempt, maxAttempts),
     readDownloadToBuffer,

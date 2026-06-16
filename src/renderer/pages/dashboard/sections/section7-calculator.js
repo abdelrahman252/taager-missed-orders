@@ -229,6 +229,12 @@ window.renderSection7 = function (mountEl, data, ctx) {
   function s7Num(value) {
     return Number(value || 0).toLocaleString(isAr ? "ar-SA" : "en-US");
   }
+  function s7ValueStack(valueHtml, labelKey, extraClass) {
+    return '<span class="expected-value-stack ' + (extraClass || '') + '" dir="auto">' +
+      '<span class="expected-value-main">' + valueHtml + '</span>' +
+      window.supposedBadgeHtml(labelKey) +
+      '</span>';
+  }
   function supportedCurrencies() {
     return window.TaagerCurrency && Array.isArray(window.TaagerCurrency.supported)
       ? window.TaagerCurrency.supported
@@ -1421,7 +1427,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         '<div class="sfe-metric-val" style="color:' +
         valColor +
         '">' +
-        val + window.supposedBadgeHtml(label) +
+        s7ValueStack(val, label, "s7-expected-value-stack") +
         "</div>" +
         '<div class="sfe-metric-sub" style="color:' +
         subColor +
@@ -2102,7 +2108,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
   function updateSimUI() {
     var c = computeSim();
     var delivEl = document.getElementById("sfe-delivered-display");
-    if (delivEl) delivEl.innerHTML = s7Num(Math.round(c.deliveredOrders)) + window.supposedBadgeHtml('delivered');
+    if (delivEl) delivEl.innerHTML = s7ValueStack(s7Num(Math.round(c.deliveredOrders)), 'delivered', 's7-expected-value-stack');
     var ndrHint = document.getElementById("sfe-ndr-hint");
     var commHint = document.getElementById("sfe-comm-hint");
     if (ndrHint) ndrHint.textContent = Math.round(simState.ndr * 100) + "%";
@@ -2156,14 +2162,14 @@ window.renderSection7 = function (mountEl, data, ctx) {
     document.getElementById("s7-out-cpa").textContent = fmt(res.cpa, 2);
     var breakEvenEl = document.getElementById("s7-out-breakeven-cpa");
     if (breakEvenEl) {
-      breakEvenEl.innerHTML = fmt(res.breakEvenCpa, 2) + window.supposedBadgeHtml('breakeven');
+      breakEvenEl.innerHTML = s7ValueStack(fmt(res.breakEvenCpa, 2), 'breakeven', 's7-expected-value-stack');
       breakEvenEl.style.color = res.cpaSAR > res.breakEvenCpaSAR ? "#ef4444" : "#00e676";
     }
-    document.getElementById("s7-out-revenue").innerHTML = fmt(res.profit) + window.supposedBadgeHtml('revenue');
+    document.getElementById("s7-out-revenue").innerHTML = s7ValueStack(fmt(res.profit), 'revenue', 's7-expected-value-stack');
 
     var netEl = document.getElementById("s7-out-net");
     if (netEl) {
-      netEl.innerHTML = (res.net > 0 ? "+" : "") + fmt(res.net) + window.supposedBadgeHtml('profit');
+      netEl.innerHTML = s7ValueStack((res.net > 0 ? "+" : "") + fmt(res.net), 'profit', 's7-expected-value-stack');
       netEl.style.color =
         res.net < 0
           ? "#ef4444"
@@ -2994,7 +3000,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       "</div>" +
       "</div>" +
       // Top KPI cards
-      '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px">' +
+      '<div class="s7-kpi-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px">' +
       '<div class="s7-card"><div style="font-size:12px;color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"

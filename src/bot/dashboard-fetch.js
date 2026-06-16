@@ -1151,6 +1151,53 @@ async function gotoDashboardTaagerOrders(page) {
   return page;
 }
 
+async function stabilizeDashboardTaagerOrdersBeforeDateRange(page, meta = {}) {
+  assertUsableTaagerPage(page, "dashboard-orders-stabilize-before-date-range");
+  const attempt = Number(meta.attempt || 1);
+  const maxAttempts = Number(meta.maxAttempts || MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS);
+  log(`Dashboard Taager export stabilization attempt ${attempt}/${maxAttempts}: reloading /orders before date selection`);
+
+  await clearTaagerInterruptionBounded(page, "dashboard-orders-stabilize-before-reload");
+  await reloadWithNetworkRetries(page, "Dashboard Taager orders stabilization", {
+    attempts: 1,
+    timeout: 45000,
+    waitMs: 3000,
+  }).catch(async (error) => {
+    log(`Dashboard Taager export stabilization reload failed (${error.message}); reopening /orders`);
+    await gotoWithNetworkRetries(page, taagerCountryUrl("/orders"), "Dashboard Taager orders stabilization fallback", {
+      attempts: 2,
+      timeout: 45000,
+      waitMs: 5000,
+    });
+  });
+  await page.waitForTimeout(1000).catch(() => {});
+
+  if (isOnLoginPage(page.url())) {
+    log("Dashboard Taager export stabilization landed on login - re-logging in");
+    page = await taagerLogin(page);
+    await gotoWithNetworkRetries(page, taagerCountryUrl("/orders"), "Dashboard Taager orders stabilization after re-login", {
+      attempts: 2,
+      timeout: 45000,
+      waitMs: 5000,
+    });
+    await page.waitForTimeout(1000).catch(() => {});
+  }
+
+  const clearResult = await clearTaagerInterruptionBounded(page, "dashboard-orders-stabilize-after-reload").catch((clearError) => {
+    log(`Dashboard Taager export stabilization: interruption clear after reload failed: ${clearError.message}`);
+    return { cleared: false, method: "error" };
+  });
+  log(`Dashboard Taager export stabilization: interruption clear after reload -> cleared=${!!clearResult.cleared} method=${clearResult.method || "none"}`);
+  await waitForTaagerTarget(
+    page,
+    TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR,
+    "Dashboard Taager orders page ready after stabilization reload",
+    { timeout: 15000, blockingOverlayTimeout: 5000, log }
+  );
+  log("Dashboard Taager export stabilization complete: orders controls visible");
+  return page;
+}
+
 function createDashboardTaagerOrdersExportFlow() {
   return createTaagerOrdersExportFlow({
     flow: "dashboard",
@@ -1162,6 +1209,7 @@ function createDashboardTaagerOrdersExportFlow() {
     safeTaagerClick,
     pickDateRange: pickTaagerDateRange,
     gotoOrders: gotoDashboardTaagerOrders,
+    stabilizeBeforeDateRange: stabilizeDashboardTaagerOrdersBeforeDateRange,
     recoverForRetry: (page, error, attempt, maxAttempts) =>
       recoverTaagerForRetry(page, "dashboard-orders-export", "/orders", error, attempt, maxAttempts),
     readDownloadToBuffer,
