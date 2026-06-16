@@ -562,7 +562,7 @@
     /* Always called on open() so theme switches are reflected immediately */
     el.style.background  = _il() ? 'rgba(255,255,255,0.97)' : 'rgba(13,21,37,0.85)';
     el.style.borderLeft  = '1px solid ' + (_il() ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.08)');
-    el.style.boxShadow   = _il() ? '-8px 0 40px rgba(0,0,0,0.12)' : '-8px 0 40px rgba(0,0,0,0.6)';
+    el.style.boxShadow   = _il() ? '-6px 0 20px rgba(0,0,0,0.08)' : '-6px 0 22px rgba(0,0,0,0.36)';
   }
 
   function getOrCreateDrawer() {
@@ -575,12 +575,14 @@
         'position:fixed', 'top:0', 'right:0',
         'width:720px', 'max-width:100vw',
         'height:100vh', 'height:100dvh',
-        'backdrop-filter:blur(16px)',
-        '-webkit-backdrop-filter:blur(16px)',
+        'backdrop-filter:none',
+        '-webkit-backdrop-filter:none',
         'z-index:1000',
         'display:flex', 'flex-direction:column',
-        'transform:translateX(100%)',
-        'transition:transform 0.3s cubic-bezier(0.4,0,0.2,1)',
+        'transform:translate3d(100%,0,0)',
+        'transition:transform 0.24s cubic-bezier(0.4,0,0.2,1)',
+        'will-change:transform',
+        'contain:layout paint',
         'font-family:inherit',
         'direction:inherit'
       ].join(';');
@@ -692,7 +694,7 @@
       requestAnimationFrame(function () {
         requestAnimationFrame(function () {
           backdrop.style.opacity = '1';
-          drawer.style.transform = 'translateX(0)';
+          drawer.style.transform = 'translate3d(0,0,0)';
         });
       });
 
@@ -710,7 +712,7 @@
       var drawer   = document.getElementById(DRAWER_ID);
       var backdrop = document.getElementById(BACKDROP_ID);
 
-      if (drawer)   drawer.style.transform  = 'translateX(100%)';
+      if (drawer)   drawer.style.transform  = 'translate3d(100%,0,0)';
       if (backdrop) backdrop.style.opacity  = '0';
 
       document.removeEventListener('keydown', _escHandler);

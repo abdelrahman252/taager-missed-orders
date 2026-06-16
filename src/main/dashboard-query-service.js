@@ -301,29 +301,90 @@ function rowAmountDue(row) {
   return 0;
 }
 
-const PROVINCE_MAP = [
-  { id: 'riyadh',  keys: ['الرياض', 'الخرج', 'المجمعة', 'الدوادمي', 'riyadh'] },
-  { id: 'eastern', keys: ['الشرقية', 'الدمام', 'الخبر', 'الأحساء', 'eastern'] },
-  { id: 'mecca',   keys: ['مكة', 'جدة', 'الطائف', 'الغربية', 'mecca'] },
-  { id: 'jazan',   keys: ['جيزان', 'جازان', 'jazan', 'gizan'] },
-  { id: 'baha',    keys: ['الباحة', 'baha'] },
-  { id: 'madinah', keys: ['المدينة', 'ينبع', 'madinah'] },
-  { id: 'aseer',   keys: ['عسير', 'أبها', 'خميس', 'aseer'] },
-  { id: 'qassim',  keys: ['القصيم', 'بريدة', 'عنيزة', 'qassim'] },
-  { id: 'tabuk',    keys: ['تبوك', 'tabuk'] },
-  { id: 'hail',     keys: ['حائل', 'hail'] },
-  { id: 'najran',   keys: ['نجران', 'najran'] },
-  { id: 'jawf',     keys: ['الجوف', 'سكاكا', 'jawf', 'jouf'] },
-  { id: 'northern', keys: ['الحدود الشمالية', 'عرعر', 'northern', 'arar'] }
-];
+const PROVINCE_MAP_BY_COUNTRY = {
+  sa: [
+    { id: 'riyadh', keys: ['الرياض', 'الخرج', 'المجمعة', 'الدوادمي', 'riyadh'] },
+    { id: 'eastern', keys: ['الشرقية', 'الدمام', 'الخبر', 'الأحساء', 'الاحساء', 'eastern'] },
+    { id: 'mecca', keys: ['مكة', 'جدة', 'جده', 'الطائف', 'الغربية', 'mecca', 'jeddah'] },
+    { id: 'jazan', keys: ['جيزان', 'جازان', 'jazan', 'gizan'] },
+    { id: 'baha', keys: ['الباحة', 'baha'] },
+    { id: 'madinah', keys: ['المدينة', 'ينبع', 'madinah', 'medina'] },
+    { id: 'aseer', keys: ['عسير', 'أبها', 'ابها', 'خميس', 'aseer'] },
+    { id: 'qassim', keys: ['القصيم', 'بريدة', 'عنيزة', 'qassim'] },
+    { id: 'tabuk', keys: ['تبوك', 'tabuk'] },
+    { id: 'hail', keys: ['حائل', 'hail'] },
+    { id: 'najran', keys: ['نجران', 'najran'] },
+    { id: 'jawf', keys: ['الجوف', 'سكاكا', 'jawf', 'jouf'] },
+    { id: 'northern', keys: ['الحدود الشمالية', 'عرعر', 'northern', 'arar'] }
+  ],
+  eg: [
+    { id: 'cairo', keys: ['القاهرة', 'القاهره', 'cairo'] },
+    { id: 'giza', keys: ['الجيزة', 'الجيزه', 'giza'] },
+    { id: 'alex', keys: ['الإسكندرية', 'الاسكندرية', 'إسكندرية', 'اسكندرية', 'alexandria', 'alex'] },
+    { id: 'delta', keys: ['الدقهلية', 'الغربية', 'الشرقية', 'المنوفية', 'كفر الشيخ', 'القليوبية', 'دمياط', 'dakahlia', 'sharkia'] },
+    { id: 'canal', keys: ['بور سعيد', 'بورسعيد', 'الإسماعيلية', 'الاسماعيلية', 'السويس', 'سيناء', 'port said', 'suez'] },
+    { id: 'upper', keys: ['أسيوط', 'اسيوط', 'سوهاج', 'قنا', 'الأقصر', 'الاقصر', 'أسوان', 'اسوان', 'بني سويف', 'الفيوم', 'المنيا'] },
+    { id: 'redsea', keys: ['البحر الأحمر', 'البحر الاحمر', 'الغردقة', 'الغردقه', 'red sea', 'hurghada'] },
+    { id: 'matrouh', keys: ['مطروح', 'matrouh'] },
+    { id: 'beheira', keys: ['البحيرة', 'البحيره', 'beheira'] }
+  ],
+  ae: [
+    { id: 'dubai', keys: ['دبي', 'dubai'] },
+    { id: 'abudhabi', keys: ['أبو ظبي', 'ابو ظبي', 'ابوظبي', 'أبوظبي', 'abu dhabi'] },
+    { id: 'sharjah', keys: ['الشارقة', 'الشارقه', 'sharjah'] },
+    { id: 'ajman', keys: ['عجمان', 'ajman'] },
+    { id: 'rak', keys: ['رأس الخيمة', 'راس الخيمة', 'rak', 'ras al khaimah'] },
+    { id: 'fujairah', keys: ['الفجيرة', 'الفجيره', 'fujairah'] },
+    { id: 'uaq', keys: ['أم القيوين', 'ام القيوين', 'umm al quwain'] }
+  ],
+  iq: [
+    { id: 'baghdad', keys: ['بغداد', 'baghdad'] },
+    { id: 'basra', keys: ['البصرة', 'بصرة', 'basra'] },
+    { id: 'najaf', keys: ['النجف', 'نجف', 'najaf'] },
+    { id: 'karbala', keys: ['كربلاء', 'karbala'] },
+    { id: 'mosul', keys: ['الموصل', 'موصل', 'نينوى', 'نينوي', 'mosul', 'nineveh'] },
+    { id: 'kurdistan', keys: ['أربيل', 'اربيل', 'السليمانية', 'سليمانية', 'دهوك', 'حلبجة', 'erbil', 'sulaymaniyah', 'duhok', 'halabja'] },
+    { id: 'kirkuk', keys: ['كركوك', 'kirkuk'] },
+    { id: 'diyala', keys: ['ديالى', 'ديالي', 'diyala'] },
+    { id: 'anbar', keys: ['الأنبار', 'الانبار', 'anbar', 'ramadi'] },
+    { id: 'salahaddin', keys: ['صلاح الدين', 'تكريت', 'salah al din', 'salahaddin', 'saladin', 'tikrit'] },
+    { id: 'south', keys: ['واسط', 'كوت', 'بابل', 'ذي قار', 'ميسان', 'الديوانية', 'ديوانية', 'دوانية', 'القادسية', 'المثنى', 'سماوة', 'wasit', 'babil', 'dhi qar', 'maysan', 'diwaniyah', 'qadisiyah', 'muthanna'] }
+  ],
+  om: [
+    { id: 'muscat', keys: ['مسقط', 'مطرح', 'بوشر', 'السيب', 'muscat'] },
+    { id: 'batinah', keys: ['صحار', 'بركاء', 'السويق', 'الخابورة', 'شناص', 'لوى', 'صحم', 'الباطنة'] },
+    { id: 'dhofar', keys: ['صلالة', 'ظفار', 'ثمريت', 'طاقة', 'مرباط', 'dhofar', 'salalah'] },
+    { id: 'dakhiliyah', keys: ['نزوى', 'بهلاء', 'إزكي', 'ازكي', 'سمائل', 'الحمراء', 'الداخلية'] },
+    { id: 'sharqiyah', keys: ['صور', 'إبراء', 'ابراء', 'بدية', 'القابل', 'المضيبي', 'جعلان', 'الشرقية'] },
+    { id: 'dhahirah', keys: ['عبري', 'ينقل', 'ضنك', 'الظاهرة'] },
+    { id: 'buraimi', keys: ['البريمي', 'محضة', 'buraimi'] },
+    { id: 'musandam', keys: ['خصب', 'بخاء', 'مسندم', 'musandam'] },
+    { id: 'wusta', keys: ['الدقم', 'هيما', 'محوت', 'مصيرة', 'الوسطى'] }
+  ]
+};
+
+function normalizePlaceName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFKC')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/[^\w\u0600-\u06ff]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function resolveProvince(cityName, country) {
   if (!cityName) return 'other';
-  const lowerCity = String(cityName).toLowerCase();
-  for (let i = 0; i < PROVINCE_MAP.length; i++) {
-    const prov = PROVINCE_MAP[i];
+  const countryKey = lower(country || 'sa');
+  const provinceMap = PROVINCE_MAP_BY_COUNTRY[countryKey] || PROVINCE_MAP_BY_COUNTRY.sa;
+  const lowerCity = normalizePlaceName(cityName);
+  for (let i = 0; i < provinceMap.length; i++) {
+    const prov = provinceMap[i];
     for (let j = 0; j < prov.keys.length; j++) {
-      if (lowerCity.includes(prov.keys[j])) return prov.id;
+      const key = normalizePlaceName(prov.keys[j]);
+      if (key && (lowerCity.includes(key) || key.includes(lowerCity))) return prov.id;
     }
   }
   return 'other';

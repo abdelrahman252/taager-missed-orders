@@ -150,6 +150,8 @@ contextBridge.exposeInMainWorld("api", {
   onLicenseExpired:(cb) => ipcRenderer.on("license-expired",   ()        => cb()),
   onGoogleLoginNeeded:   (cb) => ipcRenderer.on("bot-google-login-needed",   (_, data) => cb(data)),
   onGoogleLoginComplete: (cb) => ipcRenderer.on("bot-google-login-complete", (_, data) => cb(data)),
+  onDashboardLog:   (cb) => ipcRenderer.on("bot-dashboard-log",   (_, data) => cb(data)),
+  onDashboardStage: (cb) => ipcRenderer.on("bot-dashboard-stage", (_, data) => cb(data)),
   on:              (ch, cb) => ipcRenderer.on(ch, (_, data) => cb(data)),
   removeAllListeners: (ch) => ipcRenderer.removeAllListeners(ch),
 

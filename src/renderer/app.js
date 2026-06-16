@@ -18,7 +18,7 @@ const _STRINGS = {
     "topbar.operations":  "Operations",
     "topbar.dashboard":   "Dashboard",
     "titlebar.sync":      "Sync",
-    "titlebar.sync_tooltip": "Sync license and account permissions from the admin panel.",
+    "titlebar.sync_tooltip": "Sync license and account permissions, then refresh the app.",
     "titlebar.lang_tooltip": "Switch between English and Arabic.",
     "titlebar.theme_tooltip": "Switch between light and dark theme.",
     "titlebar.zoom_group": "Application zoom",
@@ -495,7 +495,7 @@ const _STRINGS = {
     "topbar.operations": "العمليات",
     "topbar.dashboard":  "لوحة التحكم",
     "titlebar.sync":     "مزامنة",
-    "titlebar.sync_tooltip": "مزامنة الترخيص وصلاحيات الحسابات من لوحة المشرف.",
+    "titlebar.sync_tooltip": "مزامنة الترخيص وصلاحيات الحسابات ثم تحديث التطبيق.",
     "titlebar.lang_tooltip": "التبديل بين العربية والإنجليزية.",
     "titlebar.theme_tooltip": "التبديل بين الوضع الفاتح والداكن.",
     "titlebar.minimize": "تصغير النافذة",
@@ -1381,7 +1381,8 @@ window.TaagerGeo = (() => {
       ["kirkuk", "كركوك", 238, 112, 34, 24, ["كركوك", "kirkuk"]],
       ["diyala", "ديالى", 267, 155, 34, 28, ["ديالى", "ديالي", "diyala"]],
       ["anbar", "الأنبار", 124, 162, 62, 48, ["الأنبار", "الانبار", "anbar", "ramadi"]],
-      ["south", "جنوب العراق", 234, 248, 60, 42, ["واسط", "كوت", "بابل", "ذي قار", "ميسان", "الديوانية", "المثنى", "سماوة"]]
+      ["salahaddin", "صلاح الدين", 224, 136, 36, 26, ["صلاح الدين", "تكريت", "salah al din", "salahaddin", "saladin", "tikrit"]],
+      ["south", "جنوب العراق", 234, 248, 60, 42, ["واسط", "كوت", "بابل", "ذي قار", "ميسان", "الديوانية", "ديوانية", "دوانية", "القادسية", "المثنى", "سماوة"]]
     ],
     om: [
       ["muscat", "مسقط", 257, 164, 40, 26, ["مسقط", "مطرح", "بوشر", "السيب", "muscat"]],
@@ -1418,6 +1419,11 @@ window.TaagerGeo = (() => {
   function atlasProfiles() {
     const atlas = atlasData();
     return atlas.visualProfiles || VISUAL_PROFILES;
+  }
+
+  function atlasCityPoints() {
+    const atlas = atlasData();
+    return atlas.cityPoints || {};
   }
 
   function normalizeCountry(country) {
@@ -1498,6 +1504,24 @@ window.TaagerGeo = (() => {
     return Object.assign({}, profiles.default || VISUAL_PROFILES.default, profiles[cc] || {});
   }
 
+  function resolveCityPoint(cityName, country) {
+    if (!cityName) return null;
+    const cc = normalizeCountry(country);
+    const city = textKey(cityName);
+    const points = atlasCityPoints()[cc] || [];
+    for (let i = 0; i < points.length; i++) {
+      const entry = points[i];
+      const keys = entry[2] || [];
+      for (let j = 0; j < keys.length; j++) {
+        const key = textKey(keys[j]);
+        if (key && (city === key || city.indexOf(key) !== -1 || key.indexOf(city) !== -1)) {
+          return { x: Number(entry[0]), y: Number(entry[1]) };
+        }
+      }
+    }
+    return null;
+  }
+
   function clipRegionCell(polygon, a, b, c) {
     const result = [];
     for (let i = 0; i < polygon.length; i++) {
@@ -1561,6 +1585,15 @@ window.TaagerGeo = (() => {
   function cityPoint(cityName, country, index) {
     const cc = normalizeCountry(country);
     const pid = resolveProvince(cityName, cc);
+    const exact = resolveCityPoint(cityName, cc);
+    if (exact && Number.isFinite(exact.x) && Number.isFinite(exact.y)) {
+      return {
+        country: cc,
+        provinceId: pid,
+        x: Math.max(18, Math.min(382, exact.x)),
+        y: Math.max(18, Math.min(322, exact.y))
+      };
+    }
     const meta = provinceMap(cc)[pid] || provinceMap(cc).other;
     const key = textKey(cityName) || String(index || 0);
     let hash = 0;
@@ -1575,7 +1608,79 @@ window.TaagerGeo = (() => {
     };
   }
 
-  return { provinceMap, resolveProvince, textKey, outline, shape, viewBox, visualProfile, cityPoint };
+  function spreadCityPoints(cities, options) {
+    const opts = options || {};
+    const minDistance = Number(opts.minDistance || 24);
+    const maxShift = Number(opts.maxShift || 28);
+    const bounds = Object.assign({ minX: 22, maxX: 378, minY: 20, maxY: 320 }, opts.bounds || {});
+    const points = (Array.isArray(cities) ? cities : []).map((city, index) => {
+      const x = Number(city && city.x);
+      const y = Number(city && city.y);
+      return Object.assign({}, city, {
+        x: Number.isFinite(x) ? x : 205,
+        y: Number.isFinite(y) ? y : 190,
+        anchorX: Number.isFinite(x) ? x : 205,
+        anchorY: Number.isFinite(y) ? y : 190,
+        _spreadIndex: index
+      });
+    });
+    for (let pass = 0; pass < Number(opts.iterations || 28); pass++) {
+      for (let i = 0; i < points.length; i++) {
+        for (let j = i + 1; j < points.length; j++) {
+          const a = points[i];
+          const b = points[j];
+          let dx = b.x - a.x;
+          let dy = b.y - a.y;
+          let dist = Math.sqrt(dx * dx + dy * dy);
+          if (!dist) {
+            const seed = textKey(a.name || a.city || i) + "|" + textKey(b.name || b.city || j);
+            let hash = 0;
+            for (let k = 0; k < seed.length; k++) hash = ((hash << 5) - hash + seed.charCodeAt(k)) | 0;
+            const angle = ((Math.abs(hash) % 360) * Math.PI) / 180;
+            dx = Math.cos(angle);
+            dy = Math.sin(angle);
+            dist = 1;
+          }
+          if (dist >= minDistance) continue;
+          const push = (minDistance - dist) / 2;
+          const nx = dx / dist;
+          const ny = dy / dist;
+          a.x -= nx * push;
+          a.y -= ny * push;
+          b.x += nx * push;
+          b.y += ny * push;
+        }
+      }
+      points.forEach((point) => {
+        point.x += (point.anchorX - point.x) * 0.035;
+        point.y += (point.anchorY - point.y) * 0.035;
+        const shiftX = point.x - point.anchorX;
+        const shiftY = point.y - point.anchorY;
+        const shift = Math.sqrt(shiftX * shiftX + shiftY * shiftY);
+        if (shift > maxShift) {
+          const scale = maxShift / shift;
+          point.x = point.anchorX + shiftX * scale;
+          point.y = point.anchorY + shiftY * scale;
+        }
+        point.x = Math.max(bounds.minX, Math.min(bounds.maxX, point.x));
+        point.y = Math.max(bounds.minY, Math.min(bounds.maxY, point.y));
+      });
+    }
+    return points.map((point) => {
+      const out = Object.assign({}, point, {
+        x: Math.round(point.x * 10) / 10,
+        y: Math.round(point.y * 10) / 10,
+        rawX: point.anchorX,
+        rawY: point.anchorY
+      });
+      delete out.anchorX;
+      delete out.anchorY;
+      delete out._spreadIndex;
+      return out;
+    });
+  }
+
+  return { provinceMap, resolveProvince, textKey, outline, shape, viewBox, visualProfile, cityPoint, spreadCityPoints };
 })();
 
 // ── Theme & Lang helpers ──
@@ -2153,6 +2258,7 @@ function primeLikelyFeatureRoutes(preferredFeature) {
 }
 
 const _pageLifecycle = new Map();
+const APP_RELOAD_RESTORE_KEY = "taager-app-reload-restore-v1";
 
 function pageLifecycle(pageId) {
   if (!_pageLifecycle.has(pageId)) {
@@ -2179,6 +2285,84 @@ function canWarmActivate(pageId) {
   const state = pageLifecycle(pageId);
   const page = document.getElementById(pageId);
   return !!(state.mounted && !state.invalid && page && page.children.length);
+}
+
+function activeDashboardSection() {
+  const mount = document.getElementById("db-shell-mount");
+  const section = mount && mount._dashboardActiveSection;
+  return typeof section === "string" && section ? section : "";
+}
+
+function captureAppReloadRestoreState(reason) {
+  const activePage = document.querySelector(".page.active");
+  const state = {
+    pageId: activePage && activePage.id ? activePage.id : _activePageId || "",
+    dashboardSection: activeDashboardSection(),
+    setupStep: window._setupCurrentStep || "",
+    reason: reason || "reload",
+    ts: Date.now(),
+  };
+  try {
+    sessionStorage.setItem(APP_RELOAD_RESTORE_KEY, JSON.stringify(state));
+  } catch (_) {}
+  return state;
+}
+
+function consumeAppReloadRestoreState() {
+  let parsed = null;
+  try {
+    parsed = JSON.parse(sessionStorage.getItem(APP_RELOAD_RESTORE_KEY) || "null");
+    sessionStorage.removeItem(APP_RELOAD_RESTORE_KEY);
+  } catch (_) {
+    try { sessionStorage.removeItem(APP_RELOAD_RESTORE_KEY); } catch (__) {}
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  if (Date.now() - Number(parsed.ts || 0) > 5 * 60 * 1000) return null;
+  return parsed;
+}
+
+function reloadAppPreservingRoute(reason) {
+  captureAppReloadRestoreState(reason);
+  window.location.reload();
+}
+
+window.addEventListener("beforeunload", function () {
+  captureAppReloadRestoreState("window-reload");
+});
+
+function routeAfterCredentialsReady(creds, restoreState) {
+  const hasAccounts = creds && creds.accounts && creds.accounts.length > 0;
+  const restorePage = restoreState && restoreState.pageId;
+
+  if (restorePage === "page-dashboard" && hasAccounts && window._dashboardEnabled) {
+    if (restoreState.dashboardSection) window._dashboardInitialSection = restoreState.dashboardSection;
+    goToDashboard();
+    return;
+  }
+
+  if (restorePage === "page-analytics" && hasAccounts && window._analyticsEnabled && !window._teamLeaderEnabled) {
+    goToAnalytics();
+    return;
+  }
+
+  if (restorePage === "page-operations" && hasAccounts && window._operationsEnabled && !window._teamLeaderEnabled) {
+    goToOperations();
+    return;
+  }
+
+  if (restorePage === "page-ai-intelligence" && hasAccounts && window._dashboardEnabled) {
+    goToAiIntelligence();
+    return;
+  }
+
+  if (restorePage === "page-setup" && !window._teamLeaderEnabled) {
+    goToSetup(restoreState.setupStep || (hasAccounts ? "run" : "accounts"));
+    return;
+  }
+
+  if (window._teamLeaderEnabled && hasAccounts) goToDashboard();
+  else goToSetup(hasAccounts ? "run" : "accounts");
 }
 
 function activatePage(pageId) {
@@ -2744,7 +2928,7 @@ async function runAutoRunTick(dateFrom, dateTo) {
 // What it refreshes:
 //   1. License validity, expiry, max_accounts (busts the 60-second cache)
 //   2. Per-account unlock status from license_accounts table (busts 15-second cred cache)
-//   3. Re-renders the current page so changes are visible immediately
+//   3. Reloads the renderer and restores the current page/section
 async function adminRefresh() {
   const btn = document.getElementById("btn-admin-refresh");
   if (!btn || btn.classList.contains("refreshing")) return;
@@ -2796,28 +2980,9 @@ async function adminRefresh() {
     // 4. Refresh topbar text (expiry days, accounts badge)
     updateTopBarText();
 
-    // 5. Re-render the current page so the user sees the changes immediately
+    // 5. Hard-refresh the renderer, matching Ctrl+R, while restoring the current route.
     //    — setup page picks up new unlock state, new account slots, etc.
-    const activePage = document.querySelector(".page.active");
-    if (activePage) {
-      const pid = activePage.id;
-      if (window._teamLeaderEnabled && ["page-run", "page-results", "page-analytics", "page-operations"].includes(pid)) {
-        goToDashboard();
-      } else if (pid === "page-setup") {
-        // Re-render setup at whichever step is currently visible
-        const currentStep = window._setupCurrentStep || "accounts";
-        renderSetup((params) => {
-          if (params && params.dateFrom) {
-            sessionDate = { dateFrom: params.dateFrom, dateTo: params.dateTo };
-            goToRun(params.dateFrom, params.dateTo, params.selectedAccountIds);
-          } else {
-            goToSetup("accounts");
-          }
-        }, currentStep);
-      } else {
-        reRenderCurrentPage();
-      }
-    }
+    reloadAppPreservingRoute("admin-refresh");
   } catch (err) {
     console.warn("[AdminRefresh] Sync failed:", err?.message || err);
     if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(err, { operation: "adminRefresh" });
@@ -2840,6 +3005,7 @@ function handleAdminCacheReset() {
 }
 
 async function init() {
+  const reloadRestoreState = consumeAppReloadRestoreState();
   document.getElementById("btn-minimize").addEventListener("click", () => window.api.minimize());
   document.getElementById("btn-maximize").addEventListener("click", () => window.api.maximize());
   document.getElementById("btn-close").addEventListener("click",    () => window.api.close());
@@ -2947,9 +3113,7 @@ async function init() {
   // Route based on credential state:
   // - Accounts exist → skip the accounts management step, go straight to run step
   // - No accounts    → land on accounts step so user can add their first account
-  const hasAccounts = creds.accounts && creds.accounts.length > 0;
-  if (window._teamLeaderEnabled && hasAccounts) goToDashboard();
-  else goToSetup(hasAccounts ? "run" : "accounts");
+  routeAfterCredentialsReady(creds, reloadRestoreState);
   scheduleFeaturePrewarm(window._teamLeaderEnabled ? "dashboard" : null);
 
   setTimeout(refreshStartupStateFromServer, 250);
@@ -3031,9 +3195,7 @@ async function afterLicense(isFlush = false) {
   window._dashboardEnabled  = creds.dashboardEnabled  === true;
   window._teamLeaderEnabled = creds.teamLeaderEnabled === true;
   primeLikelyFeatureRoutes(window._teamLeaderEnabled ? "dashboard" : null);
-  const hasAccounts = creds.accounts && creds.accounts.length > 0;
-  if (window._teamLeaderEnabled && hasAccounts) goToDashboard();
-  else goToSetup(hasAccounts ? "run" : "accounts");
+  routeAfterCredentialsReady(creds, null);
   scheduleFeaturePrewarm(window._teamLeaderEnabled ? "dashboard" : null);
 }
 
@@ -3403,11 +3565,13 @@ function _setDashboardFetchUi(state) {
   }
 
   if (state.active) {
+    const detail = state.childLog || state.stageMessage || window._dashboardFetchLastChildLog || "";
     status.innerHTML = `
       <div class="taager-spinner" aria-hidden="true"></div>
       <div>
         <strong>${TaagerUI.esc(state.title || TaagerUI.t("dashboard.fetching_title", "Updating dashboard..."))}</strong>
         <span>${TaagerUI.esc(state.body || TaagerUI.t("dashboard.fetching_body", "Fetching orders, refreshing product data, and matching ad spend across accounts. This can take a few minutes; keep the app open."))}</span>
+        ${detail ? `<span style="display:block;margin-top:6px;color:var(--text3);font-size:12px;direction:ltr;text-align:left;unicode-bidi:plaintext;">${TaagerUI.esc(detail)}</span>` : ""}
       </div>
     `;
     return;
@@ -3467,8 +3631,46 @@ async function _onRunForDashboard(selectedAccountIds, period, options) {
     acc.id || acc.value,
     acc.memberName || acc.easyEmail || acc.email || acc.taagerEmail || acc.easyStore || acc.storeName || acc.label || acc.name || acc.id || acc.value
   ]));
+  window._dashboardFetchLastChildLog = "";
   if (window.api && typeof window.api.removeAllListeners === "function") {
     window.api.removeAllListeners("bot-2fa-needed");
+    window.api.removeAllListeners("bot-dashboard-log");
+    window.api.removeAllListeners("bot-dashboard-stage");
+  }
+  const dashboardLogHandler = (payload) => {
+    if (!payload || ids.indexOf(payload.accountId) === -1) return;
+    const message = String(payload.message || "").trim();
+    if (!message) return;
+    window._dashboardFetchLastChildLog = `${payload.accountLabel || payload.accountId}: ${message}`;
+    console.log(`[Dashboard child] ${window._dashboardFetchLastChildLog}`);
+    if (window._dashboardFetchState && window._dashboardFetchState.active) {
+      _setDashboardFetchUi({
+        ...window._dashboardFetchState,
+        childLog: window._dashboardFetchLastChildLog
+      });
+    }
+  };
+  const dashboardStageHandler = (payload) => {
+    if (!payload || ids.indexOf(payload.accountId) === -1) return;
+    const stageText = `${payload.accountLabel || payload.accountId}: ${payload.stage || payload.lastStage || "dashboard"} ${payload.status ? `(${payload.status})` : ""}${payload.message ? ` - ${payload.message}` : ""}`;
+    window._dashboardFetchLastChildLog = stageText;
+    console.log("[Dashboard stage]", payload);
+    if (window._dashboardFetchState && window._dashboardFetchState.active) {
+      _setDashboardFetchUi({
+        ...window._dashboardFetchState,
+        stageMessage: stageText
+      });
+    }
+  };
+  if (window.api && typeof window.api.onDashboardLog === "function") {
+    window.api.onDashboardLog(dashboardLogHandler);
+  } else if (window.api && typeof window.api.on === "function") {
+    window.api.on("bot-dashboard-log", dashboardLogHandler);
+  }
+  if (window.api && typeof window.api.onDashboardStage === "function") {
+    window.api.onDashboardStage(dashboardStageHandler);
+  } else if (window.api && typeof window.api.on === "function") {
+    window.api.on("bot-dashboard-stage", dashboardStageHandler);
   }
   if (window.api && typeof window.api.on2faNeeded === "function") {
     window.api.on2faNeeded((message) => {
@@ -3537,6 +3739,8 @@ async function _onRunForDashboard(selectedAccountIds, period, options) {
   }
   if (window.api && typeof window.api.removeAllListeners === "function") {
     window.api.removeAllListeners("bot-2fa-needed");
+    window.api.removeAllListeners("bot-dashboard-log");
+    window.api.removeAllListeners("bot-dashboard-stage");
   }
 
   const marketingStore = window.DashboardMarketingState;

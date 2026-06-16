@@ -59,6 +59,7 @@
     if (item.error) return item.error;
     if (!item.inspection) return tr('static.waiting', 'Upload a Taager sheet to inspect it.');
     var inspection = item.inspection;
+    if (inspection.periodMismatch || inspection.canApply === false) return tr('static.periodMismatch', 'Sheet dates do not match the selected period.');
     var text = (inspection.orders || 0) + ' ' + tr('static.orders', 'orders') + ' / ' + (inspection.rows || 0) + ' ' + tr('static.rows', 'item rows');
     if (inspection.requiresConfirmation) text += ' - ' + tr('static.confirmationRequired', 'confirmation required');
     return text;
@@ -183,7 +184,12 @@
     var inspected = [];
     for (var i = 0; i < ready.length; i++) {
       var inspection = await window.api.inspectStaticDashboardUpdate(filePayload(ready[i], false));
-      if (inspection && inspection.ok) inspected.push({ account: ready[i], result: inspection });
+      if (inspection && inspection.ok && inspection.canApply !== false) inspected.push({ account: ready[i], result: inspection });
+      else if (inspection && inspection.ok && inspection.canApply === false) state.results.push({
+        ok: false,
+        label: ready[i].label || ready[i].id,
+        message: inspection.blockedReason || tr('static.periodMismatchHelp', 'Select the dashboard period that matches the uploaded sheet, then update again.')
+      });
       else state.results.push({ ok: false, label: ready[i].label || ready[i].id, message: inspection && inspection.error || tr('static.inspectFailed', 'Workbook inspection failed.') });
     }
     var risky = inspected.filter(function (entry) { return entry.result.requiresConfirmation; });

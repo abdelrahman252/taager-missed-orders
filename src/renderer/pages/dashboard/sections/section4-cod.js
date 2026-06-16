@@ -827,6 +827,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
 
   // ── City Breakdown HTML ──────────────────────────────────────────────────
   function cityBreakdownHTML() {
+    const fastMapPaint = true;
     const activeMapShape = window.TaagerGeo && typeof window.TaagerGeo.shape === "function"
       ? window.TaagerGeo.shape(activeCodCountry())
       : { outline: countryOutlinePath(activeCodCountry()), regions: [] };
@@ -851,22 +852,24 @@ window.renderSection4 = function (mountEl, data, ctx) {
             ? window.TaagerGeo.provinceMap(code)
             : {};
           const miniProvinces = Object.keys(miniProvinceMap).filter((pid) => pid !== "other").map((pid) => miniProvinceMap[pid]);
-          const miniGlowDefs = miniProvinces.map((p) =>
+          const miniGlowDefs = fastMapPaint ? "" : miniProvinces.map((p) =>
             `<radialGradient id="${miniId}_glow_${p.id}" cx="50%" cy="50%" r="50%">
               <stop offset="0%" stop-color="${p.color}" stop-opacity=".35"/>
               <stop offset="72%" stop-color="${p.color}" stop-opacity=".10"/>
               <stop offset="100%" stop-color="${p.color}" stop-opacity="0"/>
             </radialGradient>`
           ).join("");
-          const miniGlows = miniProvinces.map((p) =>
+          const miniGlows = miniProvinces.map((p) => fastMapPaint
+            ? `<ellipse cx="${p.x}" cy="${p.y}" rx="${p.rx || 38}" ry="${p.ry || 28}" fill="${p.color}" clip-path="url(#${miniId}_clip)" opacity=".10"/>`
+            :
             `<ellipse cx="${p.x}" cy="${p.y}" rx="${p.rx || 38}" ry="${p.ry || 28}" fill="url(#${miniId}_glow_${p.id})" clip-path="url(#${miniId}_clip)" opacity=".92"/>`
           ).join("");
           const label = window.TaagerCountry && window.TaagerCountry.label ? window.TaagerCountry.label(code) : code.toUpperCase();
           return `<div style="border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:9px;background:rgba(255,255,255,.025)">
             <div style="display:flex;justify-content:space-between;gap:8px;color:#fff;font-size:10px;font-weight:800"><span>${esc(label)}</span><span>${Number(group.nativeAmountDue || 0).toLocaleString("en-US")} ${esc(group.currency || "")}</span></div>
             <svg class="dash-country-map dash-country-map--compact" viewBox="${window.TaagerGeo && window.TaagerGeo.viewBox ? window.TaagerGeo.viewBox(code) : "0 0 400 340"}" style="width:100%;height:130px">
-              <defs><clipPath id="${miniId}_clip"><path d="${miniShape.outline}"/></clipPath><filter id="${miniId}_shadow" x="-25%" y="-25%" width="150%" height="170%"><feDropShadow dx="0" dy="7" stdDeviation="6" flood-color="#020617" flood-opacity=".65"/></filter>${miniGlowDefs}</defs>
-              <path d="${miniShape.outline}" fill="rgba(20,184,166,.09)" stroke="rgba(20,184,166,.55)" stroke-width="2" filter="url(#${miniId}_shadow)"/>
+              <defs><clipPath id="${miniId}_clip"><path d="${miniShape.outline}"/></clipPath>${fastMapPaint ? "" : `<filter id="${miniId}_shadow" x="-25%" y="-25%" width="150%" height="170%"><feDropShadow dx="0" dy="7" stdDeviation="6" flood-color="#020617" flood-opacity=".65"/></filter>`}${miniGlowDefs}</defs>
+              <path d="${miniShape.outline}" fill="rgba(20,184,166,.09)" stroke="rgba(20,184,166,.55)" stroke-width="2"${fastMapPaint ? "" : ` filter="url(#${miniId}_shadow)"`}/>
               ${miniGlows}
               <path d="${miniShape.outline}" fill="none" stroke="rgba(94,234,212,.65)" stroke-width="1.7"/>
               ${dots}
@@ -888,9 +891,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
           <div style="width:22px;height:4px;border-radius:9999px;
                       background:rgba(20,184,166,0.2);overflow:hidden;flex-shrink:0;margin-left:4px">
             <div class="s4-city-bar" data-pct="${c.pct}"
-                 style="height:100%;width:0%;background:#14b8a6;
-                        box-shadow:0 0 6px #14b8a6;
-                        transition:width 0.35s ease-out"></div>
+                 style="height:100%;width:${Math.max(0, Math.min(100, Number(c.pct || 0)))}%;background:#14b8a6;"></div>
           </div>
         </div>
         <div style="color:rgba(255,255,255,0.9);text-align:right;font-weight:600">
@@ -908,8 +909,15 @@ window.renderSection4 = function (mountEl, data, ctx) {
       })
       .join("");
 
-    const maxDue = Math.max(...D.cities.map((c) => parseFloat(c.due || 0)), 1);
-    const cityDots = D.cities
+    const mapCitiesForDisplay = window.TaagerGeo && typeof window.TaagerGeo.spreadCityPoints === "function"
+      ? window.TaagerGeo.spreadCityPoints(D.cities, {
+          minDistance: 22,
+          maxShift: 28,
+          iterations: 30
+        })
+      : D.cities;
+    const maxDue = Math.max(...mapCitiesForDisplay.map((c) => parseFloat(c.due || 0)), 1);
+    const cityDots = mapCitiesForDisplay
       .map((c) => {
         const dueVal = parseFloat(c.due || 0);
         const r = 3 + (dueVal / maxDue) * 6; // min 3, max 9
@@ -918,7 +926,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
         const cRateColor = rateColor(c.pct || 0);
         return `
         <g class="s4-city-dot" data-name="${esc(c.name)}" data-due="${c.due}" data-coll="${c.collected}" data-pct="${c.pct}" data-cx="${cx}" data-cy="${cy}" style="cursor:pointer; outline: none; pointer-events:all;">
-          <circle cx="${cx}" cy="${cy}" r="${r * 2.5}" fill="${cRateColor}" opacity="0.15"
+          <circle cx="${cx}" cy="${cy}" r="${r * 1.18}" fill="${cRateColor}" opacity="0.04"
                   style="pointer-events:none;"/>
           <circle cx="${cx}" cy="${cy}" r="${r}" fill="${cRateColor}" stroke="#fff" stroke-width="1"
                   style="pointer-events:none;"/>
@@ -936,7 +944,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
     const mapStop2 = lightMode ? "#dbeafe" : "#0a1528";
     const mapStop3 = lightMode ? "#e8f0fb" : "#060e1c";
     const mapStroke = lightMode ? "#9fb5d4" : "#14b8a6";
-    const mapFilter = lightMode
+    const mapFilter = fastMapPaint ? "none" : lightMode
       ? "drop-shadow(0 14px 28px rgba(15,23,42,0.08))"
       : "drop-shadow(0 0 18px rgba(20,184,166,0.25)) drop-shadow(0 0 6px rgba(20,184,166,0.15))";
     const tooltipBg = lightMode ? "#ffffff" : "rgba(11, 17, 32, 0.9)";
@@ -948,14 +956,16 @@ window.renderSection4 = function (mountEl, data, ctx) {
       ? window.TaagerGeo.provinceMap(activeCodCountry())
       : {};
     const provinceGlows = Object.keys(provinceGlowMap).filter((pid) => pid !== "other").map((pid) => provinceGlowMap[pid]);
-    const provinceGlowDefs = provinceGlows.map((p) =>
+    const provinceGlowDefs = fastMapPaint ? "" : provinceGlows.map((p) =>
       `<radialGradient id="s4-prov-${_s4MapUid}-${p.id}" cx="50%" cy="50%" r="50%">
         <stop offset="0%" stop-color="${p.color}" stop-opacity=".34"/>
         <stop offset="72%" stop-color="${p.color}" stop-opacity=".10"/>
         <stop offset="100%" stop-color="${p.color}" stop-opacity="0"/>
       </radialGradient>`
     ).join("");
-    const regionGlows = provinceGlows.map((p) =>
+    const regionGlows = provinceGlows.map((p) => fastMapPaint
+      ? `<ellipse class="s4-region-shape" cx="${p.x}" cy="${p.y}" rx="${p.rx || 38}" ry="${p.ry || 28}" fill="${p.color}" clip-path="url(#s4MapClip_${_s4MapUid})" fill-opacity=".025" pointer-events="none"/>`
+      :
       `<ellipse class="s4-region-shape" cx="${p.x}" cy="${p.y}" rx="${p.rx || 38}" ry="${p.ry || 28}" fill="url(#s4-prov-${_s4MapUid}-${p.id})" clip-path="url(#s4MapClip_${_s4MapUid})" opacity=".95" style="mix-blend-mode:screen"/>`
     ).join("");
 
@@ -1010,15 +1020,15 @@ window.renderSection4 = function (mountEl, data, ctx) {
                   <stop offset="100%" stop-color="#14b8a6" stop-opacity="${lightMode ? "0.08" : "0.14"}"/>
                 </linearGradient>
                 <clipPath id="s4MapClip_${_s4MapUid}"><path d="${activeMapPath}"/></clipPath>
-                <filter id="s4MapShadow_${_s4MapUid}" x="-30%" y="-30%" width="160%" height="180%">
+                ${fastMapPaint ? "" : `<filter id="s4MapShadow_${_s4MapUid}" x="-30%" y="-30%" width="160%" height="180%">
                   <feDropShadow dx="0" dy="11" stdDeviation="9" flood-color="${lightMode ? "#0f172a" : "#020617"}" flood-opacity="${lightMode ? "0.22" : "0.75"}"/>
                   <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="${lightMode ? "#3b82f6" : "#14b8a6"}" flood-opacity="${lightMode ? "0.12" : "0.22"}"/>
-                </filter>
+                </filter>`}
                 ${provinceGlowDefs}
               </defs>
               <path d="${activeMapPath}"
                    fill="url(#${_s4BgId})" stroke="${mapStroke}" stroke-width="1.5" stroke-opacity="${lightMode ? "0.85" : "0.4"}"
-                    filter="url(#s4MapShadow_${_s4MapUid})" style="filter:${mapFilter}"/>
+                    ${fastMapPaint ? "" : `filter="url(#s4MapShadow_${_s4MapUid})"`} style="filter:${mapFilter}"/>
               ${regionGlows}
               <path d="${activeMapPath}" fill="url(#s4MapSheen_${_s4MapUid})" pointer-events="none"/>
               <path d="${activeMapPath}" fill="none" stroke="${mapStroke}" stroke-width="2.1" stroke-opacity="${lightMode ? "0.95" : "0.7"}" pointer-events="none"/>
@@ -1582,6 +1592,11 @@ window.renderSection4 = function (mountEl, data, ctx) {
     <div class="s4-body dash-scroll" dir="${isAr ? "rtl" : "ltr"}" style="
         flex:1;overflow-y:auto;background:#080b12;display:flex;
         flex-direction:column;color:#fff;font-family:'Cairo',sans-serif">
+      <style>
+        .s4-body .fade-up{animation:none!important}
+        .s4-body .s4-city-dot,.s4-body .s4-region-shape{transition:opacity .12s ease}
+        .s4-body .s4-city-bar{transition:none!important;box-shadow:none!important}
+      </style>
 
       <!-- Page header -->
       <div style="padding:28px 32px 16px;text-align:center">
@@ -2527,7 +2542,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
 
   // ── Post-mount: stagger city bar fills ───────────────────────────────────
   (function animateCityBars() {
-    const bars = mountEl.querySelectorAll(".s4-city-bar");
+    const bars = mountEl.querySelectorAll(".s4-city-bar.__animated_disabled");
     bars.forEach((bar, i) => {
       const pct = parseFloat(bar.dataset.pct) || 0;
       setTimeout(
@@ -2554,7 +2569,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
   if (tooltip) {
     const mapEl = tooltip.closest(".s4-map");
 
-    mountEl.querySelectorAll(".s4-city-dot").forEach((dot) => {
+    mountEl.querySelectorAll(".s4-city-dot.__per_dot_disabled").forEach((dot) => {
       dot.addEventListener("mouseenter", () => {
         const mapRect = mapEl ? mapEl.getBoundingClientRect() : null;
         const dotRect = dot.getBoundingClientRect();
@@ -2597,6 +2612,94 @@ window.renderSection4 = function (mountEl, data, ctx) {
         tooltip.style.visibility = "hidden";
       });
     });
+
+    tooltip.innerHTML = `
+      <div data-s4-tip-name style="font-weight:800; color:#14b8a6; margin-bottom:7px; font-size:15px;"></div>
+      <div style="display:flex; justify-content:space-between; gap:18px; margin-bottom:4px;">
+        <span style="color:rgba(255,255,255,0.6)">${s4Txt("Expected:", "\u0627\u0644\u0645\u062a\u0648\u0642\u0639:")}</span>
+        <span><span data-s4-tip-due></span> ${activeCurrency}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; gap:18px; margin-bottom:4px;">
+        <span style="color:rgba(255,255,255,0.6)">${s4Txt("Collected:", "\u062a\u0645 \u0627\u0644\u062a\u062d\u0635\u064a\u0644:")}</span>
+        <span><span data-s4-tip-coll></span> ${activeCurrency}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; gap:18px;">
+        <span style="color:rgba(255,255,255,0.6)">${s4Txt("Rate:", "\u0627\u0644\u0646\u0633\u0628\u0629:")}</span>
+        <span data-s4-tip-pct style="color:#00e676"></span>
+      </div>
+    `;
+    const tipLabels = tooltip.querySelectorAll("span");
+    if (tipLabels[0]) tipLabels[0].textContent = s4Txt("Expected:", "\u0627\u0644\u0645\u062a\u0648\u0642\u0639:");
+    if (tipLabels[2]) tipLabels[2].textContent = s4Txt("Collected:", "\u062a\u0645 \u0627\u0644\u062a\u062d\u0635\u064a\u0644:");
+    if (tipLabels[4]) tipLabels[4].textContent = s4Txt("Rate:", "\u0627\u0644\u0646\u0633\u0628\u0629:");
+    const tipName = tooltip.querySelector("[data-s4-tip-name]");
+    const tipDue = tooltip.querySelector("[data-s4-tip-due]");
+    const tipColl = tooltip.querySelector("[data-s4-tip-coll]");
+    const tipPct = tooltip.querySelector("[data-s4-tip-pct]");
+    let activeDot = null;
+    let tipFrame = 0;
+
+    const s4DotFromTarget = (target) =>
+      target && target.closest ? target.closest(".s4-city-dot") : null;
+
+    const showS4Tooltip = (dot) => {
+      if (!dot || dot === activeDot) return;
+      activeDot = dot;
+      if (tipFrame) cancelAnimationFrame(tipFrame);
+      tipFrame = requestAnimationFrame(() => {
+        tipFrame = 0;
+        const mapRect = mapEl ? mapEl.getBoundingClientRect() : null;
+        const dotRect = dot.getBoundingClientRect();
+        if (mapRect && dotRect) {
+          const rawX = dotRect.left - mapRect.left + dotRect.width / 2;
+          const x = Math.min(Math.max(rawX, 118), Math.max(118, mapRect.width - 118));
+          const y = dotRect.top - mapRect.top + dotRect.height / 2;
+          tooltip.style.transform = `translate3d(${x}px, ${y - 12}px, 0) translate(-50%, -100%)`;
+        }
+        const name = dot.getAttribute("data-name") || "";
+        const due = Number(dot.getAttribute("data-due")).toLocaleString("en-US");
+        const coll = Number(dot.getAttribute("data-coll")).toLocaleString("en-US");
+        const pct = Number(dot.getAttribute("data-pct")).toFixed(1) + "%";
+        if (tipName && tipName.textContent !== name) tipName.textContent = name;
+        if (tipDue && tipDue.textContent !== due) tipDue.textContent = due;
+        if (tipColl && tipColl.textContent !== coll) tipColl.textContent = coll;
+        if (tipPct && tipPct.textContent !== pct) tipPct.textContent = pct;
+        tooltip.style.visibility = "visible";
+        tooltip.style.opacity = "1";
+      });
+    };
+
+    const hideS4Tooltip = (dot) => {
+      if (dot && activeDot !== dot) return;
+      activeDot = null;
+      tooltip.style.opacity = "0";
+      tooltip.style.visibility = "hidden";
+    };
+
+    if (mapEl) {
+      mapEl.addEventListener("pointerover", (event) => {
+        const dot = s4DotFromTarget(event.target);
+        if (!dot || (event.relatedTarget && dot.contains(event.relatedTarget))) return;
+        showS4Tooltip(dot);
+      });
+      mapEl.addEventListener("pointerout", (event) => {
+        const dot = s4DotFromTarget(event.target);
+        if (!dot || (event.relatedTarget && dot.contains(event.relatedTarget))) return;
+        hideS4Tooltip(dot);
+      });
+      mapEl.addEventListener("click", (event) => {
+        const dot = s4DotFromTarget(event.target);
+        if (!dot) return;
+        const cityName = dot.getAttribute("data-name") || "";
+        if (
+          cityName &&
+          window.CityIntelligenceDrawer &&
+          typeof window.CityIntelligenceDrawer.open === "function"
+        ) {
+          window.CityIntelligenceDrawer.open(cityName, window.dashboardGeoData || data || null);
+        }
+      });
+    }
   }
 
   // ── Cities "show all" button ─────────────────────────────────────────────

@@ -14,7 +14,9 @@ const {
   TAAGER_COUNTRY_NAMES: NORMALIZED_TAAGER_COUNTRY_NAMES,
 } = require("./taager-country");
 const { createEasyOrdersExportFlow } = require("./easy-orders-export");
+const { createTaagerOrdersExportFlow } = require("./taager-orders-export-flow");
 const {
+  installTaagerInterruptionAutoDismiss,
   clearTaagerInterruption,
   waitForTaagerTarget,
   safeTaagerClick,
@@ -27,6 +29,9 @@ const {
 
 const config = JSON.parse(process.env.BOT_CONFIG || "{}");
 const log = (msg) => process.stdout.write(msg + "\n");
+const emitStage = (stage, status, message, extra = {}) => {
+  process.send && process.send({ type: "stage", flow: "dashboard", stage, status, message, ...extra });
+};
 const easyOrdersFlow = createEasyOrdersExportFlow({
   config,
   log,
@@ -67,6 +72,7 @@ const TAAGER_EXPORT_BUTTON_SELECTOR = [
 let dashboardSheetProcessingFns = null;
 let activeContext = null;
 let activePage = null;
+let taagerIdentityVerified = false;
 
 function processDashboardSheets(...args) {
   if (!dashboardSheetProcessingFns) dashboardSheetProcessingFns = require("./dashboard-sheet-processing");
@@ -151,6 +157,31 @@ async function reloadWithNetworkRetries(page, label, options = {}) {
   }
 }
 
+async function withTaagerStepTimeout(label, timeoutMs, fn) {
+  let timer = null;
+  return Promise.race([
+    Promise.resolve().then(fn),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(`TAAGER_STEP_TIMEOUT: ${label} exceeded ${timeoutMs}ms`));
+      }, timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+async function clearTaagerInterruptionBounded(page, where = "taager", timeoutMs = 7000) {
+  return withTaagerStepTimeout(
+    `clear interruption at ${where}`,
+    timeoutMs,
+    () => clearTaagerInterruption(page, { log })
+  ).catch((error) => {
+    log(`Taager interruption clear at ${where} did not finish cleanly: ${error.message}`);
+    return { cleared: false, method: "timeout" };
+  });
+}
+
 function isOnLoginPage(url) {
   return (
     url.includes("/login") ||
@@ -179,7 +210,9 @@ async function launchDashboardContext(profilePath, chromePath) {
         windowSize: "1400,900",
       });
       await addChromeFingerprintSpoofing(context);
+      await installTaagerInterruptionAutoDismiss(context, { log });
       const page = context.pages()[0] || (await context.newPage());
+      await installTaagerInterruptionAutoDismiss(page, { log });
       page.setViewportSize({ width: 1400, height: 900 }).catch(() => {});
       activeContext = context;
       activePage = page;
@@ -521,6 +554,7 @@ async function verifyTaagerIdentity(page, where) {
   if (!actualCode) {
     throw new Error("TAAGER_IDENTITY_UNVERIFIED: merchant ID was not visible in header or profile");
   }
+  taagerIdentityVerified = true;
   process.send && process.send({
     type: "session-event",
     site: "taager",
@@ -680,7 +714,7 @@ async function clickTaagerDateRangeButton(page, kind) {
   for (const selector of selectors) {
     const target = page.locator(selector).first();
     if (await target.isVisible({ timeout: 700 }).catch(() => false)) {
-      await clearTaagerInterruption(page, { log }).catch(() => {});
+      await clearTaagerInterruptionBounded(page, `date-${kind}-button`);
       await target.click({ timeout: 3000 }).catch(async () => {
         await target.evaluate((el) => el.click()).catch(() => {});
       });
@@ -691,7 +725,7 @@ async function clickTaagerDateRangeButton(page, kind) {
   const index = kind === "from" ? 0 : 1;
   const fallback = dateButtons.nth(index);
   if (await fallback.isVisible({ timeout: 1000 }).catch(() => false)) {
-    await clearTaagerInterruption(page, { log }).catch(() => {});
+    await clearTaagerInterruptionBounded(page, `date-${kind}-fallback-button`);
     await fallback.click({ timeout: 3000 }).catch(async () => {
       await fallback.evaluate((el) => el.click()).catch(() => {});
     });
@@ -772,10 +806,18 @@ function isTaagerSwitchToArabicLanguageText(text) {
 
 async function taagerLogin(page) {
   assertUsableTaagerPage(page, "login-start");
+  await installTaagerInterruptionAutoDismiss(page, { log });
+  await clearTaagerInterruptionBounded(page, "login-start");
   await ensureTaagerArabic(page, "before-login", { requireButton: false });
   await gotoWithNetworkRetries(page, taagerCountryUrl("/auth/login"), "Taager login", { attempts: 3, timeout: 45000, waitMs: 5000 });
   await page.waitForTimeout(1500);
+  const loginClear = await clearTaagerInterruptionBounded(page, "login-after-navigation").catch((error) => {
+    log(`Taager login: popup clear after navigation failed: ${error.message}`);
+    return { cleared: false, method: "error" };
+  });
+  log(`Taager login: popup clear after navigation -> cleared=${!!loginClear.cleared} method=${loginClear.method || "none"} url=${page.url()}`);
   await ensureTaagerArabic(page, "login-page", { requireButton: false });
+  await clearTaagerInterruptionBounded(page, "login-page");
   if (!page.url().includes("/login") && !page.url().includes("/auth")) {
     log("Taager: already logged in");
     await ensureTaagerArabic(page, "login-reused", { requireButton: true });
@@ -822,23 +864,31 @@ async function taagerLogin(page) {
     return page;
   } else if (method === "phone") {
     if (!phone || !password) throw new Error("Taager phone/password credentials are missing");
+    await clearTaagerInterruptionBounded(page, "phone-login-before-phone");
     await page.waitForSelector('input[name="phoneNumber"]', { timeout: 15000 });
+    await clearTaagerInterruptionBounded(page, "phone-login-before-fill");
     await page.fill('input[name="phoneNumber"]', phone);
     await page.fill("#password", password);
+    await clearTaagerInterruptionBounded(page, "phone-login-before-submit");
     await page.click("#phone-login-submit-btn");
   } else {
     if (!email || !password) throw new Error("Taager email/password credentials are missing");
+    await clearTaagerInterruptionBounded(page, "email-login-before-register");
     await page.waitForSelector("#register", { timeout: 15000 });
+    await clearTaagerInterruptionBounded(page, "email-login-before-register-click");
     await page.click("#register");
     await page.waitForSelector("#email", { timeout: 10000 });
+    await clearTaagerInterruptionBounded(page, "email-login-before-fill");
     await page.fill("#email", email);
     await page.fill("#password", password);
+    await clearTaagerInterruptionBounded(page, "email-login-before-submit");
     await page.click("#loginByPhoneNumber");
   }
 
   const started = Date.now();
   while (Date.now() - started < 5 * 60 * 1000) {
     await page.waitForTimeout(3000);
+    await clearTaagerInterruptionBounded(page, "login-confirmation-loop");
     const url = page.url();
     if (url.includes("/home") || url.includes("/orders") || url.includes("/products")) {
       log("Taager login confirmed");
@@ -853,8 +903,17 @@ async function taagerLogin(page) {
 
 async function ensureTaagerArabic(page, where = "taager", options = {}) {
   assertUsableTaagerPage(page, `arabic-${where}`);
-  await page.setExtraHTTPHeaders({ "Accept-Language": "ar-SA,ar;q=0.9,en;q=0.5" }).catch(() => {});
-  await page.evaluate(() => {
+  await withTaagerStepTimeout(
+    `install Taager interruption guard at ${where}`,
+    8000,
+    () => installTaagerInterruptionAutoDismiss(page, { log })
+  ).catch((error) => log(`Taager language prep: guard install skipped at ${where}: ${error.message}`));
+  await withTaagerStepTimeout(
+    `set Taager language headers at ${where}`,
+    5000,
+    () => page.setExtraHTTPHeaders({ "Accept-Language": "ar-SA,ar;q=0.9,en;q=0.5" })
+  ).catch(() => {});
+  await withTaagerStepTimeout(`prime Taager Arabic locale at ${where}`, 5000, () => page.evaluate(() => {
     try {
       localStorage.setItem("i18nextLng", "ar");
       localStorage.setItem("language", "ar");
@@ -862,10 +921,18 @@ async function ensureTaagerArabic(page, where = "taager", options = {}) {
       document.documentElement.lang = "ar";
       document.documentElement.dir = "rtl";
     } catch (_) {}
-  }).catch(() => {});
+  })).catch((error) => log(`Taager language prep: locale prime skipped at ${where}: ${error.message}`));
   await page.waitForTimeout(300).catch(() => {});
+  await clearTaagerInterruptionBounded(page, where);
   for (let attempt = 1; attempt <= 2; attempt++) {
-    const text = await readTaagerLanguageButtonText(page);
+    const text = await withTaagerStepTimeout(
+      `read Taager language button at ${where}`,
+      5000,
+      () => readTaagerLanguageButtonText(page)
+    ).catch((error) => {
+      log(`Taager language prep: could not read language button at ${where}: ${error.message}`);
+      return "";
+    });
     if (!text) {
       if (options.requireButton) {
         throw new Error(`TAAGER_LANGUAGE_BUTTON_MISSING: #change-language-btn not visible at ${where}`);
@@ -881,13 +948,25 @@ async function ensureTaagerArabic(page, where = "taager", options = {}) {
     }
 
     log(`Taager language is English at ${where} - switching to Arabic`);
-    await clearTaagerInterruption(page, { log }).catch(() => {});
+    await clearTaagerInterruptionBounded(page, `${where}-before-language-click`);
     const langBtn = page.locator("#change-language-btn:visible").first();
-    await langBtn.click({ timeout: 5000 }).catch(async () => {
-      await langBtn.evaluate((el) => el.click()).catch(() => {});
+    await withTaagerStepTimeout(
+      `click Taager language button at ${where}`,
+      7000,
+      () => langBtn.click({ timeout: 5000 })
+    ).catch(async () => {
+      await withTaagerStepTimeout(
+        `fallback click Taager language button at ${where}`,
+        3000,
+        () => langBtn.evaluate((el) => el.click())
+      ).catch(() => {});
     });
     await page.waitForTimeout(1500).catch(() => {});
-    const afterText = await readTaagerLanguageButtonText(page);
+    const afterText = await withTaagerStepTimeout(
+      `read Taager language button after switch at ${where}`,
+      5000,
+      () => readTaagerLanguageButtonText(page)
+    ).catch(() => "");
     if (isTaagerAlreadyArabicLanguageText(afterText)) return page;
     if (attempt === 1) {
       log(`Taager language switch did not settle at ${where}; reloading and retrying`);
@@ -936,6 +1015,7 @@ function isRecoverableTaagerError(error, page) {
     isOnLoginPage(url) ||
     message.includes("SESSION_EXPIRED") ||
     message.includes("SESSION_UNVERIFIED") ||
+    message.includes("TAAGER_STEP_TIMEOUT") ||
     message.includes("TAAGER_LANGUAGE_NOT_ARABIC") ||
     message.includes("TAAGER_LANGUAGE_BUTTON_MISSING") ||
     message.includes("TAAGER_TARGET_TIMEOUT") ||
@@ -961,50 +1041,66 @@ async function recoverTaagerForRetry(page, stage, targetPath, error, attempt, ma
   });
 
   if (isClosedAutomationPage(recoveryPage)) {
+    log(`Taager ${stage}: recovery page is closed; relaunching and reopening ${targetPath}`);
     recoveryPage = await relaunchTaagerAutomationPage(stage, targetPath);
   } else {
     assertUsableTaagerPage(recoveryPage, `${stage}-recovery`);
-    await clearTaagerInterruption(recoveryPage, { log }).catch(() => {});
+    log(`Taager ${stage}: clearing interruptions before recovery reload (url=${recoveryPage.url()})`);
+    const clearResult = await clearTaagerInterruptionBounded(recoveryPage, `${stage}-before-recovery-reload`).catch((clearError) => {
+      log(`Taager ${stage}: interruption clear before reload failed: ${clearError.message}`);
+      return { cleared: false, method: "error" };
+    });
+    log(`Taager ${stage}: interruption clear before reload -> cleared=${!!clearResult.cleared} method=${clearResult.method || "none"}`);
+    log(`Taager ${stage}: reloading current page for recovery`);
     await reloadWithNetworkRetries(recoveryPage, `Taager ${stage} recovery`, { attempts: 2, timeout: 45000, waitMs: 5000 }).catch(async () => {
+      log(`Taager ${stage}: reload recovery failed; navigating directly to ${targetPath}`);
       await gotoWithNetworkRetries(recoveryPage, taagerCountryUrl(targetPath), `Taager ${stage} recovery fallback`, { attempts: 2, timeout: 45000, waitMs: 5000 });
     });
     await recoveryPage.waitForTimeout(1000).catch(() => {});
+    if (!isOnLoginPage(recoveryPage.url()) && targetPath) {
+      log(`Taager ${stage}: re-opening ${targetPath} after recovery reload`);
+      await gotoWithNetworkRetries(recoveryPage, taagerCountryUrl(targetPath), `Taager ${stage} recovery target`, { attempts: 2, timeout: 45000, waitMs: 5000 });
+      await recoveryPage.waitForTimeout(1000).catch(() => {});
+    }
+    log(`Taager ${stage}: recovery navigation settled (url=${recoveryPage.url()})`);
   }
 
   if (isOnLoginPage(recoveryPage.url())) {
     log(`Taager ${stage}: recovery landed on login - re-logging in`);
     recoveryPage = await taagerLogin(recoveryPage);
   }
-  await ensureTaagerArabic(recoveryPage, `${stage}-recovery`, { requireButton: !isOnLoginPage(recoveryPage.url()) });
+  await ensureTaagerArabic(recoveryPage, `${stage}-recovery`, { requireButton: false }).catch((languageError) => {
+    log(`Taager ${stage}: language prep during recovery was skipped: ${languageError.message}`);
+  });
   if (!isOnLoginPage(recoveryPage.url())) {
     await assertTaagerSession(recoveryPage);
-    await verifyTaagerIdentity(recoveryPage, `${stage}-recovery`);
+    if (taagerIdentityVerified) {
+      log(`Taager ${stage}: identity already verified this run; skipping duplicate recovery scrape`);
+    } else {
+      await verifyTaagerIdentity(recoveryPage, `${stage}-recovery`);
+    }
     await ensureTaagerCountrySelected(recoveryPage, `${stage}-recovery`);
+    if (String(targetPath || "").includes("/orders")) {
+      log(`Taager ${stage}: checking orders page after recovery before next attempt`);
+      const clearResult = await clearTaagerInterruptionBounded(recoveryPage, `${stage}-after-recovery`).catch((clearError) => {
+        log(`Taager ${stage}: interruption clear after recovery failed: ${clearError.message}`);
+        return { cleared: false, method: "error" };
+      });
+      log(`Taager ${stage}: interruption clear after recovery -> cleared=${!!clearResult.cleared} method=${clearResult.method || "none"}`);
+      await waitForTaagerTarget(
+        recoveryPage,
+        TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR,
+        `Taager ${stage} recovery orders page ready`,
+        { timeout: 15000, blockingOverlayTimeout: 5000, log }
+      );
+      log(`Taager ${stage}: recovery page is ready for the next export attempt (url=${recoveryPage.url()})`);
+    }
   }
   activePage = recoveryPage;
   return recoveryPage;
 }
 
-async function exportTaagerOrdersAttempt(page, dateFrom, dateTo, attempt, maxAttempts) {
-  assertUsableTaagerPage(page, "dashboard-orders-export");
-  await ensureTaagerArabic(page, "before-orders-export", { requireButton: false });
-  await gotoWithNetworkRetries(page, taagerCountryUrl("/orders"), "Taager dashboard orders", { attempts: 3, timeout: 45000, waitMs: 5000 });
-  await ensureTaagerArabic(page, "orders-export", { requireButton: true });
-  await assertTaagerSession(page);
-  await verifyTaagerIdentity(page, "orders-export");
-  await ensureTaagerCountrySelected(page, "orders-export");
-  await clearTaagerInterruption(page, { log }).catch(() => {});
-  await waitForTaagerTarget(page, TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR, "Taager orders page ready", { timeout: 15000, blockingOverlayTimeout: 5000, log });
-  log(`Dashboard Taager export from: ${formatDataDay(dateFrom)} to ${formatDataDay(dateTo)} (attempt ${attempt}/${maxAttempts})`);
-  await pickTaagerDateRange(page, dateFrom, dateTo);
-  await safeTaagerClick(page, TAAGER_ORDERS_SEARCH_ENABLED_SELECTOR, "Taager orders search button", { timeout: 15000, log });
-  await waitForTaagerTarget(page, TAAGER_ORDERS_SEARCH_ENABLED_SELECTOR, "Taager orders search button after filter", { timeout: 30000, blockingOverlayTimeout: 5000, log });
-  await page.waitForTimeout(500);
-
-  await waitForTaagerTarget(page, TAAGER_EXPORT_BUTTON_SELECTOR, "Taager export button", { timeout: 30000, log });
-  const downloadPromise = page.waitForEvent("download", { timeout: 120000 });
-  await safeTaagerClick(page, TAAGER_EXPORT_BUTTON_SELECTOR, "Taager export button", { timeout: 30000, clickTimeout: 5000, noWaitAfter: true, log });
-  const download = await downloadPromise;
+async function readDownloadToBuffer(download) {
   const stream = await download.createReadStream();
   const chunks = [];
   await new Promise((resolve, reject) => {
@@ -1015,18 +1111,74 @@ async function exportTaagerOrdersAttempt(page, dateFrom, dateTo, attempt, maxAtt
   return Buffer.concat(chunks);
 }
 
-async function exportTaagerOrders(page, dateFrom, dateTo) {
-  let lastError = null;
-  for (let attempt = 1; attempt <= MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS; attempt++) {
-    try {
-      return await exportTaagerOrdersAttempt(page, dateFrom, dateTo, attempt, MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS);
-    } catch (error) {
-      lastError = error;
-      page = await recoverTaagerForRetry(page, "dashboard-orders-export", "/orders", error, attempt, MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS);
-      if (attempt >= MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS) break;
+async function gotoDashboardTaagerOrders(page) {
+  assertUsableTaagerPage(page, "dashboard-orders-export");
+  log("Dashboard Taager export: ensuring Arabic before /orders navigation");
+  await ensureTaagerArabic(page, "before-orders-export", { requireButton: false });
+  log(`Dashboard Taager export: navigating to ${taagerCountryUrl("/orders")}`);
+  await gotoWithNetworkRetries(page, taagerCountryUrl("/orders"), "Taager dashboard orders", { attempts: 3, timeout: 45000, waitMs: 5000 });
+  log(`Dashboard Taager export: /orders navigation settled (url=${page.url()})`);
+  if (!page.url().includes("/login") && !page.url().includes("/auth")) {
+    log("Dashboard Taager export: fast-checking orders controls");
+    const clearResult = await clearTaagerInterruptionBounded(page, "dashboard-orders-fast-check").catch((clearError) => {
+      log(`Dashboard Taager export: interruption clear failed during fast-check: ${clearError.message}`);
+      return { cleared: false, method: "error" };
+    });
+    log(`Dashboard Taager export: fast-check interruption clear -> cleared=${!!clearResult.cleared} method=${clearResult.method || "none"}`);
+    const searchReady = await page.locator(TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR).first()
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
+    if (searchReady) {
+      log("Dashboard Taager export: orders controls visible; skipping slow post-navigation checks");
+      return page;
     }
+    log("Dashboard Taager export: orders controls not visible yet; falling back to full verification");
   }
-  throw new Error(`TAAGER_POPUP_RECOVERY_FAILED: Taager dashboard export failed after ${MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS} attempts. Last error: ${lastError ? lastError.message : "unknown error"}`);
+  await ensureTaagerArabic(page, "orders-export", { requireButton: true });
+  log("Dashboard Taager export: verifying session, identity, and country");
+  await assertTaagerSession(page);
+  if (taagerIdentityVerified) {
+    log("Dashboard Taager export: identity already verified this run; skipping duplicate profile/header scrape");
+  } else {
+    await verifyTaagerIdentity(page, "orders-export");
+  }
+  await ensureTaagerCountrySelected(page, "orders-export");
+  const clearResult = await clearTaagerInterruptionBounded(page, "dashboard-orders-before-ready-wait").catch((clearError) => {
+    log(`Dashboard Taager export: interruption clear failed before page-ready wait: ${clearError.message}`);
+    return { cleared: false, method: "error" };
+  });
+  log(`Dashboard Taager export: interruption clear before page-ready wait -> cleared=${!!clearResult.cleared} method=${clearResult.method || "none"}`);
+  return page;
+}
+
+function createDashboardTaagerOrdersExportFlow() {
+  return createTaagerOrdersExportFlow({
+    flow: "dashboard",
+    log,
+    emitStage: (message) => process.send && process.send(message),
+    formatDataDay,
+    clearTaagerInterruption: (page) => clearTaagerInterruptionBounded(page, "dashboard-orders-export"),
+    waitForTaagerTarget,
+    safeTaagerClick,
+    pickDateRange: pickTaagerDateRange,
+    gotoOrders: gotoDashboardTaagerOrders,
+    recoverForRetry: (page, error, attempt, maxAttempts) =>
+      recoverTaagerForRetry(page, "dashboard-orders-export", "/orders", error, attempt, maxAttempts),
+    readDownloadToBuffer,
+    maxAttempts: MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS,
+    searchButtonSelector: TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR,
+    searchEnabledSelector: TAAGER_ORDERS_SEARCH_ENABLED_SELECTOR,
+    exportButtonSelector: TAAGER_EXPORT_BUTTON_SELECTOR,
+    finalErrorPrefix: "TAAGER_POPUP_RECOVERY_FAILED: Taager dashboard export failed",
+  });
+}
+
+async function exportTaagerOrdersAttempt(page, dateFrom, dateTo, attempt, maxAttempts) {
+  return createDashboardTaagerOrdersExportFlow().exportAttempt(page, dateFrom, dateTo, attempt, maxAttempts);
+}
+
+async function exportTaagerOrders(page, dateFrom, dateTo) {
+  return createDashboardTaagerOrdersExportFlow().exportOrders(page, dateFrom, dateTo);
 }
 
 (async () => {
@@ -1050,13 +1202,16 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
   });
 
   await addChromeFingerprintSpoofing(context);
+  await installTaagerInterruptionAutoDismiss(context, { log });
 
   let page = context.pages()[0] || (await context.newPage());
+  await installTaagerInterruptionAutoDismiss(page, { log });
   page.setViewportSize({ width: 1400, height: 900 }).catch(() => {});
   activeContext = context;
   activePage = page;
 
   try {
+    emitStage("dashboard.fetch.start", "started", "Preparing dashboard date range");
     const now = new Date();
     const requestedFrom = parseConfigDate(config.dashboardDateFrom);
     const requestedTo = parseConfigDate(config.dashboardDateTo);
@@ -1065,25 +1220,34 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
     const { exportDateFrom, exportDateTo } = resolveSafeTaagerExportRange(dateFrom, dateTo, { today: now });
 
     log(`Dashboard fetch - Taager ${formatDataDay(exportDateFrom)} -> ${formatDataDay(exportDateTo)} (saving created-date range ${formatDataDay(dateFrom)} -> ${formatDataDay(dateTo)})`);
+    emitStage("taager.login", "started", "Logging into Taager");
     page = await taagerLogin(page);
+    emitStage("taager.login", "ok", "Taager login confirmed");
+    emitStage("taager.orders.export", "started", "Exporting Taager orders");
     const buffer = await withSessionGuard(
       page,
       () => exportTaagerOrders(page, exportDateFrom, exportDateTo),
       async () => { page = await taagerLogin(page); },
       "Taager"
     );
+    emitStage("taager.orders.export", "ok", `Taager export downloaded ${buffer.length} bytes`, { bytes: buffer.length });
     let easyBuffer = null;
     let enrichmentError = "";
     if (DASHBOARD_ENRICHMENT_PROVIDER === "easyorders") {
       const easyFrom = addLocalDays(dateFrom, -EASY_ORDERS_LOOKBACK_DAYS);
       try {
+        emitStage("easyorders.enrichment", "started", `Exporting EasyOrders enrichment from ${formatDataDay(easyFrom)}`);
         log(`Dashboard enrichment - EasyOrders ${formatDataDay(easyFrom)} -> ${formatDataDay(dateTo)} (product names + payment only)`);
         await easyOrdersFlow.login(page);
         easyBuffer = await easyOrdersFlow.exportOrders(page, easyFrom);
+        emitStage("easyorders.enrichment", "ok", `EasyOrders enrichment export downloaded ${easyBuffer.length} bytes`, { bytes: easyBuffer.length });
       } catch (enrichmentErr) {
         enrichmentError = enrichmentErr.message || String(enrichmentErr);
         log(`Dashboard enrichment - EasyOrders failed, continuing with Taager-only data: ${enrichmentErr.message}`);
+        emitStage("easyorders.enrichment", "warning", `Continuing Taager-only: ${enrichmentError}`);
       }
+    } else {
+      emitStage("easyorders.enrichment", "ok", "EasyOrders enrichment disabled for this account");
     }
 
     const sheetOptions = {
@@ -1098,12 +1262,15 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
     };
     let processed;
     try {
+      emitStage("dashboard.parse", "started", "Parsing dashboard sheets");
       processed = processDashboardSheets(sheetOptions);
     } catch (sheetError) {
       if (!easyBuffer) throw sheetError;
       log(`Dashboard enrichment - EasyOrders parse failed, continuing with Taager-only data: ${sheetError.message}`);
+      emitStage("dashboard.parse", "warning", `EasyOrders parse failed; retrying Taager-only: ${sheetError.message}`);
       processed = processDashboardSheets({ ...sheetOptions, easyOrdersBuffer: null });
     }
+    emitStage("dashboard.parse", "ok", `Parsed ${processed.rows.length} dashboard rows`, { rows: processed.rows.length });
     if (processed.enrichmentDiagnostics.status === "ok") {
       log(`Dashboard enrichment - EasyOrders named ${processed.enrichmentDiagnostics.productNameMatches || 0} rows, cache hits ${processed.enrichmentDiagnostics.cacheHits || 0}, learned ${processed.enrichmentDiagnostics.learnedSkuNames || 0} SKUs, and matched ${processed.enrichmentDiagnostics.paymentMatches || 0} payment rows`);
     }
@@ -1111,6 +1278,8 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
       processed.enrichmentDiagnostics = Object.assign({}, processed.enrichmentDiagnostics, { error: enrichmentError });
     }
 
+    emitStage("dashboard.result", "started", "Sending dashboard result to main process");
+    emitStage("dashboard.result", "ok", "Dashboard result ready");
     process.send && process.send({
       type: "dashboard-result",
       rows: processed.rows,
@@ -1125,6 +1294,7 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
     });
   } catch (err) {
     log(`FATAL: ${err.message}`);
+    emitStage("dashboard.fetch", "failed", err.message || String(err));
     process.send && process.send({ type: "error", error: err.message });
   } finally {
     await (activeContext || context).close().catch(() => {});

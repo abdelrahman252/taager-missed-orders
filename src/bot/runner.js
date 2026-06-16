@@ -16,7 +16,9 @@ const {
   TAAGER_COUNTRY_NAMES,
 } = require("./taager-country");
 const { createEasyOrdersExportFlow } = require("./easy-orders-export");
+const { createTaagerOrdersExportFlow } = require("./taager-orders-export-flow");
 const {
+  installTaagerInterruptionAutoDismiss,
   clearTaagerInterruption,
   waitForTaagerTarget,
   safeTaagerClick,
@@ -30,6 +32,9 @@ const {
 
 const config = JSON.parse(process.env.BOT_CONFIG || "{}");
 const log = (msg) => process.stdout.write(msg + "\n");
+const emitStage = (stage, status, message, extra = {}) => {
+  process.send && process.send({ type: "stage", flow: "runner", stage, status, message, ...extra });
+};
 const easyOrdersFlow = createEasyOrdersExportFlow({
   config,
   log,
@@ -63,6 +68,7 @@ let parserFns = null;
 let outputFns = null;
 let activeContext = null;
 let activePage = null;
+let taagerIdentityVerified = false;
 
 function parser() {
   if (!parserFns) parserFns = require("./parser");
@@ -84,6 +90,10 @@ function buildFailedExcel(...args) {
 
 function buildSkippedExcel(...args) {
   return output().buildSkippedExcel(...args);
+}
+
+function xlsx() {
+  return require("xlsx");
 }
 
 
@@ -234,6 +244,31 @@ function friendlyErrorMessage(error) {
     return "INTERNET_ISSUE: Internet connection or website timeout. Please check your internet, restart the app, and launch the run again.";
   }
   return message;
+}
+
+async function withTaagerStepTimeout(label, timeoutMs, fn) {
+  let timer = null;
+  return Promise.race([
+    Promise.resolve().then(fn),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(`TAAGER_STEP_TIMEOUT: ${label} exceeded ${timeoutMs}ms`));
+      }, timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+async function clearTaagerInterruptionBounded(page, where = "taager", timeoutMs = 7000) {
+  return withTaagerStepTimeout(
+    `clear interruption at ${where}`,
+    timeoutMs,
+    () => clearTaagerInterruption(page, { log })
+  ).catch((error) => {
+    log(`Taager interruption clear at ${where} did not finish cleanly: ${error.message}`);
+    return { cleared: false, method: "timeout" };
+  });
 }
 
 // ════════════════════════════════════════
@@ -470,7 +505,7 @@ async function clickTaagerDateRangeButton(page, kind) {
   for (const selector of selectors) {
     const target = page.locator(selector).first();
     if (await target.isVisible({ timeout: 700 }).catch(() => false)) {
-      await clearTaagerInterruption(page, { log }).catch(() => {});
+      await clearTaagerInterruptionBounded(page, `date-${kind}-button`);
       await target.click({ timeout: 3000 }).catch(async () => {
         await target.evaluate((el) => el.click()).catch(() => {});
       });
@@ -481,7 +516,7 @@ async function clickTaagerDateRangeButton(page, kind) {
   const index = kind === "from" ? 0 : 1;
   const fallback = dateButtons.nth(index);
   if (await fallback.isVisible({ timeout: 1000 }).catch(() => false)) {
-    await clearTaagerInterruption(page, { log }).catch(() => {});
+    await clearTaagerInterruptionBounded(page, `date-${kind}-fallback-button`);
     await fallback.click({ timeout: 3000 }).catch(async () => {
       await fallback.evaluate((el) => el.click()).catch(() => {});
     });
@@ -1039,7 +1074,9 @@ async function launchRunnerContext(profilePath, chromePath) {
         Object.defineProperty(navigator, "plugins", { get: () => [1, 2, 3, 4, 5] });
         Object.defineProperty(navigator, "languages", { get: () => ["ar-SA", "ar", "en"] });
       });
+      await installTaagerInterruptionAutoDismiss(context, { log });
       const page = context.pages()[0] || (await context.newPage());
+      await installTaagerInterruptionAutoDismiss(page, { log });
       activeContext = context;
       activePage = page;
       return { context, page };
@@ -1688,6 +1725,7 @@ async function verifyTaagerIdentity(page, where = "session") {
   if (expectedCode) assertIdentityMatch("TAAGER", "affiliate code", expectedCode, actualCode);
   if (!actualCode) throw new Error("TAAGER_IDENTITY_UNVERIFIED: merchant ID was not visible in header or profile");
   log(`Taager identity verified: ${actualCountry || expectedCountry} / ${actualEmail || "no-email"} / ${actualCode}`);
+  taagerIdentityVerified = true;
   process.send && process.send({
     type: "session-event",
     site: "taager",
@@ -2570,8 +2608,17 @@ function isTaagerSwitchToArabicLanguageText(text) {
 
 async function ensureTaagerArabic(page, where = "taager", options = {}) {
   assertUsableTaagerPage(page, `arabic-${where}`);
-  await page.setExtraHTTPHeaders({ "Accept-Language": "ar-SA,ar;q=0.9,en;q=0.5" }).catch(() => {});
-  await page.evaluate(() => {
+  await withTaagerStepTimeout(
+    `install Taager interruption guard at ${where}`,
+    8000,
+    () => installTaagerInterruptionAutoDismiss(page, { log })
+  ).catch((error) => log(`Taager language prep: guard install skipped at ${where}: ${error.message}`));
+  await withTaagerStepTimeout(
+    `set Taager language headers at ${where}`,
+    5000,
+    () => page.setExtraHTTPHeaders({ "Accept-Language": "ar-SA,ar;q=0.9,en;q=0.5" })
+  ).catch(() => {});
+  await withTaagerStepTimeout(`prime Taager Arabic locale at ${where}`, 5000, () => page.evaluate(() => {
     try {
       localStorage.setItem("i18nextLng", "ar");
       localStorage.setItem("language", "ar");
@@ -2579,10 +2626,18 @@ async function ensureTaagerArabic(page, where = "taager", options = {}) {
       document.documentElement.lang = "ar";
       document.documentElement.dir = "rtl";
     } catch (_) {}
-  }).catch(() => {});
+  })).catch((error) => log(`Taager language prep: locale prime skipped at ${where}: ${error.message}`));
   await page.waitForTimeout(300).catch(() => {});
+  await clearTaagerInterruptionBounded(page, where);
   for (let attempt = 1; attempt <= 2; attempt++) {
-    const text = await readTaagerLanguageButtonText(page);
+    const text = await withTaagerStepTimeout(
+      `read Taager language button at ${where}`,
+      5000,
+      () => readTaagerLanguageButtonText(page)
+    ).catch((error) => {
+      log(`Taager language prep: could not read language button at ${where}: ${error.message}`);
+      return "";
+    });
     if (!text) {
       if (options.requireButton) {
         throw new Error(`TAAGER_LANGUAGE_BUTTON_MISSING: #change-language-btn not visible at ${where}`);
@@ -2598,13 +2653,25 @@ async function ensureTaagerArabic(page, where = "taager", options = {}) {
     }
 
     log(`Taager language is English at ${where} - switching to Arabic`);
-    await clearTaagerInterruption(page, { log }).catch(() => {});
+    await clearTaagerInterruptionBounded(page, `${where}-before-language-click`);
     const langBtn = page.locator("#change-language-btn:visible").first();
-    await langBtn.click({ timeout: 5000 }).catch(async () => {
-      await langBtn.evaluate((el) => el.click()).catch(() => {});
+    await withTaagerStepTimeout(
+      `click Taager language button at ${where}`,
+      7000,
+      () => langBtn.click({ timeout: 5000 })
+    ).catch(async () => {
+      await withTaagerStepTimeout(
+        `fallback click Taager language button at ${where}`,
+        3000,
+        () => langBtn.evaluate((el) => el.click())
+      ).catch(() => {});
     });
     await page.waitForTimeout(1500).catch(() => {});
-    const afterText = await readTaagerLanguageButtonText(page);
+    const afterText = await withTaagerStepTimeout(
+      `read Taager language button after switch at ${where}`,
+      5000,
+      () => readTaagerLanguageButtonText(page)
+    ).catch(() => "");
     if (isTaagerAlreadyArabicLanguageText(afterText)) return page;
     if (attempt === 1) {
       log(`Taager language switch did not settle at ${where}; reloading and retrying`);
@@ -2617,11 +2684,19 @@ async function ensureTaagerArabic(page, where = "taager", options = {}) {
 
 async function taagerLogin(page) {
   assertUsableTaagerPage(page, "login-start");
+  await installTaagerInterruptionAutoDismiss(page, { log });
+  await clearTaagerInterruptionBounded(page, "login-start");
   log(`[NAV] -> ${taagerCountryUrl("/auth/login")}`);
   await ensureTaagerArabic(page, "before-login", { requireButton: false });
   await gotoWithNetworkRetries(page, taagerCountryUrl("/auth/login"), "Taager login", { attempts: 3, timeout: 45000, waitMs: 5000 });
   await page.waitForTimeout(1500);
+  const loginClear = await clearTaagerInterruptionBounded(page, "login-after-navigation").catch((error) => {
+    log(`Taager login: popup clear after navigation failed: ${error.message}`);
+    return { cleared: false, method: "error" };
+  });
+  log(`Taager login: popup clear after navigation -> cleared=${!!loginClear.cleared} method=${loginClear.method || "none"} url=${page.url()}`);
   await ensureTaagerArabic(page, "login-page", { requireButton: false });
+  await clearTaagerInterruptionBounded(page, "login-page");
 
   if (!page.url().includes("/login") && !page.url().includes("/auth")) {
     log("Taager: already logged in");
@@ -2676,23 +2751,31 @@ async function taagerLogin(page) {
     return page;
   } else if (method === "phone") {
     if (!phone || !password) throw new Error("Taager phone/password credentials are missing");
+    await clearTaagerInterruptionBounded(page, "phone-login-before-phone");
     await page.waitForSelector('input[name="phoneNumber"]', { timeout: 15000 });
+    await clearTaagerInterruptionBounded(page, "phone-login-before-fill");
     await page.fill('input[name="phoneNumber"]', phone);
     await page.fill("#password", password);
+    await clearTaagerInterruptionBounded(page, "phone-login-before-submit");
     await page.click("#phone-login-submit-btn");
   } else {
     if (!email || !password) throw new Error("Taager email/password credentials are missing");
+    await clearTaagerInterruptionBounded(page, "email-login-before-register");
     await page.waitForSelector("#register", { timeout: 15000 });
+    await clearTaagerInterruptionBounded(page, "email-login-before-register-click");
     await page.click("#register");
     await page.waitForSelector("#email", { timeout: 10000 });
+    await clearTaagerInterruptionBounded(page, "email-login-before-fill");
     await page.fill("#email", email);
     await page.fill("#password", password);
+    await clearTaagerInterruptionBounded(page, "email-login-before-submit");
     await page.click("#loginByPhoneNumber");
   }
 
   const started = Date.now();
   while (Date.now() - started < 5 * 60 * 1000) {
     await page.waitForTimeout(3000);
+    await clearTaagerInterruptionBounded(page, "login-confirmation-loop");
     const url = page.url();
     if (url.includes("/home") || url.includes("/orders") || url.includes("/products")) {
       log("Taager login confirmed");
@@ -2764,9 +2847,27 @@ async function ensureTaagerCountrySelected(page, where = "taager") {
 async function taagerGoto(page, pathnameOrUrl) {
   assertUsableTaagerPage(page, `goto-${pathnameOrUrl}`);
   const url = pathnameOrUrl.startsWith("http") ? pathnameOrUrl : taagerCountryUrl(pathnameOrUrl);
+  const isOrdersTarget = String(pathnameOrUrl || "").includes("/orders");
+  log(`Taager goto ${pathnameOrUrl}: start`);
+  log(`Taager goto ${pathnameOrUrl}: ensuring language before navigation`);
   await ensureTaagerArabic(page, `before-goto-${pathnameOrUrl}`, { requireButton: false });
+  log(`Taager goto ${pathnameOrUrl}: navigating to ${url}`);
   await gotoWithNetworkRetries(page, url, `Taager ${pathnameOrUrl}`, { attempts: 3, timeout: 45000, waitMs: 5000 });
   await page.waitForTimeout(1000);
+  log(`Taager goto ${pathnameOrUrl}: navigation settled at ${page.url()}`);
+  if (isOrdersTarget && !page.url().includes("/login") && !page.url().includes("/auth")) {
+    log(`Taager goto ${pathnameOrUrl}: fast-checking orders controls`);
+    await clearTaagerInterruptionBounded(page, `fast-check-${pathnameOrUrl}`);
+    const searchReady = await page.locator(TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR).first()
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
+    if (searchReady) {
+      log(`Taager goto ${pathnameOrUrl}: orders controls visible; skipping slow post-navigation checks`);
+      return page;
+    }
+    log(`Taager goto ${pathnameOrUrl}: orders controls not visible yet; falling back to full verification`);
+  }
+  log(`Taager goto ${pathnameOrUrl}: ensuring language after navigation`);
   await ensureTaagerArabic(page, `after-goto-${pathnameOrUrl}`, { requireButton: true });
   if (page.url().includes("/login") || page.url().includes("/auth")) {
     log("Taager session expired - re-logging in");
@@ -2775,12 +2876,20 @@ async function taagerGoto(page, pathnameOrUrl) {
     await page.waitForTimeout(1000);
     await ensureTaagerArabic(page, `post-relogin-${pathnameOrUrl}`, { requireButton: true });
   }
+  log(`Taager goto ${pathnameOrUrl}: checking authenticated page DOM`);
   await assertTaagerSession(page);
-  await verifyTaagerIdentity(page, `goto-${pathnameOrUrl}`).catch((err) => {
-    log(`Taager identity verification failed after navigation: ${err.message}`);
-    throw err;
-  });
+  if (taagerIdentityVerified) {
+    log(`Taager goto ${pathnameOrUrl}: identity already verified this run; skipping duplicate profile/header scrape`);
+  } else {
+    log(`Taager goto ${pathnameOrUrl}: verifying identity after navigation`);
+    await verifyTaagerIdentity(page, `goto-${pathnameOrUrl}`).catch((err) => {
+      log(`Taager identity verification failed after navigation: ${err.message}`);
+      throw err;
+    });
+  }
+  log(`Taager goto ${pathnameOrUrl}: checking country selector`);
   await ensureTaagerCountrySelected(page, `goto-${pathnameOrUrl}`);
+  log(`Taager goto ${pathnameOrUrl}: ready`);
   return page;
 }
 
@@ -2823,6 +2932,7 @@ function isRecoverableTaagerError(error, page) {
     isOnLoginPage(url) ||
     message.includes("SESSION_EXPIRED") ||
     message.includes("SESSION_UNVERIFIED") ||
+    message.includes("TAAGER_STEP_TIMEOUT") ||
     message.includes("TAAGER_LANGUAGE_NOT_ARABIC") ||
     message.includes("TAAGER_LANGUAGE_BUTTON_MISSING") ||
     message.includes("TAAGER_TARGET_TIMEOUT") ||
@@ -2851,22 +2961,51 @@ async function recoverTaagerForRetry(page, stage, targetPath, error, attempt, ma
     recoveryPage = await relaunchTaagerAutomationPage(stage, targetPath);
   } else {
     assertUsableTaagerPage(recoveryPage, `${stage}-recovery`);
-    await clearTaagerInterruption(recoveryPage, { log }).catch(() => {});
+    await clearTaagerInterruptionBounded(recoveryPage, `${stage}-before-recovery-reload`);
     await reloadWithNetworkRetries(recoveryPage, `Taager ${stage} recovery`, { attempts: 2, timeout: 45000, waitMs: 5000 }).catch(async () => {
       await gotoWithNetworkRetries(recoveryPage, taagerCountryUrl(targetPath), `Taager ${stage} recovery fallback`, { attempts: 2, timeout: 45000, waitMs: 5000 });
     });
     await recoveryPage.waitForTimeout(1000).catch(() => {});
+    if (!isOnLoginPage(recoveryPage.url()) && targetPath) {
+      log(`Taager ${stage}: re-opening ${targetPath} after recovery reload`);
+      await gotoWithNetworkRetries(recoveryPage, taagerCountryUrl(targetPath), `Taager ${stage} recovery target`, { attempts: 2, timeout: 45000, waitMs: 5000 });
+      await recoveryPage.waitForTimeout(1000).catch(() => {});
+    }
   }
 
   if (isOnLoginPage(recoveryPage.url())) {
     log(`Taager ${stage}: recovery landed on login - re-logging in`);
     recoveryPage = await taagerLogin(recoveryPage);
   }
-  await ensureTaagerArabic(recoveryPage, `${stage}-recovery`, { requireButton: !isOnLoginPage(recoveryPage.url()) });
+  await ensureTaagerArabic(recoveryPage, `${stage}-recovery`, { requireButton: false }).catch((languageError) => {
+    log(`Taager ${stage}: language prep during recovery was skipped: ${languageError.message}`);
+  });
   if (!isOnLoginPage(recoveryPage.url())) {
     await assertTaagerSession(recoveryPage);
-    await verifyTaagerIdentity(recoveryPage, `${stage}-recovery`);
+    if (taagerIdentityVerified) {
+      log(`Taager ${stage}: identity already verified this run; skipping duplicate recovery scrape`);
+    } else {
+      await verifyTaagerIdentity(recoveryPage, `${stage}-recovery`);
+    }
     await ensureTaagerCountrySelected(recoveryPage, `${stage}-recovery`);
+    await clearTaagerInterruptionBounded(recoveryPage, `${stage}-after-recovery`);
+    if (String(targetPath || "").includes("/orders")) {
+      await waitForTaagerTarget(
+        recoveryPage,
+        TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR,
+        `Taager ${stage} recovery orders page ready`,
+        { timeout: 15000, blockingOverlayTimeout: 5000, log }
+      );
+      log(`Taager ${stage}: recovery page is ready for the next export attempt`);
+    } else if (String(targetPath || "").includes("/cart")) {
+      await waitForTaagerTarget(
+        recoveryPage,
+        "#oneCustomer-tab-btn, #multipleCustomers-tab-btn",
+        `Taager ${stage} recovery cart page ready`,
+        { timeout: 30000, blockingOverlayTimeout: 5000, log }
+      );
+      log(`Taager ${stage}: recovery cart is ready for the next upload attempt`);
+    }
   }
   activePage = recoveryPage;
   return recoveryPage;
@@ -2883,26 +3022,30 @@ async function readDownloadToBuffer(download) {
   return Buffer.concat(chunks);
 }
 
+function createRunnerTaagerOrdersExportFlow() {
+  return createTaagerOrdersExportFlow({
+    flow: "runner",
+    log,
+    emitStage: (message) => process.send && process.send(message),
+    formatDataDay,
+    clearTaagerInterruption: (page) => clearTaagerInterruptionBounded(page, "orders-export"),
+    waitForTaagerTarget,
+    safeTaagerClick,
+    pickDateRange: pickTaagerDateRange,
+    gotoOrders: (page) => taagerGoto(page, "/orders"),
+    recoverForRetry: (page, error, attempt, maxAttempts) =>
+      recoverTaagerForRetry(page, "orders-export", "/orders", error, attempt, maxAttempts),
+    readDownloadToBuffer,
+    maxAttempts: MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS,
+    searchButtonSelector: TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR,
+    searchEnabledSelector: TAAGER_ORDERS_SEARCH_ENABLED_SELECTOR,
+    exportButtonSelector: TAAGER_EXPORT_BUTTON_SELECTOR,
+    finalErrorPrefix: "TAAGER_POPUP_RECOVERY_FAILED: Taager orders export failed",
+  });
+}
+
 async function taagerOrdersExportAttempt(page, exportFromDate, dateTo, attempt, maxAttempts) {
-  page = await taagerGoto(page, "/orders");
-  await clearTaagerInterruption(page, { log }).catch(() => {});
-  await waitForTaagerTarget(page, TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR, "Taager orders page ready", { timeout: 15000, blockingOverlayTimeout: 5000, log });
-
-  log(`Taager export from: ${formatDataDay(exportFromDate)} to ${formatDataDay(dateTo)} (attempt ${attempt}/${maxAttempts})`);
-  await pickTaagerDateRange(page, exportFromDate, dateTo);
-
-  await safeTaagerClick(page, TAAGER_ORDERS_SEARCH_ENABLED_SELECTOR, "Taager orders search button", { timeout: 15000, log });
-  await waitForTaagerTarget(page, TAAGER_ORDERS_SEARCH_ENABLED_SELECTOR, "Taager orders search button after filter", { timeout: 30000, blockingOverlayTimeout: 5000, log });
-  await page.waitForTimeout(500);
-
-  log("Downloading Taager orders...");
-  await waitForTaagerTarget(page, TAAGER_EXPORT_BUTTON_SELECTOR, "Taager export button", { timeout: 30000, log });
-  const downloadPromise = page.waitForEvent("download", { timeout: 120000 });
-  await safeTaagerClick(page, TAAGER_EXPORT_BUTTON_SELECTOR, "Taager export button", { timeout: 30000, clickTimeout: 5000, noWaitAfter: true, log });
-  const download = await downloadPromise;
-  const buffer = await readDownloadToBuffer(download);
-  log(`Taager orders downloaded: ${buffer.length} bytes`);
-  return buffer;
+  return createRunnerTaagerOrdersExportFlow().exportAttempt(page, exportFromDate, dateTo, attempt, maxAttempts);
 }
 
 async function phase4_taager(page, exportFromDate, dateTo) {
@@ -2910,18 +3053,13 @@ async function phase4_taager(page, exportFromDate, dateTo) {
   log("\n========================================");
   log("  PHASE 4 - Taager Login & Export");
   log("========================================\n");
+  emitStage("taager.login", "started", "Logging into Taager");
   page = await taagerLogin(page);
-  let lastError = null;
-  for (let attempt = 1; attempt <= MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS; attempt++) {
-    try {
-      return await taagerOrdersExportAttempt(page, exportFromDate, dateTo, attempt, MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS);
-    } catch (error) {
-      lastError = error;
-      page = await recoverTaagerForRetry(page, "orders-export", "/orders", error, attempt, MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS);
-      if (attempt >= MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS) break;
-    }
-  }
-  throw new Error(`TAAGER_POPUP_RECOVERY_FAILED: Taager orders export failed after ${MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS} attempts. Last error: ${lastError ? lastError.message : "unknown error"}`);
+  emitStage("taager.login", "ok", "Taager login confirmed");
+  emitStage("taager.orders.export", "started", "Exporting Taager orders");
+  const buffer = await createRunnerTaagerOrdersExportFlow().exportOrders(page, exportFromDate, dateTo);
+  emitStage("taager.orders.export", "ok", `Taager export downloaded ${buffer.length} bytes`, { bytes: buffer.length });
+  return buffer;
 }
 
 function taagerFailedOrderFromCard(card, order, fallbackIndex) {
@@ -2957,22 +3095,220 @@ function scrapeTaagerCardFailures(cardStatuses, orders = []) {
   });
 }
 
+function normalizeFailedPhone(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function normalizeFailedSku(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function normalizeFailedOrderId(value) {
+  return String(value || "").trim();
+}
+
+function sameFailedPhone(a, b) {
+  const left = normalizeFailedPhone(a);
+  const right = normalizeFailedPhone(b);
+  return !!left && !!right && (left === right || left.endsWith(right) || right.endsWith(left));
+}
+
+function failedOrderValue(row, ...searches) {
+  if (!row || typeof row !== "object") return "";
+  const keys = Object.keys(row);
+  for (const search of searches) {
+    if (row[search] !== undefined && row[search] !== null && row[search] !== "") {
+      return String(row[search]);
+    }
+  }
+  const lowered = searches.map((search) => String(search).toLowerCase());
+  const found = keys.find((key) => {
+    const lk = key.toLowerCase();
+    return lowered.some((search) => lk.includes(search) || search.includes(lk));
+  });
+  return found && row[found] !== undefined && row[found] !== null ? String(row[found]) : "";
+}
+
+function failedHintKey(phone, sku) {
+  return `${normalizeFailedPhone(phone)}|${normalizeFailedSku(sku)}`;
+}
+
+function buildFailedHintMaps(cardFailures = []) {
+  const byPhoneSku = new Map();
+  const byPhone = new Map();
+  const bySku = new Map();
+  for (const failure of cardFailures || []) {
+    const phone = normalizeFailedPhone(failure.phone);
+    const sku = normalizeFailedSku(failure.sku);
+    if (!failure.error) continue;
+    if (phone && sku) byPhoneSku.set(failedHintKey(phone, sku), failure.error);
+    if (phone && !byPhone.has(phone)) byPhone.set(phone, failure.error);
+    if (sku && !bySku.has(sku)) bySku.set(sku, failure.error);
+  }
+  return { byPhoneSku, byPhone, bySku };
+}
+
+function failedHintFor(rowInfo, hints) {
+  const phone = normalizeFailedPhone(rowInfo.phone);
+  const sku = normalizeFailedSku(rowInfo.sku);
+  return (phone && sku && hints.byPhoneSku.get(failedHintKey(phone, sku))) ||
+    (phone && hints.byPhone.get(phone)) ||
+    (sku && hints.bySku.get(sku)) ||
+    "";
+}
+
+function orderFailedIdentity(order) {
+  return {
+    orderId: normalizeFailedOrderId(order?.orderId),
+    phone: normalizeFailedPhone(formatPhone(order?.normPhone || order?.phone || "", TAAGER_COUNTRY) || order?.phone || order?.normPhone || ""),
+    sku: normalizeFailedSku(order?.sku),
+  };
+}
+
+function orderMatchesFailedInfo(order, failedInfo) {
+  const orderInfo = orderFailedIdentity(order);
+  const failedOrderId = normalizeFailedOrderId(failedInfo.orderId);
+  const failedSku = normalizeFailedSku(failedInfo.sku);
+  if (failedOrderId && orderInfo.orderId && failedOrderId === orderInfo.orderId) return true;
+  if (failedSku && orderInfo.sku && failedSku === orderInfo.sku && sameFailedPhone(failedInfo.phone, orderInfo.phone)) return true;
+  return false;
+}
+
+function findMatchingAttemptedOrder(failedInfo, orders, usedIndexes) {
+  const byIdentity = orders.findIndex((order, index) => !usedIndexes.has(index) && orderMatchesFailedInfo(order, failedInfo));
+  if (byIdentity >= 0) return { index: byIdentity, order: orders[byIdentity] };
+
+  const phoneMatches = orders
+    .map((order, index) => ({ index, order }))
+    .filter(({ index, order }) => !usedIndexes.has(index) && sameFailedPhone(failedInfo.phone, orderFailedIdentity(order).phone));
+  if (phoneMatches.length === 1) return phoneMatches[0];
+
+  return null;
+}
+
+function normalizeOfficialFailedRow(row, rowIndex, orders, usedIndexes, hints) {
+  const info = {
+    row: rowIndex + 1,
+    orderId: failedOrderValue(row, "(Order ID on your store)", "Order ID on your store", "Order ID", "order_id", "orderId"),
+    name: failedOrderValue(row, "(Customer Name)", "Customer Name", "customer_name", "name"),
+    productName: failedOrderValue(row, "(Product Name)", "Product Name", "product_name"),
+    sku: failedOrderValue(row, "(Product ID)", "Product ID", "product_id", "sku"),
+    phone: failedOrderValue(row, "(Phone Number)", "Phone Number", "phone_number", "phone"),
+    qty: Number(failedOrderValue(row, "(Quantity)", "Quantity", "qty")) || 1,
+    unitPrice: failedOrderValue(row, "(Product Price)", "Product Price", "price", "unitPrice"),
+    subtotal: failedOrderValue(row, "(Product Price)", "Product Price", "price", "subtotal"),
+    city: failedOrderValue(row, "(Province)", "Province", "city"),
+    address: failedOrderValue(row, "(Address)", "Address", "address"),
+    error: failedOrderValue(row, "Reason", "reason", "Error", "error", "Message", "message"),
+  };
+
+  const matched = findMatchingAttemptedOrder(info, orders, usedIndexes);
+  if (matched) usedIndexes.add(matched.index);
+  const attempted = matched?.order || {};
+  const error = info.error || failedHintFor(info, hints) || "Taager upload failed";
+
+  return {
+    row: matched ? matched.index + 1 : info.row,
+    attemptedIndex: matched ? matched.index : null,
+    orderId: info.orderId || attempted.orderId || "",
+    name: attempted.name || info.name || "",
+    product: attempted.productName || info.productName || "",
+    productName: attempted.productName || info.productName || "",
+    sku: attempted.sku || info.sku || "",
+    phone: info.phone || formatPhone(attempted.normPhone || attempted.phone || "", TAAGER_COUNTRY) || "",
+    normPhone: attempted.normPhone || info.phone || "",
+    source: attempted.source || "taager-upload",
+    city: attempted.city || info.city || "",
+    address: attempted.address || info.address || "",
+    qty: attempted.qty || info.qty || 1,
+    unitPrice: attempted.unitPrice || info.unitPrice || "",
+    subtotal: attempted.subtotal || info.subtotal || "",
+    uncertain: !!attempted.uncertain,
+    error,
+  };
+}
+
+async function downloadOfficialTaagerFailedOrders(page, orders = [], cardFailures = []) {
+  const failedBtn = page.locator("#download-failed-orders").first();
+  const hasOfficialFailedFile = await failedBtn.isVisible({ timeout: 8000 }).catch(() => false);
+  if (!hasOfficialFailedFile) {
+    log("Taager official failed-orders download not visible; using card-status fallback.");
+    return { failedOrders: cardFailures, official: false, downloadedBuffer: null };
+  }
+
+  try {
+    log("Taager official failed-orders download found; downloading source-of-truth file.");
+    const dlPromise = page.waitForEvent("download", { timeout: 30000 });
+    await failedBtn.click();
+    const dl = await dlPromise;
+    const stream = await dl.createReadStream();
+    const chunks = [];
+    await new Promise((resolve, reject) => {
+      stream.on("data", (chunk) => chunks.push(chunk));
+      stream.on("end", resolve);
+      stream.on("error", reject);
+    });
+    const downloadedBuffer = Buffer.concat(chunks);
+    const workbook = xlsx().read(downloadedBuffer, { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = xlsx().utils.sheet_to_json(sheet, { defval: "" });
+    const hints = buildFailedHintMaps(cardFailures);
+    const usedIndexes = new Set();
+    const failedOrders = rows.map((row, index) => normalizeOfficialFailedRow(row, index + 1, orders, usedIndexes, hints));
+    log(`Taager official failed-orders parsed: ${failedOrders.length}`);
+    return { failedOrders, official: true, downloadedBuffer };
+  } catch (error) {
+    log(`Taager official failed-orders download/parse failed; using card-status fallback: ${error.message}`);
+    return { failedOrders: cardFailures, official: false, downloadedBuffer: null };
+  }
+}
+
+function splitSuccessfulOrders(orders, failedOrders = []) {
+  const failedIndexes = new Set(
+    (failedOrders || [])
+      .map((failure) => Number.isFinite(failure.attemptedIndex) ? failure.attemptedIndex : null)
+      .filter((index) => index !== null)
+  );
+  const identityOnlyFailures = (failedOrders || []).filter((failure) => !Number.isFinite(failure.attemptedIndex));
+  return (orders || []).filter((order, index) => {
+    if (failedIndexes.has(index)) return false;
+    return !identityOnlyFailures.some((failure) => orderMatchesFailedInfo(order, failure));
+  });
+}
+
 async function scrapeTaagerCartCardStatuses(page) {
   return page.$$eval("[id^='order-details-button']", (buttons) => buttons.map((button, index) => {
-    const card = button.closest("[class*='rounded'][class*='border']") || button.parentElement?.parentElement;
+    const card = (() => {
+      let best = button.closest("[class*='rounded'][class*='border']") || button.parentElement?.parentElement;
+      for (let node = button; node; node = node.parentElement) {
+        if (node.querySelector && node.querySelector("[class*='bg-toast-secondary-error'], [class*='toast-secondary-error'], [class*='toast'][class*='error']")) {
+          best = node;
+          break;
+        }
+      }
+      return best;
+    })();
     if (!card) return { index, success: true, error: "", phone: "", sku: "" };
-    const errEl = card.querySelector("[class*='toast-secondary-error'], [class*='toast'][class*='error']");
+    const errEl = card.querySelector("[class*='bg-toast-secondary-error'], [class*='toast-secondary-error'], [class*='toast'][class*='error']");
     const cardText = (card.innerText || "").trim();
     const lowerText = cardText.toLowerCase();
     const explicitFailure = /failed|rejected|error|not available|unavailable|خطأ|فشل|مرفوض|غير متوفر|غير متاح/.test(lowerText);
     const explicitPending = /draft|pending|processing|مسودة|قيد|جاري/.test(lowerText);
     const error = errEl ? errEl.innerText.trim() : (explicitFailure ? cardText.split("\n").find((line) => /failed|rejected|error|not available|unavailable|خطأ|فشل|مرفوض|غير متوفر|غير متاح/i.test(line)) || "Taager upload failed" : "");
+    const finalError = (() => {
+      if (!errEl) return error;
+      const leafTexts = Array.from(errEl.querySelectorAll("div, p, span"))
+        .map((el) => (el.innerText || el.textContent || "").trim().replace(/\s+/g, " "))
+        .filter(Boolean)
+        .filter((text) => /Product\s+\S+\s+is not available|failed|rejected|error|unavailable|not available/i.test(text));
+      return leafTexts[leafTexts.length - 1] || (errEl.innerText || errEl.textContent || "").trim().replace(/\s+/g, " ") || error;
+    })();
     const spans = Array.from(card.querySelectorAll("span"));
     const hasSuccessText = spans.some((span) => /تم استلام الطلب|تم انشاء الطلب|تم إنشاء الطلب|success|received|created/i.test(span.textContent || ""));
-    const success = !errEl && !explicitFailure && (hasSuccessText || !explicitPending);
+    const success = !finalError && !explicitFailure && (hasSuccessText || !explicitPending);
     const phoneEl = card.querySelector("p[dir='ltr']");
-    const skuMatch = error.match(/Product\s+(\S+)\s+is not available/i);
-    return { index, success, error, phone: phoneEl ? phoneEl.innerText.trim() : "", sku: skuMatch ? skuMatch[1] : "" };
+    const skuMatch = finalError.match(/Product\s+(\S+)\s+is not available/i);
+    return { index, success, error: finalError, phone: phoneEl ? phoneEl.innerText.trim() : "", sku: skuMatch ? skuMatch[1] : "" };
   })).catch(() => []);
 }
 
@@ -3067,8 +3403,12 @@ async function waitForTaagerCartProgress(page, label, conditionFn, options = {})
   let blockingOverlaySince = 0;
 
   while (Date.now() - started < timeout) {
-    await clearTaagerInterruption(page, { log }).catch(() => {});
-    if (await hasVisibleOverlayWithoutCalendar(page)) {
+    await clearTaagerInterruptionBounded(page, `cart-${label}`);
+    if (await withTaagerStepTimeout(
+      `check cart overlay during ${label}`,
+      3000,
+      () => hasVisibleOverlayWithoutCalendar(page)
+    ).catch(() => false)) {
       if (!blockingOverlaySince) blockingOverlaySince = Date.now();
       const blockedFor = Date.now() - blockingOverlaySince;
       if (blockedFor >= blockingOverlayTimeout) {
@@ -3124,7 +3464,7 @@ async function clickTaagerButtonByTextScan(page, matcher, label) {
 }
 
 async function clickTaagerLocatorWithFallbacks(page, selector, textMatcher, label, options = {}) {
-  await clearTaagerInterruption(page, { log }).catch(() => {});
+  await clearTaagerInterruptionBounded(page, `${label}-before-click`);
   const locator = page.locator(selector).first();
   if (await locator.isVisible({ timeout: options.visibleTimeout || 3000 }).catch(() => false)) {
     try {
@@ -3134,7 +3474,7 @@ async function clickTaagerLocatorWithFallbacks(page, selector, textMatcher, labe
     } catch (error) {
       if (!isProbablyPopupBlockerError(error)) throw error;
       log(`${label}: normal click blocked (${error.message}); trying force click`);
-      await clearTaagerInterruption(page, { log }).catch(() => {});
+      await clearTaagerInterruptionBounded(page, `${label}-after-blocked-click`);
       try {
         await locator.click({ timeout: options.clickTimeout || 5000, force: true, noWaitAfter: !!options.noWaitAfter });
         log(`${label}: clicked via force selector`);
@@ -3156,7 +3496,7 @@ async function clickTaagerLocatorWithFallbacks(page, selector, textMatcher, labe
 
 async function openTaagerBulkCartTab(page) {
   log("Taager cart: opening multiple-customers tab");
-  await clearTaagerInterruption(page, { log }).catch(() => {});
+  await clearTaagerInterruptionBounded(page, "cart-open-bulk-tab");
   const clicked = await clickTaagerLocatorWithFallbacks(
     page,
     "#multipleCustomers-tab-btn, button:has-text('إرسال إلى عدة عملاء')",
@@ -3178,8 +3518,8 @@ async function waitForBulkCartReady(page) {
   const deadline = Date.now() + 30000;
   let lastDiagnostics = null;
   while (Date.now() < deadline) {
-    await clearTaagerInterruption(page, { log }).catch(() => {});
-    const ready = await page.evaluate(() => {
+    await clearTaagerInterruptionBounded(page, "cart-wait-bulk-ready");
+    const ready = await withTaagerStepTimeout("read cart bulk controls", 5000, () => page.evaluate(() => {
       const visible = (el) => {
         if (!el) return false;
         const style = window.getComputedStyle(el);
@@ -3191,7 +3531,7 @@ async function waitForBulkCartReady(page) {
       const hasInstruction = Array.from(document.querySelectorAll("p, span, div"))
         .some((el) => /رفع\s+الملف/.test(String(el.innerText || el.textContent || "")));
       return visible(uploadButton) || !!uploadInput || hasInstruction;
-    }).catch(() => false);
+    })).catch(() => false);
     if (ready) {
       const diagnostics = await readTaagerCartDiagnostics(page);
       logTaagerCartDiagnostics("Taager cart bulk upload controls ready", diagnostics);
@@ -3206,7 +3546,7 @@ async function waitForBulkCartReady(page) {
 
 async function uploadTaagerBulkFile(page, tempPath) {
   log("Taager cart: uploading file through visible upload button");
-  await clearTaagerInterruption(page, { log }).catch(() => {});
+  await clearTaagerInterruptionBounded(page, "cart-before-file-upload");
   const uploadSelector = "#upload-file-btn, button:has-text('رفع الملف بعد التعديل')";
 
   const chooserPromise = page.waitForEvent("filechooser", { timeout: 7000 }).catch(() => null);
@@ -3230,7 +3570,7 @@ async function uploadTaagerBulkFile(page, tempPath) {
     log("Taager cart: upload button was not clickable; using hidden input fallback");
   }
 
-  await clearTaagerInterruption(page, { log }).catch(() => {});
+  await clearTaagerInterruptionBounded(page, "cart-before-hidden-input-upload");
   const uploadInput = page.locator("#upload-file-input, input[type='file'][accept*='.xlsx'], input[type='file']").first();
   await uploadInput.waitFor({ state: "attached", timeout: 15000 });
   await uploadInput.setInputFiles(tempPath);
@@ -3286,7 +3626,7 @@ async function gotoTaagerCartForUpload(page) {
     await page.waitForTimeout(1000);
   }
 
-  await clearTaagerInterruption(page, { log }).catch(() => {});
+  await clearTaagerInterruptionBounded(page, "cart-before-tabs-ready");
   await waitForTaagerTarget(
     page,
     "#oneCustomer-tab-btn, #multipleCustomers-tab-btn",
@@ -3308,6 +3648,7 @@ async function gotoTaagerCartForUpload(page) {
 async function uploadToTaagerCartAttempt(page, orders, tempPath, attempt, maxAttempts) {
   log(`Taager cart upload attempt ${attempt}/${maxAttempts}`);
   log("Taager cart: navigating to /cart");
+  emitStage("taager.cart.navigate", "started", `Opening Taager cart (attempt ${attempt}/${maxAttempts})`, { attempt, maxAttempts });
   try {
     page = await gotoTaagerCartForUpload(page);
   } catch (error) {
@@ -3316,10 +3657,15 @@ async function uploadToTaagerCartAttempt(page, orders, tempPath, attempt, maxAtt
     throw new Error(`Taager cart navigation failed before opening the multiple-customers tab: ${error.message}`);
   }
   log("Taager cart: /cart navigation verified");
+  emitStage("taager.cart.navigate", "ok", "Taager cart navigation verified", { attempt, maxAttempts });
 
+  emitStage("taager.cart.bulk-tab", "started", "Opening bulk upload tab", { attempt, maxAttempts });
   await openTaagerBulkCartTab(page);
   await waitForBulkCartReady(page);
+  emitStage("taager.cart.bulk-tab", "ok", "Bulk upload controls are ready", { attempt, maxAttempts });
+  emitStage("taager.cart.file", "started", "Uploading Taager bulk file", { attempt, maxAttempts });
   await uploadTaagerBulkFile(page, tempPath);
+  emitStage("taager.cart.file", "ok", "Taager bulk file selected", { attempt, maxAttempts });
   log("Taager cart file selected - waiting for confirm button");
   process.send && process.send({ type: "order-progress", current: 0, total: orders.length, success: 0, failed: 0, lastOrder: null });
 
@@ -3340,11 +3686,14 @@ async function uploadToTaagerCartAttempt(page, orders, tempPath, attempt, maxAtt
 
   if (config.autoConfirm === true) {
     log("Auto-confirm is ON - confirming Taager bulk orders");
+    emitStage("taager.cart.confirm", "started", "Auto-confirming Taager bulk orders", { attempt, maxAttempts });
     const confirmVisible = await isTaagerBulkConfirmVisible(page);
     if (confirmVisible) await clickTaagerBulkConfirm(page);
     else log("Taager confirm button is no longer visible; continuing to card/status wait.");
+    emitStage("taager.cart.confirm", "ok", "Taager bulk confirmation submitted", { attempt, maxAttempts });
   } else {
     log("Auto-confirm is OFF - waiting for manual Taager confirmation");
+    emitStage("taager.cart.confirm", "started", "Waiting for manual Taager confirmation", { attempt, maxAttempts });
     process.send && process.send({ type: "needs-confirm" });
     const started = Date.now();
     let confirmed = false;
@@ -3357,6 +3706,7 @@ async function uploadToTaagerCartAttempt(page, orders, tempPath, attempt, maxAtt
       }
     }
     if (!confirmed) throw new Error("Manual Taager confirmation was not completed within 10 minutes");
+    emitStage("taager.cart.confirm", "ok", "Manual Taager confirmation detected", { attempt, maxAttempts });
   }
 
   const processingTimeout = 3 * 60 * 1000;
@@ -3364,6 +3714,7 @@ async function uploadToTaagerCartAttempt(page, orders, tempPath, attempt, maxAtt
   let processingDone = false;
 
   try {
+    emitStage("taager.cart.processing", "started", "Waiting for Taager cart processing", { attempt, maxAttempts });
     const startedState = await waitForTaagerCartProgress(
       page,
       "processing start",
@@ -3383,8 +3734,10 @@ async function uploadToTaagerCartAttempt(page, orders, tempPath, attempt, maxAtt
       { timeout: processingTimeout, pollMs: 3000 }
     );
     processingDone = true;
+    emitStage("taager.cart.processing", "ok", "Taager cart processing finished", { attempt, maxAttempts });
   } catch (error) {
     log(`Taager processing wait did not finish cleanly: ${error.message}`);
+    emitStage("taager.cart.processing", "warning", error.message, { attempt, maxAttempts });
   }
 
   if (!processingDone) {
@@ -3418,16 +3771,20 @@ async function uploadToTaagerCartAttempt(page, orders, tempPath, attempt, maxAtt
     log(`Taager cart did not reach a clean finish, but order cards exist; reporting card statuses instead of reloading (${taagerCartStateSummary(stateAfterWait)}).`);
   }
 
-  const total = cardStatuses.length || orders.length;
-  const success = cardStatuses.length ? cardStatuses.filter((card) => card.success).length : orders.length;
-  const failed = Math.max(0, total - success);
-  const failedOrders = scrapeTaagerCardFailures(cardStatuses, orders);
+  const total = orders.length;
+  const cardFailedOrders = scrapeTaagerCardFailures(cardStatuses, orders);
+  const officialFailed = await downloadOfficialTaagerFailedOrders(page, orders, cardFailedOrders);
+  const failedOrders = officialFailed.failedOrders || [];
+  const successfulOrders = splitSuccessfulOrders(orders, failedOrders);
+  const success = successfulOrders.length;
+  const failed = Math.max(0, failedOrders.length);
   const lastOrder = failedOrders[0] || (orders[orders.length - 1]
     ? { name: orders[orders.length - 1].name, product: orders[orders.length - 1].productName, sku: orders[orders.length - 1].sku, phone: formatPhone(orders[orders.length - 1].normPhone, TAAGER_COUNTRY), error: "" }
     : null);
   process.send && process.send({ type: "order-progress", current: total, total, success, failed, lastOrder });
-  log(`Taager upload done - success:${success} failed:${failed}`);
-  return { success, failed, failedOrders, cardStatuses };
+  log(`Taager upload done - success:${success} failed:${failed}${officialFailed.official ? " (official failed file)" : " (card fallback)"}`);
+  emitStage("taager.cart.upload", failed > 0 ? "warning" : "ok", `Taager upload done - success:${success} failed:${failed}`, { success, failed, failedSource: officialFailed.official ? "official" : "card" });
+  return { success, failed, failedOrders, successfulOrders, cardStatuses, failedSource: officialFailed.official ? "official" : "card" };
 }
 
 async function phase5_uploadToTaager(page, orders) {
@@ -3435,6 +3792,7 @@ async function phase5_uploadToTaager(page, orders) {
   log("  PHASE 5 - Upload to Taager Cart");
   log(`  Total: ${orders.length} orders`);
   log("========================================\n");
+  emitStage("taager.cart.upload", "started", `Uploading ${orders.length} orders to Taager cart`, { total: orders.length });
   const outputBuffer = buildOutputExcel(orders);
   const tempPath = path.join(os.tmpdir(), `taager-upload-${Date.now()}.xlsx`);
   fs.writeFileSync(tempPath, outputBuffer);
@@ -3444,9 +3802,11 @@ async function phase5_uploadToTaager(page, orders) {
     let lastError = null;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
+        emitStage("taager.cart.attempt", "started", `Attempt ${attempt}/${maxAttempts}`, { attempt, maxAttempts });
         return await uploadToTaagerCartAttempt(page, orders, tempPath, attempt, maxAttempts);
       } catch (error) {
         lastError = error;
+        emitStage("taager.cart.attempt", attempt >= maxAttempts ? "failed" : "retry", error.message || String(error), { attempt, maxAttempts });
         page = await recoverTaagerForRetry(page, "cart-upload", "/cart", error, attempt, maxAttempts);
         if (attempt >= maxAttempts) break;
         await page.waitForTimeout(1000).catch(() => {});
@@ -3585,8 +3945,10 @@ async function phase5_uploadToTaager(page, orders) {
       get: () => ["ar-SA", "ar", "en"],
     });
   });
+  await installTaagerInterruptionAutoDismiss(context, { log });
 
   let page = context.pages()[0] || (await context.newPage());
+  await installTaagerInterruptionAutoDismiss(page, { log });
   activeContext = context;
   activePage = page;
 
@@ -3749,10 +4111,9 @@ async function phase5_uploadToTaager(page, orders) {
 
     // Phase 5 - upload orders to Taager cart.
     const uploadResults = await phase5_uploadToTaager(page, orders);
-    const cardStatuses = Array.isArray(uploadResults.cardStatuses) ? uploadResults.cardStatuses : [];
-    const successfulOrders = cardStatuses.length > 0
-      ? orders.filter((_, index) => !!cardStatuses[index]?.success)
-      : orders.slice(0, uploadResults.success);
+    const successfulOrders = Array.isArray(uploadResults.successfulOrders)
+      ? uploadResults.successfulOrders
+      : splitSuccessfulOrders(orders, uploadResults.failedOrders || []);
 
     const buildResultOrderRow = (o) => {
       const taagerKey = `${o.normPhone}|${o.sku}`;
@@ -3791,18 +4152,18 @@ async function phase5_uploadToTaager(page, orders) {
 
     // ── Send final result ──
     const failedBuffer = uploadResults.failedOrders.length > 0
-      ? buildFailedExcel(uploadResults.failedOrders)
+      ? buildOutputExcel(uploadResults.failedOrders)
       : null;
 
     process.send && process.send({
       type: "result",
       data: {
-        orders: uploadResults.success,
+        orders: successfulOrders.length,
         taagerCountry: TAAGER_COUNTRY,
         stats,
         productSummary: Object.values(productSummaryMap),
         buffer: Array.from(outputBuffer),
-        orderRows: orders.map(o => {
+        ...(false ? { orderRows: orders.map(o => {
           // Taager analytics enrichment.
           // 1st priority: exact phone+SKU match in current Taager export (update run status)
           // 2nd priority: SKU-level inference from other orders with same SKU (first-run estimate)
@@ -3831,13 +4192,14 @@ async function phase5_uploadToTaager(page, orders) {
             marketerCommission: taagerExact?.marketerCommission ?? taagerSku.marketerCommission ?? o.marketerCommission ?? 0,
             taagerOrderNumber:    taagerExact?.taagerOrderNumber    || o.taagerOrderNumber    || "",
           };
-        }),
+        }) } : {}),
         orderRows: successfulOrders.map(buildResultOrderRow),
         attemptedOrderRows: orders.map(buildResultOrderRow),
         failedOrders: {
           count: uploadResults.failed,
           summary: uploadResults.failedOrders,
           errorRows: uploadResults.failedOrders,
+          source: uploadResults.failedSource || "unknown",
           failedDir: "",
           failedPath: "",
           buffer: failedBuffer ? Array.from(failedBuffer) : null,

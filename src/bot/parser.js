@@ -622,6 +622,9 @@ function parseFullMonthSnapshot(buffer, options = {}) {
       skippedNoSku: 0,
       skippedOutOfRange: 0,
       expandedItemRows: 0,
+      datedSourceRows: 0,
+      sourceDateFrom: "",
+      sourceDateTo: "",
       dateFrom: "",
       dateTo: "",
       headerMap: Object.assign({}, idx),
@@ -656,6 +659,11 @@ function parseFullMonthSnapshot(buffer, options = {}) {
       const itemCount = Math.max(products.length, qtys.length, prices.length, 1);
       const createdAt = localDateKey(row[idx.created]);
       const updatedAt = localDateKey(row[idx.updated]);
+      if (createdAt) {
+        diagnostics.datedSourceRows++;
+        if (!diagnostics.sourceDateFrom || createdAt < diagnostics.sourceDateFrom) diagnostics.sourceDateFrom = createdAt;
+        if (!diagnostics.sourceDateTo || createdAt > diagnostics.sourceDateTo) diagnostics.sourceDateTo = createdAt;
+      }
       if (!inRange(createdAt)) {
         diagnostics.skippedOutOfRange++;
         continue;

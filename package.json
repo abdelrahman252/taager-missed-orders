@@ -1,6 +1,6 @@
 {
   "name": "taager-orders",
-  "version": "1.0.43",
+  "version": "1.0.44",
   "description": "Taager Orders Automation Bot",
   "repository": {
     "type": "git",
@@ -25,6 +25,7 @@
     "verify:dashboard:countries": "node scripts/verify-dashboard-countries.js",
     "verify:country-flow": "node scripts/verify-country-order-flow.js",
     "verify:taager-dates": "node scripts/verify-taager-date-range.js",
+    "verify:taager-flow": "node scripts/verify-taager-flow-recovery.js",
     "verify:taager-recovery": "node scripts/verify-taager-recovery.js",
     "verify:stage1-recovery": "node scripts/verify-stage1-account-recovery.js",
     "verify:stage2-recovery": "node scripts/verify-stage2-zoom-sync-recovery.js",

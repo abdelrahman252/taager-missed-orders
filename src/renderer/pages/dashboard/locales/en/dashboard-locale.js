@@ -133,6 +133,8 @@
       'static.recommended': 'recommended',
       'static.waiting': 'Upload a Taager sheet to inspect it.',
       'static.inspecting': 'Checking workbook...',
+      'static.periodMismatch': 'Sheet dates do not match the selected period.',
+      'static.periodMismatchHelp': 'Select the dashboard period that matches the uploaded sheet, then update again.',
       'static.orders': 'orders',
       'static.rows': 'item rows',
       'static.confirmationRequired': 'confirmation required',

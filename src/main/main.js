@@ -1157,6 +1157,37 @@ function validateDashboardSnapshotReplacement(existingRows, incomingRows, dateFr
   };
 }
 
+function staticDashboardPeriodMismatch(processed) {
+  const diagnostics = processed && processed.parseDiagnostics || {};
+  const sourceRows = Number(diagnostics.sourceRows || 0);
+  const datedRows = Number(diagnostics.datedSourceRows || 0);
+  const skippedOutOfRange = Number(diagnostics.skippedOutOfRange || 0);
+  const parsedItems = Number(diagnostics.parsedItemRows || 0);
+  const sourceDateFrom = diagnostics.sourceDateFrom || "";
+  const sourceDateTo = diagnostics.sourceDateTo || "";
+  const dateFrom = processed && processed.dateFrom || diagnostics.dateFrom || "";
+  const dateTo = processed && processed.dateTo || diagnostics.dateTo || "";
+  const allDatedRowsOutsideRange = sourceRows > 0 &&
+    datedRows > 0 &&
+    parsedItems === 0 &&
+    skippedOutOfRange >= datedRows &&
+    sourceDateFrom &&
+    sourceDateTo &&
+    dateFrom &&
+    dateTo;
+  if (!allDatedRowsOutsideRange) return null;
+  return {
+    selectedDateFrom: dateFrom,
+    selectedDateTo: dateTo,
+    sourceDateFrom,
+    sourceDateTo,
+    sourceRows,
+    datedRows,
+    skippedOutOfRange,
+    message: `The uploaded Taager sheet contains orders dated ${sourceDateFrom} - ${sourceDateTo}, but the selected dashboard period is ${dateFrom} - ${dateTo}. Select the matching period, then upload/update again.`,
+  };
+}
+
 function replaceDashboardRowsInRange(existingRows, incomingRows, dateFrom, dateTo) {
   const from = normalizeDashboardDateKey(dateFrom);
   const to = normalizeDashboardDateKey(dateTo);
@@ -2663,6 +2694,8 @@ ipcMain.handle("save-analytics-settings", async (_, { minutesPerOrder, purgeDays
   return { ok: true };
 });
 
+const DASHBOARD_FETCH_ACCOUNT_TIMEOUT_MS = 8 * 60 * 1000;
+
 // ── Dashboard Fetch — spawn dashboard-fetch.js (Taager-only, no Easy-Orders) ──
 ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo } = {}) => {
   if (!(await isLicenseValid())) return { success: false, error: "LICENSE_INVALID" };
@@ -2741,19 +2774,61 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo } 
 
     const accountLabel = accountDisplayName(acc, dashboardAccountId);
 
+    let resolved = false;
+    let lastStage = "dashboard.fetch.spawned";
+    let killedByWatchdog = false;
+
+    const forwardDashboardLog = (text, options = {}) => {
+      const message = String(text || "");
+      const payload = {
+        accountId: dashboardAccountId,
+        accountLabel,
+        message,
+        stream: options.stream || "stdout",
+        timestamp: Date.now(),
+      };
+      mainWindow.webContents.send("bot-dashboard-log", payload);
+      mainWindow.webContents.send("bot-log", `[Dashboard:${accountLabel}]${options.stream === "stderr" ? "[ERR]" : ""} ${message}`);
+    };
+
     child.stdout.on("data", (d) => {
-      const text = d.toString();
-      mainWindow.webContents.send("bot-log", `[Dashboard:${accountLabel}] ${text}`);
+      forwardDashboardLog(d.toString(), { stream: "stdout" });
     });
     child.stderr.on("data", (d) => {
-      mainWindow.webContents.send("bot-log", `[Dashboard:${accountLabel}][ERR] ` + d.toString());
+      forwardDashboardLog(d.toString(), { stream: "stderr" });
     });
 
-    let resolved = false;
-    const safeResolve = (v) => { if (!resolved) { resolved = true; resolve(v); } };
+    const watchdog = setTimeout(() => {
+      killedByWatchdog = true;
+      const error = `DASHBOARD_FETCH_TIMEOUT: last stage was ${lastStage}`;
+      forwardDashboardLog(error, { stream: "stderr" });
+      try { child.kill(); } catch (_) {}
+      safeResolve({ success: false, error, lastStage });
+    }, DASHBOARD_FETCH_ACCOUNT_TIMEOUT_MS);
+
+    const safeResolve = (v) => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(watchdog);
+        resolve(v);
+      }
+    };
 
     child.on("message", async (msg) => {
-      if (msg.type === "dashboard-result") {
+      if (msg.type === "stage") {
+        lastStage = msg.stage || lastStage;
+        const payload = {
+          ...msg,
+          accountId: dashboardAccountId,
+          accountLabel,
+          lastStage,
+          timestamp: Date.now(),
+        };
+        mainWindow.webContents.send("bot-dashboard-stage", payload);
+        if (msg.message) {
+          forwardDashboardLog(`[stage:${msg.status || "info"}] ${msg.stage || lastStage} - ${msg.message}`);
+        }
+      } else if (msg.type === "dashboard-result") {
         const rows = normalizeDashboardProfitRows(msg.rows || []);
         try {
           const rangeFrom = msg.dateFrom || dateFrom || "";
@@ -2813,10 +2888,11 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo } 
           snapshotMonth: msg.snapshotMonth,
           parseDiagnostics: msg.parseDiagnostics || null,
           enrichmentDiagnostics: msg.enrichmentDiagnostics || (msg.parseDiagnostics && msg.parseDiagnostics.enrichment) || null,
-          debugSummary: dashboardDebugSummaryForRange(rows, msg.dateFrom || dateFrom || "", msg.dateTo || dateTo || "", msg.parseDiagnostics)
+          debugSummary: dashboardDebugSummaryForRange(rows, msg.dateFrom || dateFrom || "", msg.dateTo || dateTo || "", msg.parseDiagnostics),
+          lastStage
         });
       } else if (msg.type === "error") {
-        safeResolve({ success: false, error: msg.error });
+        safeResolve({ success: false, error: msg.error, lastStage });
       } else if (msg.type === "export-timestamp") {
         lastExportTimestamp = msg.timestamp || Date.now();
       } else if (msg.type === "taager-restart") {
@@ -2844,10 +2920,10 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo } 
 
     child.on("error", (err) => {
       monitoring.captureException(err, { operation: "dashboard.fetch.childProcess", extra: { accountId: dashboardAccountId } });
-      safeResolve({ success: false, error: err.message });
+      safeResolve({ success: false, error: err.message, lastStage });
     });
     child.on("exit", (code) => {
-      if (!resolved) safeResolve({ success: false, error: `Process exited with code ${code}` });
+      if (!resolved && !killedByWatchdog) safeResolve({ success: false, error: `Process exited with code ${code}`, lastStage });
     });
   });
 });
@@ -2886,10 +2962,18 @@ function prepareStaticDashboardUpdate(payload = {}) {
   const normalizedRows = normalizeDashboardProfitRows(processed.rows);
   const existingRows = dashboardStore.get("accounts", {})[accountId]?.snapshot || [];
   const validation = validateDashboardSnapshotReplacement(existingRows, normalizedRows, processed.dateFrom, processed.dateTo, processed.parseDiagnostics);
+  const periodMismatch = staticDashboardPeriodMismatch({ ...processed, rows: normalizedRows });
+  if (periodMismatch) {
+    processed.warnings = [
+      ...(processed.warnings || []),
+      periodMismatch.message,
+    ];
+  }
   return {
     accountId,
     processed: { ...processed, rows: normalizedRows },
     validation,
+    periodMismatch,
     requiresConfirmation: validation.suspicious || normalizedRows.length === 0,
   };
 }
@@ -2907,6 +2991,9 @@ function staticDashboardResult(prepared, extra = {}) {
     parseDiagnostics: prepared.processed.parseDiagnostics,
     enrichmentDiagnostics: prepared.processed.enrichmentDiagnostics,
     validation: prepared.validation,
+    periodMismatch: prepared.periodMismatch,
+    canApply: !prepared.periodMismatch,
+    blockedReason: prepared.periodMismatch ? prepared.periodMismatch.message : "",
     requiresConfirmation: prepared.requiresConfirmation,
     ...extra,
   };
@@ -2928,6 +3015,14 @@ ipcMain.handle("apply-static-dashboard-update", async (_, payload) => {
     if (!(await isLicenseValid())) return { ok: false, error: "LICENSE_INVALID" };
     if (!licenseStore.get("dashboardEnabled", false)) return { ok: false, error: "DASHBOARD_NOT_ENABLED" };
     const prepared = prepareStaticDashboardUpdate(payload);
+    if (prepared.periodMismatch) {
+      return staticDashboardResult(prepared, {
+        ok: false,
+        saved: false,
+        blocked: true,
+        error: prepared.periodMismatch.message,
+      });
+    }
     const persisted = persistDashboardSnapshot(prepared.accountId, {
       snapshot: prepared.processed.rows,
       dateFrom: prepared.processed.dateFrom,
@@ -4103,6 +4198,9 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
         if (msg.type === "export-timestamp") {
           lastExportTimestamp = msg.timestamp;
         }
+        if (msg.type === "stage") {
+          mainWindow.webContents.send("bot-log", `[Stage:${msg.flow || "runner"}] ${msg.stage || "unknown"} ${msg.status ? `(${msg.status})` : ""}${msg.message ? ` - ${msg.message}` : ""}`);
+        }
         if (msg.type === "2fa-needed")     mainWindow.webContents.send("bot-2fa-needed");
         if (msg.type === "needs-confirm")  mainWindow.webContents.send("bot-needs-confirm");
         if (msg.type === "cooldown")       mainWindow.webContents.send("bot-cooldown", msg);
@@ -4242,6 +4340,9 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
           accountExportTimestamps[idx] = msg.timestamp;
         }
         const tagged = { ...msg, accountId, accountEmail, accountLabel, accountIdx: idx, totalAccounts: accountsToRun.length };
+        if (msg.type === "stage") {
+          mainWindow.webContents.send("bot-log", `${prefix}[Stage:${msg.flow || "runner"}] ${msg.stage || "unknown"} ${msg.status ? `(${msg.status})` : ""}${msg.message ? ` - ${msg.message}` : ""}`);
+        }
         if (msg.type === "2fa-needed")     mainWindow.webContents.send("bot-2fa-needed",     tagged);
         if (msg.type === "needs-confirm")  mainWindow.webContents.send("bot-needs-confirm",  tagged);
         if (msg.type === "cooldown")       mainWindow.webContents.send("bot-cooldown",       tagged);

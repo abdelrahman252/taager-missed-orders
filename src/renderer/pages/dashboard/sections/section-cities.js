@@ -597,6 +597,13 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   ALL_CITIES.sort(function (a, b) {
     return b.orders - a.orders;
   });
+  if (window.TaagerGeo && typeof window.TaagerGeo.spreadCityPoints === "function") {
+    ALL_CITIES = window.TaagerGeo.spreadCityPoints(ALL_CITIES, {
+      minDistance: 24,
+      maxShift: 30,
+      iterations: 32
+    });
+  }
 
   var MAX_ORDERS = (ALL_CITIES[0] && ALL_CITIES[0].orders) || 1;
   var TOTAL_ORDERS = ALL_CITIES.reduce(function (sum, city) {
@@ -964,6 +971,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   }
 
   function mixedCountryMapsHTML(countryGroups) {
+    var fastMapPaint = true;
     return '<div class="fade-up" style="animation-delay:80ms;background:#0b1120;border:1px solid rgba(255,255,255,0.06);border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:12px;">' +
       '<div style="font-size:15px;font-weight:800;color:#fff;">' + s6Txt("Geographical Distribution by Country", "التوزيع الجغرافي حسب الدولة") + '</div>' +
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;">' +
@@ -988,7 +996,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         }).map(function (pid) {
           return miniProvinceMap[pid];
         });
-        var miniGlowDefs = miniProvinces.map(function (p) {
+        var miniGlowDefs = fastMapPaint ? "" : miniProvinces.map(function (p) {
           return '<radialGradient id="' + miniId + '_glow_' + p.id + '" cx="50%" cy="50%" r="50%">' +
             '<stop offset="0%" stop-color="' + p.color + '" stop-opacity=".35"/>' +
             '<stop offset="72%" stop-color="' + p.color + '" stop-opacity=".10"/>' +
@@ -996,14 +1004,16 @@ window.renderSectionCities = function (mountEl, data, ctx) {
             '</radialGradient>';
         }).join("");
         var miniGlows = miniProvinces.map(function (p) {
-          return '<ellipse cx="' + p.x + '" cy="' + p.y + '" rx="' + (p.rx || 38) + '" ry="' + (p.ry || 28) + '" fill="url(#' + miniId + '_glow_' + p.id + ')" clip-path="url(#' + miniId + '_clip)" opacity=".92"/>';
+          return fastMapPaint
+            ? '<ellipse cx="' + p.x + '" cy="' + p.y + '" rx="' + (p.rx || 38) + '" ry="' + (p.ry || 28) + '" fill="' + p.color + '" clip-path="url(#' + miniId + '_clip)" opacity=".10"/>'
+            : '<ellipse cx="' + p.x + '" cy="' + p.y + '" rx="' + (p.rx || 38) + '" ry="' + (p.ry || 28) + '" fill="url(#' + miniId + '_glow_' + p.id + ')" clip-path="url(#' + miniId + '_clip)" opacity=".92"/>';
         }).join("");
         var label = window.TaagerCountry && window.TaagerCountry.label ? window.TaagerCountry.label(code) : code.toUpperCase();
         return '<div style="border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025);border-radius:14px;padding:10px;">' +
           '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px;"><strong style="font-size:11px;color:#fff;">' + esc(label) + '</strong><span style="font-size:9px;color:rgba(255,255,255,.48);">' + esc(group.currency || "") + ' · ' + s7Num(group.orderCount || group.rows || 0) + '</span></div>' +
           '<svg class="dash-country-map dash-country-map--compact" viewBox="' + (window.TaagerGeo && window.TaagerGeo.viewBox ? window.TaagerGeo.viewBox(code) : "0 0 400 340") + '" style="width:100%;height:145px;">' +
-          '<defs><clipPath id="' + miniId + '_clip"><path d="' + miniShape.outline + '"/></clipPath><filter id="' + miniId + '_shadow" x="-25%" y="-25%" width="150%" height="170%"><feDropShadow dx="0" dy="7" stdDeviation="6" flood-color="#020617" flood-opacity=".65"/></filter>' + miniGlowDefs + '</defs>' +
-          '<path d="' + miniShape.outline + '" fill="rgba(59,130,246,.09)" stroke="rgba(168,85,247,.55)" stroke-width="2" filter="url(#' + miniId + '_shadow)"/>' +
+          '<defs><clipPath id="' + miniId + '_clip"><path d="' + miniShape.outline + '"/></clipPath>' + (fastMapPaint ? "" : '<filter id="' + miniId + '_shadow" x="-25%" y="-25%" width="150%" height="170%"><feDropShadow dx="0" dy="7" stdDeviation="6" flood-color="#020617" flood-opacity=".65"/></filter>') + miniGlowDefs + '</defs>' +
+          '<path d="' + miniShape.outline + '" fill="rgba(59,130,246,.09)" stroke="rgba(168,85,247,.55)" stroke-width="2"' + (fastMapPaint ? "" : ' filter="url(#' + miniId + '_shadow)"') + '/>' +
           miniGlows +
           '<path d="' + miniShape.outline + '" fill="none" stroke="rgba(196,181,253,.68)" stroke-width="1.7"/>' +
           dots + '</svg>' +
@@ -1014,6 +1024,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   }
 
   function mapHTML() {
+    var fastMapPaint = true;
     var themeAttr = document.documentElement.getAttribute("data-theme");
     var kbotTheme = window._kbotTheme;
     var lightMode = (themeAttr || kbotTheme) === "light";
@@ -1033,7 +1044,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     var mapProfile = mapShape.profile || (window.TaagerGeo && typeof window.TaagerGeo.visualProfile === "function"
       ? window.TaagerGeo.visualProfile(activeCountry)
       : {});
-    var mapFilter = lightMode
+    var mapFilter = fastMapPaint ? "none" : lightMode
       ? "drop-shadow(0 10px 18px rgba(15,23,42," + (mapProfile.shadowOpacityLight || 0.18) + "))"
       : "drop-shadow(0 0 8px rgba(168,85,247," + (mapProfile.shadowOpacityDark || 0.1) + "))";
     var countryLabel = activeCountry === "mixed"
@@ -1080,10 +1091,10 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       '<stop offset="100%" stop-color="#14b8a6" stop-opacity="' + (lightMode ? "0.04" : "0") + '"/>' +
       "</linearGradient>" +
       '<clipPath id="scMapClip_' + _mapUid + '"><path d="' + mapPath + '"/></clipPath>' +
-      '<filter id="scMapShadow_' + _mapUid + '" x="-30%" y="-30%" width="160%" height="180%">' +
+      (fastMapPaint ? "" : '<filter id="scMapShadow_' + _mapUid + '" x="-30%" y="-30%" width="160%" height="180%">' +
       '<feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="' + (lightMode ? "#0f172a" : "#020617") + '" flood-opacity="' + (lightMode ? (mapProfile.shadowOpacityLight || 0.18) : (mapProfile.shadowOpacityDark || 0.1)) + '"/>' +
-      "</filter>" +
-      PROVINCES.map(function (p) {
+      "</filter>") +
+      (fastMapPaint ? "" : PROVINCES.map(function (p) {
         return (
           '<radialGradient id="sc-prov-' +
           _mapUid +
@@ -1098,7 +1109,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
           '" stop-opacity="0"/>' +
           "</radialGradient>"
         );
-      }).join("") +
+      }).join("")) +
       "</defs>";
 
     var provBlobs = PROVINCES.map(function (p) {
@@ -1106,10 +1117,11 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         '<ellipse class="sc-prov-blob sc-region-shape" data-province="' + p.id + '"' +
         ' cx="' + p.mapCx + '" cy="' + p.mapCy + '"' +
         ' rx="' + p.mapRx + '" ry="' + p.mapRy + '"' +
-        ' fill="url(#sc-prov-' + _mapUid + "-" + p.id + ')"' +
+        ' fill="' + (fastMapPaint ? p.color : ("url(#sc-prov-" + _mapUid + "-" + p.id + ")")) + '"' +
         ' clip-path="url(#scMapClip_' + _mapUid + ')"' +
-        ' data-default-fill="url(#sc-prov-' + _mapUid + '-' + p.id + ')" data-default-opacity="1"' +
-        ' style="cursor:pointer;transition:opacity 0.3s,transform 0.3s;"/>' 
+        ' data-default-fill="' + (fastMapPaint ? p.color : ('url(#sc-prov-' + _mapUid + '-' + p.id + ')')) + '" data-default-opacity="' + (fastMapPaint ? "0.025" : "1") + '"' +
+        ' fill-opacity="' + (fastMapPaint ? "0.025" : "1") + '"' +
+        ' style="cursor:pointer;pointer-events:all;transition:opacity 0.18s;"/>' 
       );
     }).join("");
 
@@ -1119,7 +1131,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       var dotColor = hasActivity ? c.color : "#64748b";
       var r = hasActivity ? (mapProfile.dotBase || 4) + Math.sqrt(orderRatio) * (mapProfile.dotRange || 8.5) : 2.4;
       r = Math.min(mapProfile.dotMax || 13, r);
-      var haloScale = mapProfile.haloScale || 2.45;
+      var haloScale = fastMapPaint ? 1.18 : (mapProfile.haloScale || 2.45);
       return (
         '<g class="sc-city-dot" data-province="' +
         c.provinceId +
@@ -1136,7 +1148,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         '" data-color="' +
         dotColor +
         '"' +
-        ' style="cursor:pointer;transition:opacity 0.3s">' +
+        ' style="cursor:pointer;transition:opacity 0.16s">' +
         '<circle cx="' +
         c.x +
         '" cy="' +
@@ -1146,7 +1158,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         '"' +
         ' fill="' +
         dotColor +
-        '" opacity="0.13" pointer-events="none"/>' +
+        '" opacity="' + (fastMapPaint ? "0.04" : "0.13") + '" pointer-events="none"/>' +
         '<circle cx="' +
         c.x +
         '" cy="' +
@@ -1542,12 +1554,9 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         '<div class="sc-rate-bar" data-pct="' +
         (c.drRate || 0) +
         '"' +
-        ' style="height:100%;width:0%;border-radius:9999px;background:' +
+        ' style="height:100%;width:' + Math.max(0, Math.min(100, Number(c.drRate || 0))) + '%;border-radius:9999px;background:' +
         drColor2 +
-        ";" +
-        "box-shadow:0 0 6px " +
-        drColor2 +
-        '88;transition:width 1s ease-out"></div>' +
+        ';"></div>' +
         "</div>" +
         "</div>" +
         /* NDR% — switchable by pill */
@@ -1736,11 +1745,9 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         '<div style="height:4px;border-radius:9999px;background:rgba(148,163,184,0.22);overflow:hidden;margin-bottom:12px">' +
         '<div class="sc-prov-bar" data-pct="' +
         p.deliveryRate +
-        '" style="height:100%;width:0%;border-radius:9999px;background:' +
+        '" style="height:100%;width:' + Math.max(0, Math.min(100, Number(p.deliveryRate || 0))) + '%;border-radius:9999px;background:' +
         p.color +
-        ";box-shadow:0 0 10px " +
-        p.color +
-        '88;transition:width 0.4s ease-out"></div>' +
+        ';"></div>' +
         "</div>" +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px" class="cool-tooltip" data-tooltip="' +
         s6Txt(
@@ -1760,11 +1767,9 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         '<div style="height:4px;border-radius:9999px;background:rgba(148,163,184,0.22);overflow:hidden">' +
         '<div class="sc-prov-bar" data-pct="' +
         p.drRate +
-        '" style="height:100%;width:0%;border-radius:9999px;background:' +
+        '" style="height:100%;width:' + Math.max(0, Math.min(100, Number(p.drRate || 0))) + '%;border-radius:9999px;background:' +
         p.color +
-        ";box-shadow:0 0 10px " +
-        p.color +
-        '88;transition:width 0.4s ease-out"></div>' +
+        ';"></div>' +
         "</div>" +
         "</div>" +
         '<div style="display:grid;grid-template-columns:repeat(3,1fr);width:100%;' +
@@ -1865,10 +1870,11 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   var alignStr = isAr ? "right" : "left";
 
   mountEl.innerHTML =
-    '<div class="dash-scroll" dir="' +
+    '<div class="sc-body dash-scroll" dir="' +
     dirStr +
     '" style="flex:1;overflow-y:auto;background:#080b12;' +
     "display:flex;flex-direction:column;color:#fff;font-family:'Cairo',sans-serif;\">" +
+    '<style>.sc-body .fade-up{animation:none!important}.sc-body .sc-rate-bar,.sc-body .sc-prov-bar{transition:none!important;box-shadow:none!important}.sc-body .sc-city-dot,.sc-body .sc-prov-blob{transition:opacity .12s ease!important}</style>' +
     /* Header */
     '<div style="padding:28px 32px 20px;display:flex;align-items:flex-start;">' +
     "<div>" +
@@ -1913,10 +1919,10 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
   // ── Post-mount: animate bars ────────────────────────────────────────────────
   setTimeout(function () {
-    mountEl.querySelectorAll(".sc-rate-bar").forEach(function (bar) {
+    mountEl.querySelectorAll(".sc-rate-bar.__animated_disabled").forEach(function (bar) {
       bar.style.width = bar.dataset.pct + "%";
     });
-    mountEl.querySelectorAll(".sc-prov-bar").forEach(function (bar) {
+    mountEl.querySelectorAll(".sc-prov-bar.__animated_disabled").forEach(function (bar) {
       bar.style.width = bar.dataset.pct + "%";
     });
   }, 10);
@@ -2045,7 +2051,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   var ttName = mountEl.querySelector("#sc-tt-name");
   var ttInfo = mountEl.querySelector("#sc-tt-info");
 
-  mountEl.querySelectorAll(".sc-city-dot").forEach(function (el) {
+  mountEl.querySelectorAll(".sc-city-dot.__per_dot_disabled").forEach(function (el) {
     el.addEventListener("mouseenter", function () {
       if (!tooltip) return;
       var cx = parseFloat(el.dataset.cx),
@@ -2088,6 +2094,82 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       }
     });
   });
+
+  var scMapSvg = mountEl.querySelector("#sc-map-svg");
+  var activeTooltipDot = null;
+  var tooltipFrame = 0;
+
+  function dotFromEventTarget(target) {
+    return target && target.closest ? target.closest(".sc-city-dot") : null;
+  }
+
+  function showCityTooltip(el) {
+    if (!tooltip || !el || el === activeTooltipDot) return;
+    activeTooltipDot = el;
+    if (tooltipFrame) cancelAnimationFrame(tooltipFrame);
+    tooltipFrame = requestAnimationFrame(function () {
+      tooltipFrame = 0;
+      var cx = parseFloat(el.dataset.cx);
+      var cy = parseFloat(el.dataset.cy);
+      tooltip.style.left = Math.min(Math.max((cx / 400) * 100, 24), 76) + "%";
+      tooltip.style.top = Math.max((cy / 340) * 100, 14) + "%";
+      if (ttName && ttName.textContent !== el.dataset.name) {
+        ttName.textContent = el.dataset.name;
+      }
+      if (ttInfo) {
+        var ordersLabel = window.dashboardI18n && window.dashboardI18n.currentLocale === "ar"
+          ? "\u0637\u0644\u0628"
+          : "orders";
+        var infoText =
+          Number(el.dataset.orders).toLocaleString("en-US") +
+          " " +
+          ordersLabel +
+          " - DR " +
+          formatPercent(el.dataset.rate) +
+          "%";
+        if (ttInfo.textContent !== infoText) ttInfo.textContent = infoText;
+        ttInfo.style.color = el.dataset.color || "#fff";
+      }
+      tooltip.style.visibility = "visible";
+      tooltip.style.opacity = "1";
+    });
+  }
+
+  function hideCityTooltip(el) {
+    if (!tooltip || (el && activeTooltipDot !== el)) return;
+    activeTooltipDot = null;
+    tooltip.style.opacity = "0";
+    tooltip.style.visibility = "hidden";
+  }
+
+  if (scMapSvg) {
+    scMapSvg.addEventListener("pointerover", function (event) {
+      var dot = dotFromEventTarget(event.target);
+      if (!dot || (event.relatedTarget && dot.contains(event.relatedTarget))) return;
+      showCityTooltip(dot);
+    });
+    scMapSvg.addEventListener("pointerout", function (event) {
+      var dot = dotFromEventTarget(event.target);
+      if (!dot || (event.relatedTarget && dot.contains(event.relatedTarget))) return;
+      hideCityTooltip(dot);
+    });
+    scMapSvg.addEventListener("click", function (event) {
+      var el = dotFromEventTarget(event.target);
+      if (!el) return;
+      var cityName = el.dataset.name;
+      if (cityName && typeof window.CityIntelligenceDrawer === "object") {
+        var geoPayload = window.dashboardGeoData || null;
+        window.CityIntelligenceDrawer.open(cityName, geoPayload);
+      } else {
+        var prov = PROVINCES.find(function (p) {
+          return p.cities.some(function (c) {
+            return c.name === cityName;
+          });
+        });
+        if (prov) toggleProvince(prov.id);
+      }
+    });
+  }
 
   /* clear button */
   var clearBtn = mountEl.querySelector("#sc-clear-btn");
@@ -3855,8 +3937,12 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       typeof window.CityIntelligenceDrawer === "object"
     ) {
       var drawerEl = document.getElementById("geo-city-drawer");
+      var drawerTransform = drawerEl ? drawerEl.style.transform || "" : "";
       var alreadyOpen =
-        drawerEl && drawerEl.style.transform === "translateX(0px)";
+        drawerEl &&
+        (drawerTransform === "translateX(0px)" ||
+          drawerTransform === "translateX(0)" ||
+          drawerTransform.indexOf("translate3d(0") === 0);
       if (!alreadyOpen) {
         window.CityIntelligenceDrawer.open(
           state.selectedCity,
