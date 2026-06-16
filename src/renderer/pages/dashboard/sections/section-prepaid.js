@@ -81,6 +81,11 @@
   }
 
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function pct(value) {
+    var n = Number(value);
+    if (!Number.isFinite(n)) n = 0;
+    return (n * 100).toFixed(2).replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '') + '%';
+  }
 
   function paymentCardIcon(size, color) {
     size = size || 28;
@@ -959,7 +964,7 @@
         recsState.data.actions.push({
           type: 'action', emoji: '🚨', title: sTx('Apply Prepaid Immediately', 'تطبيق الدفع المسبق فوراً'),
           city: rec.city, product: rec.product,
-          reason: rec.reason || (sTx('COD NDR ' + Math.round((rec.codNdr || 0) * 100) + '% vs ' + Math.round((rec.prepaidNdr || 0) * 100) + '% for Prepaid', 'NDR COD ' + Math.round((rec.codNdr || 0) * 100) + '% مقابل ' + Math.round((rec.prepaidNdr || 0) * 100) + '% للمسبق')),
+          reason: rec.reason || (sTx('COD NDR ' + pct(rec.codNdr || 0) + ' vs ' + pct(rec.prepaidNdr || 0) + ' for Prepaid', 'NDR COD ' + pct(rec.codNdr || 0) + ' مقابل ' + pct(rec.prepaidNdr || 0) + ' للمسبق')),
           accentColor: '#3DDC97'
         });
       });
@@ -981,7 +986,7 @@
         recsState.data.cities.push({
           type: 'city', emoji: 'PIN', title: sTx('Heavy COD City', 'مدينة COD ثقيلة'),
           city: c.city, product: null,
-          reason: sTx('COD share ' + Math.round((c.codPct || 0) * 100) + '% · NDR ' + Math.round((c.codNdr || 0) * 100) + '%', 'نسبة COD ' + Math.round((c.codPct || 0) * 100) + '% · NDR ' + Math.round((c.codNdr || 0) * 100) + '%'),
+          reason: sTx('COD share ' + pct(c.codPct || 0) + ' · NDR ' + pct(c.codNdr || 0), 'نسبة COD ' + pct(c.codPct || 0) + ' · NDR ' + pct(c.codNdr || 0)),
           accentColor: '#8B7CF6'
         });
       });
@@ -1033,7 +1038,7 @@
           recsState.data.products.push({
             type: 'product', emoji: '*', title: sTx('Outstanding Prepaid Product', 'منتج متميز بالدفع المسبق'),
             city: null, product: p.name,
-            reason: sTx('Prepaid delivery rate ' + Math.round(p.ndr * 100) + '% of ' + p.prepaidCount + ' orders', 'معدل تسليم المسبق ' + Math.round(p.ndr * 100) + '% من ' + p.prepaidCount + ' طلب'),
+            reason: sTx('Prepaid delivery rate ' + pct(p.ndr) + ' of ' + p.prepaidCount + ' orders', 'معدل تسليم المسبق ' + pct(p.ndr) + ' من ' + p.prepaidCount + ' طلب'),
             accentColor: '#22d3ee'
           });
         }

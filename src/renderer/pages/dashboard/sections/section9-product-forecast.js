@@ -42,6 +42,16 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       .replace(/ربح تاجر/g, 'الربح');
   }
   function p9Num(v) { return Number(v || 0).toLocaleString(isAr ? 'ar-EG-u-nu-latn' : 'en-US'); }
+  function p9PctValue(value, decimals) {
+    var n = Number(value);
+    if (!Number.isFinite(n)) n = 0;
+    return n.toFixed(decimals == null ? 2 : decimals)
+      .replace(/(\.\d*?[1-9])0+$/, '$1')
+      .replace(/\.0+$/, '');
+  }
+  function p9RatioPctValue(value, decimals) {
+    return p9PctValue((Number(value) || 0) * 100, decimals);
+  }
   function productStatusCount(product, bucket, fallbackFields) {
     var counts = product && (product.statusCounts || product.statusBucketCounts || product.bucketCounts);
     if (counts && counts[bucket] != null) return Math.max(0, Math.round(Number(counts[bucket]) || 0));
@@ -85,7 +95,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
 
     if (expectedRateMode) {
       var globalExpectedNdrRate = (data && data.overview && data.overview.deliveryRate != null) ? (data.overview.deliveryRate / 100) : 0.35;
-      var expectedNdrRate = (p.ndrPct != null) ? (p.ndrPct / 100) : globalExpectedNdrRate;
+      var expectedNdrRate = (p.expectedNdrRate != null) ? Number(p.expectedNdrRate) : ((p.ndrPct != null) ? (p.ndrPct / 100) : globalExpectedNdrRate);
       
       realNdr = expectedNdrRate;
       expectedDeliveriesExact = expectedDeliveriesExact != null
@@ -228,7 +238,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       return sign + valStr + ' ' + viewCurrency;
     }
   }
-  function formatPct(v) { return Math.round(v * 100) + '%'; }
+  function formatPct(v) { return p9RatioPctValue(v) + '%'; }
 
   function matchMethodLabel(sim) {
     if (sim && sim.syncMatchDetail === 'separated_sku') return p9Txt('Marketing spend matched by separated SKU', 'Marketing spend matched by separated SKU');
@@ -701,7 +711,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     }
 
     // NDR analysis
-    var ndrPct = Math.round(s.ndr * 100);
+    var ndrPct = p9RatioPctValue(s.ndr);
     if (s.ndr < 0.20) {
       insights.push({ type: 'negative', icon: '⚠️', cat: p9Txt('NDR ANALYSIS', 'تحليل نسبة التسليم'),
         text: p9Txt('NDR of <span class="hi-red">', 'نسبة التسليم <span class="hi-red">') + ndrPct + p9Txt('%</span> is critically below 20% — primary driver of losses.', '%</span> أقل من حد الخطر 20% — سبب رئيسي للخسائر.') });
@@ -716,7 +726,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     // Break-even hint
     if (c.ndrRequired !== null && c.ndrRequired <= 1 && c.netProfit < 0) {
       insights.push({ type: 'warning', icon: '⚡', cat: p9Txt('BREAK-EVEN', 'نقطة التعادل'),
-        text: p9Txt('To break even, NDR must reach <strong style="color:#f59e0b">', 'للتعادل، ارفع نسبة التسليم إلى <strong style="color:#f59e0b">') + Math.round(c.ndrRequired * 100) + '%</strong>.' });
+        text: p9Txt('To break even, NDR must reach <strong style="color:#f59e0b">', 'للتعادل، ارفع نسبة التسليم إلى <strong style="color:#f59e0b">') + p9RatioPctValue(c.ndrRequired) + '%</strong>.' });
     }
 
     return insights.slice(0, 5).map(_insightHtml).join('');
@@ -989,7 +999,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         ) +
         _kpiMiniTip(
           p9Txt('Net Delivery Rate', 'نسبة التسليم NDR'),
-          valueStack(Math.round(s.ndr * 100) + '%', 'dr', 's9-card-value-stack'), (window.dashboardRateColor ? window.dashboardRateColor(s.ndr, { scale: 'ratio' }) : (s.ndr >= 0.40 ? '#22d3ee' : s.ndr >= 0.30 ? '#00e676' : s.ndr >= 0.20 ? '#f59e0b' : '#ef4444')), '📊',
+          valueStack(formatPct(s.ndr), 'dr', 's9-card-value-stack'), (window.dashboardRateColor ? window.dashboardRateColor(s.ndr, { scale: 'ratio' }) : (s.ndr >= 0.40 ? '#22d3ee' : s.ndr >= 0.30 ? '#00e676' : s.ndr >= 0.20 ? '#f59e0b' : '#ef4444')), '📊',
           p9Txt('Net Delivery Rate (NDR)', 'نسبة التسليم (NDR)'),
           p9Txt('Percentage of orders successfully delivered. Healthy baseline starts at 30%, with top tier at 40%+.', 'النسبة المئوية للطلبات التي تم تسليمها. المعيار الصحي يبدأ من 30%، وأعلى مستوى من 40% فأكثر.'),
           'NDR = deliveredOrders / totalOrders * 100'
@@ -1054,7 +1064,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
           '<span style="font-size:11px;color:rgba(255,255,255,0.35);">' + p9Txt('Actual: ', 'الفعلي: ') + formatPct(s.realNdr) + '</span>' +
         '</div>' +
         '<div class="sfe-input-wrap2">' +
-          '<input type="number" class="s9-ndr-input sfe-input2" min="0" max="100" step="1" value="' + Math.round(s.ndr * 100) + '" placeholder="24" style="direction:ltr;">' +
+          '<input type="number" class="s9-ndr-input sfe-input2" min="0" max="100" step="any" value="' + p9RatioPctValue(s.ndr) + '" placeholder="24" style="direction:ltr;">' +
           '<span class="sfe-input-unit2">%</span>' +
         '</div>' +
         '<div class="sfe-slider-markers" style="margin-top:6px;">' +
@@ -1606,7 +1616,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       if (metricVals[0]) metricVals[0].textContent = p9Num(c.totalOrders);
       if (metricVals[1]) metricVals[1].textContent = p9Num(s.realConfirmed);
       if (metricVals[2]) metricVals[2].innerHTML = valueStack(p9Num(Math.round(c.deliveredOrders)), 'delivered', 's9-card-value-stack');
-      if (metricVals[3]) metricVals[3].innerHTML = valueStack(Math.round(s.ndr * 100) + '%', 'dr', 's9-card-value-stack');
+      if (metricVals[3]) metricVals[3].innerHTML = valueStack(formatPct(s.ndr), 'dr', 's9-card-value-stack');
       if (metricVals[4]) metricVals[4].innerHTML = valueStack(toDisplay(s.avgCommission).toFixed(2) + ' ' + viewCurrency, 'profit', 's9-card-value-stack');
       if (metricVals[5]) metricVals[5].textContent = formatPct(s.realConfirmationRate);
       if (metricVals[6]) metricVals[6].textContent = formatPct(s.realDr);
@@ -1617,7 +1627,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     var deliveredInput = mountEl.querySelector('.s9-delivered-orders-input');
     if (deliveredInput && document.activeElement !== deliveredInput) deliveredInput.value = c.deliveredOrders;
     var ndrInput = mountEl.querySelector('.s9-ndr-input');
-    if (ndrInput && document.activeElement !== ndrInput) ndrInput.value = Math.round(s.ndr * 100);
+    if (ndrInput && document.activeElement !== ndrInput) ndrInput.value = p9RatioPctValue(s.ndr);
     var spendInput = mountEl.querySelector('.s9-sim-spend-input');
     if (spendInput && document.activeElement !== spendInput) spendInput.value = Math.round(toDisplay(s.adSpend));
 
@@ -1797,7 +1807,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       });
       ndrInp.addEventListener('blur', function (e) {
         var v = parseFloat(e.target.value);
-        if (isNaN(v) || v < 1) { e.target.value = Math.round(simulations[selectedIdx].ndr * 100); return; }
+        if (isNaN(v) || v < 1) { e.target.value = p9RatioPctValue(simulations[selectedIdx].ndr); return; }
         if (v > 100) e.target.value = '100';
       });
     }

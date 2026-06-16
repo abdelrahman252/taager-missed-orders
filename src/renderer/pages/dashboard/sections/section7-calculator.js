@@ -166,6 +166,21 @@ window.renderSection7 = function (mountEl, data, ctx) {
 
   // -- 2. State ----------------------------------------------------------------
   var nativeCurrency = window.dashboardActiveCurrency || (d && d.currency) || "SAR";
+  var overviewData = (ctx && ctx.data && ctx.data.overview) || {};
+  var overviewCurrency =
+    (ctx && ctx.data && ctx.data.meta && ctx.data.meta.activeCurrency) ||
+    (overviewData.totalDeliveredSales && overviewData.totalDeliveredSales.unit) ||
+    nativeCurrency;
+  var overviewDeliveredSales = Number(
+    overviewData.totalDeliveredSales && overviewData.totalDeliveredSales.value != null
+      ? overviewData.totalDeliveredSales.value
+      : (d.totalDeliveredSales != null ? d.totalDeliveredSales : d.deliveredSales || 0),
+  ) || 0;
+  var overviewDeliveredAov = Number(
+    overviewData.deliveredAov && overviewData.deliveredAov.value != null
+      ? overviewData.deliveredAov.value
+      : (d.deliveredAov != null ? d.deliveredAov : 0),
+  ) || 0;
   var state = {
     budget: d.adSpend != null ? d.adSpend : 250,
     currency: d.currency || nativeCurrency,
@@ -688,6 +703,16 @@ window.renderSection7 = function (mountEl, data, ctx) {
       minimumFractionDigits: dec,
       maximumFractionDigits: dec,
     });
+  }
+  function s7PctValue(value, decimals) {
+    var n = Number(value);
+    if (!Number.isFinite(n)) n = 0;
+    return n.toFixed(decimals == null ? 2 : decimals)
+      .replace(/(\.\d*?[1-9])0+$/, "$1")
+      .replace(/\.0+$/, "");
+  }
+  function s7RatioPctValue(value, decimals) {
+    return s7PctValue((Number(value) || 0) * 100, decimals);
   }
 
   // -- CurrencyBadge component helper ------------------------------------------
@@ -1458,7 +1483,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "sfe-neutral",
         s7Txt("Delivered", "?? ???????"),
         s7Num(Math.round(c.deliveredOrders)),
-        Math.round(s.ndr * 100) + "% NDR",
+        s7RatioPctValue(s.ndr) + "% NDR",
         s7Txt("Delivered Orders", "??????? ???????"),
         s7Txt(
           "Orders that reached the customer based on the simulated delivery rate.",
@@ -1653,9 +1678,9 @@ window.renderSection7 = function (mountEl, data, ctx) {
     if (c.ndrRequired !== null && c.ndrRequired <= 1) {
       rows += _beRow(
         s7Txt("Net Delivery Rate", "???? ???????"),
-        Math.round(s.ndr * 100) + "%",
-        Math.round(c.ndrRequired * 100) + "%",
-        "+" + Math.round((c.ndrRequired - s.ndr) * 100) + "pp",
+        s7RatioPctValue(s.ndr) + "%",
+        s7RatioPctValue(c.ndrRequired) + "%",
+        "+" + s7PctValue((c.ndrRequired - s.ndr) * 100) + "pp",
       );
     }
     if (c.commRequired !== null) {
@@ -1728,7 +1753,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     if (!el) return;
     var s = simState;
     var insights = [];
-    var ndrPct = Math.round(s.ndr * 100);
+    var ndrPct = s7RatioPctValue(s.ndr);
 
     // 1. Core profitability state
     if (c.netProfit < 0) {
@@ -1994,7 +2019,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     var el = document.getElementById("sfe-scenario-table");
     if (!el) return;
     var s = simState;
-    var ndrBase = Math.round(s.ndr * 100);
+    var ndrBase = Number(s7RatioPctValue(s.ndr));
     var scenarios = [
       {
         label: "NDR -10pp",
@@ -2063,7 +2088,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
           sc.label +
           "</td>" +
           "<td>" +
-          Math.round(sc.ndr * 100) +
+          s7RatioPctValue(sc.ndr) +
           "%</td>" +
           "<td>" +
           sfeFmt(sc.comm, 2) +
@@ -2107,11 +2132,11 @@ window.renderSection7 = function (mountEl, data, ctx) {
 
   function updateSimUI() {
     var c = computeSim();
-    var delivEl = document.getElementById("sfe-delivered-display");
-    if (delivEl) delivEl.innerHTML = s7ValueStack(s7Num(Math.round(c.deliveredOrders)), 'delivered', 's7-expected-value-stack');
+    var delivEl = document.getElementById("sfe-delivered-orders");
+    if (delivEl && document.activeElement !== delivEl) delivEl.value = Math.round(c.deliveredOrders);
     var ndrHint = document.getElementById("sfe-ndr-hint");
     var commHint = document.getElementById("sfe-comm-hint");
-    if (ndrHint) ndrHint.textContent = Math.round(simState.ndr * 100) + "%";
+    if (ndrHint) ndrHint.textContent = s7RatioPctValue(simState.ndr) + "%";
     if (commHint) commHint.textContent = formatTwoDecimals(convert(simState.avgCommission, nativeCurrency || window.dashboardActiveCurrency || "SAR", state.currency)) + " " + state.currency;
     var badge = document.getElementById("sfe-sim-badge");
     if (badge) badge.style.display = simState._isModified ? "flex" : "none";
@@ -2184,6 +2209,16 @@ window.renderSection7 = function (mountEl, data, ctx) {
               ? "rgba(16,185,129,0.2)"
               : "rgba(0,230,118,0.2)";
       }
+    }
+    var deliveredSalesEl = document.getElementById("s7-out-delivered-sales");
+    if (deliveredSalesEl) {
+      var deliveredSalesConverted = convert(overviewDeliveredSales, overviewCurrency, state.currency);
+      deliveredSalesEl.innerHTML = s7ValueStack(fmt(deliveredSalesConverted), 'sales', 's7-expected-value-stack');
+    }
+    var deliveredAovEl = document.getElementById("s7-out-delivered-aov");
+    if (deliveredAovEl) {
+      var deliveredAovConverted = convert(overviewDeliveredAov, overviewCurrency, state.currency);
+      deliveredAovEl.innerHTML = s7ValueStack(fmt(deliveredAovConverted, 2), 'aov', 's7-expected-value-stack');
     }
 
     var gaugeWrap = document.getElementById("s7-gauge-wrap");
@@ -2339,7 +2374,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
       ".s7-currency-badge.egp{background:linear-gradient(135deg,rgba(245,158,11,0.25) 0%,rgba(217,119,6,0.15) 100%);color:#fbbf24;border-color:rgba(251,191,36,0.35);box-shadow:0 4px 12px rgba(251,191,36,0.15),inset 0 1px 1px rgba(255,255,255,0.15)}" +
       "@keyframes badgeChange{0%{transform:scale(0.85);opacity:0.5}100%{transform:scale(1);opacity:1}}" +
       ".s7-currency-badge-animate{animation:badgeChange 0.35s cubic-bezier(0.34,1.56,0.64,1)}" +
-      ".s7-card{background:linear-gradient(145deg,rgba(30,41,59,0.4),rgba(15,23,42,0.6));border:1px solid rgba(59,130,246,0.16);border-radius:14px;padding:20px 16px;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;position:relative;overflow:hidden;transition:.2s}" +
+      ".s7-card{background:linear-gradient(145deg,rgba(30,41,59,0.4),rgba(15,23,42,0.6));border:1px solid rgba(59,130,246,0.16);border-radius:14px;padding:20px 16px;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;position:relative;overflow:hidden;transition:.2s;min-width:0;text-align:center}" +
+      ".s7-card>div{min-width:0}" +
       ".s7-card:hover{border-color:rgba(255,255,255,0.15);transform:translateY(-2px)}" +
       ".s7-source-breakdown{margin:24px 30px 0;background:" +
       (document.documentElement.getAttribute("data-theme") === "light"
@@ -2537,6 +2573,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         : "rgba(255,255,255,0.07)") +
       "}" +
       ".sfe-control-group{display:flex;flex-direction:column;gap:16px}" +
+      ".sfe-control-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}" +
       ".sfe-control-row{display:flex;flex-direction:column;gap:6px}" +
       ".sfe-label{font-size:12px;font-weight:500;color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
@@ -2587,6 +2624,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       ".sfe-derived-row{background:rgba(77,166,255,0.04);border:1px solid rgba(77,166,255,.1);border-radius:8px;padding:10px 12px}" +
       ".sfe-derived-value{font-size:22px;font-weight:700;color:#4da6ff;letter-spacing:-.03em}" +
       ".sfe-derived-note{font-size:10px;color:#4d5066;margin-top:2px}" +
+      "@media (max-width:720px){.sfe-control-pair{grid-template-columns:1fr}}" +
       ".sfe-score-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}" +
       ".sfe-score-block{background:" +
       (document.documentElement.getAttribute("data-theme") === "light"
@@ -2904,7 +2942,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       ) +
       _kpiMiniTip(
         s7Txt("Delivery Rate NDR", "???? ??????? NDR"),
-        realNdrPct.toFixed(1) + "%",
+        s7PctValue(realNdrPct) + "%",
         "#f59e0b",
         "??",
         s7Txt("Delivery Rate (NDR)", "???? ??????? (NDR)"),
@@ -3000,7 +3038,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       "</div>" +
       "</div>" +
       // Top KPI cards
-      '<div class="s7-kpi-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px">' +
+      '<div class="s7-kpi-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px">' +
       '<div class="s7-card"><div style="font-size:12px;color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
@@ -3110,6 +3148,52 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "netProfit = revenue - adSpend",
       ) +
       '</div><div style="display:flex;align-items:center;gap:8px;font-size:22px;font-weight:900"><span style="color:#00e676">??</span><span id="s7-out-net" dir="ltr">--</span></div><div class="s7-curr-lbl" style="font-size:10px;color:' +
+      (document.documentElement.getAttribute("data-theme") === "light"
+        ? "#64748b"
+        : "rgba(255,255,255,0.5)") +
+      ";background:" +
+      (document.documentElement.getAttribute("data-theme") === "light"
+        ? "#f1f5f9"
+        : "rgba(255,255,255,0.08)") +
+      ';padding:3px 10px;border-radius:12px">' +
+      state.viewCurrency +
+      "</div></div>" +
+      '<div class="s7-card"><div style="font-size:12px;color:#10b981;font-weight:700;display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap">' +
+      s7Txt("Net Total Delivered Sales", "صافي مبيعات الطلبات المسلمة") +
+      " " +
+      _tip(
+        "??",
+        s7Txt("Net Total Delivered Sales", "صافي مبيعات الطلبات المسلمة"),
+        s7Txt(
+          "Same dashboard metric used in the overview: net delivered sales for delivered net orders only.",
+          "نفس مؤشر لوحة التحكم في النظرة العامة: صافي مبيعات الطلبات المسلمة للطلبات الصافية المسلمة فقط.",
+        ),
+        "netDeliveredSales = sum(delivered net order sales)",
+      ) +
+      '</div><div style="display:flex;align-items:center;gap:8px;font-size:20px;font-weight:900;min-width:0"><span style="color:#10b981">??</span><span id="s7-out-delivered-sales" dir="ltr">--</span></div><div class="s7-curr-lbl" style="font-size:10px;color:' +
+      (document.documentElement.getAttribute("data-theme") === "light"
+        ? "#64748b"
+        : "rgba(255,255,255,0.5)") +
+      ";background:" +
+      (document.documentElement.getAttribute("data-theme") === "light"
+        ? "#f1f5f9"
+        : "rgba(255,255,255,0.08)") +
+      ';padding:3px 10px;border-radius:12px">' +
+      state.viewCurrency +
+      "</div></div>" +
+      '<div class="s7-card"><div style="font-size:12px;color:#38bdf8;font-weight:700;display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap">' +
+      s7Txt("Average Order Value (Delivered)", "متوسط قيمة الطلب المسلم") +
+      " " +
+      _tip(
+        "??",
+        s7Txt("Average Order Value (Delivered)", "متوسط قيمة الطلب المسلم"),
+        s7Txt(
+          "Same dashboard metric used in the overview: net delivered sales divided by delivered orders.",
+          "نفس مؤشر لوحة التحكم في النظرة العامة: صافي المبيعات المسلمة مقسوم على الطلبات المسلمة.",
+        ),
+        "deliveredAOV = netDeliveredSales / deliveredOrders",
+      ) +
+      '</div><div style="display:flex;align-items:center;gap:8px;font-size:20px;font-weight:900;min-width:0"><span style="color:#38bdf8">??</span><span id="s7-out-delivered-aov" dir="ltr">--</span></div><div class="s7-curr-lbl" style="font-size:10px;color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.5)") +
@@ -3294,13 +3378,23 @@ window.renderSection7 = function (mountEl, data, ctx) {
       s7Txt("SIMULATION CONTROLS", "????? ?????? ?? ????????") +
       "</div>" +
       '<div class="sfe-control-group">' +
+      '<div class="sfe-control-pair">' +
       '<div class="sfe-control-row">' +
       '<label class="sfe-label">' +
       s7Txt("Net Orders", "صافي الطلبات") +
       "</label>" +
-      '<div class="sfe-input-wrap2"><input type="number" id="sfe-orders" class="sfe-input2" min="1" step="50"><span class="sfe-input-unit2">' +
+      '<div class="sfe-input-wrap2"><input type="number" id="sfe-orders" class="sfe-input2" min="1" step="1"><span class="sfe-input-unit2">' +
       s7Txt("orders", "???") +
       "</span></div>" +
+      "</div>" +
+      '<div class="sfe-control-row">' +
+      '<label class="sfe-label">' +
+      s7Txt("Delivered Orders", "??????? ???????") +
+      "</label>" +
+      '<div class="sfe-input-wrap2"><input type="number" id="sfe-delivered-orders" class="sfe-input2" min="0" step="1"><span class="sfe-input-unit2">' +
+      s7Txt("orders", "???") +
+      "</span></div>" +
+      "</div>" +
       "</div>" +
       '<div class="sfe-control-row">' +
       '<label class="sfe-label">' +
@@ -3312,15 +3406,11 @@ window.renderSection7 = function (mountEl, data, ctx) {
       state.currency +
       "</span></div>" +
       "</div>" +
-      '<div class="sfe-global-rate-note">' +
-      '<strong>' + s7Txt("Global exchange rates", "????? ????? ??????") + "</strong>" +
-      '<span>' + s7Txt("Refresh or edit currency rates from the dashboard top bar.", "???? ?????? ?? ????? ??????? ?? ?????? ?????? ??????.") + "</span>" +
-      "</div>" +
       '<div class="sfe-control-row">' +
       '<label class="sfe-label">' +
       s7Txt("Net Delivery Rate", "???? ???????") +
       ' <span class="sfe-label-hint" id="sfe-ndr-hint">0%</span></label>' +
-      '<div class="sfe-input-wrap2"><input type="number" id="sfe-ndr" class="sfe-input2" min="1" max="100" step="1" inputmode="decimal"><span class="sfe-input-unit2">%</span></div>' +
+      '<div class="sfe-input-wrap2"><input type="number" id="sfe-ndr" class="sfe-input2" min="0" max="100" step="any" inputmode="decimal"><span class="sfe-input-unit2">%</span></div>' +
       '<div class="sfe-health-scale" aria-hidden="true"></div>' +
       '<div class="sfe-slider-markers">' +
       '<span class="sfe-marker sfe-marker--danger">' +
@@ -3340,14 +3430,9 @@ window.renderSection7 = function (mountEl, data, ctx) {
       ' <span class="sfe-label-hint" id="sfe-comm-hint">0 ' + state.currency + '</span></label>' +
       '<div class="sfe-input-wrap2"><input type="number" id="sfe-comm" class="sfe-input2" min="0" step="0.5" inputmode="decimal"><span class="sfe-input-unit2">' + state.currency + '</span></div>' +
       "</div>" +
-      '<div class="sfe-control-row sfe-derived-row">' +
-      '<label class="sfe-label" style="color:#4d5066">' +
-      s7Txt("Delivered Orders", "??????? ???????") +
-      "</label>" +
-      '<div class="sfe-derived-value" id="sfe-delivered-display">—</div>' +
-      '<div class="sfe-derived-note">' +
-      s7Txt("auto-calculated · Orders × NDR", "???? ???????? · ??????? × NDR") +
-      "</div>" +
+      '<div class="sfe-global-rate-note">' +
+      '<strong>' + s7Txt("Global exchange rates", "????? ????? ??????") + "</strong>" +
+      '<span>' + s7Txt("Refresh or edit currency rates from the dashboard top bar.", "???? ?????? ?? ????? ??????? ?? ?????? ?????? ??????.") + "</span>" +
       "</div>" +
       "</div>" +
       "</div>" +
@@ -3779,10 +3864,12 @@ window.renderSection7 = function (mountEl, data, ctx) {
   // -- Sim Inputs Init ---------------------------------------------------------
   function initSimInputs() {
     var inpOrders = document.getElementById("sfe-orders");
+    var inpDelivered = document.getElementById("sfe-delivered-orders");
     var inpSpend = document.getElementById("sfe-adspend");
     var inpNdr = document.getElementById("sfe-ndr");
     var inpComm = document.getElementById("sfe-comm");
     if (inpOrders) inpOrders.value = simState.totalOrders;
+    if (inpDelivered) inpDelivered.value = Math.round(computeSim().deliveredOrders);
 
     // Display SFE simulation spend converted from active currency to state.currency
     if (inpSpend)
@@ -3790,7 +3877,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         convert(simState.adSpend, nativeCurrency || window.dashboardActiveCurrency || "SAR", state.currency),
       );
 
-    if (inpNdr) inpNdr.value = Math.round(simState.ndr * 100);
+    if (inpNdr) inpNdr.value = s7RatioPctValue(simState.ndr);
     if (inpComm) inpComm.value = formatTwoDecimals(
       convert(simState.avgCommission, nativeCurrency || window.dashboardActiveCurrency || "SAR", state.currency),
     );
@@ -3833,6 +3920,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     }
 
     var ordersEl = document.getElementById("sfe-orders");
+    var deliveredEl = document.getElementById("sfe-delivered-orders");
     var spendEl = document.getElementById("sfe-adspend");
     var ndrEl = document.getElementById("sfe-ndr");
     var commEl = document.getElementById("sfe-comm");
@@ -3842,6 +3930,16 @@ window.renderSection7 = function (mountEl, data, ctx) {
       ordersEl.addEventListener("input", function (e) {
         simState.totalOrders = Math.max(1, parseInt(e.target.value) || 1);
         simState._ordersModified = true;
+        onChange();
+      });
+    if (deliveredEl)
+      deliveredEl.addEventListener("input", function (e) {
+        var delivered = Math.max(0, Math.round(parseFloat(e.target.value) || 0));
+        var total = Math.max(1, Number(simState.totalOrders) || 1);
+        delivered = Math.min(total, delivered);
+        simState.ndr = delivered / total;
+        simState._ndrModified = true;
+        if (String(e.target.value) !== String(delivered)) e.target.value = delivered;
         onChange();
       });
     if (spendEl)
@@ -3858,8 +3956,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
     if (ndrEl)
       ndrEl.addEventListener("input", function (e) {
         var ndrPct = Math.max(
-          1,
-          Math.min(100, parseFloat(e.target.value) || 1),
+          0,
+          Math.min(100, parseFloat(e.target.value) || 0),
         );
         simState.ndr = ndrPct / 100;
         simState._ndrModified = true;

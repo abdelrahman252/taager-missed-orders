@@ -31,6 +31,11 @@
   function sTx(en, ar) { return pick(en, ar); }
   function tx(en, ar) { return pick(en, ar); }
   function dashText(en, ar) { return pick(en, ar); }
+  function pct(value) {
+    var n = Number(value);
+    if (!Number.isFinite(n)) n = 0;
+    return (n * 100).toFixed(2).replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '') + '%';
+  }
 
   var C = {
     card: '#0b1120',
@@ -56,14 +61,14 @@
   function buildMetrics(ins) {
     var m = ins.metric || {};
     var pills = [];
-    if (m.ndr !== undefined)         pills.push(metricPill('NDR',      Math.round(m.ndr * 100) + '%'));
-    if (m.dr !== undefined)          pills.push(metricPill('DR',       Math.round(m.dr  * 100) + '%'));
+    if (m.ndr !== undefined)         pills.push(metricPill('NDR',      pct(m.ndr)));
+    if (m.dr !== undefined)          pills.push(metricPill('DR',       pct(m.dr)));
     if (m.orders !== undefined)      pills.push(metricPill(sTx('Orders', 'طلبات'),    m.orders));
     if (m.prepaidPct !== undefined)  pills.push(metricPill(sTx('Prepaid', 'مسبق'),     Math.round(m.prepaidPct * 100) + '%'));
-    if (m.codNdr !== undefined)      pills.push(metricPill('COD NDR',  Math.round(m.codNdr * 100) + '%'));
-    if (m.prepaidNdr !== undefined)  pills.push(metricPill(sTx('Prepaid NDR', 'مسبق NDR'), Math.round(m.prepaidNdr * 100) + '%'));
+    if (m.codNdr !== undefined)      pills.push(metricPill('COD NDR',  pct(m.codNdr)));
+    if (m.prepaidNdr !== undefined)  pills.push(metricPill(sTx('Prepaid NDR', 'مسبق NDR'), pct(m.prepaidNdr)));
     if (m.advantage !== undefined)   pills.push(metricPill(sTx('Advantage', 'فارق'),     '+' + Math.round(m.advantage * 100) + '%'));
-    if (m.provinceNdr !== undefined) pills.push(metricPill('NDR',      Math.round(m.provinceNdr * 100) + '%'));
+    if (m.provinceNdr !== undefined) pills.push(metricPill('NDR',      pct(m.provinceNdr)));
     if (m.scalingScore !== undefined)pills.push(metricPill(sTx('Scaling', 'توسع'),     m.scalingScore));
     if (m.riskScore !== undefined)   pills.push(metricPill(sTx('Risk Score', 'خطورة'),    m.riskScore));
 

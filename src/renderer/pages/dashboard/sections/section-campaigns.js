@@ -579,7 +579,7 @@
         '<td class="campaign-num"><strong>' + fmt(group.clicks) + '</strong><small>' + fmt(group.campaignCount) + ' campaigns</small></td>' +
         '<td class="campaign-num"><strong>' + fmt(group.taagerOrders) + '</strong><small>' + conversionLabel + ' conversion · ' + fmt(trafficViewCount) + ' ' + trafficViewLabel + '</small></td>' +
         '<td class="campaign-num"><strong>' + fmt(group.taagerDelivered) + window.supposedBadgeHtml('delivered') + '</strong><small>' + deliveredConversionLabel + ' delivered conversion</small></td>' +
-        '<td class="campaign-num">' + esc(Number(group.taagerNdrPct || 0).toFixed(1)) + '%</td>' +
+        '<td class="campaign-num">' + esc(fmtDecimal(group.taagerNdrPct || 0, 2)) + '%</td>' +
         '<td class="campaign-num">' + cpaLabel + '</td>' +
         '<td class="campaign-num">' + deliveredCpaLabel + window.supposedBadgeHtml('delivered') + '</td>' +
         '<td class="campaign-num">' + money(group.breakEvenCpa, currency) + '</td>' +

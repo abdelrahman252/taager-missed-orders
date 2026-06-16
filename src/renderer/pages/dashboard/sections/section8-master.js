@@ -83,7 +83,14 @@ window.renderSection8 = function (mountEl, data, ctx) {
   }
   function fmtPct(value) {
     var n = num(value, 0);
-    return n.toFixed(1) + '%';
+    return s8PctValue(n) + '%';
+  }
+  function s8PctValue(value, decimals) {
+    var n = Number(value);
+    if (!Number.isFinite(n)) n = 0;
+    return n.toFixed(decimals == null ? 2 : decimals)
+      .replace(/(\.\d*?[1-9])0+$/, '$1')
+      .replace(/\.0+$/, '');
   }
   function dayLabel(value) {
     return isAr ? (value + ' يوم') : (value + ' days');
@@ -243,9 +250,9 @@ window.renderSection8 = function (mountEl, data, ctx) {
   
   var PIPELINE_SUMMARY = [
     { label: s8Txt('Net Orders', 'صافي الطلبات'),  value: String(totalOrders),  color: '#fff'    },
-    { label: s8Txt('Net Delivery Rate (NDR)', '???? ???????'),    value: pNdr.toFixed(1) + '%', color: pNdrColor },
-    { label: s8Txt('Confirmation Rate', 'نسبة التأكيد'), value: pConfirmation.toFixed(1) + '%', color: '#3b82f6' },
-    { label: s8Txt('DR Rate', 'نسبة DR'), value: pDr.toFixed(1) + '%', color: '#22d3ee' },
+    { label: s8Txt('Net Delivery Rate (NDR)', '???? ???????'),    value: s8PctValue(pNdr) + '%', color: pNdrColor },
+    { label: s8Txt('Confirmation Rate', 'نسبة التأكيد'), value: s8PctValue(pConfirmation) + '%', color: '#3b82f6' },
+    { label: s8Txt('DR Rate', 'نسبة DR'), value: s8PctValue(pDr) + '%', color: '#22d3ee' },
     { label: s8Txt('Average Delivery Time', '????? ??? ???????'), value: (cod.avgDays == null ? s8Txt('Unavailable', '??? ????') : s8Txt(cod.avgDays + ' days', cod.avgDays + ' ???')), color: '#fff' },
   ];
 
@@ -276,8 +283,8 @@ window.renderSection8 = function (mountEl, data, ctx) {
   var codNdrColor = window.dashboardRateColor ? window.dashboardRateColor(codNdrPct) : (codNdrPct >= 40 ? '#22d3ee' : codNdrPct >= 30 ? '#00e676' : codNdrPct >= 20 ? '#f59e0b' : '#ef4444');
 
   var COD_METRICS = [
-    { label: 'DR', value: drPct.toFixed(1) + '%',  pct: drDeliveredOrders + ' / ' + drBaseOrders,  color: codDrColor, icon: 'box'    },
-    { label: 'NDR', value: codNdrPct.toFixed(1) + '%', pct: drDeliveredOrders + ' / ' + ndrBaseOrders, color: codNdrColor, icon: 'box'    },
+    { label: 'DR', value: s8PctValue(drPct) + '%',  pct: drDeliveredOrders + ' / ' + drBaseOrders,  color: codDrColor, icon: 'box'    },
+    { label: 'NDR', value: s8PctValue(codNdrPct) + '%', pct: drDeliveredOrders + ' / ' + ndrBaseOrders, color: codNdrColor, icon: 'box'    },
     { label: s8Txt('Collected', '?? ???????'), value: fmt(collected), pct: s8Txt(drDeliveredOrders + ' orders', drDeliveredOrders + ' ???'), color: '#00e676', icon: 'box'  },
     { label: s8Txt('Gap', '??????'),     value: fmt(remaining), pct: remainingRate.toFixed(1) + '%', color: '#ef4444', icon: 'xcircle'},
   ];
@@ -407,9 +414,9 @@ window.renderSection8 = function (mountEl, data, ctx) {
     return ranked.length;
   })();
   var avgShippingValue = cod.avgDays == null ? null : num(cod.avgDays, 0).toFixed(1);
-  var ndrVal = ndrPct.toFixed(1) + '%';
+  var ndrVal = s8PctValue(ndrPct) + '%';
   var ndrSub = s8Txt(deliveredCount + ' of ' + totalOrders, deliveredCount + ' ?? ' + totalOrders);
-  var drVal = drPct.toFixed(1) + '%';
+  var drVal = s8PctValue(drPct) + '%';
   var drSub = s8Txt(drDeliveredOrders + ' of ' + drBaseOrders, drDeliveredOrders + ' ?? ' + drBaseOrders);
   var ndrMetricColor = window.dashboardRateColor ? window.dashboardRateColor(ndrPct) : (ndrPct >= 40 ? '#22d3ee' : ndrPct >= 30 ? '#00e676' : ndrPct >= 20 ? '#f59e0b' : '#ef4444');
   var drMetricColor = window.dashboardRateColor ? window.dashboardRateColor(drPct) : (drPct >= 40 ? '#22d3ee' : drPct >= 30 ? '#00e676' : drPct >= 20 ? '#f59e0b' : '#ef4444');
@@ -1322,7 +1329,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
     var rows = topScaling.map(function (c, i) {
       var rank = i + 1;
       var rankColor = rank === 1 ? '#f59e0b' : rank === 2 ? '#94a3b8' : rank === 3 ? '#cd7f32' : 'rgba(255,255,255,0.25)';
-      var ndr = typeof c.ndrPct === 'number' ? c.ndrPct.toFixed(1) : '—';
+      var ndr = typeof c.ndrPct === 'number' ? s8PctValue(c.ndrPct) : '—';
       var ndrColor = window.dashboardRateColor ? window.dashboardRateColor(parseFloat(ndr)) : (parseFloat(ndr) >= 40 ? '#22d3ee' : parseFloat(ndr) >= 30 ? '#00e676' : parseFloat(ndr) >= 20 ? '#f59e0b' : '#ef4444');
       var barW = Math.max(4, Math.round(c.scalingScore || 0));
 

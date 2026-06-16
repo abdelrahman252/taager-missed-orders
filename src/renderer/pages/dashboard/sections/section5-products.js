@@ -986,7 +986,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
       confirmationPct: roundTo(row.confirmationPct, 1),
       cancelPct: roundTo(row.cancelPct, 1),
       pendingPct: roundTo(row.pendingPct, 1),
-      ndrPct: roundTo(ndrPctVal, 1),
+      ndrPct: roundTo(ndrPctVal, 2),
       drRate: drRateVal,
       deliveryPct: deliveryPctVal,
       ndrBaseOrders: Number(row.ndrBaseOrders || 0),
@@ -1265,6 +1265,13 @@ window.renderSection5 = function (mountEl, data, ctx) {
   }
 
   // ── Rate badge ────────────────────────────────────────────────────────────
+  function s5PctValue(value, decimals) {
+    const n = Number(value);
+    return (Number.isFinite(n) ? n : 0).toFixed(decimals == null ? 2 : decimals)
+      .replace(/(\.\d*?[1-9])0+$/, '$1')
+      .replace(/\.0+$/, '');
+  }
+
   function rateBadgeHTML(value, type) {
     let color;
     if      (type === 'delivery')     color = ndrColor(value);
@@ -1275,8 +1282,9 @@ window.renderSection5 = function (mountEl, data, ctx) {
     else color = '#8892a4';
 
     const capped = Math.min(Math.max(value, 0), 100);
+    const label = s5PctValue(value);
 
-    return `<div class="s5-rate-badge"><div style="font-size:16px;font-weight:900;color:${color};line-height:1;text-align:center">${value}٪</div>
+    return `<div class="s5-rate-badge"><div style="font-size:16px;font-weight:900;color:${color};line-height:1;text-align:center">${label}٪</div>
 <div class="s5-rate-track" style="width:100%;height:3px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;margin-top:6px">
   <div class="s5-rate-bar" data-target="${capped}" style="height:100%;width:100%;transform:scaleX(${capped / 100});transform-origin:${isAr ? 'right' : 'left'};background:${color};border-radius:2px;transition:none"></div>
 </div></div>`;
@@ -1414,7 +1422,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
       const deliveredDisplay = stats ? stats.delivered.toLocaleString('en-US') : '-';
       const ndrVal   = stats ? stats.ndr : null;
       const ndrTextColor = ndrVal === null ? 'rgba(255,255,255,0.22)' : ndrColor(ndrVal);
-      const ndrText  = ndrVal === null ? '-' : ndrVal.toFixed(1) + '%';
+      const ndrText  = ndrVal === null ? '-' : s5PctValue(ndrVal) + '%';
       return `<div style="display:grid;grid-template-columns:1fr 42px 42px 42px 42px 42px;gap:5px;
         align-items:center;margin-bottom:7px;padding:5px 6px;border-radius:7px;background:rgba(255,255,255,0.02);">
         <div>
@@ -1471,7 +1479,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
       const ndrVal = item.ndr !== undefined
         ? Number(item.ndr || 0)
         : ((Number(item.count) || 0) > 0 ? delivered / Number(item.count) * 100 : 0);
-      const ndrText = hasOrders ? ndrVal.toFixed(1) + '%' : '-';
+      const ndrText = hasOrders ? s5PctValue(ndrVal) + '%' : '-';
       const ndrTextColor = hasOrders ? ndrColor(ndrVal) : 'rgba(255,255,255,0.45)';
       return `<div style="display:grid;grid-template-columns:38px 46px 46px 46px 46px 46px;gap:5px;align-items:center;margin-bottom:8px">
         <div>
@@ -1567,8 +1575,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
           let ndrCell = '-';
           let ndrTextColor = 'rgba(255,255,255,0.45)';
           if (city.count > 0) {
-            const ndrVal = parseFloat((city.delivered / city.count * 100).toFixed(1));
-            ndrCell = ndrVal + '%';
+            const ndrVal = city.delivered / city.count * 100;
+            ndrCell = s5PctValue(ndrVal) + '%';
             ndrTextColor = ndrColor(ndrVal);
           }
           return `<div style="display:grid;grid-template-columns:1fr 42px 42px 42px 42px 42px;gap:5px;

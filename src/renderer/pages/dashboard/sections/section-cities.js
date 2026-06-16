@@ -160,6 +160,14 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       .replace(/'/g, "&#39;");
   }
 
+  function pctValue(value, decimals) {
+    var n = Number(value);
+    if (!Number.isFinite(n)) n = 0;
+    return n.toFixed(decimals == null ? 2 : decimals)
+      .replace(/(\.\d*?[1-9])0+$/, "$1")
+      .replace(/\.0+$/, "");
+  }
+
   function getIsAr() {
     return window.dashboardI18n
       ? window.dashboardI18n.currentLocale === "ar"
@@ -208,7 +216,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     }
 
     var preview = items.slice(0, 10).map(function (city) {
-      var ndrLabel = typeof city.ndr === "number" ? " - NDR " + city.ndr.toFixed(1) + "%" : "";
+      var ndrLabel = typeof city.ndr === "number" ? " - NDR " + pctValue(city.ndr) + "%" : "";
       return (
         '<span style="display:inline-flex;padding:5px 9px;border-radius:999px;' +
         'background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.28);' +
@@ -1403,7 +1411,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         ndrVal === null
           ? "rgba(255,255,255,0.25)"
           : rateColor(ndrVal);
-      var ndrDisplay = ndrVal === null ? "—" : ndrVal.toFixed(1) + "%";
+      var ndrDisplay = ndrVal === null ? "—" : pctValue(ndrVal) + "%";
 
       // Sum of Profit After Tax for unique delivered orders in the selected period.
       var commVal = cs.earnedProfitAfterTax != null
@@ -3342,7 +3350,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
                 ";background:" +
                 nc0 +
                 '1a;padding:2px 6px;border-radius:6px;">' +
-                ndrNum.toFixed(1) +
+                pctValue(ndrNum) +
                 "%</span>"
               : '<span style="font-size:11px;font-weight:800;color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:6px;">&mdash;</span>';
           }
@@ -3411,7 +3419,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
         if (ndrCell && cell) {
           var ndr =
-            cell.ndr !== undefined ? Math.round(cell.ndr * 1000) / 10 : null;
+            cell.ndr !== undefined ? cell.ndr * 100 : null;
           var nc =
             ndr !== null
               ? rateColor(ndr)
@@ -3422,7 +3430,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
               ";background:" +
               nc +
               '1a;padding:2px 6px;border-radius:6px;">' +
-              ndr.toFixed(1) +
+              pctValue(ndr) +
               "%</span>"
             : '<span style="font-size:11px;font-weight:800;color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:6px;">&mdash;</span>';
         }
@@ -3622,7 +3630,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
               ";background:" +
               nc +
               '1a;padding:2px 6px;border-radius:6px;">' +
-              ndrNum.toFixed(1) +
+              pctValue(ndrNum) +
               "%</span>";
           }
         }

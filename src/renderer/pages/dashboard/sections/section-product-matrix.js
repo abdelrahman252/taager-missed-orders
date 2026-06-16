@@ -52,6 +52,13 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
   }
+  function pctValue(value, decimals) {
+    var n = Number(value);
+    if (!Number.isFinite(n)) n = 0;
+    return n.toFixed(decimals == null ? 2 : decimals)
+      .replace(/(\.\d*?[1-9])0+$/, '$1')
+      .replace(/\.0+$/, '');
+  }
 
   function getAllProducts(geoData) {
     var rankedList = (geoData && geoData.products && geoData.products.rankedList) || [];
@@ -170,7 +177,7 @@
       var productAvgCommission = (p.deliveredCount || 0) > 0 ? ((Number(p.commission) || 0) / p.deliveredCount) : 0;
       var productBreakEvenCpa = productAvgCommission * ((Number(p.ndrPct || p.deliveryRate || 0)) / 100);
       var drBadge = '<div style="display:flex;flex-direction:column;gap:4px;align-items:center">' +
-          '<div style="font-size:10px;font-weight:700;color:' + drColor + ';background:' + drColor + '18;padding:2px 6px;border-radius:12px;border:1px solid ' + drColor + '44">' + overallDr.toFixed(1) + '% <span style="opacity:0.5;font-size:9px">NDR</span></div>' +
+          '<div style="font-size:10px;font-weight:700;color:' + drColor + ';background:' + drColor + '18;padding:2px 6px;border-radius:12px;border:1px solid ' + drColor + '44">' + pctValue(overallDr) + '% <span style="opacity:0.5;font-size:9px">NDR</span></div>' +
           '<div style="font-size:10px;font-weight:700;color:' + activeDrColor + ';background:' + activeDrColor + '18;padding:2px 6px;border-radius:12px;border:1px solid ' + activeDrColor + '44">' + activeDr.toFixed(1) + '% <span style="opacity:0.5;font-size:9px">DR</span></div>' +
           '<div style="font-size:9px;font-weight:800;color:#c084fc;margin-top:2px;" title="' + sTx('Break-even CPA = simulator profit after tax per delivered order × NDR', 'تكلفة التعادل = متوسط ربح تاجر × NDR') + '">BE: ' + productBreakEvenCpa.toFixed(2) + ' ' + activeCurrency + '</div>' +
         '</div>';
@@ -184,7 +191,7 @@
         return '<div class="insight-city-btn" data-city="' + cityObj.name + '" style="cursor:pointer;display:inline-flex;flex-direction:column;align-items:center;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);padding:6px 12px;border-radius:6px;transition:background 0.2s">' +
           '<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.85);max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + cityObj.name + '">' + cityObj.name + '</div>' +
           '<div style="display:flex;gap:6px;margin-top:4px">' +
-            '<div style="font-size:10px;font-weight:800;color:' + cNdrColor + '">' + cNdr.toFixed(1) + '% <span style="opacity:0.5;font-size:8px">NDR</span></div>' +
+            '<div style="font-size:10px;font-weight:800;color:' + cNdrColor + '">' + pctValue(cNdr) + '% <span style="opacity:0.5;font-size:8px">NDR</span></div>' +
             '<div style="font-size:10px;font-weight:800;color:' + cDrColor + '">' + cDr.toFixed(1) + '% <span style="opacity:0.5;font-size:8px">DR</span></div>' +
           '</div>' +
         '</div>';
