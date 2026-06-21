@@ -1,6 +1,6 @@
 {
   "name": "taager-orders",
-  "version": "1.0.51",
+  "version": "1.0.52",
   "description": "Taager Orders Automation Bot",
   "repository": {
     "type": "git",
@@ -144,7 +144,7 @@
     },
     "dmg": {
       "title": "Taager Orders",
-      "background": "build/background.tiff",
+      "backgroundColor": "#0f1117",
       "window": {
         "width": 540,
         "height": 380
