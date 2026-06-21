@@ -10,6 +10,10 @@ async function renderOperations(onBack) {
   let _odTablePage = 1;
   let _activeTab = "overview";
   let _activeAccount = "";
+  let _activeFilter = "today";
+  let _customFrom = null;
+  let _customTo = null;
+  let _settings = {};
 
   // ── Shell (rendered immediately so skeleton is visible during data fetch) ──
   root.innerHTML = `
@@ -41,10 +45,29 @@ async function renderOperations(onBack) {
     </div>
 
       <div class="ops-page">
-      <div class="ops-tour-row">
-        <button type="button" class="taager-tour-quick-guide" id="ops-tour-btn" title="${window.t_ops('tour.common.quickGuide', { default: 'Quick Guide' })}">
-          <span class="taager-tour-guide-mark">?</span><span>${window.t_ops('tour.common.quickGuide', { default: 'Quick Guide' })}</span>
-        </button>
+      <div class="ops-header-bar">
+        <div class="ops-header-left">
+          <div class="ops-header-title">${window._t ? window._t("topbar.operations") : "Operations"}</div>
+        </div>
+        <div class="ops-header-right">
+          <div class="analytics-tabs-group" id="ops-date-tabs">
+            <button class="analytics-tab-btn active" data-filter="today">${window.t_anl('tabs.today')}</button>
+            <button class="analytics-tab-btn" data-filter="yesterday">${window.t_anl('tabs.yesterday')}</button>
+            <button class="analytics-tab-btn" data-filter="last2">${window.t_anl('tabs.last2')}</button>
+            <button class="analytics-tab-btn" data-filter="7d">${window.t_anl('tabs.7d')}</button>
+            <button class="analytics-tab-btn" data-filter="thisMonth">${window.t_anl('tabs.thisMonth')}</button>
+            <button class="analytics-tab-btn" data-filter="custom">${window.t_anl('tabs.custom')}</button>
+          </div>
+          <div class="analytics-date-custom-inline" id="ops-date-custom-inline" style="display:none">
+            <input type="date" class="date-input-inline" id="ops-custom-from">
+            <span style="color:#64748b; font-size:11px;">${window.t_anl('dateCustom.to')}</span>
+            <input type="date" class="date-input-inline" id="ops-custom-to">
+            <button class="btn-apply-inline" id="ops-custom-apply-btn">${window.t_anl('dateCustom.apply')}</button>
+          </div>
+          <button type="button" class="taager-tour-quick-guide" id="ops-tour-btn" title="${window.t_ops('tour.common.quickGuide', { default: 'Quick Guide' })}">
+            <span class="taager-tour-guide-mark">?</span><span>${window.t_ops('tour.common.quickGuide', { default: 'Quick Guide' })}</span>
+          </button>
+        </div>
       </div>
       <div class="ops-first-run-guidance" id="ops-first-run-guidance" style="display:none;margin:0 0 14px;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--bg2);align-items:center;justify-content:space-between;gap:14px;box-shadow:0 10px 28px rgba(0,0,0,.10);">
         <div style="min-width:0;">
@@ -102,7 +125,17 @@ async function renderOperations(onBack) {
     }
   }
 
-  _allRuns = await _loadOperationRuns();
+  const [runsResp, settingsResp] = await Promise.all([
+    _loadOperationRuns(),
+    window.api.getAnalyticsSettings().catch(() => ({})),
+  ]);
+  _allRuns = Array.isArray(runsResp) ? runsResp : [];
+  _settings = settingsResp || {};
+  if (_settings.defaultDate && ["today", "yesterday", "last2", "7d", "thisMonth", "custom"].includes(_settings.defaultDate)) {
+    _activeFilter = _settings.defaultDate;
+  }
+  _autoSelectAvailableDateFilter();
+  _syncDateControls();
 
   // Apply entrance animation classes to mount points BEFORE filling content
   const _opsPanels = [
@@ -134,6 +167,27 @@ async function renderOperations(onBack) {
   // ── Wire sidebar nav ────────────────────────────────────────────────────────
   // Back button (order details panel)
   root.querySelector("#ops-back-to-orders")?.addEventListener("click", _clearOrderDetails);
+  root.querySelectorAll("#ops-date-tabs .analytics-tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      _activeFilter = btn.dataset.filter;
+      _selectedRunId = null;
+      _selectedOrderIdx = 0;
+      _syncDateControls();
+      if (_activeFilter !== "custom") _renderPanels();
+    });
+  });
+  root.querySelector("#ops-custom-apply-btn")?.addEventListener("click", () => {
+    const fromEl = root.querySelector("#ops-custom-from");
+    const toEl = root.querySelector("#ops-custom-to");
+    if (!fromEl?.value || !toEl?.value) return;
+
+    _customFrom = new Date(fromEl.value);
+    _customTo = new Date(toEl.value);
+    _customTo.setHours(23, 59, 59, 999);
+    _selectedRunId = null;
+    _selectedOrderIdx = 0;
+    _renderPanels();
+  });
   root.addEventListener("click", (e) => {
     if (e.target.closest("#ops-scroll-history")) _scrollToRunHistory();
     if (e.target.closest("#ops-first-run-btn") && typeof goToSetup === "function") goToSetup("run");
@@ -172,10 +226,90 @@ async function renderOperations(onBack) {
   });
 
   // ── Order Details ──────────────────────────────────────────────────────────
+  function _syncDateControls() {
+    const customWrap = root.querySelector("#ops-date-custom-inline");
+    root.querySelectorAll("#ops-date-tabs .analytics-tab-btn").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.filter === _activeFilter);
+    });
+    if (customWrap) customWrap.style.display = _activeFilter === "custom" ? "flex" : "none";
+  }
+
+  function _resolveDateRange() {
+    if (_activeFilter === "custom" && _customFrom && _customTo) {
+      return { from: _customFrom, to: _customTo };
+    }
+    return _resolvePresetDateRange(_activeFilter);
+  }
+
+  function _resolvePresetDateRange(filter) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfDay = (d) => {
+      const e = new Date(d);
+      e.setHours(23, 59, 59, 999);
+      return e;
+    };
+
+    if (filter === "today") return { from: today, to: endOfDay(today) };
+    if (filter === "yesterday") {
+      const y = new Date(today);
+      y.setDate(today.getDate() - 1);
+      return { from: y, to: endOfDay(y) };
+    }
+    if (filter === "last2") {
+      const from = new Date(today);
+      from.setDate(today.getDate() - 1);
+      return { from, to: endOfDay(today) };
+    }
+    if (filter === "7d") {
+      const from = new Date(today);
+      from.setDate(today.getDate() - 6);
+      return { from, to: endOfDay(today) };
+    }
+    if (filter === "thisMonth") {
+      const from = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { from, to: endOfDay(today) };
+    }
+    return null;
+  }
+
+  function _filterRunsByDate(runs, dateRange) {
+    if (!dateRange) return runs || [];
+    return (runs || []).filter(r => {
+      if (!r.runTimestamp) return false;
+      return r.runTimestamp >= dateRange.from.getTime() &&
+             r.runTimestamp <= dateRange.to.getTime();
+    });
+  }
+
+  function _getDateFilteredRuns() {
+    return _filterRunsByDate(_allRuns, _resolveDateRange());
+  }
+
+  function _autoSelectAvailableDateFilter() {
+    if (!_allRuns.length || _activeFilter === "custom") return;
+    const currentRuns = _filterRunsByDate(_allRuns, _resolveDateRange());
+    if (currentRuns.length > 0) return;
+
+    const latestRun = [..._allRuns]
+      .filter(r => r.runTimestamp)
+      .sort((a, b) => b.runTimestamp - a.runTimestamp)[0];
+    if (!latestRun) return;
+
+    const candidateFilters = ["today", "yesterday", "last2", "7d", "thisMonth"];
+    const latestTs = latestRun.runTimestamp;
+    const matchedFilter = candidateFilters.find(filter => {
+      const range = _resolvePresetDateRange(filter);
+      return range && latestTs >= range.from.getTime() && latestTs <= range.to.getTime();
+    });
+    _activeFilter = matchedFilter || "thisMonth";
+  }
+
   function _getFilteredRuns() {
+    const dateRuns = _getDateFilteredRuns();
     return _activeAccount
-      ? (_allRuns || []).filter(r => _opsAccountMatches(r, _activeAccount))
-      : (_allRuns || []);
+      ? dateRuns.filter(r => _opsAccountMatches(r, _activeAccount))
+      : dateRuns;
   }
 
   function _getLatestRun(runs) {
@@ -204,9 +338,8 @@ async function renderOperations(onBack) {
     renderOpsInsights(root.querySelector("#ops-insights-mount"), filteredRuns);
     renderOpsProductPerf(root.querySelector("#ops-product-mount"), filteredRuns);
 
-    const selectedRun = _allRuns.find(r => String(r.runId) === String(_selectedRunId));
-    const selectedVisible = selectedRun && _opsAccountMatches(selectedRun, _activeAccount);
-    const runToShow = selectedVisible && _opsRunHasOrders(selectedRun)
+    const selectedRun = filteredRuns.find(r => String(r.runId) === String(_selectedRunId));
+    const runToShow = selectedRun && _opsRunHasOrders(selectedRun)
       ? selectedRun
       : _getLatestRunWithOrders(filteredRuns);
     renderOpsHistory(root.querySelector("#ops-history-mount"), filteredRuns, _onSelectRun, runToShow?.runId || null);
@@ -220,6 +353,7 @@ async function renderOperations(onBack) {
     if (!tabBar) return;
 
     const accounts = _opsUniqueAccounts(_allRuns).filter(a => a.key);
+    const dateRuns = _getDateFilteredRuns();
     if (accounts.length <= 1) {
       tabBar.innerHTML = "";
       _activeAccount = "";
@@ -230,7 +364,7 @@ async function renderOperations(onBack) {
     if (_activeAccount && !validKeys.has(_activeAccount)) _activeAccount = "";
 
     const countFor = key => {
-      const runs = key ? (_allRuns || []).filter(r => _opsAccountMatches(r, key)) : (_allRuns || []);
+      const runs = key ? dateRuns.filter(r => _opsAccountMatches(r, key)) : dateRuns;
       const rowCount = _opsFlattenRuns(runs).length;
       const submittedCount = runs.reduce((n, r) => n + (Number(r.ordersSubmitted) || 0), 0);
       return Math.max(rowCount, submittedCount);
@@ -272,7 +406,7 @@ async function renderOperations(onBack) {
     const opts = arguments[1] || {};
     _selectedRunId = runId;
     _selectedOrderIdx = 0;
-    const run = _allRuns.find(r => String(r.runId) === String(runId));
+    const run = _getFilteredRuns().find(r => String(r.runId) === String(runId));
     if (!run) return;
     if (!_opsRunHasOrders(run)) {
       _showEmptyOrderDetails();

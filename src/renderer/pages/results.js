@@ -83,6 +83,50 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       }
       .orders-preview-table tbody tr:hover { background: rgba(79,142,247,0.05); }
       .orders-preview-table tbody tr:last-child td { border-bottom: none; }
+      .orders-preview-table.results-orders-table {
+        min-width: 1180px;
+      }
+      .results-orders-table th,
+      .results-orders-table td {
+        padding: 8px 12px;
+        vertical-align: middle;
+      }
+      .results-orders-table .res-index {
+        text-align: center;
+        color: var(--text2);
+        font-size: 11px;
+      }
+      .results-orders-table .res-name,
+      .results-orders-table .res-product {
+        direction: rtl;
+        text-align: right;
+      }
+      .results-orders-table .res-name {
+        font-weight: 600;
+      }
+      .results-orders-table .res-phone {
+        direction: ltr;
+        font-family: monospace;
+        color: var(--accent);
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .results-orders-table .res-number {
+        text-align: right;
+        font-weight: 700;
+      }
+      .results-orders-table .res-price {
+        color: var(--success);
+      }
+      .results-orders-table .res-date {
+        color: var(--text2);
+        font-variant-numeric: tabular-nums;
+      }
+      .results-orders-table .res-city {
+        color: var(--text2);
+        direction: rtl;
+        text-align: right;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -286,14 +330,14 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     function renderOrderRow(o, i, attrs) {
       const createdAt = orderCreatedAtText(o);
       return `<tr ${attrs || ""}>
-        <td style="color:var(--text2);font-size:11px;text-align:center;width:38px">${i + 1}</td>
-        <td style="font-weight:600;direction:rtl;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.name || "—"}</td>
-        <td style="font-family:monospace;color:var(--accent);font-weight:700;font-size:13px;white-space:nowrap">${o.phone || "—"}</td>
-        <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl" title="${(o.productName||"").replace(/"/g,"")}">${o.productName || "—"}</td>
-        <td style="text-align:right;font-weight:700;width:44px">${o.qty || 1}</td>
-        <td style="text-align:right;color:var(--success);white-space:nowrap;width:72px">${o.unitPrice || "—"}</td>
-        <td style="font-variant-numeric:tabular-nums;color:var(--text2);white-space:nowrap;width:118px" title="${String(createdAt).replace(/"/g,"")}">${createdAt}</td>
-        <td style="color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:90px">${o.city || "—"}</td>
+        <td class="res-index">${i + 1}</td>
+        <td class="res-name" title="${String(o.name || "").replace(/"/g,"")}">${o.name || "—"}</td>
+        <td class="res-phone">${o.phone || "—"}</td>
+        <td class="res-product" title="${(o.productName||"").replace(/"/g,"")}">${o.productName || "—"}</td>
+        <td class="res-number">${o.qty || 1}</td>
+        <td class="res-number res-price">${o.unitPrice || "—"}</td>
+        <td class="res-date" title="${String(createdAt).replace(/"/g,"")}">${createdAt}</td>
+        <td class="res-city" title="${String(o.city || "").replace(/"/g,"")}">${o.city || "—"}</td>
       </tr>`;
     }
 
@@ -343,26 +387,26 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <input type="text" placeholder="${t('results.search_orders_placeholder') || 'Search by name, phone or product...'}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font-size:12px;color:var(--text);outline:none" oninput="window._resOrderSearch('${tableUid}',this.value)">
         </div>
         <div class="dash-section-body no-pad" style="overflow-x:auto">
-          <table class="orders-preview-table" style="width:100%;table-layout:fixed;border-collapse:collapse">
+          <table class="orders-preview-table results-orders-table" style="width:100%;table-layout:fixed;border-collapse:collapse">
             <colgroup>
-              <col style="width:38px">
-              <col style="width:auto">
+              <col style="width:40px">
+              <col style="width:18%">
               <col style="width:130px">
-              <col style="width:auto">
-              <col style="width:44px">
-              <col style="width:72px">
-              <col style="width:118px">
-              <col style="width:90px">
+              <col style="width:34%">
+              <col style="width:52px">
+              <col style="width:76px">
+              <col style="width:136px">
+              <col style="width:150px">
             </colgroup>
             <thead><tr>
-              <th style="width:38px">#</th>
-              <th>${t("results.customer_name_col")}</th>
+              <th>#</th>
+              <th style="text-align:right">${t("results.customer_name_col")}</th>
               <th>${t("results.phone_col")}</th>
-              <th>${t("results.product_col")}</th>
+              <th style="text-align:right">${t("results.product_col")}</th>
               <th style="text-align:right">${t("results.qty_col")}</th>
               <th style="text-align:right">${t("results.price_col")}</th>
               <th>${t("results.easy_created_at_col")}</th>
-              <th>${t("results.city_col")}</th>
+              <th style="text-align:right">${t("results.city_col")}</th>
             </tr></thead>
             <tbody id="${tableUid}-tbody">
               ${initialPagedOrders.itemsHtml}

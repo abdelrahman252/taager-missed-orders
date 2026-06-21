@@ -39,6 +39,78 @@
   ROW 2: [Account Perf (col1)]  [Smart Insights (col2)]  [Run History (col3)]
   ROW 3: [Product Perf (col1-2-3, full width)]
 */
+.ops-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.ops-header-title {
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+.ops-header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.ops-header-right .taager-tour-quick-guide {
+  flex-shrink: 0;
+}
+
+.ops-page .analytics-date-custom-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(13, 20, 38, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  padding: 3px 10px;
+  backdrop-filter: blur(10px);
+}
+.ops-page .date-input-inline {
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-size: 11px;
+  outline: none;
+  padding: 3px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.ops-page .date-input-inline::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.5;
+  cursor: pointer;
+}
+.ops-page .date-input-inline::-webkit-calendar-picker-indicator:hover {
+  opacity: 0.8;
+}
+.ops-page .btn-apply-inline {
+  background: rgba(124, 107, 255, 0.15);
+  border: 1px solid rgba(124, 107, 255, 0.25);
+  border-radius: 6px;
+  color: #c084fc;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ops-page .btn-apply-inline:hover {
+  background: rgba(124, 107, 255, 0.25);
+  color: #ffffff;
+  box-shadow: 0 0 8px rgba(124, 107, 255, 0.2);
+}
+
 .ops-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 320px;
@@ -678,6 +750,24 @@
 }
 
 @media (max-width: 720px) {
+  .ops-header-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .ops-header-right {
+    justify-content: flex-start;
+  }
+  .ops-header-right .analytics-tabs-group,
+  .ops-header-right .analytics-date-custom-inline {
+    width: 100%;
+  }
+  .ops-header-right .analytics-date-custom-inline {
+    flex-wrap: wrap;
+  }
+  .ops-header-right .date-input-inline {
+    flex: 1 1 120px;
+    min-width: 0;
+  }
   .ops-account-tabs { justify-content: stretch; }
   .ops-account-filter { width: 100%; align-items: stretch; flex-direction: column; }
   .ops-account-select-wrap { width: 100%; min-width: 0; max-width: none; }
@@ -959,6 +1049,18 @@ select.ops-field-sm option {
 
 [data-theme="light"] .ops-history-row.active:hover {
   background: rgba(79,142,247,.12);
+}
+
+[data-theme="light"] .ops-page .analytics-date-custom-inline {
+  background: var(--bg3);
+  border-color: var(--border);
+}
+[data-theme="light"] .ops-page .date-input-inline {
+  color: var(--text);
+}
+[data-theme="light"] .ops-page .date-input-inline::-webkit-calendar-picker-indicator {
+  filter: none;
+  opacity: 0.55;
 }
 
 [data-theme="light"] .analytics-tabs-group {
