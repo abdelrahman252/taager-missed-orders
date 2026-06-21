@@ -4,6 +4,7 @@ countries/
 supabase/
 scripts/*
 !scripts/regenerate-transparent-icons.ps1
+!scripts/verify-actual-mode-financials.js
 old taager src/
 
 # Generated QA reports

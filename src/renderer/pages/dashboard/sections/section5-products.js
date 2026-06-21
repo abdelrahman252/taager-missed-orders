@@ -94,7 +94,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
   const STAT_CARDS_DEFAULT = [
     { label: s5Txt('Total Products Sold', 'إجمالي المنتجات المباعة'),    value: 0, unit: s5Txt('unique products', 'منتج مختلف'),  color: '#a855f7', iconType: 'grid'   },
-    { label: s5Txt('Total Orders', 'إجمالي الطلبات المُسجلة'),    value: 0, unit: s5Txt('orders', 'طلب'),          color: '#14b8a6', iconType: 'box'    },
+    { label: s5Txt('Total / Net Orders', 'إجمالي / صافي الطلبات'),    value: 0, displayValue: '0 / 0', unit: s5Txt('orders', 'طلب'),          color: '#14b8a6', iconType: 'box'    },
     { label: s5Txt('Total Pieces Sold', 'إجمالي القطع المُباعة'),       value: 0, unit: s5Txt('pieces', 'قطعة'),         color: '#3b82f6', iconType: 'pieces' },
     { label: s5Txt('Total Earned Taager Profit After Tax', 'إجمالي ربح تاجر المحقق بعد الضريبة'),      value: 0, unit: activeCurrency,          color: '#f59e0b', iconType: 'coins'  },
     { label: s5Txt('Products generating 80% of Taager Profit After Tax', 'منتجات تحقق 80% من ربح تاجر بعد الضريبة'), value: 0, unit: s5Txt('products only', 'منتجات فقط'),  color: '#ef4444', iconType: 'pie'    },
@@ -108,6 +108,12 @@ window.renderSection5 = function (mountEl, data, ctx) {
   const productAccountId = data && data.meta && data.meta.activeAccountId
     ? data.meta.activeAccountId
     : (window.getActiveAccountId ? window.getActiveAccountId() : '__all__');
+
+  function totalNetOrdersDisplay(totalOrders, netOrders) {
+    var raw = Number(totalOrders || 0);
+    var net = Number(netOrders || 0);
+    return raw.toLocaleString('en-US') + ' / ' + net.toLocaleString('en-US');
+  }
   const roiFallback = (data && data.roi) || { adSpend: 0, currency: 'SAR', egpRate: 52 };
   let productFinancialSettings = window.DashboardRoiState
     ? window.DashboardRoiState.get(productAccountId, roiFallback)
@@ -557,9 +563,11 @@ window.renderSection5 = function (mountEl, data, ctx) {
   // ── Build real data ───────────────────────────────────────────────────────
   if (pd && (!pd.rankedList || pd.rankedList.length === 0)) {
     PRODUCTS_RAW = [];
+    const summaryNetOrders = (pd.summary && (pd.summary.netOrderCount != null ? pd.summary.netOrderCount : pd.summary.totalOrders)) || 0;
+    const summaryTotalOrders = (pd.summary && (pd.summary.totalOrderCount != null ? pd.summary.totalOrderCount : summaryNetOrders)) || 0;
     STAT_CARDS = [
       { label: s5Txt('Total Products Sold', 'إجمالي المنتجات المباعة'),    value: (pd.summary && pd.summary.uniqueProducts) || 0, unit: s5Txt('unique products', 'منتج مختلف'), color: '#a855f7', iconType: 'grid'   },
-      { label: s5Txt('Total Orders', 'إجمالي الطلبات المُسجلة'),    value: (pd.summary && pd.summary.totalOrders)    || 0, unit: s5Txt('orders', 'طلب'),        color: '#14b8a6', iconType: 'box'    },
+      { label: s5Txt('Total / Net Orders', 'إجمالي / صافي الطلبات'),    value: summaryNetOrders, displayValue: totalNetOrdersDisplay(summaryTotalOrders, summaryNetOrders), unit: s5Txt('orders', 'طلب'),        color: '#14b8a6', iconType: 'box'    },
       { label: s5Txt('Total Pieces Sold', 'إجمالي القطع المُباعة'),       value: (pd.summary && pd.summary.totalPieces)    || 0, unit: s5Txt('pieces', 'قطعة'),       color: '#3b82f6', iconType: 'pieces' },
       { label: s5Txt('Total Earned Taager Profit After Tax', 'إجمالي ربح تاجر المحقق بعد الضريبة'),      value: commissionInCurrency((pd.summary && pd.summary.totalComm) || 0), unit: selectedCurrency(),        color: '#f59e0b', iconType: 'coins'  },
       { label: s5Txt('Products generating 80% of Taager Profit After Tax', 'منتجات تحقق 80% من ربح تاجر بعد الضريبة'), value: 0,                                               unit: s5Txt('product', 'منتج'),       color: '#ef4444', iconType: 'pie'    },
@@ -596,6 +604,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
       return {
         key: productKey, sku: p.sku || '', rank, name: productDisplayName(p.sku, p.name), cat: `SKU: ${p.sku || 'N/A'}`,
         deliveries: units, placedCount: p.netOrderCount != null ? p.netOrderCount : (p.placedCount || 0), pieces: p.pieces || p.qty || 0,
+        totalOrderCount: p.totalOrderCount != null ? p.totalOrderCount : (p.totalOrders || p.statusTotalCount || p.netOrderCount || p.placedCount || 0),
         sharePct, revenue: commission, delta: Number(p.delta || 0), spark, ...styleCfg,
         commission, deliveredCount: units,
         actualDeliveredCount: p.actualDeliveredCount,
@@ -649,9 +658,11 @@ window.renderSection5 = function (mountEl, data, ctx) {
     }
     if (count80 === 0) count80 = 1;
 
+    const summaryNetOrders = (pd.summary && (pd.summary.netOrderCount != null ? pd.summary.netOrderCount : pd.summary.totalOrders)) || 0;
+    const summaryTotalOrders = (pd.summary && (pd.summary.totalOrderCount != null ? pd.summary.totalOrderCount : summaryNetOrders)) || 0;
     STAT_CARDS = [
       { label: s5Txt('Total Products Sold', 'إجمالي المنتجات المباعة'),    value: pd.summary.uniqueProducts || 0,  unit: s5Txt('unique products', 'منتج مختلف'),  color: '#a855f7', iconType: 'grid'   },
-      { label: s5Txt('Total Orders', 'إجمالي الطلبات المُسجلة'),    value: pd.summary.totalOrders    || 0,  unit: s5Txt('orders', 'طلب'),          color: '#14b8a6', iconType: 'box'    },
+      { label: s5Txt('Total / Net Orders', 'إجمالي / صافي الطلبات'),    value: summaryNetOrders, displayValue: totalNetOrdersDisplay(summaryTotalOrders, summaryNetOrders),  unit: s5Txt('orders', 'طلب'),          color: '#14b8a6', iconType: 'box'    },
       { label: s5Txt('Total Pieces Sold', 'إجمالي القطع المُباعة'),       value: pd.summary.totalPieces    || 0,  unit: s5Txt('pieces', 'قطعة'),         color: '#3b82f6', iconType: 'pieces' },
       { label: s5Txt('Total Earned Taager Profit After Tax', 'إجمالي ربح تاجر المحقق بعد الضريبة'),      value: commissionInCurrency(pd.summary.totalComm || 0),  unit: selectedCurrency(),          color: '#f59e0b', iconType: 'coins'  },
       { label: s5Txt('Products generating 80% of Taager Profit After Tax', 'منتجات تحقق 80% من ربح تاجر بعد الضريبة'), value: count80,                         unit: s5Txt('products only', 'منتجات فقط'),  color: '#ef4444', iconType: 'pie'    },
@@ -1292,7 +1303,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
   // ── Funnel panel content ─────────────────────────────────────────────────
   function funnelHTML(p) {
-    const total = p.statusTotalCount || p.totalOrderCount || p.netOrderCount || p.placedCount || 1;
+    const total = p.totalOrderCount || p.statusTotalCount || p.netOrderCount || p.placedCount || 1;
     const stages = [
       { label:s5Txt('Total Orders', s5Txt('Total Orders', 'إجمالي الطلبات')), count: total, color:'#fff', pct: 100 },
       { label:s5Txt('Confirmed', 'مؤكدة'), count: p.confirmationStatusCount || p.confirmedCount, color:'#3b82f6', pct: p.confirmationPct },
@@ -1700,8 +1711,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
     else if (filterState.statusKey === 'failed') hlCount = p.failedCount || 0;
     else if (filterState.statusKey === 'canceled') hlCount = p.canceledCount || 0;
     else if (filterState.statusKey === 'processing') hlCount = p.processingCount || 0;
-    const displayOrderCount = p.placedCount || p.statusTotalCount || p.totalOrderCount || 0;
-    const displayNetOrderCount = p.netOrderCount || 0;
+    const displayOrderCount = p.totalOrderCount || p.statusTotalCount || p.placedCount || 0;
+    const displayNetOrderCount = p.netOrderCount || p.placedCount || 0;
     const displayConfirmedCount = p.confirmationStatusCount || p.confirmedCount || 0;
     const placedText = productCompactNumber(displayOrderCount, 0, 10000);
     const netOrderText = productCompactNumber(displayNetOrderCount, 0, 10000);
@@ -2021,12 +2032,14 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
   // ── Stat card ─────────────────────────────────────────────────────────────
   function statCardHTML(c, i) {
+    const displayValue = c.displayValue != null ? String(c.displayValue) : productCompactNumber(c.value, 0, 10000);
+    const titleValue = c.displayValue != null ? String(c.displayValue) : productNumber(c.value, 0);
     return `<div class="s5-stat-card" style="flex:1;background:#0b1120;border:1px solid ${c.color}28;border-radius:14px;padding:14px 16px;direction:${isAr ? 'ltr' : 'rtl'};display:flex;flex-direction:row;align-items:center;gap:14px;position:relative;overflow:hidden">
       <div style="position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 20% 50%,${c.color}10 0%,transparent 65%)"></div>
       <div class="s5-stat-icon" style="width:46px;height:46px;border-radius:12px;flex-shrink:0;background:${c.color}22;border:1.5px solid ${c.color}35;display:flex;align-items:center;justify-content:center;position:relative;z-index:1">${statIconHTML(c.iconType, c.color)}</div>
       <div style="flex:1;text-align:right;direction:${isAr ? 'rtl' : 'ltr'};position:relative;z-index:1">
         <div class="s5-stat-label" style="font-size:10px;color:rgba(255,255,255,0.35);font-weight:600;margin-bottom:4px;line-height:1.3">${c.label}</div>
-        <div id="s5-stat-${i}" class="s5-stat-value s5-number-fit" title="${attr(productNumber(c.value, 0))}" style="font-size:26px;font-weight:900;color:#fff;line-height:1;letter-spacing:0">${productCompactNumber(c.value, 0, 10000)}</div>
+        <div id="s5-stat-${i}" class="s5-stat-value s5-number-fit" title="${attr(titleValue)}" style="font-size:26px;font-weight:900;color:#fff;line-height:1;letter-spacing:0">${esc(displayValue)}</div>
         <div class="s5-stat-unit" data-stat-unit="${i}" style="font-size:10px;color:${c.color};font-weight:700;margin-top:4px;letter-spacing:0.3px">${c.unit}</div>
       </div>
     </div>`;
@@ -2233,7 +2246,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
     return `<div class="s5-header-cols s5-metrics-track" style="display:flex;align-items:center;padding:0 0 10px 0;border-bottom:1px solid rgba(255,255,255,0.05);margin-bottom:10px;position:sticky;top:0;z-index:9;background:#080b12">
       <div class="s5-header-product" style="flex:0 0 200px;min-width:200px;padding-inline-start:10px;font-size:10px;color:rgba(255,255,255,0.42);font-weight:800;text-align:start">${s5Txt('Product', 'المنتج')}</div>
       <div style="width:1px"></div>
-      ${colHeaderBtn(s5Txt('Orders', 'الطلبات'),'placedCount','flex:0 0 64px')}
+      ${colHeaderBtn(s5Txt('Orders', 'الطلبات'),'totalOrderCount','flex:0 0 64px')}
       <div style="width:1px"></div>
       ${colHeaderBtn(s5Txt('Net Orders', 'الطلبات الصافية'),'netOrderCount','flex:0 0 64px')}
       <div style="width:1px"></div>
@@ -2663,7 +2676,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
           font-size: 10px !important;
           gap: 3px !important;
         }
-        .s5-header-cols .s5-sort-col[data-field="placedCount"],
+        .s5-header-cols .s5-sort-col[data-field="totalOrderCount"],
         .s5-header-cols .s5-sort-col[data-field="netOrderCount"] { flex-basis: 60px !important; min-width: 60px !important; }
         .s5-header-cols .s5-sort-col[data-field="totalPieces"] { flex-basis: 62px !important; min-width: 62px !important; }
         .s5-header-cols .s5-sort-col[data-field="failedCount"] { flex-basis: 62px !important; min-width: 62px !important; }
@@ -4685,7 +4698,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
       }
 
       /* Funnel bars */
-      var rawTotal = p.statusTotalCount || p.totalOrderCount || p.placedCount || 1;
+      var rawTotal = p.totalOrderCount || p.statusTotalCount || p.placedCount || 1;
+      var netTotal = p.netOrderCount || p.placedCount || p.statusTotalCount || 0;
       var funnel = [
         { label: s5Txt('Confirmed', 'مؤكد'), count: p.confirmationStatusCount || p.confirmedCount || 0, color: '#3b82f6' },
         { label: s5Txt('Pending', 'قيد الانتظار'), count: p.pendingStatusCount || p.pendingCount || 0, color: '#a855f7' },
@@ -4747,7 +4761,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         '<div class="s5-modal-kpi-grid" style="padding:20px 28px;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;' +
           'border-bottom:1px solid rgba(255,255,255,0.06);">' +
           [
-            { label: s5Txt('Total Orders', 'إجمالي الطلبات'), value: num(rawTotal),          color: '#a855f7', badge: null },
+            { label: s5Txt('Total / Net Orders', 'إجمالي / صافي الطلبات'), value: totalNetOrdersDisplay(rawTotal, netTotal),          color: '#a855f7', badge: null },
             { label: s5Txt('NDR', 'NDR'),                      value: pct(ndrVal),          color: ndrColor(ndrVal), badge: null },
             { label: s5Txt('Delivery Rate', 'معدل التسليم'),   value: pct(drVal),          color: drColor(drVal), badge: null },
             { label: s5Txt('Cancel Rate', 'معدل الإلغاء'),   value: pct(cancelVal),      color: '#ef4444', badge: null },

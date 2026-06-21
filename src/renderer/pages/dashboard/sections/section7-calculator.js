@@ -139,11 +139,12 @@ window.renderSection7 = function (mountEl, data, ctx) {
   var realAvgCommission = d.averageProfit != null
     ? Number(d.averageProfit)
     : (d.avgCommission != null ? Number(d.avgCommission) : 0);
-  var realTaagerProfitAfterTax = d.taagerProfitAfterTax != null
-    ? Number(d.taagerProfitAfterTax)
-    : realAvgCommission;
+  var realTaagerProfitAfterTax = d.actualEarnedProfitAfterTax != null
+    ? Number(d.actualEarnedProfitAfterTax)
+    : (d.taagerProfitAfterTax != null ? Number(d.taagerProfitAfterTax) : realAvgCommission);
+  var isExpectedRateMode = window.isExpectedNdrMode && window.isExpectedNdrMode();
 
-  if (window.isExpectedNdrMode && window.isExpectedNdrMode()) {
+  if (isExpectedRateMode) {
     var globalExpectedNdrRate = 35;
     if (ctx && ctx.data && ctx.data.overview) {
       if (ctx.data.overview.deliveryRate != null) {
@@ -156,13 +157,15 @@ window.renderSection7 = function (mountEl, data, ctx) {
   }
 
   var realExpectedDvl =
-    !(window.isExpectedNdrMode && window.isExpectedNdrMode()) &&
+    !isExpectedRateMode &&
     (d.actualDeliveredCount != null || d.deliveredCount != null)
       ? Number(d.actualDeliveredCount != null ? d.actualDeliveredCount : d.deliveredCount || 0)
       : Math.round((realNdrPct / 100) * realTotalOrders);
-  var realExpectedDvlExact = d.expectedDeliveriesExact != null
-    ? Number(d.expectedDeliveriesExact || 0)
-    : (realNdrPct / 100) * realTotalOrders;
+  var realExpectedDvlExact = isExpectedRateMode
+    ? (d.expectedDeliveriesExact != null
+      ? Number(d.expectedDeliveriesExact || 0)
+      : (realNdrPct / 100) * realTotalOrders)
+    : realExpectedDvl;
 
   // -- 2. State ----------------------------------------------------------------
   var nativeCurrency = window.dashboardActiveCurrency || (d && d.currency) || "SAR";
@@ -825,10 +828,14 @@ window.renderSection7 = function (mountEl, data, ctx) {
     var spendSAR = convert(state.budget, state.currency, window.dashboardActiveCurrency || "SAR");
     var cpaSAR = realTotalOrders > 0 ? spendSAR / realTotalOrders : 0;
     var breakEvenCpaSAR = realAvgCommission * (realNdrPct / 100);
-    var deliveredSalesSAR = Number(d.totalDeliveredSales || d.deliveredSales || 0);
+    var deliveredSalesSAR = Number(
+      !isExpectedRateMode && d.actualDeliveredSales != null
+        ? d.actualDeliveredSales
+        : (d.totalDeliveredSales || d.deliveredSales || 0)
+    );
 
-    var actualDelivered = d.deliveredCount != null ? Number(d.deliveredCount) : 0;
-    if (window.isExpectedNdrMode && window.isExpectedNdrMode()) {
+    var actualDelivered = d.actualDeliveredCount != null ? Number(d.actualDeliveredCount) : (d.deliveredCount != null ? Number(d.deliveredCount) : 0);
+    if (isExpectedRateMode) {
       if (actualDelivered > 0) {
         deliveredSalesSAR = deliveredSalesSAR * (realExpectedDvlExact / actualDelivered);
       } else {
@@ -839,7 +846,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       }
     }
 
-    var revSAR = realAvgCommission * realExpectedDvlExact;
+    var revSAR = isExpectedRateMode ? (realAvgCommission * realExpectedDvlExact) : realTaagerProfitAfterTax;
     var netSAR = revSAR - spendSAR;
     var roi = spendSAR > 0 ? (netSAR / spendSAR) * 100 : 0;
     var returnPerSar = spendSAR > 0 ? revSAR / spendSAR : 0;
@@ -2935,10 +2942,12 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "?",
         s7Txt("Delivered Orders", "??????? ???????"),
         s7Txt(
-          "Orders that actually reached the customer. Calculated from net orders × delivery rate.",
+          isExpectedRateMode
+            ? "Forecast delivered orders from net orders x delivery rate."
+            : "Orders that actually reached the customer, counted from delivered sheet status.",
           "??????? ???? ???? ?????? ??????. ???? ?? ?????? ??????? × ???? ???????.",
         ),
-        "delivered = netOrders * NDR%",
+        isExpectedRateMode ? "delivered = netOrders * NDR%" : "delivered = sheet delivered status",
       ) +
       _kpiMiniTip(
         s7Txt("Delivery Rate NDR", "???? ??????? NDR"),
@@ -3119,10 +3128,14 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "??",
         s7Txt("Total Profit Before Ad Spend", "?????? ????? ??? ???????"),
         s7Txt(
-          "Expected delivered orders multiplied by the editable average profit per delivered order.",
+          isExpectedRateMode
+            ? "Expected delivered orders multiplied by the editable average profit per delivered order."
+            : "Actual earned profit after tax from delivered orders before subtracting synced ad spend.",
           "????? ??????? ?? ??????? ??????? × ????? ??? ????.",
         ),
-        "totalProfitBeforeAdSpend = expectedDeliveriesExact * averageProfitPerDeliveredOrder",
+        isExpectedRateMode
+          ? "totalProfitBeforeAdSpend = expectedDeliveriesExact * averageProfitPerDeliveredOrder"
+          : "totalProfitBeforeAdSpend = actualEarnedProfitAfterTax",
       ) +
       '</div><div style="display:flex;align-items:center;gap:8px;font-size:22px;font-weight:900"><span style="color:#3b82f6">??</span><span id="s7-out-revenue">--</span></div><div class="s7-curr-lbl" style="font-size:10px;color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
@@ -3136,13 +3149,13 @@ window.renderSection7 = function (mountEl, data, ctx) {
       state.viewCurrency +
       "</div></div>" +
       '<div class="s7-card"><div style="font-size:12px;color:#00e676;font-weight:700;display:flex;align-items:center;gap:5px">' +
-      s7Txt("Net Profit", "????? ??????") +
+      s7Txt("Account Net Profit", "????? ??????") +
       " " +
       _tip(
         "??",
-        s7Txt("Net Profit", "????? ??????"),
+        s7Txt("Account Net Profit", "????? ??????"),
         s7Txt(
-          "Profit after subtracting ad costs from revenue. If negative, the campaign is losing money.",
+          "Whole-account profit after subtracting total synced ad spend. This can differ from SKU-matched Campaigns profit.",
           "???? ????? ??? ??? ?????? ??????? ?? ?????????. ??? ???? ?????? ????? ???? ?? ?????.",
         ),
         "netProfit = revenue - adSpend",

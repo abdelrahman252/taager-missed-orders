@@ -35,6 +35,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
   // ── state (stored on mountEl to persist across dashboard updates) ─────────
   if (mountEl._s6ActivePeriod === undefined || mountEl._s6ActivePeriod === '30') mountEl._s6ActivePeriod = 'month';
   if (mountEl._s6ActiveMode === undefined) mountEl._s6ActiveMode = 'profit';
+  if (mountEl._s6ActiveCpaPlatform === undefined) mountEl._s6ActiveCpaPlatform = 'all';
 
   const activeAccountId = (ctx && ctx.data && ctx.data.meta && ctx.data.meta.activeAccountId) || (window.getActiveAccountId ? window.getActiveAccountId() : '__all__');
   const roi = (ctx && ctx.data && ctx.data.roi) || {};
@@ -49,9 +50,14 @@ window.renderSection6 = function (mountEl, data, ctx) {
 
   let activePeriod = mountEl._s6ActivePeriod;
   let activeMode = mountEl._s6ActiveMode;
+  let activeCpaPlatform = mountEl._s6ActiveCpaPlatform;
   let dailyAdSpend = 0;
   let syncedSpendActive = false;
   let chartInstance = null;
+  let donutChartInstance = null;
+  let PLATFORM_ROWS = [];
+  let ACCOUNT_CPA = null;
+  let MARKETING_SUMMARY = null;
 
   const _fbMonthsEn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const _fbMonthsAr = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
@@ -102,6 +108,113 @@ window.renderSection6 = function (mountEl, data, ctx) {
     return Number(value || 0).toLocaleString('en-US', {
       minimumFractionDigits: decimals > 1 ? decimals : 0,
       maximumFractionDigits: decimals
+    });
+  }
+
+  function moneyNumberMax(value, maxDecimals) {
+    maxDecimals = maxDecimals == null ? 2 : maxDecimals;
+    if (window.formatDashboardNumber && activeCurrency === 'IQD' && Math.abs(Number(value) || 0) >= 100000) {
+      return window.formatDashboardNumber(value, {
+        decimals: maxDecimals,
+        compact: true,
+        compactThreshold: 100000,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: maxDecimals
+      });
+    }
+    return Number(value || 0).toLocaleString('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: maxDecimals
+    });
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+    });
+  }
+
+  function normalizePlatformKey(platform) {
+    var value = String(platform || '').toLowerCase().replace(/[\s_-]+/g, '');
+    if (value.indexOf('tiktok') !== -1 || value === 'tt') return 'tiktok';
+    if (value.indexOf('snapchat') !== -1 || value === 'snap') return 'snapchat';
+    if (value.indexOf('facebook') !== -1 || value === 'meta' || value === 'fb') return 'facebook';
+    return value || 'unknown';
+  }
+
+  function platformDisplayName(platform) {
+    platform = normalizePlatformKey(platform);
+    if (platform === 'tiktok') return 'TikTok';
+    if (platform === 'snapchat') return 'Snapchat';
+    if (platform === 'facebook') return 'Facebook';
+    return platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : s6Txt('Unknown', 'غير معروف');
+  }
+
+  function platformColor(platform) {
+    platform = normalizePlatformKey(platform);
+    if (platform === 'tiktok') return '#00e5ff';
+    if (platform === 'snapchat') return '#facc15';
+    if (platform === 'facebook') return '#60a5fa';
+    return '#a855f7';
+  }
+
+  function buildPlatformRows(summary) {
+    if (!summary) return [];
+    const byPlatform = {};
+    const order = ['tiktok', 'snapchat', 'facebook'];
+
+    function ensure(platform) {
+      platform = normalizePlatformKey(platform);
+      if (!byPlatform[platform]) {
+        byPlatform[platform] = {
+          platform: platform,
+          label: platformDisplayName(platform),
+          spend: 0,
+          purchases: 0,
+          purchaseMetric: '',
+          purchaseMetricAvailable: false
+        };
+      }
+      return byPlatform[platform];
+    }
+
+    const sources = Array.isArray(summary.sourceBreakdown) ? summary.sourceBreakdown : [];
+    if (sources.length) {
+      sources.forEach(function (source) {
+        const platform = normalizePlatformKey(source && source.platform || summary.platform || 'unknown');
+        const row = ensure(platform);
+        const sourceCurrency = String(source && (source.currency || source.targetCurrency) || summary.currency || activeCurrency).toUpperCase();
+        const rawSpend = source && source.rawSpend != null
+          ? convert(Number(source.rawSpend || 0), sourceCurrency, activeCurrency)
+          : convert(Number(source && (source.convertedSpend || source.adSpend) || 0), String(source && source.targetCurrency || summary.currency || activeCurrency).toUpperCase(), activeCurrency);
+        row.spend += Number(rawSpend || 0);
+        row.purchases += Number(source && source.purchases || 0);
+        row.purchaseMetricAvailable = row.purchaseMetricAvailable || !!(source && source.purchaseMetricAvailable);
+        if (!row.purchaseMetric && source && source.purchaseMetric) row.purchaseMetric = String(source.purchaseMetric);
+      });
+    } else if (Array.isArray(summary.platformBreakdown)) {
+      summary.platformBreakdown.forEach(function (source) {
+        const platform = normalizePlatformKey(source && source.platform || 'unknown');
+        const row = ensure(platform);
+        row.label = String(source && source.label || row.label);
+        row.spend += convert(Number(source && source.adSpend || 0), String(summary.currency || activeCurrency).toUpperCase(), activeCurrency);
+        row.purchases += Number(source && source.purchases || 0);
+        row.purchaseMetricAvailable = row.purchaseMetricAvailable || !!(source && source.purchaseMetricAvailable);
+        if (!row.purchaseMetric && source && source.purchaseMetric) row.purchaseMetric = String(source.purchaseMetric);
+      });
+    }
+
+    return Object.keys(byPlatform).map(function (platform) {
+      const row = byPlatform[platform];
+      row.spend = Number(row.spend.toFixed(2));
+      row.purchases = Number(row.purchases.toFixed(2));
+      row.cpa = row.purchases > 0 ? Number((row.spend / row.purchases).toFixed(2)) : null;
+      row.color = platformColor(platform);
+      return row;
+    }).sort(function (a, b) {
+      const ai = order.indexOf(a.platform);
+      const bi = order.indexOf(b.platform);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
     });
   }
 
@@ -171,6 +284,233 @@ window.renderSection6 = function (mountEl, data, ctx) {
     const ndrPct = Number(roi.ndrPct) || 0;
     const breakEven = avgCommission * (ndrPct / 100);
     return convert(breakEven, baseCurrency, activeCurrency);
+  }
+
+  const CPA_PLATFORM_TABS = [
+    { key: 'all', label: 'All' },
+    { key: 'tiktok', label: 'TikTok' },
+    { key: 'snapchat', label: 'Snapchat' },
+    { key: 'facebook', label: 'Facebook' }
+  ];
+
+  function formatCpaDateLabel(dateText) {
+    var text = String(dateText || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return text || '';
+    var date = new Date(text + 'T00:00:00');
+    if (Number.isNaN(date.getTime())) return text.slice(5);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  function cpaTabLimit() {
+    if (activePeriod === '7') return 7;
+    if (activePeriod === '14') return 14;
+    return null;
+  }
+
+  function cpaPlatformTabsHtml() {
+    if (activeMode !== 'cpa') return '';
+    return '<div id="s6-cpa-platform-tabs" style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">' +
+      CPA_PLATFORM_TABS.map(function (tab) {
+        var active = tab.key === activeCpaPlatform;
+        var color = tab.key === 'all' ? '#14b8a6' : platformColor(tab.key);
+        return '<button type="button" data-cpa-platform="' + tab.key + '" style="padding:5px 10px;border-radius:8px;border:' +
+          (active ? '1.5px solid ' + color : '1px solid rgba(255,255,255,0.11)') + ';background:' +
+          (active ? color + '22' : 'rgba(255,255,255,0.035)') + ';color:' +
+          (active ? '#fff' : 'rgba(255,255,255,0.52)') + ';font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;">' +
+          escapeHtml(tab.label) + '</button>';
+      }).join('') +
+    '</div>';
+  }
+
+  function dailyPlatformRows(platform) {
+    platform = normalizePlatformKey(platform || 'all');
+    var summary = MARKETING_SUMMARY || {};
+    var rows = Array.isArray(summary.dailyPlatformBreakdown) ? summary.dailyPlatformBreakdown.slice() : [];
+    if (!rows.length && Array.isArray(summary.sourceBreakdown)) {
+      summary.sourceBreakdown.forEach(function (source) {
+        (Array.isArray(source && source.dailyBreakdown) ? source.dailyBreakdown : []).forEach(function (day) {
+          rows.push(Object.assign({}, day, { platform: day.platform || source.platform }));
+        });
+      });
+    }
+    var byDate = {};
+    rows.forEach(function (row) {
+      var rowPlatform = normalizePlatformKey(row && row.platform || '');
+      if (platform && platform !== 'all' && rowPlatform !== platform) return;
+      var date = String(row && row.date || '').slice(0, 10);
+      if (!date) return;
+      if (!byDate[date]) byDate[date] = { date: date, spend: 0, purchases: 0, purchaseMetricAvailable: false };
+      var rowCurrency = String(row && (row.currency || row.targetCurrency) || summary.currency || activeCurrency).toUpperCase();
+      var rowSpend = row && row.spend != null
+        ? Number(row.spend || 0)
+        : row && row.convertedSpend != null
+        ? Number(row.convertedSpend || 0)
+        : row && row.adSpend != null
+        ? Number(row.adSpend || 0)
+        : row && row.rawSpend != null
+        ? convert(Number(row.rawSpend || 0), rowCurrency, activeCurrency)
+        : 0;
+      byDate[date].spend += Number(rowSpend || 0);
+      byDate[date].purchases += Number(row.purchases || 0);
+      byDate[date].purchaseMetricAvailable = byDate[date].purchaseMetricAvailable || !!row.purchaseMetricAvailable;
+    });
+    var result = Object.keys(byDate).sort().map(function (date) {
+      var row = byDate[date];
+      row.spend = Number(row.spend.toFixed(2));
+      row.purchases = Number(row.purchases.toFixed(2));
+      return row;
+    });
+    var limit = cpaTabLimit();
+    return limit && result.length > limit ? result.slice(result.length - limit) : result;
+  }
+
+  function synthesizedPlatformRows(platform, labels) {
+    platform = normalizePlatformKey(platform || 'all');
+    var count = Math.max(1, (labels || []).length || (activePeriod === '7' ? 7 : activePeriod === '14' ? 14 : dashboardDays));
+    var rows = buildPlatformRows(MARKETING_SUMMARY || {});
+    var total = { spend: 0, purchases: 0, purchaseMetricAvailable: false };
+
+    rows.forEach(function (row) {
+      if (platform !== 'all' && normalizePlatformKey(row.platform) !== platform) return;
+      total.spend += Number(row.spend || 0);
+      total.purchases += Number(row.purchases || 0);
+      total.purchaseMetricAvailable = total.purchaseMetricAvailable || !!row.purchaseMetricAvailable || Number(row.purchases || 0) > 0;
+    });
+
+    if (total.spend <= 0 && platform === 'all') total.spend = Number(dailyAdSpend || 0) * count;
+    if (total.spend <= 0 || (platform !== 'all' && total.purchases <= 0 && !total.purchaseMetricAvailable)) return [];
+
+    return Array.from({ length: count }, function (_, index) {
+      return {
+        date: '',
+        label: labels && labels[index] || '',
+        spend: total.spend / count,
+        purchases: total.purchases / count,
+        purchaseMetricAvailable: total.purchaseMetricAvailable,
+        synthetic: true
+      };
+    });
+  }
+
+  function platformTotals(platform) {
+    platform = normalizePlatformKey(platform || 'all');
+    var total = { spend: 0, purchases: 0, purchaseMetricAvailable: false };
+    buildPlatformRows(MARKETING_SUMMARY || {}).forEach(function (row) {
+      if (platform !== 'all' && normalizePlatformKey(row.platform) !== platform) return;
+      total.spend += Number(row.spend || 0);
+      total.purchases += Number(row.purchases || 0);
+      total.purchaseMetricAvailable = total.purchaseMetricAvailable || !!row.purchaseMetricAvailable || Number(row.purchases || 0) > 0;
+    });
+    return total;
+  }
+
+  function accountOrderCpaProfile(labels, orders, totalSpend, datasetLabel, platform) {
+    var count = Math.max(1, (labels || []).length || (orders || []).length || dashboardDays);
+    var dailySpend = Number(totalSpend || 0) / count;
+    var denominatorValues = (orders || []).slice(Math.max(0, (orders || []).length - count));
+    while (denominatorValues.length < count) denominatorValues.unshift(0);
+    var profileLabels = (labels || []).slice(Math.max(0, (labels || []).length - count));
+    while (profileLabels.length < count) profileLabels.unshift('');
+    return {
+      labels: profileLabels,
+      cpaValues: denominatorValues.map(function (orderCount) {
+        return Number(orderCount || 0) > 0 ? Number((dailySpend / Number(orderCount || 0)).toFixed(2)) : 0;
+      }),
+      denominatorValues: denominatorValues,
+      spendValues: denominatorValues.map(function () { return dailySpend; }),
+      denominatorLabel: s6Txt('Taager Orders', 'طلبات تاجر'),
+      datasetLabel: datasetLabel,
+      platform: platform,
+      inferredFromAccountOrders: true
+    };
+  }
+
+  function cpaChartProfile() {
+    const chartData = getChartData(activePeriod);
+    const fallbackLabels = chartData.map(x => x.d);
+    const ordersData = getDailyOrdersData(activePeriod);
+    const fallbackOrders = ordersData.map(x => Number(x.v || 0));
+    let platformRows = activeCpaPlatform === 'all' ? dailyPlatformRows('all') : dailyPlatformRows(activeCpaPlatform);
+    const platformRowsUsable = activeCpaPlatform === 'all'
+      ? platformRows.some(function (row) { return Number(row.spend || 0) > 0; })
+      : platformRows.some(function (row) { return Number(row.spend || 0) > 0 && Number(row.purchases || 0) > 0; });
+    if (syncedSpendActive && (!platformRows.length || !platformRowsUsable)) {
+      if (activeCpaPlatform === 'all') {
+        platformRows = synthesizedPlatformRows(activeCpaPlatform, fallbackLabels);
+      } else {
+        var totals = platformTotals(activeCpaPlatform);
+        if (Number(totals.spend || 0) > 0) {
+          return accountOrderCpaProfile(
+            fallbackLabels,
+            fallbackOrders,
+            totals.spend,
+            platformDisplayName(activeCpaPlatform) + ' CPA',
+            activeCpaPlatform
+          );
+        }
+        platformRows = [];
+      }
+    }
+
+    if (syncedSpendActive && platformRows.length) {
+      var labels = platformRows.map(function (row, index) { return row.label || formatCpaDateLabel(row.date) || fallbackLabels[index] || ''; });
+      if (activeCpaPlatform === 'all') {
+        var alignedOrders = fallbackOrders.slice(Math.max(0, fallbackOrders.length - platformRows.length));
+        while (alignedOrders.length < platformRows.length) alignedOrders.unshift(0);
+        return {
+          labels: labels,
+          cpaValues: platformRows.map(function (row, index) {
+            var orders = Number(alignedOrders[index] || 0);
+            return orders > 0 ? Number((Number(row.spend || 0) / orders).toFixed(2)) : 0;
+          }),
+          denominatorValues: alignedOrders,
+          spendValues: platformRows.map(function (row) { return Number(row.spend || 0); }),
+          denominatorLabel: s6Txt('Taager Orders', 'طلبات تاجر'),
+          datasetLabel: s6Txt('Account CPA', 'CPA الحساب'),
+          platform: 'all'
+        };
+      }
+      return {
+        labels: labels,
+        cpaValues: platformRows.map(function (row) {
+          var purchases = Number(row.purchases || 0);
+          return purchases > 0 ? Number((Number(row.spend || 0) / purchases).toFixed(2)) : 0;
+        }),
+        denominatorValues: platformRows.map(function (row) { return Number(row.purchases || 0); }),
+        spendValues: platformRows.map(function (row) { return Number(row.spend || 0); }),
+        denominatorLabel: s6Txt('Platform Purchases', 'مشتريات المنصة'),
+        datasetLabel: platformDisplayName(activeCpaPlatform) + ' CPA',
+        platform: activeCpaPlatform
+      };
+    }
+
+    if (activeCpaPlatform !== 'all') {
+      return {
+        labels: fallbackLabels,
+        cpaValues: fallbackLabels.map(function () { return 0; }),
+        denominatorValues: fallbackLabels.map(function () { return 0; }),
+        spendValues: fallbackLabels.map(function () { return 0; }),
+        denominatorLabel: s6Txt('Platform Purchases', 'مشتريات المنصة'),
+        datasetLabel: platformDisplayName(activeCpaPlatform) + ' CPA',
+        platform: activeCpaPlatform
+      };
+    }
+
+    return {
+      labels: fallbackLabels,
+      cpaValues: fallbackOrders.map(orders => orders > 0 ? Number((dailyAdSpend / orders).toFixed(2)) : 0),
+      denominatorValues: fallbackOrders,
+      spendValues: fallbackOrders.map(function () { return dailyAdSpend; }),
+      denominatorLabel: s6Txt('Taager Orders', 'طلبات تاجر'),
+      datasetLabel: activeCpaPlatform === 'all' ? s6Txt('Account CPA', 'CPA الحساب') : platformDisplayName(activeCpaPlatform) + ' CPA',
+      platform: activeCpaPlatform
+    };
+  }
+
+  function averageCpaFromProfile(profile) {
+    var totalSpend = (profile.spendValues || []).reduce((sum, value) => sum + Number(value || 0), 0);
+    var totalDenominator = (profile.denominatorValues || []).reduce((sum, value) => sum + Number(value || 0), 0);
+    return totalDenominator > 0 ? totalSpend / totalDenominator : 0;
   }
 
   // ── static constants ──────────────────────────────────────────────────────
@@ -291,11 +631,8 @@ window.renderSection6 = function (mountEl, data, ctx) {
     var rightSideHtml = '';
     
     if (activeMode === 'cpa') {
-      const ordersData = getDailyOrdersData(activePeriod);
-      const ordersValues = ordersData.map(x => x.v);
-      const totalOrders = ordersValues.reduce((a, b) => a + b, 0);
-      const totalSpend = dailyAdSpend * ordersValues.length;
-      const averageCpa = totalOrders > 0 ? totalSpend / totalOrders : 0;
+      const profile = cpaChartProfile();
+      const averageCpa = averageCpaFromProfile(profile);
       const breakEvenCpa = getBreakEvenCpa();
       const cColor = averageCpa > breakEvenCpa ? '#ef4444' : '#00e676';
       
@@ -306,7 +643,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
             <div id="s6-header-cpa-badge" style="display:inline-flex;align-items:center;gap:4px;
               background:${cColor}12;border:1px solid ${cColor}25;
               border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;color:${cColor};">
-              ${s6Txt('commission.breakEvenLine', 'تكلفة التعادل')}: ${moneyNumber(breakEvenCpa, 1)} ${activeCurrency}
+              ${s6Txt('commission.breakEvenLine', 'تكلفة التعادل')}: ${moneyNumberMax(breakEvenCpa, 2)} ${activeCurrency}
             </div>
             <span style="font-size:30px;font-weight:900;color:#fff;letter-spacing:-1px;">
               <span id="s6-total-countup">${moneyNumber(averageCpa, 1)}</span> ${activeCurrency}
@@ -391,11 +728,95 @@ window.renderSection6 = function (mountEl, data, ctx) {
           <div style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.85);">
             ${activeMode === 'cpa' ? s6Txt('CPA and Break-even Target curves', 'منحنى تكلفة الطلب (CPA) مقابل خط التعادل') : s6Txt('Daily profit trend curve', 'منحنى اتجاه الأرباح اليومية')}
           </div>
+          ${cpaPlatformTabsHtml()}
           ${spendInputHtml}
         </div>
         <div id="s6-chart-wrap" style="position:relative;transition:opacity 0.3s;">
           <canvas id="s6-area-chart" height="240"></canvas>
         </div>
+      </div>
+    `;
+  }
+
+  function platformAnalyticsHtml() {
+    if (activeMode !== 'cpa') return '';
+    const hasRows = PLATFORM_ROWS.length > 0;
+    const rowsHtml = hasRows ? PLATFORM_ROWS.map(function (row, i) {
+      const cpaText = row.cpa == null ? s6Txt('No purchase data', 'لا توجد بيانات مشتريات') : moneyNumber(row.cpa, 1) + ' ' + activeCurrency;
+      const purchaseText = row.purchaseMetricAvailable || row.purchases > 0
+        ? moneyNumber(row.purchases, row.purchases % 1 === 0 ? 0 : 1)
+        : s6Txt('No data', 'لا توجد بيانات');
+      const metricText = row.purchaseMetric ? row.purchaseMetric.replace(/_/g, ' ') : s6Txt('platform reported', 'من المنصة');
+      return `
+        <div class="fade-up" style="display:grid;grid-template-columns:minmax(130px,1.2fr) repeat(3,minmax(110px,1fr));gap:12px;align-items:center;
+          padding:13px 14px;border-top:${i === 0 ? 'none' : '1px solid rgba(255,255,255,0.06)'};animation-delay:${180 + i * 70}ms;">
+          <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+            <div style="width:10px;height:32px;border-radius:4px;background:${row.color};box-shadow:0 0 16px ${row.color}55;"></div>
+            <div style="min-width:0;">
+              <div style="font-size:13px;font-weight:900;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(row.label)}</div>
+              <div style="font-size:10px;color:rgba(255,255,255,0.38);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(metricText)}</div>
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:15px;font-weight:900;color:#fff;">${moneyNumber(row.spend, 2)}</div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.38);">${activeCurrency}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:15px;font-weight:900;color:${row.purchaseMetricAvailable || row.purchases > 0 ? '#facc15' : 'rgba(255,255,255,0.38)'};">${purchaseText}</div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.38);">${s6Txt('Platform Purchases', 'مشتريات المنصة')}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:15px;font-weight:900;color:${row.cpa == null ? 'rgba(255,255,255,0.38)' : '#14b8a6'};">${cpaText}</div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.38);">${s6Txt('Platform CPA', 'CPA المنصة')}</div>
+          </div>
+        </div>
+      `;
+    }).join('') : `
+      <div style="padding:18px 14px;border-top:1px solid rgba(255,255,255,0.06);font-size:12px;color:rgba(255,255,255,0.48);text-align:center;">
+        ${syncedSpendActive
+          ? s6Txt('Platform purchase data will appear after the next marketing sync.', 'ستظهر بيانات مشتريات المنصات بعد المزامنة التالية.')
+          : s6Txt('Connect marketing platforms to see platform spend, purchases, and CPA.', 'اربط منصات التسويق لعرض الإنفاق والمشتريات وCPA لكل منصة.')}
+      </div>
+    `;
+
+    const accountCpaText = ACCOUNT_CPA && ACCOUNT_CPA.cpa != null ? moneyNumber(ACCOUNT_CPA.cpa, 1) + ' ' + activeCurrency : 'N/A';
+    const accountOrdersText = ACCOUNT_CPA ? moneyNumber(ACCOUNT_CPA.orders, 0) : '0';
+    const accountSpendText = ACCOUNT_CPA ? moneyNumber(ACCOUNT_CPA.spend, 2) : '0.00';
+
+    return `
+      <div style="background:#0b1120;border:1px solid rgba(255,255,255,0.07);border-radius:16px;overflow:hidden;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;border-bottom:1px solid rgba(255,255,255,0.06);">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:34px;height:34px;border-radius:8px;background:rgba(20,184,166,0.14);border:1px solid rgba(20,184,166,0.28);display:flex;align-items:center;justify-content:center;">
+              ${iconBarsHtml('#14b8a6', 18)}
+            </div>
+            <div>
+              <div style="font-size:14px;font-weight:900;color:#fff;">${s6Txt('Platform CPA Breakdown', 'تفصيل CPA حسب المنصة')}</div>
+              <div style="font-size:11px;color:rgba(255,255,255,0.42);">${s6Txt('Platform CPA uses ad-platform reported purchases. Account CPA uses Taager orders.', 'CPA المنصة يعتمد على مشتريات المنصة، وCPA الحساب يعتمد على طلبات تاجر.')}</div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(90px,1fr));gap:8px;min-width:340px;">
+            <div style="padding:9px 10px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);text-align:right;">
+              <div style="font-size:15px;font-weight:900;color:#fff;">${accountSpendText}</div>
+              <div style="font-size:10px;color:rgba(255,255,255,0.4);">${s6Txt('Total Spend', 'إجمالي الإنفاق')}</div>
+            </div>
+            <div style="padding:9px 10px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);text-align:right;">
+              <div style="font-size:15px;font-weight:900;color:#facc15;">${accountOrdersText}</div>
+              <div style="font-size:10px;color:rgba(255,255,255,0.4);">${s6Txt('Taager Orders', 'طلبات تاجر')}</div>
+            </div>
+            <div style="padding:9px 10px;border-radius:10px;background:rgba(20,184,166,0.08);border:1px solid rgba(20,184,166,0.18);text-align:right;">
+              <div style="font-size:15px;font-weight:900;color:#14b8a6;">${accountCpaText}</div>
+              <div style="font-size:10px;color:rgba(255,255,255,0.4);">${s6Txt('Account CPA', 'CPA الحساب')}</div>
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:minmax(130px,1.2fr) repeat(3,minmax(110px,1fr));gap:12px;padding:10px 14px;background:rgba(255,255,255,0.025);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.04em;color:rgba(255,255,255,0.38);">
+          <div>${s6Txt('Platform', 'المنصة')}</div>
+          <div style="text-align:right;">${s6Txt('Spend', 'الإنفاق')}</div>
+          <div style="text-align:right;">${s6Txt('Purchases', 'المشتريات')}</div>
+          <div style="text-align:right;">${s6Txt('CPA', 'CPA')}</div>
+        </div>
+        ${rowsHtml}
       </div>
     `;
   }
@@ -455,10 +876,10 @@ window.renderSection6 = function (mountEl, data, ctx) {
         </div>
 
         <!-- donut canvas wrapper -->
-        <div style="position:relative;height:180px;display:flex;align-items:center;justify-content:center;isolation:isolate;">
-          <canvas id="s6-donut-chart" width="180" height="180" style="position:relative;z-index:2;"></canvas>
+        <div style="position:relative;width:180px;height:180px;max-width:180px;max-height:180px;margin:0 auto;display:flex;align-items:center;justify-content:center;isolation:isolate;overflow:hidden;">
+          <canvas id="s6-donut-chart" width="180" height="180" style="display:block;width:180px!important;height:180px!important;max-width:180px;max-height:180px;position:relative;z-index:2;"></canvas>
           <!-- center label -->
-          <div style="position:absolute;z-index:1;text-align:center;pointer-events:none;">
+          <div style="position:absolute;z-index:3;text-align:center;pointer-events:none;">
             <div style="font-size:20px;font-weight:900;color:#fff;" id="s6-donut-total">
               ${moneyNumber(totalSAR, 2)}
             </div>
@@ -592,6 +1013,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
 
     function render() {
     const marketingState = window.DashboardMarketingState ? window.DashboardMarketingState.get(activeAccountId) : null;
+    MARKETING_SUMMARY = marketingState && marketingState.summary ? marketingState.summary : null;
     syncedSpendActive = !!(
       marketingState &&
       marketingState.status === 'connected' &&
@@ -609,11 +1031,15 @@ window.renderSection6 = function (mountEl, data, ctx) {
         : [];
       if (sourceBreakdown.length > 0) {
         totalSpend = sourceBreakdown.reduce(function (total, source) {
-          return total + convert(Number(source.rawSpend || 0), source.currency || "SAR", activeCurrency);
+          const sourceCurrency = String(source && (source.currency || source.targetCurrency) || marketingState.summary.currency || activeCurrency).toUpperCase();
+          const sourceSpend = source && source.rawSpend != null
+            ? convert(Number(source.rawSpend || 0), sourceCurrency, activeCurrency)
+            : convert(Number(source && (source.convertedSpend || source.adSpend) || 0), String(source && source.targetCurrency || marketingState.summary.currency || activeCurrency).toUpperCase(), activeCurrency);
+          return total + Number(sourceSpend || 0);
         }, 0);
       } else {
         const totalSpendRaw = Number(marketingState.summary.adSpend || 0);
-        totalSpend = convert(totalSpendRaw, baseCurrency, activeCurrency);
+        totalSpend = convert(totalSpendRaw, marketingState.summary.currency || baseCurrency, activeCurrency);
       }
     } else {
       totalSpend = Number(roiSettings.adSpend) || Number(roi.adSpend) || convert(250 * dashboardDays, baseCurrency, activeCurrency);
@@ -645,11 +1071,12 @@ window.renderSection6 = function (mountEl, data, ctx) {
     const labels = chartData.map(x => x.d);
 
     if (activeMode === 'cpa') {
-      const ordersData = getDailyOrdersData(activePeriod);
-      const ordersValues = ordersData.map(x => x.v);
+      const profile = cpaChartProfile();
+      const ordersValues = profile.denominatorValues.map(x => Number(x || 0));
+      const spendValues = profile.spendValues.map(x => Number(x || 0));
       const breakEvenCpa = getBreakEvenCpa();
       const threshold = breakEvenCpa * 0.05;
-      const cpaValues = ordersValues.map(orders => orders > 0 ? Number((dailyAdSpend / orders).toFixed(2)) : 0);
+      const cpaValues = profile.cpaValues.map(x => Number(x || 0));
 
       let profitableDays = 0, profitableSpend = 0;
       let unprofitableDays = 0, unprofitableSpend = 0;
@@ -657,21 +1084,22 @@ window.renderSection6 = function (mountEl, data, ctx) {
       let zeroOrderDays = 0, zeroOrderSpend = 0;
 
       ordersValues.forEach((orders, i) => {
-        const cpa = orders > 0 ? (dailyAdSpend / orders) : 0;
+        const daySpend = Number(spendValues[i] || 0);
+        const cpa = Number(cpaValues[i] || 0);
         if (orders === 0) {
           zeroOrderDays++;
-          zeroOrderSpend += dailyAdSpend;
+          zeroOrderSpend += daySpend;
         } else {
           const diff = cpa - breakEvenCpa;
           if (diff < -threshold) {
             profitableDays++;
-            profitableSpend += dailyAdSpend;
+            profitableSpend += daySpend;
           } else if (diff > threshold) {
             unprofitableDays++;
-            unprofitableSpend += dailyAdSpend;
+            unprofitableSpend += daySpend;
           } else {
             borderlineDays++;
-            borderlineSpend += dailyAdSpend;
+            borderlineSpend += daySpend;
           }
         }
       });
@@ -690,8 +1118,17 @@ window.renderSection6 = function (mountEl, data, ctx) {
       ];
 
       const totalOrders = ordersValues.reduce((a, b) => a + b, 0);
-      const totalSpend = dailyAdSpend * totalDays;
+      const totalSpend = spendValues.reduce((a, b) => a + b, 0);
       const averageCpa = totalOrders > 0 ? totalSpend / totalOrders : 0;
+      const accountOrdersValues = getDailyOrdersData(activePeriod).map(x => Number(x.v || 0));
+      const accountTotalOrders = accountOrdersValues.reduce((a, b) => a + b, 0);
+      const accountTotalSpend = Number(dailyAdSpend || 0) * (accountOrdersValues.length || totalDays);
+      PLATFORM_ROWS = syncedSpendActive ? buildPlatformRows(marketingState && marketingState.summary) : [];
+      ACCOUNT_CPA = {
+        spend: Number(accountTotalSpend.toFixed(2)),
+        orders: accountTotalOrders,
+        cpa: accountTotalOrders > 0 ? Number((accountTotalSpend / accountTotalOrders).toFixed(2)) : null
+      };
       
       const nonZeroCpas = cpaValues.filter(v => v > 0);
       const minCpa = nonZeroCpas.length > 0 ? Math.min(...nonZeroCpas) : 0;
@@ -699,7 +1136,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
 
       METRICS_ROWS = [
         { label: s6Txt('Average CPA', 'متوسط تكلفة الطلب (CPA)'), value: moneyNumber(averageCpa, 1), unit: activeCurrency, color: 'rgba(255,255,255,0.85)' },
-        { label: s6Txt('commission.breakEvenLine', 'تكلفة التعادل (CPA)'), value: moneyNumber(breakEvenCpa, 1), unit: activeCurrency, color: '#f59e0b' },
+        { label: s6Txt('commission.breakEvenLine', 'تكلفة التعادل (CPA)'), value: moneyNumberMax(breakEvenCpa, 2), unit: activeCurrency, color: '#f59e0b' },
         { label: s6Txt('Lowest Daily CPA', 'أقل تكلفة طلب يومية'), value: moneyNumber(minCpa, 1), unit: activeCurrency, color: '#00e676' },
         { label: s6Txt('Highest Daily CPA', 'أعلى تكلفة طلب يومية'), value: moneyNumber(maxCpa, 1), unit: activeCurrency, color: '#ef4444' },
         { label: s6Txt('Total Period Ad Spend', 'إجمالي الإنفاق للفترة'), value: moneyNumber(totalSpend, 2), unit: activeCurrency, color: 'rgba(255,255,255,0.85)' }
@@ -711,7 +1148,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
       let bestCpaVal = 0;
       if (nonZeroCpaValues.length > 0) {
         const best = nonZeroCpaValues.reduce((min, cur) => cur.v < min.v ? cur : min, nonZeroCpaValues[0]);
-        bestDayLabel = chartData[best.idx].d;
+        bestDayLabel = profile.labels[best.idx] || labels[best.idx] || 'N/A';
         bestCpaVal = best.v;
       }
       
@@ -771,6 +1208,8 @@ window.renderSection6 = function (mountEl, data, ctx) {
         },
       ];
     } else {
+      PLATFORM_ROWS = [];
+      ACCOUNT_CPA = null;
       // ── Profit Trend calculations ───────────────────────────────────────────
       const values = chartData.map(x => x.v);
       const n = values.length || 1;
@@ -894,6 +1333,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
           <div style="display:flex;flex-direction:column;gap:12px;">
             ${headerRowHtml()}
             ${areaChartCardHtml()}
+            ${platformAnalyticsHtml()}
           </div>
 
           <!-- ROW 2 & 3: cards wrapper -->
@@ -914,12 +1354,13 @@ window.renderSection6 = function (mountEl, data, ctx) {
   }
 
   function updateCpaCalculationsAndChart() {
-    const chartData = getChartData(activePeriod);
-    const ordersData = getDailyOrdersData(activePeriod);
-    const ordersValues = ordersData.map(x => x.v);
+    const profile = cpaChartProfile();
+    const chartData = profile.labels.map(function (label) { return { d: label }; });
+    const ordersValues = profile.denominatorValues.map(x => Number(x || 0));
+    const spendValues = profile.spendValues.map(x => Number(x || 0));
     const breakEvenCpa = getBreakEvenCpa();
     const threshold = breakEvenCpa * 0.05;
-    const cpaValues = ordersValues.map(orders => orders > 0 ? Number((dailyAdSpend / orders).toFixed(2)) : 0);
+    const cpaValues = profile.cpaValues.map(x => Number(x || 0));
 
     let profitableDays = 0, profitableSpend = 0;
     let unprofitableDays = 0, unprofitableSpend = 0;
@@ -927,28 +1368,29 @@ window.renderSection6 = function (mountEl, data, ctx) {
     let zeroOrderDays = 0, zeroOrderSpend = 0;
 
     ordersValues.forEach((orders, i) => {
-      const cpa = orders > 0 ? (dailyAdSpend / orders) : 0;
+      const daySpend = Number(spendValues[i] || 0);
+      const cpa = Number(cpaValues[i] || 0);
       if (orders === 0) {
         zeroOrderDays++;
-        zeroOrderSpend += dailyAdSpend;
+        zeroOrderSpend += daySpend;
       } else {
         const diff = cpa - breakEvenCpa;
         if (diff < -threshold) {
           profitableDays++;
-          profitableSpend += dailyAdSpend;
+          profitableSpend += daySpend;
         } else if (diff > threshold) {
           unprofitableDays++;
-          unprofitableSpend += dailyAdSpend;
+          unprofitableSpend += daySpend;
         } else {
           borderlineDays++;
-          borderlineSpend += dailyAdSpend;
+          borderlineSpend += daySpend;
         }
       }
     });
 
     const totalDays = ordersValues.length || 1;
     const totalOrders = ordersValues.reduce((a, b) => a + b, 0);
-    const totalSpend = dailyAdSpend * totalDays;
+    const totalSpend = spendValues.reduce((a, b) => a + b, 0);
     const averageCpa = totalOrders > 0 ? totalSpend / totalOrders : 0;
     
     const nonZeroCpas = cpaValues.filter(v => v > 0);
@@ -989,7 +1431,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
 
     METRICS_ROWS = [
       { label: s6Txt('Average CPA', 'متوسط تكلفة الطلب (CPA)'), value: moneyNumber(averageCpa, 1), unit: activeCurrency, color: 'rgba(255,255,255,0.85)' },
-      { label: s6Txt('commission.breakEvenLine', 'تكلفة التعادل (CPA)'), value: moneyNumber(breakEvenCpa, 1), unit: activeCurrency, color: '#f59e0b' },
+      { label: s6Txt('commission.breakEvenLine', 'تكلفة التعادل (CPA)'), value: moneyNumberMax(breakEvenCpa, 2), unit: activeCurrency, color: '#f59e0b' },
       { label: s6Txt('Lowest Daily CPA', 'أقل تكلفة طلب يومية'), value: moneyNumber(minCpa, 1), unit: activeCurrency, color: '#00e676' },
       { label: s6Txt('Highest Daily CPA', 'أعلى تكلفة طلب يومية'), value: moneyNumber(maxCpa, 1), unit: activeCurrency, color: '#ef4444' },
       { label: s6Txt('Total Period Ad Spend', 'إجمالي الإنفاق للفترة'), value: moneyNumber(totalSpend, 2), unit: activeCurrency, color: 'rgba(255,255,255,0.85)' }
@@ -1091,9 +1533,11 @@ window.renderSection6 = function (mountEl, data, ctx) {
     const threshold = breakEvenCpa * 0.05;
 
     if (activeMode === 'cpa') {
-      const ordersData = getDailyOrdersData(activePeriod);
-      ordersValues = ordersData.map(x => x.v);
-      const cpaValues = ordersValues.map(orders => orders > 0 ? Number((dailyAdSpend / orders).toFixed(2)) : 0);
+      const profile = cpaChartProfile();
+      labels.splice(0, labels.length, ...profile.labels);
+      ordersValues = profile.denominatorValues;
+      const cpaValues = profile.cpaValues;
+      const cpaLineColor = activeCpaPlatform === 'all' ? '#a855f7' : platformColor(activeCpaPlatform);
 
       const pointBackgroundColor = cpaValues.map((cpa, i) => {
         const orders = ordersValues[i];
@@ -1106,11 +1550,11 @@ window.renderSection6 = function (mountEl, data, ctx) {
 
       datasets = [
         {
-          label: s6Txt('commission.modeCpa', 'تكلفة الطلب (CPA)'),
+          label: profile.datasetLabel || s6Txt('commission.modeCpa', 'تكلفة الطلب (CPA)'),
           data: cpaValues,
-          borderColor: '#a855f7',
+          borderColor: cpaLineColor,
           borderWidth: 2.5,
-          backgroundColor: 'rgba(168, 85, 247, 0.05)',
+          backgroundColor: cpaLineColor + '12',
           fill: false,
           tension: 0.4,
           pointRadius: 4.5,
@@ -1175,7 +1619,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
         const fontFamily = getComputedStyle(document.body).fontFamily || 'sans-serif';
         const markerX = Math.max(chartArea.left + 18, xScale.getPixelForValue(0) + 24);
         const labelText = s6Txt('commission.breakEvenLine', 'Break-even CPA') + ': ' +
-          moneyNumber(breakEvenCpa, 1) + ' ' + activeCurrency;
+          moneyNumberMax(breakEvenCpa, 2) + ' ' + activeCurrency;
 
         ctx.save();
         ctx.font = '800 10px ' + fontFamily;
@@ -1383,13 +1827,14 @@ window.renderSection6 = function (mountEl, data, ctx) {
   function buildDonutChart() {
     const canvas = document.getElementById('s6-donut-chart');
     if (!canvas || typeof Chart === 'undefined') return;
+    if (donutChartInstance) { donutChartInstance.destroy(); donutChartInstance = null; }
     const theme = window.dashboardThemeColors ? window.dashboardThemeColors() : {
       surface: 'rgba(11,17,32,0.95)',
       borderSoft: 'rgba(255,255,255,0.1)',
       text: '#fff'
     };
 
-    new Chart(canvas, {
+    donutChartInstance = new Chart(canvas, {
       type: 'doughnut',
       data: {
         labels: PERF_DATA.map(d => d.label),
@@ -1401,6 +1846,8 @@ window.renderSection6 = function (mountEl, data, ctx) {
         }],
       },
       options: {
+        responsive: false,
+        maintainAspectRatio: false,
         cutout: '68%',
         animation: { duration: 260, animateRotate: true },
         plugins: {
@@ -1433,11 +1880,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
       window.animateNumber(el, convertedTotal, { duration: 520, decimals: 2, compact: activeCurrency === 'IQD' });
     } else {
       if (activeMode === 'cpa') {
-        const ordersData = getDailyOrdersData(activePeriod);
-        const ordersValues = ordersData.map(x => x.v);
-        const totalOrders = ordersValues.reduce((a, b) => a + b, 0);
-        const totalSpend = dailyAdSpend * ordersValues.length;
-        const averageCpa = totalOrders > 0 ? totalSpend / totalOrders : 0;
+        const averageCpa = averageCpaFromProfile(cpaChartProfile());
         el.textContent = moneyNumber(averageCpa, 1);
       } else {
         const convertedTotal = convert(total, baseCurrency, activeCurrency);
@@ -1478,6 +1921,19 @@ window.renderSection6 = function (mountEl, data, ctx) {
         if (activeMode === 'cpa') return;
         activeMode = 'cpa';
         mountEl._s6ActiveMode = 'cpa';
+        render();
+      });
+    }
+
+    const cpaPlatformTabs = document.getElementById('s6-cpa-platform-tabs');
+    if (cpaPlatformTabs) {
+      cpaPlatformTabs.addEventListener('click', function (e) {
+        const btn = e.target.closest('button[data-cpa-platform]');
+        if (!btn) return;
+        const platform = btn.getAttribute('data-cpa-platform') || 'all';
+        if (platform === activeCpaPlatform) return;
+        activeCpaPlatform = platform;
+        mountEl._s6ActiveCpaPlatform = platform;
         render();
       });
     }
@@ -1533,6 +1989,14 @@ window.renderSection6 = function (mountEl, data, ctx) {
 
   // Unsubscribe on unmount
   mountEl._dashboardSectionCleanup = function () {
+    if (chartInstance) {
+      chartInstance.destroy();
+      chartInstance = null;
+    }
+    if (donutChartInstance) {
+      donutChartInstance.destroy();
+      donutChartInstance = null;
+    }
     if (mountEl._s6RoiListener && window.DashboardRoiState) {
       window.DashboardRoiState.unsubscribe(mountEl._s6RoiListener);
       mountEl._s6RoiListener = null;

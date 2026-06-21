@@ -290,6 +290,7 @@
       'marketing.loadingClaim': 'جاري ربط حساب الإعلانات...',
       'marketing.loadingRelease': 'جاري إلغاء ربط حساب الإعلانات...',
       'marketing.sourceAccountIdRequired': 'يرجى إدخال معرّف حساب الإعلانات أولاً.',
+      'marketing.sourceAccountNotFound': 'لم يتم العثور على حساب الإعلانات. تحقق من المعرّف أو اربط الحساب الصحيح أولاً.',
       'marketing.fullRefreshConfirm': 'هل تريد فرض إعادة تحميل كافة بيانات الإعلانات للتواريخ المحددة؟ يقوم هذا بجلب بيانات جديدة مباشرة من منصة الإعلانات ويحل محل أي قيم مخزنة مؤقتاً.',
       'marketing.fullRefresh': 'تحديث كافة التواريخ المحددة',
       'marketing.addAccount': 'إضافة حساب',

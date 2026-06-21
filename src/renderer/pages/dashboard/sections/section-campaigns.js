@@ -283,12 +283,7 @@
   function renderCampaignKpis(intel) {
     return card("Spend", money(intel.totals.spend, intel.currency), "Spent campaigns in this period", "wallet", "spend") +
       card("Matched spend", percent(intel.totals.matchedSpendPct), money(intel.totals.matchedSpend, intel.currency) + " exact SKU", "shieldHalved", "matched") +
-      card("Unmatched spend", percent(intel.totals.unmatchedSpendPct), money(intel.totals.unmatchedSpend, intel.currency) + " needs SKU", "circleXmark", "unmatched") +
-      card("Matched net orders", fmt(intel.totals.taagerOrders), "Unique net orders from SKU-matched products", "package", "orders") +
-      card("Matched CPA", intel.totals.taagerOrders > 0 ? money(intel.totals.taagerCpa, intel.currency) : "No matched net orders", "Matched spend / unique net orders", "calculator", "cpa", financialState(intel.totals.taagerCpa, intel.totals.taagerOrders > 0)) +
-      card("Matched net profit", signedMoney(intel.totals.netProfit, intel.currency), "Matched Taager profit after tax - matched spend", "moneyBill", "profit", financialState(intel.totals.netProfit, true)) +
-      card("Matched ROI", percent(intel.totals.roiPct), "Matched net profit / matched spend", "trendingUp", "roi", financialState(intel.totals.roiPct, intel.totals.matchedSpend > 0)) +
-      card("Matched profit ROAS", roas(intel.totals.profitRoas), "Matched Taager profit after tax / matched spend", "pulse", "roas");
+      card("Unmatched spend", percent(intel.totals.unmatchedSpendPct), money(intel.totals.unmatchedSpend, intel.currency) + " needs SKU", "circleXmark", "unmatched");
   }
 
   function sortValue(row, key) {
@@ -377,7 +372,7 @@
         product: "Taager product matched by a complete SKU or a unique product-name fallback in the campaign name. Account and country boundaries are preserved.",
         spend: "Attributed campaign spend converted into the shared calculator/product currency. Ambiguous campaigns are excluded.",
         clicks: "Clicks reported by the ad platform for attributed campaigns.",
-        taagerOrders: "Real conversions from Taager dashboard orders. Conversion rate = Taager orders / landing page views, or content views when landing page views are unavailable. N/A means the ad platform did not report a usable tracked-view denominator through Windsor.",
+        taagerOrders: "Product-level Taager order count for this SKU/product. This is not a whole-account unique-order total.",
         taagerDelivered: "Delivered Taager orders. Delivered conversion rate uses the same tracked-view denominator and is N/A when that denominator is unavailable.",
         taagerNdrPct: "Net delivery rate from Taager order outcomes.",
         taagerCpa: "Taager CPA = attributed campaign spend / Taager orders.",
@@ -1168,7 +1163,7 @@
         '<div class="campaign-tabs">' + platformButtons + '</div>' +
       '</div>' +
       '<div class="campaign-kpis">' + renderCampaignKpis(intel) + '</div>' +
-      '<div class="campaign-panel wide"><div class="campaign-panel-title"><div><h3>Product Actions</h3><span>Unambiguously attributed products only, using Taager business results. Financial columns use the shared calculator/product currency.</span></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="campaign-ai-chip" data-campaign-ai-review>' + icon("sparkles") + 'Analyze actions</button></div></div>' +
+      '<div class="campaign-panel wide"><div class="campaign-panel-title"><div><h3>Product Actions</h3><span>Unambiguously attributed products only, using Taager product-level results. Product orders can differ from whole-account unique orders.</span></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="campaign-ai-chip" data-campaign-ai-review>' + icon("sparkles") + 'Analyze actions</button></div></div>' +
         '<div class="campaign-controls">' +
           '<label class="campaign-search"><span>' + icon("search") + '</span><input type="search" data-product-search placeholder="Search product or SKU" value="' + esc(state.productSearch || "") + '" /></label>' +
         '</div>' +
@@ -1176,7 +1171,7 @@
           sortableTh("Product", "product", state, "products") +
           sortableTh("Spend", "spend", state, "products") +
           sortableTh("Clicks", "clicks", state, "products") +
-          sortableTh("Taager orders", "taagerOrders", state, "products") +
+          sortableTh("Product orders", "taagerOrders", state, "products") +
           sortableTh("Delivered", "taagerDelivered", state, "products") +
           sortableTh("NDR", "taagerNdrPct", state, "products") +
           sortableTh("Taager CPA", "taagerCpa", state, "products") +

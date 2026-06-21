@@ -2008,6 +2008,8 @@ async function _checkLicenseImpl(bustCache) {
     if (daysLeft !== null) licenseStore.set("daysLeft", daysLeft);
     licenseStore.set("allowReset", false);
     if (r.max_accounts) licenseStore.set("maxAccounts", r.max_accounts);
+    if (r.max_devices) licenseStore.set("maxDevices", r.max_devices);
+    if (r.active_devices !== undefined) licenseStore.set("activeDevices", r.active_devices);
     const operationsSuiteEnabled = r.analytics_enabled !== false || r.operations_enabled !== false;
     const teamLeaderEnabled = r.team_leader_enabled === true;
     licenseStore.set("analyticsEnabled",  operationsSuiteEnabled);
@@ -2016,6 +2018,8 @@ async function _checkLicenseImpl(bustCache) {
     licenseStore.set("teamLeaderEnabled", teamLeaderEnabled);
     const result = {
       valid: true, key, daysLeft, customerName, allowReset: false,
+      maxDevices: r.max_devices || licenseStore.get("maxDevices", 1),
+      activeDevices: r.active_devices || licenseStore.get("activeDevices", 1),
       analyticsEnabled:  operationsSuiteEnabled,
       operationsEnabled: operationsSuiteEnabled,
       dashboardEnabled:  r.dashboard_enabled === true || teamLeaderEnabled,
@@ -2052,6 +2056,8 @@ ipcMain.handle("submit-license", async (_, key) => {
     if (customerName) licenseStore.set("customerName", customerName);
     if (daysLeft !== null) licenseStore.set("daysLeft", daysLeft);
     if (r.max_accounts) licenseStore.set("maxAccounts", r.max_accounts);
+    if (r.max_devices) licenseStore.set("maxDevices", r.max_devices);
+    if (r.active_devices !== undefined) licenseStore.set("activeDevices", r.active_devices);
     const operationsSuiteEnabled = r.analytics_enabled !== false || r.operations_enabled !== false;
     const teamLeaderEnabled = r.team_leader_enabled === true;
     licenseStore.set("analyticsEnabled",  operationsSuiteEnabled);
@@ -2060,7 +2066,13 @@ ipcMain.handle("submit-license", async (_, key) => {
     licenseStore.set("teamLeaderEnabled", teamLeaderEnabled);
     _licenseCache = null;
     _licenseCacheAt = 0;
-    return { success: true, daysLeft, customerName };
+    return {
+      success: true,
+      daysLeft,
+      customerName,
+      maxDevices: r.max_devices || licenseStore.get("maxDevices", 1),
+      activeDevices: r.active_devices || licenseStore.get("activeDevices", 1),
+    };
   } catch {
     return { success: false, reason: "Cannot reach server. Check your internet connection." };
   }
@@ -3686,6 +3698,156 @@ function mappedMarketingSourcesForKeys(mappings, keys) {
   return [];
 }
 
+function marketingSourceAccountSignature(list) {
+  return (Array.isArray(list) ? list : [])
+    .map((source) => String(source && source.id || "").trim())
+    .filter(Boolean)
+    .sort()
+    .join("|");
+}
+
+function marketingDiagnosticFingerprint(value) {
+  const clean = String(value || "").trim();
+  if (!clean) return "";
+  return crypto.createHash("sha256").update(clean).digest("hex").slice(0, 12);
+}
+
+function marketingDiagnosticAccountIds(list) {
+  const ids = [];
+  (Array.isArray(list) ? list : []).forEach((item) => {
+    const id = String(item && (
+      item.id ||
+      item.accountId ||
+      item.account_id ||
+      item.sourceAccountId ||
+      item.source_account_id ||
+      item.adAccountId ||
+      item.ad_account_id ||
+      item.account ||
+      ""
+    ) || "").trim();
+    if (id && !ids.includes(id)) ids.push(id);
+  });
+  return ids;
+}
+
+function marketingDiagnosticMappingIds(mappings) {
+  const out = {};
+  if (!mappings || typeof mappings !== "object") return out;
+  Object.keys(mappings).forEach((key) => {
+    out[key] = marketingDiagnosticAccountIds(mappings[key]);
+  });
+  return out;
+}
+
+function marketingDiagnosticUrlFingerprints(rawUrl) {
+  const value = String(rawUrl || "").trim();
+  if (!value) return {};
+  try {
+    const parsed = new URL(value);
+    const fingerprints = {};
+    parsed.searchParams.forEach((paramValue, paramName) => {
+      const lower = String(paramName || "").toLowerCase();
+      if (/(^|_)(access|refresh)?token($|_)|authorization|code|state|secret|key/.test(lower)) {
+        fingerprints[paramName] = marketingDiagnosticFingerprint(paramValue);
+      }
+    });
+    return {
+      host: parsed.hostname,
+      path: parsed.pathname,
+      paramFingerprints: fingerprints,
+    };
+  } catch (_) {
+    return { malformed: true, fingerprint: marketingDiagnosticFingerprint(value) };
+  }
+}
+
+function marketingSensitiveDiagnosticKey(key) {
+  const lower = String(key || "").toLowerCase();
+  if (!lower) return false;
+  if (lower.includes("fingerprint") || lower.endsWith("present") || lower.endsWith("count")) return false;
+  return lower.includes("access_token") ||
+    lower.includes("refresh_token") ||
+    lower.includes("authorizationurl") ||
+    lower.includes("authorization_url") ||
+    lower === "token" ||
+    lower.endsWith("token") ||
+    lower.includes("secret") ||
+    lower.includes("apikey") ||
+    lower.includes("api_key");
+}
+
+function sanitizeMarketingDiagnostics(value, key = "") {
+  if (marketingSensitiveDiagnosticKey(key)) {
+    return { present: !!value, fingerprint: marketingDiagnosticFingerprint(value) };
+  }
+  if (Array.isArray(value)) return value.map((item) => sanitizeMarketingDiagnostics(item));
+  if (!value || typeof value !== "object") return value;
+  const out = {};
+  Object.keys(value).forEach((childKey) => {
+    out[childKey] = sanitizeMarketingDiagnostics(value[childKey], childKey);
+  });
+  return out;
+}
+
+function marketingStatusAccountIdSnapshot(status) {
+  return {
+    linked: marketingDiagnosticAccountIds(status && status.linkedAccounts),
+    mapped: marketingDiagnosticAccountIds(status && status.mappedAccounts),
+    available: marketingDiagnosticAccountIds(status && status.availableAccounts),
+    claimable: marketingDiagnosticAccountIds(status && status.claimableAccounts),
+    mappings: marketingDiagnosticMappingIds(status && status.mappings),
+  };
+}
+
+function marketingResultLogSummary(result) {
+  const summary = result && result.summary && typeof result.summary === "object" ? result.summary : null;
+  const diagnostics = result && result.diagnostics && typeof result.diagnostics === "object" ? result.diagnostics : {};
+  return {
+    ok: !!(result && result.ok),
+    status: result && result.status || "",
+    error: result && result.error || "",
+    linkedAccountCount: result && result.linkedAccountCount || 0,
+    mappedAccountCount: result && Array.isArray(result.mappedAccounts) ? result.mappedAccounts.length : 0,
+    availableAccountCount: result && Array.isArray(result.availableAccounts) ? result.availableAccounts.length : 0,
+    claimableAccountCount: result && Array.isArray(result.claimableAccounts) ? result.claimableAccounts.length : 0,
+    cacheStatus: result && result.cache && result.cache.status || "",
+    providerRequestCount: result && result.cache && result.cache.providerRequestCount || diagnostics.providerRequestCount || 0,
+    diagnostics: {
+      clientRequestId: diagnostics.clientRequestId || "",
+      accountConnected: diagnostics.accountConnected,
+      accountConnectionVerified: diagnostics.accountConnectionVerified,
+      authorizationPending: diagnostics.authorizationPending,
+      discoveredAccountCount: diagnostics.discoveredAccountCount,
+      sessionAccountCount: diagnostics.sessionAccountCount,
+      staleMappingPrunedCount: diagnostics.staleMappingPrunedCount,
+    },
+    summary: summary ? {
+      adSpend: summary.adSpend,
+      currency: summary.currency,
+      rowCount: summary.rowCount,
+      campaignCount: summary.campaignCount,
+    } : null,
+  };
+}
+
+function marketingDiagnosticTokenFingerprintFromDiagnostics(diagnostics) {
+  const source = diagnostics && typeof diagnostics === "object" ? diagnostics : {};
+  const candidates = [
+    source.tokenFingerprint,
+    source.accessTokenFingerprint,
+    source.access_token_fingerprint,
+    source.storedTokenFingerprint,
+    source.previousTokenFingerprint,
+    source.previousStoredTokenFingerprint,
+  ];
+  for (const candidate of candidates) {
+    const clean = String(candidate || "").trim();
+    if (clean) return clean;
+  }
+  return "";
+}
+
 function getCachedMarketingStatus(accountId, platform) {
   const accounts = dashboardStore.get("accounts", {});
   if (accountId === "__all__") {
@@ -3828,29 +3990,47 @@ function marketingRevisionValue(status) {
   }));
 }
 
+function hasMarketingConnectionPayload(status) {
+  return !!(status && (
+    status.summary ||
+    (Array.isArray(status.linkedAccounts) && status.linkedAccounts.length) ||
+    (Array.isArray(status.mappedAccounts) && status.mappedAccounts.length) ||
+    (Array.isArray(status.availableAccounts) && status.availableAccounts.length) ||
+    (status.mappings && typeof status.mappings === "object" && Object.keys(status.mappings).length)
+  ));
+}
+
+function isPendingMarketingStatus(status) {
+  const state = String(status && status.status || "").toLowerCase();
+  return !!(status && (state === "pending" || status.authorizationUrl || status.awaitingAuthorization));
+}
+
 function saveCachedMarketingStatus(accountId, platform, status) {
   if (!accountId || !status) return;
   const accounts = dashboardStore.get("accounts", {});
   if (!accounts[accountId]) accounts[accountId] = {};
   if (!accounts[accountId].marketing) accounts[accountId].marketing = {};
   const previous = accounts[accountId].marketing[platform] || null;
+  const preservePreviousPayload = hasMarketingConnectionPayload(previous) &&
+    isPendingMarketingStatus(status) &&
+    !hasMarketingConnectionPayload(status);
   const next = {
     platform,
-    status: status.status || "disconnected",
+    status: status.status || (isPendingMarketingStatus(status) ? "pending" : "disconnected"),
     statusCheckedAt: status.statusCheckedAt || previous && previous.statusCheckedAt || null,
-    lastSyncAt: status.lastSyncAt || null,
-    summary: status.summary || null,
-    sourceAccountName: status.sourceAccountName || "",
-    sourceAccountId: status.sourceAccountId || "",
-    linkedAccounts: Array.isArray(status.linkedAccounts) ? status.linkedAccounts : [],
-    mappedAccounts: Array.isArray(status.mappedAccounts) ? status.mappedAccounts : [],
-    availableAccounts: Array.isArray(status.availableAccounts) ? status.availableAccounts : [],
+    lastSyncAt: preservePreviousPayload ? previous.lastSyncAt || null : status.lastSyncAt || null,
+    summary: preservePreviousPayload ? previous.summary || null : status.summary || null,
+    sourceAccountName: status.sourceAccountName || preservePreviousPayload && previous.sourceAccountName || "",
+    sourceAccountId: status.sourceAccountId || preservePreviousPayload && previous.sourceAccountId || "",
+    linkedAccounts: preservePreviousPayload ? previous.linkedAccounts || [] : Array.isArray(status.linkedAccounts) ? status.linkedAccounts : [],
+    mappedAccounts: preservePreviousPayload ? previous.mappedAccounts || [] : Array.isArray(status.mappedAccounts) ? status.mappedAccounts : [],
+    availableAccounts: preservePreviousPayload ? previous.availableAccounts || [] : Array.isArray(status.availableAccounts) ? status.availableAccounts : [],
     diagnostics: status.diagnostics || null,
     reconnectRequired: !!status.reconnectRequired,
     error: status.error || "",
     limit: status.limit || null,
     limits: status.limits || null,
-    mappings: status.mappings || {},
+    mappings: preservePreviousPayload ? previous.mappings || {} : status.mappings || {},
     cache: status.cache || null,
     stale: !!status.stale,
   };
@@ -3861,7 +4041,7 @@ function saveCachedMarketingStatus(accountId, platform, status) {
   return changed;
 }
 
-function saveCachedAllMarketingMappingStatus(platform, result) {
+function saveCachedAllMarketingMappingStatus(platform, result, options = {}) {
   if (!result || !result.ok) return;
   saveCachedMarketingStatus("__all__", platform, result);
   const mappings = result.mappings && typeof result.mappings === "object" ? result.mappings : {};
@@ -3873,6 +4053,9 @@ function saveCachedAllMarketingMappingStatus(platform, result) {
       setting.dashboardAccountKey,
       ...(Array.isArray(setting.dashboardAccountKeys) ? setting.dashboardAccountKeys : []),
     ]);
+    const previous = getCachedMarketingStatus(setting.dashboardAccountId, platform);
+    const sameSources = marketingSourceAccountSignature(previous && previous.mappedAccounts) === marketingSourceAccountSignature(sourceAccounts);
+    const preserveSummary = !!options.preserveExistingSummary && sameSources && sourceAccounts.length > 0;
     saveCachedMarketingStatus(setting.dashboardAccountId, platform, {
       platform,
       status: sourceAccounts.length ? "connected" : "disconnected",
@@ -3881,8 +4064,9 @@ function saveCachedAllMarketingMappingStatus(platform, result) {
       availableAccounts: sourceAccounts.length ? [] : knownAccounts,
       mappings,
       limit: result.limits && result.limits[setting.dashboardAccountId] || null,
-      summary: null,
-      lastSyncAt: null,
+      summary: preserveSummary ? previous && previous.summary || null : null,
+      lastSyncAt: preserveSummary ? previous && previous.lastSyncAt || null : null,
+      statusCheckedAt: result.statusCheckedAt || null,
       cache: result.cache || null,
     });
   });
@@ -3897,7 +4081,13 @@ async function callMarketingBackend(action, accountId, platform, range) {
   const licenseKey = licenseStore.get("licenseKey", "");
   const account = getStoredAccountById(dashboardAccountId);
   const dashboardAccountKey = marketingStableAccountKey(dashboardAccountId);
+  const clientRequestId = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString("hex");
+  const previousStatus = getCachedMarketingStatus(dashboardAccountId, platform);
+  const previousDiagnostics = previousStatus && previousStatus.diagnostics || {};
+  const connectSnapshotIds = marketingStatusAccountIdSnapshot(previousStatus);
+  const previousTokenFingerprint = marketingDiagnosticTokenFingerprintFromDiagnostics(previousDiagnostics);
   log.info("[Marketing][Main] request", {
+    clientRequestId,
     action,
     mode: range && range.mode ? range.mode : "",
     platform,
@@ -3913,7 +4103,21 @@ async function callMarketingBackend(action, accountId, platform, range) {
     dateFrom: range && range.dateFrom ? range.dateFrom : "",
     dateTo: range && range.dateTo ? range.dateTo : "",
   });
+  if (action === "connect" || action === "status") {
+    log.info("[Marketing][Diagnostics] before request", {
+      clientRequestId,
+      action,
+      mode: range && range.mode ? range.mode : "",
+      platform,
+      dashboardAccountId,
+      previousTokenFingerprint,
+      connectSnapshotIds,
+      mappedIds: connectSnapshotIds.mappings,
+    });
+  }
   const result = await supabaseFunctionRequest("windsor-marketing", {
+    clientRequestId,
+    diagnosticsRequested: action === "connect" || action === "status",
     action,
     mode: range && range.mode ? range.mode : undefined,
     platform,
@@ -3938,17 +4142,41 @@ async function callMarketingBackend(action, accountId, platform, range) {
       accountIdents: _buildAccountIdents(),
     },
   });
+  if (result && result.diagnostics) {
+    result.diagnostics = sanitizeMarketingDiagnostics(result.diagnostics);
+  }
+  const responseSnapshotIds = marketingStatusAccountIdSnapshot(result);
+  const authorizationUrlDiagnostics = marketingDiagnosticUrlFingerprints(result && result.authorizationUrl);
+  if (result && typeof result === "object") {
+    result.diagnostics = {
+      ...(result.diagnostics && typeof result.diagnostics === "object" ? result.diagnostics : {}),
+      clientRequestId,
+      previousStoredTokenFingerprint: previousTokenFingerprint,
+      generatedAuthorizationUrl: authorizationUrlDiagnostics,
+      connectSnapshotIdsBeforeAuth: connectSnapshotIds,
+      responseAccountIds: responseSnapshotIds,
+      mappedIds: responseSnapshotIds.mappings,
+    };
+  }
+  if (action === "connect" || action === "status") {
+    log.info("[Marketing][Diagnostics] after response", {
+      clientRequestId,
+      action,
+      mode: range && range.mode ? range.mode : "",
+      platform,
+      dashboardAccountId,
+      previousTokenFingerprint,
+      generatedAuthorizationUrl: authorizationUrlDiagnostics,
+      connectSnapshotIdsBeforeAuth: connectSnapshotIds,
+      responseAccountIds: responseSnapshotIds,
+      mappedIds: responseSnapshotIds.mappings,
+      backendDiagnostics: marketingResultLogSummary(result).diagnostics,
+    });
+  }
   log.info("[Marketing][Main] response", {
+    clientRequestId,
     action,
-    ok: !!(result && result.ok),
-    status: result && result.status || "",
-    error: result && result.error || "",
-    linkedAccountCount: result && result.linkedAccountCount || 0,
-    mappedAccountCount: result && Array.isArray(result.mappedAccounts) ? result.mappedAccounts.length : 0,
-    availableAccountCount: result && Array.isArray(result.availableAccounts) ? result.availableAccounts.length : 0,
-    claimableAccountCount: result && Array.isArray(result.claimableAccounts) ? result.claimableAccounts.length : 0,
-    diagnostics: result && result.diagnostics || null,
-    summary: result && result.summary || null,
+    ...marketingResultLogSummary(result),
   });
   return result;
 }
@@ -3974,7 +4202,11 @@ ipcMain.handle("get-marketing-status", async (_, accountId, platform = "tiktok",
   try {
     const result = await callMarketingBackend("status", dashboardAccountId, platform, { mode });
     if (result && result.ok) {
-      saveCachedMarketingStatus(dashboardAccountId, platform, result);
+      if (dashboardAccountId === "__all__") {
+        saveCachedAllMarketingMappingStatus(platform, result, { preserveExistingSummary: true });
+      } else {
+        saveCachedMarketingStatus(dashboardAccountId, platform, result);
+      }
     } else if (result && result.reconnectRequired) {
       return result;
     } else {

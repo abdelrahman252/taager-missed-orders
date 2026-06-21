@@ -309,6 +309,7 @@
       'marketing.loadingClaim': 'Adding existing ad account...',
       'marketing.loadingRelease': 'Disconnecting ad account...',
       'marketing.sourceAccountIdRequired': 'Paste the ad account ID first.',
+      'marketing.sourceAccountNotFound': 'Ad account not found. Check the ID, or connect the right account first.',
       'marketing.fullRefreshConfirm': 'Force reload all ad data for the selected dates? This fetches fresh data directly from the ad platform and overwrites any cached values.',
       'marketing.fullRefresh': 'Refresh all selected dates',
       'marketing.addAccount': 'Add account',

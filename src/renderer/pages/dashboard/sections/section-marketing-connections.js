@@ -44,6 +44,9 @@
     if (clean === 'MARKETING_PROVIDER_CAPACITY_FULL') {
       return tr('marketing.providerCapacityFull', 'Connection capacity is currently full. Please contact support to increase your connection limits.');
     }
+    if (clean === 'SOURCE_ACCOUNT_NOT_FOUND') {
+      return tr('marketing.sourceAccountNotFound', 'Ad account not found. Check the ID, or connect the right account first.');
+    }
     if (clean === 'WINDSOR_RECONNECT_REQUIRED') {
       return tr('marketing.reconnectRequiredBody', label + ' authorization has expired or was revoked. Reconnect ' + label + ', then sync again.').replace(/\{platform\}/g, label);
     }
@@ -87,6 +90,32 @@
     });
   }
 
+  function convertSpendForDisplay(amount, fromCurrency, toCurrency) {
+    var from = String(fromCurrency || toCurrency || 'USD').toUpperCase();
+    var to = String(toCurrency || from || 'USD').toUpperCase();
+    var value = Number(amount || 0);
+    if (!Number.isFinite(value) || from === to) return value;
+    if (window.TaagerCurrency && typeof window.TaagerCurrency.convert === 'function') {
+      return window.TaagerCurrency.convert(value, from, to);
+    }
+    var rates = { USD: 1, SAR: 3.75, EGP: 52, AED: 3.6725, IQD: 1310, OMR: 0.385 };
+    if (!rates[from] || !rates[to]) return value;
+    return (value / rates[from]) * rates[to];
+  }
+
+  function currentGlobalEgpRate(fallback) {
+    var rate = 0;
+    if (window.TaagerCurrency && typeof window.TaagerCurrency.rates === 'function') {
+      rate = Number((window.TaagerCurrency.rates() || {}).EGP);
+    }
+    if (!(rate > 0) && window.TaagerCurrency && typeof window.TaagerCurrency.snapshot === 'function') {
+      var snap = window.TaagerCurrency.snapshot() || {};
+      rate = Number(snap.rates && snap.rates.EGP);
+    }
+    if (rate > 0) return rate;
+    return Number(fallback || 0) || 0;
+  }
+
   function spendDisplay(summary) {
     if (!summary) {
       return {
@@ -96,19 +125,26 @@
         chips: ''
       };
     }
-    var targetCurrency = String(summary.currency || '').toUpperCase();
+    var targetCurrency = String(summary.currency || window.dashboardActiveCurrency || '').toUpperCase();
     var sources = Array.isArray(summary.sourceBreakdown) ? summary.sourceBreakdown : [];
     var totals = {};
+    var convertedTotal = 0;
+    var hasSourceTotals = false;
     sources.forEach(function (source) {
       var currency = String(source && source.currency || '').toUpperCase();
       var rawSpend = Number(source && source.rawSpend);
       if (!currency || !Number.isFinite(rawSpend)) return;
       totals[currency] = (totals[currency] || 0) + rawSpend;
+      if (targetCurrency) {
+        convertedTotal += convertSpendForDisplay(rawSpend, currency, targetCurrency);
+        hasSourceTotals = true;
+      }
     });
     var currencies = Object.keys(totals).filter(function (currency) {
       return Number.isFinite(totals[currency]);
     });
-    var convertedText = formatNumber(summary.adSpend, 2) + (targetCurrency ? ' ' + targetCurrency : '');
+    var displaySpend = hasSourceTotals ? Number(convertedTotal.toFixed(2)) : Number(summary.adSpend || 0);
+    var convertedText = formatNumber(displaySpend, 2) + (targetCurrency ? ' ' + targetCurrency : '');
     if (currencies.length === 1) {
       var sourceCurrency = currencies[0];
       var rawText = formatNumber(totals[sourceCurrency], 2) + ' ' + sourceCurrency;
@@ -270,6 +306,11 @@
     var mappingDisclosure = {};
     var claimReleaseDisclosure = {};
     var pendingMappingOpen = {};
+    var authorizationInFlight = {};
+    var authorizationCanceled = {};
+    var authorizationSeq = {};
+    var authorizationSnapshot = {};
+    var pendingRenderFrame = 0;
     var GUIDE_STORAGE_KEY = 'taager_marketing_guide_dismissed_v1';
     var guideExpanded = true;
     var AUTO_REFRESH_DELAYS_MS = [3000, 5000, 10000, 15000, 20000];
@@ -285,15 +326,36 @@
         : { status: 'disconnected', summary: null, linkedAccounts: [], mappedAccounts: [], availableAccounts: [], mappings: {}, loading: false, error: '' };
     }
 
+    function compactLogData(data) {
+      if (!data || typeof data !== 'object') return data || {};
+      return {
+        accountId: data.accountId || data.dashboardAccountId || '',
+        platform: data.platform || '',
+        status: data.status || '',
+        ok: data.ok,
+        error: data.error || '',
+        loading: data.loading,
+        linkedAccountCount: data.linkedAccountCount || (Array.isArray(data.linkedAccounts) ? data.linkedAccounts.length : undefined),
+        mappedAccountCount: Array.isArray(data.mappedAccounts) ? data.mappedAccounts.length : undefined,
+        availableAccountCount: Array.isArray(data.availableAccounts) ? data.availableAccounts.length : undefined,
+        claimableAccountCount: Array.isArray(data.claimableAccounts) ? data.claimableAccounts.length : undefined,
+        selectedCount: data.selectedCount,
+        accountCount: data.accountCount,
+        sourceAccountId: data.sourceAccountId || '',
+        reason: data.reason || ''
+      };
+    }
+
     function log(event, data) {
+      var compact = compactLogData(data);
       var entry = {
         at: new Date().toLocaleTimeString("en-US"),
         event: event,
-        data: data || {}
+        data: compact || {}
       };
       debugEvents.unshift(entry);
       debugEvents = debugEvents.slice(0, 8);
-      console.log('[Marketing][UI] ' + event, data || {});
+      console.log('[Marketing][UI] ' + event, compact || {});
     }
 
     function mappedAccounts(current, dashboardAccount) {
@@ -565,7 +627,7 @@
       '</section>' + claimReleaseMarkup(current, platform, false);
     }
 
-    function diagnosticMarkup(current) {
+    function diagnosticMarkup(current, platform) {
       var diagnostics = current.diagnostics || {};
       var events = debugEvents.map(function (event) {
         return '<div><span>' + escapeHtml(event.at) + '</span> ' + escapeHtml(event.event) + '</div>';
@@ -620,6 +682,7 @@
         ? tr('marketing.addAccount', 'Add account')
         : tr('marketing.connectNewAccount', 'Connect new account');
       var canConnectNow = canConnect;
+      var canCancelAuthorization = current.status === 'pending' || awaitingAuthorizationPlatform === platform || authorizationInFlight[platform];
       var mappingContent = '';
 
       if (!allMode && currentMapping.length) {
@@ -681,7 +744,7 @@
             '<div><span>' + escapeHtml(tr('marketing.clicks', 'Clicks')) + '</span><strong>' + (summary ? formatNumber(summary.clicks, 0) : '--') + '</strong></div>' +
           '</div>' +
           mappingContent +
-          diagnosticMarkup(current) +
+          diagnosticMarkup(current, platform) +
           '<div class="marketing-last-sync"><span>' + escapeHtml(tr('marketing.lastSync', 'Last sync')) + '</span><strong>' + escapeHtml(formatDate(current.lastSyncAt)) + '</strong></div>' +
           '<div class="marketing-actions">' +
             '<button class="marketing-primary" data-marketing-connect="' + escapeHtml(platform) + '" type="button"' + (canConnectNow ? '' : ' disabled') + '>' + escapeHtml(connectLabel) + '</button>' +
@@ -691,13 +754,39 @@
               ? '<button class="marketing-secondary" data-marketing-full-sync-all="' + escapeHtml(platform) + '" type="button"' + (canSyncAll ? '' : ' disabled') + '>' + escapeHtml(tr('marketing.fullRefresh', 'Refresh all selected dates')) + '</button>'
               : '<button class="marketing-secondary" data-marketing-full-sync="' + escapeHtml(platform) + '" type="button"' + (canSync ? '' : ' disabled') + '>' + escapeHtml(tr('marketing.fullRefresh', 'Refresh all selected dates')) + '</button>') +
             '<button class="marketing-secondary" data-marketing-refresh="' + escapeHtml(platform) + '" type="button"' + (shownAccounts.length && !current.loading ? '' : ' disabled') + '>' + escapeHtml(tr('marketing.refreshStatus', 'Refresh Status')) + '</button>' +
+            (canCancelAuthorization
+              ? '<button class="marketing-secondary is-danger" data-marketing-cancel-auth="' + escapeHtml(platform) + '" type="button">' + escapeHtml(tr('marketing.cancelAuthorization', 'Cancel Authorization')) + '</button>'
+              : '') +
           '</div>' +
           (allMode ? '<p class="marketing-sync-note">' + escapeHtml(tr('marketing.syncSingleOnly', 'Sync all mapped accounts here, then select any account to view the same saved sync result without syncing again.')) + '</p>' : '') +
           '<p class="marketing-sync-note">' + escapeHtml(tr('marketing.windsorCacheNote', 'After renaming ' + label + ' campaigns or adding SKUs, synced reports may remain cached for up to 6 hours. For historical changes, refresh campaign data, then sync again.').replace(/\{platform\}/g, label)) + '</p>' +
         '</article>';
     }
 
+    function safePlatformCard(config) {
+      try {
+        return platformCard(config);
+      } catch (error) {
+        var label = platformLabel(config && config.id);
+        console.error('[Marketing][UI] platform render failed', config && config.id, error);
+        return '<article class="marketing-platform-card" data-marketing-platform="' + escapeHtml(config && config.id || '') + '">' +
+          '<div class="marketing-message is-error">' +
+            escapeHtml(tr('marketing.renderFailed', 'Could not render {platform} marketing status. Refresh Status or reconnect if this continues.').replace(/\{platform\}/g, label)) +
+          '</div>' +
+          '<div class="marketing-platform-head">' +
+            '<div class="marketing-platform-brand"><span class="marketing-platform-mark">' + escapeHtml(config && config.mark || '!') + '</span>' +
+            '<div><strong>' + escapeHtml(label) + '</strong><small>' + escapeHtml(tr('marketing.renderFailedSmall', 'Status display failed')) + '</small></div></div>' +
+            '<span class="marketing-status is-disconnected">' + escapeHtml(tr('marketing.needsRefresh', 'Needs refresh')) + '</span>' +
+          '</div>' +
+          '<div class="marketing-actions">' +
+            '<button class="marketing-secondary" data-marketing-refresh="' + escapeHtml(config && config.id || 'tiktok') + '" type="button">' + escapeHtml(tr('marketing.refreshStatus', 'Refresh Status')) + '</button>' +
+          '</div>' +
+        '</article>';
+      }
+    }
+
     function render() {
+      pendingRenderFrame = 0;
       mount.innerHTML =
         '<div class="marketing-section">' +
           '<header class="marketing-hero">' +
@@ -710,10 +799,18 @@
           '</header>' +
           marketingGuideMarkup() +
           '<div class="marketing-platform-grid">' +
-            LIVE_PLATFORMS.map(platformCard).join('') +
+            LIVE_PLATFORMS.map(safePlatformCard).join('') +
           '</div>' +
         '</div>';
       bind();
+    }
+
+    function requestRender() {
+      if (pendingRenderFrame) return;
+      var raf = window.requestAnimationFrame || function (fn) { return setTimeout(fn, 16); };
+      pendingRenderFrame = raf(function () {
+        render();
+      });
     }
 
     function setBusy(label, platform) {
@@ -773,6 +870,38 @@
       );
     }
 
+    function discoveredAccountCount(result) {
+      return Number(
+        result && result.diagnostics && (
+          result.diagnostics.discoveredAccountCount ||
+          result.diagnostics.sessionAccountCount
+        ) || 0
+      );
+    }
+
+    function requiresSessionAddedAccount(platform) {
+      var snapshot = authorizationSnapshot[platform];
+      return !!(
+        snapshot &&
+        !snapshot.reconnectRequired &&
+        hasUsableConnection(snapshot)
+      );
+    }
+
+    function usableConnectionForFlow(platform, result) {
+      if (!hasUsableConnection(result)) return false;
+      if (requiresSessionAddedAccount(platform) && !discoveredAccountCount(result)) {
+        log('connect:old_connection_ignored', {
+          platform: platform,
+          linkedAccountCount: result && result.linkedAccountCount || 0,
+          discoveredAccountCount: discoveredAccountCount(result),
+          lookup: result && result.diagnostics && result.diagnostics.optionsShape && result.diagnostics.optionsShape.lookup || ''
+        });
+        return false;
+      }
+      return true;
+    }
+
     function stopAutoRefresh(reason, platform, result) {
       if (!pollTimer && !pollPlatform) return;
       if (pollTimer) clearTimeout(pollTimer);
@@ -786,6 +915,33 @@
       pollPlatform = '';
       pollStartedAt = 0;
       pollAttempt = 0;
+    }
+
+    function cancelAuthorization(platform) {
+      platform = platform || 'tiktok';
+      log('connect:authorization_cancelled', { accountId: selectedAccountId, platform: platform });
+      authorizationCanceled[platform] = true;
+      authorizationInFlight[platform] = false;
+      authorizationSeq[platform] = Number(authorizationSeq[platform] || 0) + 1;
+      if (awaitingAuthorizationPlatform === platform) awaitingAuthorizationPlatform = '';
+      stopAutoRefresh('cancelled', platform);
+      busyLabel = '';
+      authorizationSnapshot[platform] = null;
+      if (store && typeof store.cancelAuthorization === 'function') {
+        store.cancelAuthorization(selectedAccountId, platform);
+      } else if (store && typeof store.set === 'function') {
+        var current = state(platform);
+        var hasPayload = current.summary ||
+          (Array.isArray(current.linkedAccounts) && current.linkedAccounts.length) ||
+          (Array.isArray(current.mappedAccounts) && current.mappedAccounts.length) ||
+          (current.mappings && Object.keys(current.mappings).length);
+        store.set(Object.assign({}, current, {
+          status: hasPayload ? 'connected' : 'disconnected',
+          loading: false,
+          error: ''
+        }), selectedAccountId, platform);
+      }
+      render();
     }
 
     function loadStatus(platform, options) {
@@ -802,13 +958,18 @@
         background: !!options.background
       }).then(function (result) {
         busyLabel = '';
+        if (options.autoRefresh && authorizationCanceled[platform]) {
+          log('connect:auto_refresh_ignored_after_cancel', { platform: platform });
+          render();
+          return state(platform);
+        }
         log('refresh_status:finished', {
           platform: platform,
           status: result && result.status,
           error: result && result.error || '',
           linkedAccountCount: result && result.linkedAccountCount || 0
         });
-        var usableConnection = hasUsableConnection(result);
+        var usableConnection = usableConnectionForFlow(platform, result);
         if (result && (result.reconnectRequired || result.error === 'WINDSOR_RECONNECT_REQUIRED')) {
           if (!toastedPlatforms[platform]) {
             toastedPlatforms[platform] = true;
@@ -823,6 +984,7 @@
         }
         if (awaitingAuthorizationPlatform === platform && (usableConnection || result && (result.error || result.reconnectRequired))) {
           awaitingAuthorizationPlatform = '';
+          authorizationSnapshot[platform] = null;
         }
         if (options.autoRefresh && pollPlatform === platform) {
           if (usableConnection) {
@@ -878,7 +1040,7 @@
       if (!platform) return;
       log('connect:focus_refresh', { platform: platform });
       loadStatus(platform, { force: true }).then(function (result) {
-        if (awaitingAuthorizationPlatform === platform && !hasUsableConnection(result) && !(result && (result.error || result.reconnectRequired))) {
+        if (awaitingAuthorizationPlatform === platform && !usableConnectionForFlow(platform, result) && !(result && (result.error || result.reconnectRequired))) {
           startAutoRefresh(platform);
         }
       });
@@ -889,6 +1051,23 @@
         var currency = row.querySelector('[data-source-currency="' + CSS.escape(input.value) + '"]');
         return { id: input.value, currency: currency ? currency.value : '' };
       }) : [];
+    }
+
+    function mergeMappingSources() {
+      var seen = {};
+      var merged = [];
+      Array.prototype.forEach.call(arguments, function (list) {
+        (Array.isArray(list) ? list : []).forEach(function (source) {
+          var id = String(source && source.id || '');
+          if (!id || seen[id]) return;
+          seen[id] = true;
+          merged.push({
+            id: id,
+            currency: String(source.currency || '').toUpperCase()
+          });
+        });
+      });
+      return merged;
     }
 
     function mappingRowForAccount(accountId, platform) {
@@ -904,7 +1083,7 @@
 
     function platformOfButton(button) {
       var card = button && button.closest ? button.closest('[data-marketing-platform]') : null;
-      return card ? (card.getAttribute('data-marketing-platform') || 'tiktok') : (button && (button.getAttribute('data-marketing-save-all') || button.getAttribute('data-marketing-release') || button.getAttribute('data-marketing-claim') || button.getAttribute('data-marketing-connect') || button.getAttribute('data-marketing-sync') || button.getAttribute('data-marketing-sync-all') || button.getAttribute('data-marketing-full-sync') || button.getAttribute('data-marketing-full-sync-all') || button.getAttribute('data-marketing-refresh')) || 'tiktok');
+      return card ? (card.getAttribute('data-marketing-platform') || 'tiktok') : (button && (button.getAttribute('data-marketing-save-all') || button.getAttribute('data-marketing-release') || button.getAttribute('data-marketing-claim') || button.getAttribute('data-marketing-connect') || button.getAttribute('data-marketing-cancel-auth') || button.getAttribute('data-marketing-sync') || button.getAttribute('data-marketing-sync-all') || button.getAttribute('data-marketing-full-sync') || button.getAttribute('data-marketing-full-sync-all') || button.getAttribute('data-marketing-refresh')) || 'tiktok');
     }
 
     function saveMapping(button) {
@@ -952,10 +1131,14 @@
       var card = mount.querySelector('[data-marketing-platform="' + CSS.escape(platform) + '"]');
       var rows = Array.prototype.slice.call((card || mount).querySelectorAll('[data-marketing-map-row]'));
       var payloads = rows.map(function (row) {
+        var dashboardAccountId = row.getAttribute('data-marketing-map-row') || '';
+        var dashboardAccount = shownAccounts.concat(taagerAccounts).filter(function (account) {
+          return account.id === dashboardAccountId;
+        })[0] || dashboardAccountId;
         return {
-          dashboardAccountId: row.getAttribute('data-marketing-map-row') || '',
+          dashboardAccountId: dashboardAccountId,
           dashboardAccountKey: row.getAttribute('data-marketing-map-key') || '',
-          sourceAccounts: sourcesForRow(row)
+          sourceAccounts: mergeMappingSources(mappedAccounts(state(platform), dashboardAccount), sourcesForRow(row))
         };
       }).filter(function (mapping) { return !!mapping.dashboardAccountId; });
       if (missingCurrency(payloads)) {
@@ -990,6 +1173,7 @@
       var guideDismissButton = mount.querySelector('[data-marketing-guide-dismiss]');
       var guideOpenButton = mount.querySelector('[data-marketing-guide-open]');
       var connectButtons = mount.querySelectorAll('[data-marketing-connect]');
+      var cancelAuthorizationButtons = mount.querySelectorAll('[data-marketing-cancel-auth]');
       var syncButtons = mount.querySelectorAll('[data-marketing-sync], [data-marketing-full-sync]');
       var syncAllButtons = mount.querySelectorAll('[data-marketing-sync-all], [data-marketing-full-sync-all]');
       var refreshButtons = mount.querySelectorAll('[data-marketing-refresh]');
@@ -1031,12 +1215,23 @@
       Array.prototype.forEach.call(connectButtons, function (connectButton) {
         connectButton.addEventListener('click', function () {
           var platform = platformOfButton(connectButton);
+          var requestSeq = Number(authorizationSeq[platform] || 0) + 1;
+          authorizationSeq[platform] = requestSeq;
+          authorizationCanceled[platform] = false;
+          authorizationInFlight[platform] = true;
+          authorizationSnapshot[platform] = Object.assign({}, state(platform));
+          if (store && typeof store.beginAuthorization === 'function') store.beginAuthorization(selectedAccountId, platform);
           log('button:connect', { accountId: selectedAccountId, platform: platform });
           connectButton.disabled = true;
           connectButton.textContent = tr('marketing.loadingConnect', 'Connecting securely...');
           setBusy(tr('marketing.loadingConnect', 'Connecting securely...'), platform);
           window.api.connectMarketing(selectedAccountId, platform).then(function (result) {
             busyLabel = '';
+            authorizationInFlight[platform] = false;
+            if (authorizationCanceled[platform] || authorizationSeq[platform] !== requestSeq) {
+              log('connect:ignored_after_cancel', { platform: platform, status: result && result.status || '' });
+              return;
+            }
             log('connect:finished', result || {});
             if (result && result.ok) {
               pendingMappingOpen[platform] = true;
@@ -1048,9 +1243,11 @@
                 awaitingAuthorizationPlatform = platform;
                 startAutoRefresh(platform);
               } else {
+                authorizationSnapshot[platform] = null;
                 refreshAfterMutation(platform, selectedAccountId, result);
               }
             } else {
+              authorizationSnapshot[platform] = null;
               store.set(Object.assign({}, state(platform), {
                 loading: false,
                 error: result && result.error || tr('marketing.requestFailed', 'Marketing connection request failed.')
@@ -1062,6 +1259,12 @@
             }
           }).catch(function (error) {
             busyLabel = '';
+            authorizationInFlight[platform] = false;
+            if (authorizationCanceled[platform] || authorizationSeq[platform] !== requestSeq) {
+              log('connect:error_ignored_after_cancel', { platform: platform, error: error && error.message || String(error) });
+              return;
+            }
+            authorizationSnapshot[platform] = null;
             log('connect:failed', { platform: platform, error: error && error.message || String(error) });
             store.set(Object.assign({}, state(platform), {
               loading: false,
@@ -1069,6 +1272,12 @@
             }), selectedAccountId, platform);
             render();
           });
+        });
+      });
+
+      Array.prototype.forEach.call(cancelAuthorizationButtons, function (button) {
+        button.addEventListener('click', function () {
+          cancelAuthorization(platformOfButton(button));
         });
       });
 
@@ -1278,7 +1487,7 @@
             dateFrom: period.from || period.dateFrom || period.start || '',
             dateTo: period.to || period.dateTo || period.end || '',
             targetCurrency: roi.currency || window.dashboardActiveCurrency || 'SAR',
-            egpRate: roi.egpRate || 52,
+            egpRate: currentGlobalEgpRate(roi.egpRate),
             sourceAccounts: sourceAccounts,
             mode: fullRefresh ? 'full' : 'incremental'
           };
@@ -1314,7 +1523,7 @@
             var nativeCurrency = account.taagerCountry && window.TaagerCountry && window.TaagerCountry.currency
               ? window.TaagerCountry.currency(account.taagerCountry)
               : (roi.currency || window.dashboardActiveCurrency || 'SAR');
-            return { dashboardAccountId: account.id, dashboardAccountKey: account.key, dashboardAccountKeys: account.keys || [account.key], currency: roi.currency || nativeCurrency, egpRate: roi.egpRate || 52 };
+            return { dashboardAccountId: account.id, dashboardAccountKey: account.key, dashboardAccountKeys: account.keys || [account.key], currency: roi.currency || nativeCurrency, egpRate: currentGlobalEgpRate(roi.egpRate) };
           });
           var mappings = taagerAccounts.map(function (account) {
             return {
@@ -1367,7 +1576,7 @@
       if (ctx && ctx.sectionId && ctx.sectionId !== 'marketing') return;
       if (String(status.accountId) !== String(selectedAccountId)) return;
       log('store:notified_update', { platform: status.platform, loading: status.loading });
-      render();
+      requestRender();
     };
     if (store && typeof store.subscribe === 'function') {
       store.subscribe(listener);
@@ -1383,6 +1592,11 @@
       window.removeEventListener('focus', refreshAfterAuthorizationFocus);
       window.removeEventListener('taager-lang-change', render);
       stopAutoRefresh('cleanup');
+      if (pendingRenderFrame) {
+        var cancel = window.cancelAnimationFrame || clearTimeout;
+        cancel(pendingRenderFrame);
+        pendingRenderFrame = 0;
+      }
       if (store && typeof store.unsubscribe === 'function') {
         store.unsubscribe(listener);
       }

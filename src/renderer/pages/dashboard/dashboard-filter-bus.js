@@ -600,6 +600,87 @@
     return merged;
   }
 
+  function hasMarketingConnectionPayload(value) {
+    return !!(
+      value &&
+      (
+        value.summary ||
+        (Array.isArray(value.linkedAccounts) && value.linkedAccounts.length) ||
+        (Array.isArray(value.mappedAccounts) && value.mappedAccounts.length) ||
+        (Array.isArray(value.availableAccounts) && value.availableAccounts.length) ||
+        (Array.isArray(value.selectedSourceAccounts) && value.selectedSourceAccounts.length) ||
+        (value.mappings && typeof value.mappings === 'object' && Object.keys(value.mappings).length)
+      )
+    );
+  }
+
+  function hasMarketingAssignedPayload(value) {
+    return !!(
+      value &&
+      (
+        value.summary ||
+        (Array.isArray(value.linkedAccounts) && value.linkedAccounts.length) ||
+        (Array.isArray(value.mappedAccounts) && value.mappedAccounts.length) ||
+        (Array.isArray(value.selectedSourceAccounts) && value.selectedSourceAccounts.length) ||
+        (value.mappings && typeof value.mappings === 'object' && Object.keys(value.mappings).some(function (key) {
+          return Array.isArray(value.mappings[key]) && value.mappings[key].length;
+        }))
+      )
+    );
+  }
+
+  function marketingAuthorizationCancelKey(accountId, platform) {
+    return 'taager_marketing_authorization_cancelled_' + marketingAccountId(accountId) + '_' + normalizeMarketingPlatform(platform);
+  }
+
+  function markMarketingAuthorizationCancelled(accountId, platform) {
+    try {
+      localStorage.setItem(marketingAuthorizationCancelKey(accountId, platform), String(Date.now()));
+    } catch (e) {}
+  }
+
+  function clearMarketingAuthorizationCancelled(accountId, platform) {
+    try {
+      localStorage.removeItem(marketingAuthorizationCancelKey(accountId, platform));
+    } catch (e) {}
+  }
+
+  function isMarketingAuthorizationCancelled(accountId, platform) {
+    try {
+      return !!localStorage.getItem(marketingAuthorizationCancelKey(accountId, platform));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function isPendingMarketingUpdate(value) {
+    var status = String(value && value.status || '').toLowerCase();
+    return !!(value && (status === 'pending' || value.authorizationUrl || value.awaitingAuthorization));
+  }
+
+  function isPendingOnlyMarketingAuthorization(value) {
+    return isPendingMarketingUpdate(value) && !hasMarketingAssignedPayload(value);
+  }
+
+  function mergePendingMarketingUpdate(previous, value) {
+    if (!previous || !hasMarketingConnectionPayload(previous) || !isPendingMarketingUpdate(value) || hasMarketingConnectionPayload(value)) {
+      return value;
+    }
+    return Object.assign({}, previous, value, {
+      status: value.status || 'pending',
+      summary: previous.summary || null,
+      lastSyncAt: previous.lastSyncAt || null,
+      sourceAccountName: value.sourceAccountName || previous.sourceAccountName || '',
+      sourceAccountId: value.sourceAccountId || previous.sourceAccountId || '',
+      linkedAccounts: previous.linkedAccounts || [],
+      mappedAccounts: previous.mappedAccounts || [],
+      availableAccounts: previous.availableAccounts || [],
+      mappings: previous.mappings || {},
+      selectedSourceAccounts: previous.selectedSourceAccounts || [],
+      selectedSourceAccountIds: previous.selectedSourceAccountIds || []
+    });
+  }
+
   function latestMarketingDate(a, b) {
     if (!a) return b || null;
     if (!b) return a || null;
@@ -617,6 +698,7 @@
     platform = normalizeMarketingPlatform(platform || value.platform);
     var summary = value.summary && typeof value.summary === 'object' ? value.summary : null;
     var adSpend = summary ? Number(summary.adSpend) : NaN;
+    var purchases = summary ? Number(summary.purchases) : NaN;
     var linkedAccounts = Array.isArray(value.linkedAccounts) ? value.linkedAccounts.map(function (account) {
       return { id: String(account.id || ''), name: String(account.name || ''), currency: String(account.currency || '').toUpperCase() };
     }).filter(function (account) { return !!account.id; }) : [];
@@ -640,19 +722,24 @@
     });
     if (!selectedAccounts.length && value.status === 'connected' && mappedAccounts.length) selectedAccounts = mappedAccounts;
     var normalizedSummary = summary ? Object.assign({}, summary, {
-      adSpend: isFinite(adSpend) && adSpend >= 0 ? adSpend : 0
+      adSpend: isFinite(adSpend) && adSpend >= 0 ? adSpend : 0,
+      purchases: isFinite(purchases) && purchases >= 0 ? purchases : 0,
+      purchaseMetric: String(summary.purchaseMetric || ''),
+      purchaseMetricAvailable: !!summary.purchaseMetricAvailable
     }) : null;
     if (normalizedSummary) {
-      delete normalizedSummary.purchases;
-      delete normalizedSummary.actions_purchase;
-      delete normalizedSummary.cost_per_purchase;
       normalizedSummary.campaignBreakdown = (Array.isArray(normalizedSummary.campaignBreakdown) ? normalizedSummary.campaignBreakdown : []).map(function (row) {
         var cleanRow = Object.assign({}, row);
-        delete cleanRow.purchases;
-        delete cleanRow.purchase;
-        delete cleanRow.actions_purchase;
-        delete cleanRow.conversions_purchase;
-        delete cleanRow.cost_per_purchase;
+        cleanRow.purchases = Math.max(0, Number(cleanRow.purchases) || 0);
+        cleanRow.purchaseMetric = String(cleanRow.purchaseMetric || '');
+        cleanRow.purchaseMetricAvailable = !!cleanRow.purchaseMetricAvailable;
+        return cleanRow;
+      });
+      normalizedSummary.sourceBreakdown = (Array.isArray(normalizedSummary.sourceBreakdown) ? normalizedSummary.sourceBreakdown : []).map(function (row) {
+        var cleanRow = Object.assign({}, row);
+        cleanRow.purchases = Math.max(0, Number(cleanRow.purchases) || 0);
+        cleanRow.purchaseMetric = String(cleanRow.purchaseMetric || '');
+        cleanRow.purchaseMetricAvailable = !!cleanRow.purchaseMetricAvailable;
         return cleanRow;
       });
     }
@@ -732,11 +819,11 @@
       var bucket = marketingBucket(id);
       var previous = normalizeMarketingStatus(bucket[platform], id, platform);
       var sameAssigned = sourceAccountSignature(previous.selectedSourceAccounts) === sourceAccountSignature(assigned);
-      var authorizationPending = allStatus.status === 'pending';
+      var authorizationPending = allStatus.status === 'pending' && !assigned.length;
       var reconnectRequired = !!allStatus.reconnectRequired;
       var nextValue = Object.assign({}, previous, {
         platform: platform,
-        status: authorizationPending ? 'pending' : (assigned.length ? 'connected' : 'disconnected'),
+        status: assigned.length ? 'connected' : (authorizationPending ? 'pending' : 'disconnected'),
         mappedAccounts: assigned,
         linkedAccounts: assigned.length ? assigned : [],
         linkedAccountCount: assigned.length,
@@ -750,8 +837,8 @@
         error: '',
         errorCode: '',
         reconnectRequired: reconnectRequired,
-        summary: !authorizationPending && sameAssigned && assigned.length ? previous.summary : null,
-        lastSyncAt: !authorizationPending && sameAssigned && assigned.length ? previous.lastSyncAt : null
+        summary: sameAssigned && assigned.length ? previous.summary : null,
+        lastSyncAt: sameAssigned && assigned.length ? previous.lastSyncAt : null
       });
       var next = normalizeMarketingStatus(nextValue, id, platform);
       if (JSON.stringify(previous) !== JSON.stringify(next)) {
@@ -768,7 +855,6 @@
     var aggregate = aggregateMarketingStatusForPlatform(platform);
     if (!stored) return aggregate;
     stored = normalizeMarketingStatus(stored, '__all__', platform);
-    var mergedMappings = mergeMarketingMappings(stored.mappings, aggregate.mappings);
     var storedHasConnectionData =
       stored.status === 'connected' ||
       stored.status === 'pending' ||
@@ -785,6 +871,7 @@
       aggregate.availableAccounts.length ||
       aggregate.mappedAccounts.length ||
       Object.keys(aggregate.mappings || {}).length;
+    var accountListSource = aggregateHasConnectionData ? aggregate : stored;
     var status = aggregate.status === 'connected' || stored.status === 'connected'
       ? 'connected'
       : (aggregate.status === 'pending' || stored.status === 'pending' || aggregate.loading || stored.loading
@@ -795,16 +882,16 @@
       platform: platform,
       platformLabel: platformLabel(platform),
       status: status,
-      linkedAccounts: mergeSourceAccounts(stored.linkedAccounts, aggregate.linkedAccounts),
-      linkedAccountCount: mergeSourceAccounts(stored.linkedAccounts, aggregate.linkedAccounts).length,
-      mappedAccounts: mergeSourceAccounts(stored.mappedAccounts, aggregate.mappedAccounts),
-      availableAccounts: mergeSourceAccounts(stored.availableAccounts, aggregate.availableAccounts),
-      mappings: mergedMappings,
-      selectedSourceAccounts: mergeSourceAccounts(stored.selectedSourceAccounts, aggregate.selectedSourceAccounts),
-      selectedSourceAccountIds: mergeSourceAccounts(stored.selectedSourceAccounts, aggregate.selectedSourceAccounts).map(function (source) {
+      linkedAccounts: accountListSource.linkedAccounts,
+      linkedAccountCount: accountListSource.linkedAccounts.length,
+      mappedAccounts: accountListSource.mappedAccounts,
+      availableAccounts: accountListSource.availableAccounts,
+      mappings: accountListSource.mappings,
+      selectedSourceAccounts: accountListSource.selectedSourceAccounts,
+      selectedSourceAccountIds: accountListSource.selectedSourceAccounts.map(function (source) {
         return String(source && source.id || '');
       }).filter(Boolean),
-      claimableAccounts: mergeSourceAccounts(stored.claimableAccounts, aggregate.claimableAccounts),
+      claimableAccounts: accountListSource.claimableAccounts,
       diagnostics: stored.diagnostics || aggregate.diagnostics,
       limit: stored.limit || aggregate.limit,
       limits: stored.limits || aggregate.limits,
@@ -856,6 +943,7 @@
     var adSpend = 0;
     var impressions = 0;
     var clicks = 0;
+    var purchases = 0;
     var campaignCount = 0;
     var rowCount = 0;
     var dateFrom = '';
@@ -886,6 +974,7 @@
       adSpend += Number(convertedSpend || 0);
       impressions += Number(source.impressions || 0);
       clicks += Number(source.clicks || 0);
+      purchases += Number(source.purchases || 0);
       campaignCount += Number(source.campaignCount || 0);
       rowCount += Number(source.rowCount || 0);
 
@@ -913,6 +1002,7 @@
       currency: reportingCurrency,
       impressions: impressions,
       clicks: clicks,
+      purchases: Number(purchases.toFixed(2)),
       campaignCount: campaignCount,
       rowCount: rowCount,
       dateFrom: dateFrom,
@@ -1021,6 +1111,7 @@
       egpRate: 52,
       impressions: 0,
       clicks: 0,
+      purchases: 0,
       campaignCount: 0,
       rowCount: 0,
       dateFrom: '',
@@ -1052,6 +1143,7 @@
       summary.adSpend += Number(source.adSpend || 0);
       summary.impressions += Number(source.impressions || 0);
       summary.clicks += Number(source.clicks || 0);
+      summary.purchases += Number(source.purchases || 0);
       summary.campaignCount += Number(source.campaignCount || 0);
       summary.rowCount += Number(source.rowCount || 0);
       if (source.egpRate) summary.egpRate = Number(source.egpRate) || summary.egpRate;
@@ -1069,12 +1161,18 @@
         adSpend: Number(source.adSpend || 0),
         impressions: Number(source.impressions || 0),
         clicks: Number(source.clicks || 0),
+        purchases: Number(source.purchases || 0),
+        purchaseMetric: String(source.purchaseMetric || ''),
+        purchaseMetricAvailable: !!source.purchaseMetricAvailable,
         campaignCount: Number(source.campaignCount || 0),
         rowCount: Number(source.rowCount || 0),
         lastSyncAt: status.lastSyncAt || null
       });
     });
-    if (summary) summary.adSpend = Number(summary.adSpend.toFixed(2));
+    if (summary) {
+      summary.adSpend = Number(summary.adSpend.toFixed(2));
+      summary.purchases = Number(summary.purchases.toFixed(2));
+    }
     return {
       accountId: id,
       platform: 'combined',
@@ -1115,6 +1213,27 @@
     });
   }
 
+  function marketingLogSummary(value) {
+    value = value || {};
+    return {
+      ok: value.ok,
+      accountId: value.accountId || value.dashboardAccountId || '',
+      platform: value.platform || '',
+      status: value.status || '',
+      error: value.error || '',
+      linkedAccountCount: value.linkedAccountCount || (Array.isArray(value.linkedAccounts) ? value.linkedAccounts.length : 0),
+      mappedAccountCount: Array.isArray(value.mappedAccounts) ? value.mappedAccounts.length : 0,
+      availableAccountCount: Array.isArray(value.availableAccounts) ? value.availableAccounts.length : 0,
+      claimableAccountCount: Array.isArray(value.claimableAccounts) ? value.claimableAccounts.length : 0,
+      selectedSourceAccountCount: Array.isArray(value.selectedSourceAccounts) ? value.selectedSourceAccounts.length : 0,
+      accountStatusCount: value.accountStatuses && typeof value.accountStatuses === 'object' ? Object.keys(value.accountStatuses).length : 0,
+      cacheStatus: value.cache && value.cache.status || '',
+      providerRequestCount: value.cache && value.cache.providerRequestCount || 0,
+      stale: !!value.stale,
+      offline: !!value.offline
+    };
+  }
+
   window.DashboardMarketingState = {
     platforms: MARKETING_PLATFORMS.slice(),
     get: function (accountId, platform) {
@@ -1131,8 +1250,8 @@
       var id = marketingAccountId(accountId);
       platform = normalizeMarketingPlatform(platform || value && value.platform);
       var bucket = marketingBucket(id);
+      var previous = bucket[platform] || {};
       if (value && value.ok === false) {
-        var previous = bucket[platform] || {};
         if (value.reconnectRequired) {
           value = Object.assign({}, previous, value, {
             status: 'disconnected',
@@ -1151,6 +1270,19 @@
           error: value.error || 'MARKETING_REQUEST_FAILED'
         });
         }
+      }
+      value = mergePendingMarketingUpdate(previous, value);
+      if (isMarketingAuthorizationCancelled(id, platform) && isPendingOnlyMarketingAuthorization(value)) {
+        value = Object.assign({}, value, {
+          status: 'disconnected',
+          loading: false,
+          error: '',
+          errorCode: '',
+          awaitingAuthorization: false,
+          authorizationUrl: ''
+        });
+      } else if (hasMarketingAssignedPayload(value) || value && value.authorizationUrl) {
+        clearMarketingAuthorizationCancelled(id, platform);
       }
       var next = normalizeMarketingStatus(value, id, platform);
       bucket[platform] = next;
@@ -1180,6 +1312,65 @@
         });
       } catch (e) {}
       return this.set(current, accountId, platform);
+    },
+    beginAuthorization: function (accountId, platform) {
+      var id = marketingAccountId(accountId);
+      platform = normalizeMarketingPlatform(platform);
+      clearMarketingAuthorizationCancelled(id, platform);
+      if (id === '__all__') {
+        dashboardMarketingAccounts().forEach(function (account) {
+          var childId = String(account && (account.id || account.accountId || account.key || '') || '');
+          if (childId) clearMarketingAuthorizationCancelled(childId, platform);
+        });
+      }
+    },
+    cancelAuthorization: function (accountId, platform) {
+      var id = marketingAccountId(accountId);
+      platform = normalizeMarketingPlatform(platform);
+      markMarketingAuthorizationCancelled(id, platform);
+      var loadKey = id + '|' + platform;
+      _marketingLoadSeq[loadKey] = Number(_marketingLoadSeq[loadKey] || 0) + 1;
+      delete _marketingLoadedAt[loadKey];
+      if (id !== '__all__') {
+        var allLoadKey = '__all__|' + platform;
+        _marketingLoadSeq[allLoadKey] = Number(_marketingLoadSeq[allLoadKey] || 0) + 1;
+        delete _marketingLoadedAt[allLoadKey];
+      } else {
+        dashboardMarketingAccounts().forEach(function (account) {
+          var childId = String(account && (account.id || account.accountId || account.key || '') || '');
+          if (!childId) return;
+          markMarketingAuthorizationCancelled(childId, platform);
+          var childLoadKey = childId + '|' + platform;
+          _marketingLoadSeq[childLoadKey] = Number(_marketingLoadSeq[childLoadKey] || 0) + 1;
+          delete _marketingLoadedAt[childLoadKey];
+          var childBucket = marketingBucket(childId);
+          var childCurrent = normalizeMarketingStatus(childBucket[platform], childId, platform);
+          if (childCurrent.status !== 'pending' && !childCurrent.loading) return;
+          var childHasPayload = hasMarketingAssignedPayload(childCurrent);
+          childBucket[platform] = normalizeMarketingStatus(Object.assign({}, childCurrent, {
+            status: childHasPayload && !childCurrent.reconnectRequired ? 'connected' : 'disconnected',
+            loading: false,
+            error: childCurrent.reconnectRequired ? childCurrent.error : '',
+            errorCode: childCurrent.reconnectRequired ? childCurrent.errorCode : '',
+            awaitingAuthorization: false,
+            authorizationUrl: ''
+          }), childId, platform);
+          notifyMarketing(childBucket[platform]);
+          notifyMarketing(summarizeMarketingPlatforms(childId));
+        });
+      }
+      var current = this.get(id, platform);
+      var hasPayload = hasMarketingAssignedPayload(current);
+      var next = Object.assign({}, current, {
+        status: hasPayload && !current.reconnectRequired ? 'connected' : 'disconnected',
+        loading: false,
+        error: current.reconnectRequired ? current.error : '',
+        errorCode: current.reconnectRequired ? current.errorCode : '',
+        reconnectRequired: !!current.reconnectRequired,
+        awaitingAuthorization: false,
+        authorizationUrl: ''
+      });
+      return this.set(next, id, platform);
     },
     invalidate: function (accountId, platform) {
       var id = marketingAccountId(accountId);
@@ -1268,7 +1459,7 @@
       var self = this;
       console.info('[Marketing][Store] status request', { accountId: id, platform: platform, mode: requestMode });
       _marketingLoadRequests[loadKey] = window.api.getMarketingStatus(id, platform, { mode: requestMode }).then(function (response) {
-        console.info('[Marketing][Store] status response', response);
+        console.info('[Marketing][Store] status response', marketingLogSummary(response));
         if (Number(_marketingLoadSeq[loadKey] || 0) !== requestSeq) return self.get(id, platform);
         _marketingLoadedAt[loadKey] = Date.now();
         var next = self.set(response && response.ok ? response : Object.assign({}, response || {}, {
@@ -1337,7 +1528,7 @@
             : buildMarketingSyncAllSettings(id, platform)
         });
         return window.api.syncAllMarketingData(platform, allRange).then(function (response) {
-          console.info('[Marketing][Store] sync_all response', response);
+          console.info('[Marketing][Store] sync_all response', marketingLogSummary(response));
           if (_marketingSyncRequests[requestKey] !== requestSeq) return self.get(id, platform);
           if (response && response.ok && response.accountStatuses) {
             Object.keys(response.accountStatuses).forEach(function (accountKey) {
@@ -1359,7 +1550,7 @@
         });
       }
       return window.api.syncMarketingData(id, platform, range || {}).then(function (response) {
-        console.info('[Marketing][Store] sync response', response);
+        console.info('[Marketing][Store] sync response', marketingLogSummary(response));
         if (_marketingSyncRequests[requestKey] !== requestSeq) return self.get(id, platform);
         var next = self.set(response && response.ok ? response : Object.assign({}, response || {}, {
           ok: false,
