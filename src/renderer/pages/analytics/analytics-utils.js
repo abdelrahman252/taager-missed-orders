@@ -400,7 +400,6 @@ function renderCustomSelect(container, options, currentValue, onChange, config) 
   const dropdownHome = document.createComment("custom-select-dropdown-home");
   dropdown.parentNode.insertBefore(dropdownHome, dropdown);
   let dropdownPortaled = false;
-  let portalPreferredWidth = 0;
 
   const resetDropdownPosition = () => {
     dropdown.classList.remove("custom-select-portal-open");
@@ -440,7 +439,7 @@ function renderCustomSelect(container, options, currentValue, onChange, config) 
     const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
     const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
     const dropdownWidth = Math.min(
-      Math.max(rect.width, portalPreferredWidth || dropdown.offsetWidth || rect.width),
+      Math.max(rect.width, 140),
       Math.max(140, viewportWidth - (margin * 2))
     );
     const isRtl = (document.documentElement.getAttribute("dir") || "").toLowerCase() === "rtl" ||
@@ -474,7 +473,6 @@ function renderCustomSelect(container, options, currentValue, onChange, config) 
     wrapper.classList.toggle("custom-select-fixed-open", usePortal);
     trigger.setAttribute("aria-expanded", "true");
     if (usePortal && !dropdownPortaled) {
-      portalPreferredWidth = dropdown.offsetWidth || trigger.getBoundingClientRect().width;
       document.body.appendChild(dropdown);
       dropdownPortaled = true;
       dropdown.classList.add("custom-select-portal-open");
