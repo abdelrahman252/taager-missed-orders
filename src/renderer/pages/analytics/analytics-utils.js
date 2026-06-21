@@ -227,10 +227,30 @@ function analyticsLocale() {
   return (window._kbotLang || "en") === "ar" ? "ar-EG-u-nu-latn" : "en-US";
 }
 
+function parseAnalyticsDateValue(value) {
+  if (value instanceof Date) return value;
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(value)) {
+    return new Date(value.replace(" ", "T"));
+  }
+  return new Date(value);
+}
+
 function formatAnalyticsDate(value, opts) {
-  var d = value instanceof Date ? value : new Date(value);
+  var d = parseAnalyticsDateValue(value);
   if (isNaN(d.getTime())) return "—";
   return d.toLocaleDateString(analyticsLocale(), opts || { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatAnalyticsDateTime(value) {
+  var d = parseAnalyticsDateValue(value);
+  if (isNaN(d.getTime())) return value ? String(value) : "—";
+  return d.toLocaleString(analyticsLocale(), {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 }
 
 function analyticsStatusLabel(status) {

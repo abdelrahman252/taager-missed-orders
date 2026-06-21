@@ -95,6 +95,19 @@ function localDateKey(value) {
   ].join("-");
 }
 
+function localDateTimeKey(value) {
+  const date = parseExcelDate(value);
+  if (!date) return "";
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-") + " " + [
+    String(date.getHours()).padStart(2, "0"),
+    String(date.getMinutes()).padStart(2, "0"),
+  ].join(":");
+}
+
 function matchesDateRange(value, dateFrom, dateTo) {
   const date = parseExcelDate(value);
   if (!date) return false;
@@ -220,6 +233,7 @@ function explodeRealOrderRow(row, phoneMeta) {
     address: String(row["Address"] || "").trim() || null,
     date: localDateKey(row["CreatedAt"]),
     createdAt: localDateKey(row["CreatedAt"]),
+    easyCreatedAt: localDateTimeKey(row["CreatedAt"]),
     orderStatus: "Under processing",
     amountDue: parseMoney(row["Total Cost"]),
     marketerCommission: 0,
@@ -298,6 +312,8 @@ function parseMissedOrders(buffer, dateFrom, dateTo) {
     const isCompleted = String(row["Is Completed"] || "").toLowerCase();
     if (isCompleted === "true" || isCompleted === "1") { skipped.completed++; continue; }
     if (!matchesDateRange(row["Created At"], dateFrom, dateTo)) { skipped.date++; continue; }
+    const createdDate = localDateKey(row["Created At"]);
+    const easyCreatedAt = localDateTimeKey(row["Created At"]);
 
     const rawProducts = String(row["Products"] || "").trim();
     const productText = stripProductBrackets(rawProducts) || rawProducts;
@@ -324,6 +340,9 @@ function parseMissedOrders(buffer, dateFrom, dateTo) {
       name: String(row["Full Name"] || "").trim() || ("0" + phoneMeta.digits),
       city: String(row["Government"] || row["City"] || "").trim(),
       address: String(row["Address"] || "").trim(),
+      date: createdDate,
+      createdAt: createdDate,
+      easyCreatedAt,
       sku: null,
       qty: null,
       subtotal: null,

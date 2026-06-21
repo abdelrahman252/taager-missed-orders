@@ -165,6 +165,25 @@ window.renderSection3 = function (mountEl, data, ctx) {
     if (stage && stage.id) STAGES_BY_ID[stage.id] = stage;
   });
 
+  function normalizeOrderArray(sourceRows, normalizer, cacheKey) {
+    if (!Array.isArray(sourceRows)) return [];
+    var root = window.__s3OrderNormalizationCache;
+    if (!root || typeof WeakMap === 'undefined') {
+      root = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+      window.__s3OrderNormalizationCache = root;
+    }
+    if (!root) return sourceRows.map(normalizer);
+    var entry = root.get(sourceRows);
+    if (!entry) {
+      entry = {};
+      root.set(sourceRows, entry);
+    }
+    var cached = entry[cacheKey];
+    if (cached && cached.length === sourceRows.length) return cached.rows;
+    var rows = sourceRows.map(normalizer);
+    entry[cacheKey] = { length: sourceRows.length, rows: rows };
+    return rows;
+  }
   if (data && data.orders) {
     function normalizeOrder(o) {
       var total = moneyValue(o.dashboardTotalPrice != null ? o.dashboardTotalPrice : (o.totalPrice || o.total || o.orderValue || 0));
@@ -263,8 +282,9 @@ window.renderSection3 = function (mountEl, data, ctx) {
         _phoneSearch: phoneClean + ' ' + phoneLocal + ' ' + phoneNoCode
       };
     }
-    orders = orders.map(normalizeOrder);
-    outcomeOrders = outcomeOrders.map(normalizeOrder);
+    var normalizationCacheKey = [window.dashboardI18n && window.dashboardI18n.currentLocale || (isRtl ? 'ar' : 'en'), window.TaagerStatus ? 'taager-status' : 'legacy-status'].join('|');
+    orders = normalizeOrderArray(orders, normalizeOrder, 'orders|' + normalizationCacheKey);
+    outcomeOrders = normalizeOrderArray(outcomeOrders, normalizeOrder, 'outcome|' + normalizationCacheKey);
   }
 
   function normalizeBackendOrder(o) {
@@ -509,16 +529,19 @@ window.renderSection3 = function (mountEl, data, ctx) {
   var statusFilter  = '';
   var dateFilter    = '';
   var perPage       = 10;
-  var backendOrdersEnabled = false;
+  var backendOrdersEnabled = Boolean(window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.query === 'function');
   var backendOrdersRequest = 0;
   if (window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.flags === 'function') {
     window.DashboardQueryRuntime.flags().then(function (flags) {
-      backendOrdersEnabled = !!(flags && flags.orders);
+      backendOrdersEnabled = backendOrdersEnabled || !!(flags && flags.orders);
       if (backendOrdersEnabled && mountEl.isConnected) refreshTableData();
     });
   }
   var filteredCacheKey = '';
   var filteredCacheValue = null;
+  var sortedCacheKey = '';
+  var sortedCacheValue = null;
+  var exactStatusStagesCache;
   var overviewSummary = data && data.overview ? data.overview : {};
   var codSummary = data && data.cod ? data.cod : {};
   var certifiedMetrics = data && data.pipeline && data.pipeline.metrics ? data.pipeline.metrics : null;
@@ -544,13 +567,17 @@ window.renderSection3 = function (mountEl, data, ctx) {
   }
 
   function exactStatusStages() {
-    if (!window.TaagerStatus || !Array.isArray(window.TaagerStatus.all)) return null;
+    if (exactStatusStagesCache !== undefined) return exactStatusStagesCache;
+    if (!window.TaagerStatus || !Array.isArray(window.TaagerStatus.all)) {
+      exactStatusStagesCache = null;
+      return exactStatusStagesCache;
+    }
     var counts = {};
     orders.forEach(function (order) {
       var bucket = order.exactStatusBucket || window.TaagerStatus.normalize(order.rawStatus || order.status).bucket;
       counts[bucket] = (counts[bucket] || 0) + 1;
     });
-    return window.TaagerStatus.all.map(function (meta) {
+    exactStatusStagesCache = window.TaagerStatus.all.map(function (meta) {
       var dashboardBucket = window.TaagerStatus.dashboardBucket(meta.bucket);
       var label = window.TaagerStatus.display(meta.bucket, { locale: isRtl ? 'ar' : 'en' });
       return {
@@ -571,11 +598,14 @@ window.renderSection3 = function (mountEl, data, ctx) {
           STAGE_TEMPLATE_BY_ID.waiting.iconSvg
       };
     });
+    return exactStatusStagesCache;
   }
 
   function invalidateFilteredCache() {
     filteredCacheKey = '';
     filteredCacheValue = null;
+    sortedCacheKey = '';
+    sortedCacheValue = null;
   }
 
   function hasSubsetFilters() {
@@ -637,15 +667,14 @@ window.renderSection3 = function (mountEl, data, ctx) {
   ];
 
   /* ── Filter and Sort Logic ───────────────────────────────────────────────── */
-  function getFilteredAndSortedOrders() {
+  function getFilteredOrders() {
     var key = [
       activeStageId,
       searchTerm,
       productFilter,
       cityFilter,
       statusFilter,
-      dateFilter,
-      sortVal
+      dateFilter
     ].join('\u001f');
     if (filteredCacheValue && key === filteredCacheKey) {
       return filteredCacheValue;
@@ -697,8 +726,19 @@ window.renderSection3 = function (mountEl, data, ctx) {
       results = results.filter(matchesDateFilter);
     }
 
-    // 7. Sort comparator
-    results = results.slice().sort(function(a, b) {
+    filteredCacheKey = key;
+    filteredCacheValue = results;
+    return results;
+  }
+
+  function getFilteredAndSortedOrders() {
+    var base = getFilteredOrders();
+    var key = filteredCacheKey + '\u001f' + sortVal;
+    if (sortedCacheValue && key === sortedCacheKey) {
+      return sortedCacheValue;
+    }
+
+    var results = base.slice().sort(function(a, b) {
       if (sortVal === 'date_desc' || sortVal === 'date_asc') {
         var valA = Number(a._dateTime || 0);
         var valB = Number(b._dateTime || 0);
@@ -730,11 +770,10 @@ window.renderSection3 = function (mountEl, data, ctx) {
       return 0;
     });
 
-    filteredCacheKey = key;
-    filteredCacheValue = results;
+    sortedCacheKey = key;
+    sortedCacheValue = results;
     return results;
   }
-
   /* ── 1. Pipeline Module ──────────────────────────────────────────────────── */
   /* Inject stage-card tooltip styles once */
   (function() {
@@ -913,7 +952,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
 
     var isRtl = window.dashboardI18n ? window.dashboardI18n.isRtl() : true;
     // Filter stage specific orders for detail rows; certified full-scope cards stay aligned with Master.
-    var stageOrders = getFilteredAndSortedOrders();
+    var stageOrders = getFilteredOrders();
 
     var totalValue = stageOrders.reduce(function(sum, o) { return sum + o.total; }, 0);
     var totalCommission = stageOrders.reduce(function(sum, o) { return sum + o.commission; }, 0);
@@ -1059,6 +1098,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
           var backendSort = backendOrderSort();
           exportBtn.disabled = true;
           window.DashboardQueryRuntime.exportOrders(Object.assign({
+            includeCanceled: true,
             filters: { search: searchTerm, product: productFilter, city: cityFilter }
           }, backendSort), data).finally(function () {
             exportBtn.disabled = false;
@@ -1283,7 +1323,8 @@ window.renderSection3 = function (mountEl, data, ctx) {
       customer: 'customerName',
       city: 'city',
       product: 'products',
-      status: 'statusBucket'
+      status: 'statusBucket',
+      id: 'orderScopeKey'
     };
     return { sortBy: fields[field] || 'dashboardDate', sortDir: parts[parts.length - 1] === 'asc' ? 'asc' : 'desc' };
   }
@@ -1298,6 +1339,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
   }
 
   async function refreshTableData() {
+    var requestId = ++backendOrdersRequest;
     var isRtl = window.dashboardI18n ? window.dashboardI18n.isRtl() : true;
     var rowsEl = document.getElementById('s3-rows');
     var pagWrap = document.getElementById('s3-pagination-wrap');
@@ -1306,11 +1348,11 @@ window.renderSection3 = function (mountEl, data, ctx) {
     // Filter, search, and sort records
     var backendPage = null;
     if (canUseBackendOrdersPage()) {
-      var requestId = ++backendOrdersRequest;
       var backendSort = backendOrderSort();
       backendPage = await window.DashboardQueryRuntime.query('orders', {
         page: currentPage,
         pageSize: perPage,
+        includeCanceled: true,
         sortBy: backendSort.sortBy,
         sortDir: backendSort.sortDir,
         filters: {

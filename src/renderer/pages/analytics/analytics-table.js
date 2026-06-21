@@ -12,7 +12,7 @@ let _tableState = {
   statusFilter: "",
   accountFilter:"",
   sourceFilter: "",
-  sortField:    "date",
+  sortField:    "easyCreatedAt",
   sortDir:      "desc",
 };
 
@@ -80,7 +80,7 @@ function renderOrdersExplorer(container, runs, allRuns) {
           <thead>
             <tr>
               <th data-sort="taagerOrderNumber">${window.t_anl('table.colOrder')}</th>
-              <th data-sort="date">${window.t_anl('table.colTime')}</th>
+              <th data-sort="easyCreatedAt">${window.t_anl('table.colTime')}</th>
               <th data-sort="accountEmail">${window.t_anl('account.label')}</th>
               <th data-sort="name">${window.t_anl('table.colCustomer')}</th>
               <th>${window.t_anl('table.colContact')}</th>
@@ -204,6 +204,10 @@ function _applyFiltersAndRender(container) {
     results = [...results].sort((a, b) => {
       let valA = a[s.sortField] ?? "";
       let valB = b[s.sortField] ?? "";
+      if (s.sortField === "easyCreatedAt") {
+        valA = a.easyCreatedAt || a.createdAt || a.date || "";
+        valB = b.easyCreatedAt || b.createdAt || b.date || "";
+      }
       if (typeof valA === "string") valA = valA.toLowerCase();
       if (typeof valB === "string") valB = valB.toLowerCase();
       if (valA < valB) return s.sortDir === "asc" ? -1 : 1;
@@ -255,7 +259,7 @@ function _renderTableBody(container, rows) {
 
   tbody.innerHTML = rows.map((o, idx) => {
     const statusColor = getStatusColor(o.orderStatus || "");
-    const date = o.date ? formatAnalyticsDate(o.date) : "—";
+    const date = formatAnalyticsDateTime(o.easyCreatedAt || o.createdAt || o.date);
     const sku   = o.sku || "—";
     const rawPhoneVal = o.phone || o.rawPhone || o.normPhone || "";
     const phone = rawPhoneVal ? _displayDomesticPhone(rawPhoneVal, o.taagerCountry) : "—";
@@ -387,6 +391,7 @@ function _exportToExcel(orders) {
     const rows = orders.map(o => ({
       "Order #":             o.taagerOrderNumber || "",
       "Date":                o.date            || "",
+      "EasyOrders Created At": o.easyCreatedAt || o.createdAt || o.date || "",
       "Account":             accountDisplay(o),
       "Customer":            o.name            || "",
       "Phone":               (o.phone || o.rawPhone || o.normPhone || ""),

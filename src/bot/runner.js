@@ -4176,6 +4176,7 @@ async function phase5_uploadToTaager(page, orders) {
         subtotal:           o.subtotal    || 0,
         date:               o.date        || "",
         createdAt:          o.createdAt   || "",
+        easyCreatedAt:      o.easyCreatedAt || "",
         source:             o.source      || "real",
         address:            o.address     || "",
         orderStatus:        taagerExact?.orderStatus        || o.orderStatus        || "Under processing",
@@ -4228,6 +4229,7 @@ async function phase5_uploadToTaager(page, orders) {
             subtotal:           o.subtotal    || 0,
             date:               o.date        || "",
             createdAt:          o.createdAt   || "",
+            easyCreatedAt:      o.easyCreatedAt || "",
             source:             o.source      || "real",
             address:            o.address     || "",
             // ── Analytics fields (enriched) ──

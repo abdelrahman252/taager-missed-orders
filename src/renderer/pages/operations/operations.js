@@ -307,6 +307,15 @@ async function renderOperations(onBack) {
     const sc       = _opsStatusColor(orderStatus);
     const stLabel  = window.TaagerStatus ? window.TaagerStatus.display(orderStatus) : orderStatus;
     const fmtTs    = d => d ? d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
+    const orderCreatedAt = firstOrder?.easyCreatedAt || firstOrder?.createdAt || firstOrder?.date || "";
+    const fmtOrderCreatedAt = value => {
+      if (!value) return "—";
+      if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+      const date = typeof value === "string" && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(value)
+        ? new Date(value.replace(" ", "T"))
+        : new Date(value);
+      return isNaN(date.getTime()) ? String(value) : fmtTs(date);
+    };
 
     panel.innerHTML = `
       <div class="ops-od-body">
@@ -365,7 +374,7 @@ async function renderOperations(onBack) {
             </div>
             <div class="ops-od-meta-block">
               <div class="ops-od-meta-label">${window.t_ops('orderDetails.orderDate')}</div>
-              <div class="ops-od-meta-val" style="font-size:11px">${ts ? fmtTs(ts) : "—"}</div>
+              <div class="ops-od-meta-val" style="font-size:11px">${fmtOrderCreatedAt(orderCreatedAt)}</div>
             </div>
             <div class="ops-od-meta-block">
               <div class="ops-od-meta-label">${window.t_ops('orderDetails.city')}</div>
