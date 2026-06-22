@@ -76,7 +76,7 @@
     });
 
     const subtitleFn = t('expired.subtitle');
-    const subtitleText = typeof subtitleFn === 'function' ? subtitleFn(reason) : subtitleFn;
+    const subtitleText = typeof subtitleFn === 'function' ? subtitleFn(_displayReason(reason)) : subtitleFn;
 
     el.innerHTML = `
       <div class="eo-backdrop"></div>
@@ -101,8 +101,8 @@
           <span class="eo-badge eo-badge--expired">${t('expired.badge_expired')}</span>
         </div>
 
-        <!-- Primary action -->
-        <button id="eo-continue-btn" class="eo-btn eo-btn--primary">
+        <!-- Renewal is manual for now; admin renews from the admin panel. -->
+        <button id="eo-continue-btn" class="eo-btn eo-btn--primary" disabled aria-disabled="true">
           ${t('expired.btn_continue')}
         </button>
 
@@ -272,6 +272,7 @@
         .eo-btn--primary:disabled {
           opacity: .55;
           cursor: not-allowed;
+          box-shadow: none;
         }
 
         .eo-btn--secondary {
@@ -352,18 +353,34 @@
       </style>
     `;
 
-    // Wire up the Continue button
+    // Wire up buttons
     const continueBtn = el.querySelector('#eo-continue-btn');
     const supportBtn  = el.querySelector('#eo-support-btn');
     const errorEl     = el.querySelector('#eo-error');
     const badge       = el.querySelector('.eo-badge');
 
-    supportBtn.addEventListener('click', () => {
-      if (window.TaagerSupport && typeof window.TaagerSupport.open === 'function') window.TaagerSupport.open();
+    supportBtn.addEventListener('click', async () => {
+      errorEl.style.display = 'none';
+      if (!window.TaagerSupport || typeof window.TaagerSupport.open !== 'function') {
+        errorEl.textContent = 'Support link is unavailable. Please contact the administrator directly.';
+        errorEl.style.display = 'block';
+        return;
+      }
+      try {
+        const result = await window.TaagerSupport.open();
+        if (result && result.ok === false) {
+          errorEl.textContent = 'Could not open the support link. Please contact the administrator directly.';
+          errorEl.style.display = 'block';
+        }
+      } catch (_) {
+        errorEl.textContent = 'Could not open the support link. Please contact the administrator directly.';
+        errorEl.style.display = 'block';
+      }
     });
 
     continueBtn.addEventListener('click', async () => {
       if (_revalidating) return;
+      if (continueBtn.disabled) return;
       _revalidating = true;
       const t = window._t || ((k) => k);
 
@@ -374,7 +391,7 @@
       errorEl.style.display   = 'none';
 
       try {
-        const result = await window.api.checkLicense();
+        const result = await window.api.checkLicenseNocache();
         if (result.valid) {
           // ✅ License is valid — dismiss overlay and resume
           continueBtn.textContent = t('expired.btn_verified');
@@ -436,7 +453,7 @@
     _revalidateTimer = setInterval(async () => {
       if (_revalidating || !_overlayEl) return;
       try {
-        const result = await window.api.checkLicense();
+        const result = await window.api.checkLicenseNocache();
         if (result.valid) {
           _teardown();
           if (_onResumeCallback) _onResumeCallback(result);
@@ -453,6 +470,24 @@
   }
 
   // ── Key trap ───────────────────────────────────────────────────────────────
+
+  function _displayReason(reason) {
+    const raw = String(reason || '').trim();
+    const lang = window._kbotLang || 'en';
+    const isAr = lang === 'ar';
+    const lower = raw.toLowerCase();
+    if (!raw || lower.includes('expired') || raw.includes('انته')) {
+      return isAr
+        ? 'انتهت صلاحية الترخيص. يرجى التواصل مع الدعم للتجديد.'
+        : 'License expired. Contact support to renew.';
+    }
+    if (lower.includes('revoked') || raw.includes('إلغاء') || raw.includes('ملغي')) {
+      return isAr
+        ? 'تم إيقاف الترخيص. يرجى التواصل مع الدعم.'
+        : 'Your license has been revoked. Contact support.';
+    }
+    return raw;
+  }
 
   function _trapKey(e) {
     // Allow Tab so the Continue button stays keyboard-accessible,

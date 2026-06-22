@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   'use strict';
 
   function tr(key, fallback) {
@@ -126,24 +126,15 @@
       };
     }
     var targetCurrency = String(summary.currency || window.dashboardActiveCurrency || '').toUpperCase();
-    var sources = Array.isArray(summary.sourceBreakdown) ? summary.sourceBreakdown : [];
-    var totals = {};
-    var convertedTotal = 0;
-    var hasSourceTotals = false;
-    sources.forEach(function (source) {
-      var currency = String(source && source.currency || '').toUpperCase();
-      var rawSpend = Number(source && source.rawSpend);
-      if (!currency || !Number.isFinite(rawSpend)) return;
-      totals[currency] = (totals[currency] || 0) + rawSpend;
-      if (targetCurrency) {
-        convertedTotal += convertSpendForDisplay(rawSpend, currency, targetCurrency);
-        hasSourceTotals = true;
-      }
-    });
+    var aggregate = window.DashboardMarketingSpend && typeof window.DashboardMarketingSpend.aggregateSummary === 'function'
+      ? window.DashboardMarketingSpend.aggregateSummary(summary, targetCurrency || undefined)
+      : { spend: Number(summary.adSpend || 0), currency: targetCurrency, rawSpendByCurrency: {} };
+    targetCurrency = String(aggregate.currency || targetCurrency || '').toUpperCase();
+    var totals = aggregate.rawSpendByCurrency || {};
     var currencies = Object.keys(totals).filter(function (currency) {
-      return Number.isFinite(totals[currency]);
+      return Number.isFinite(Number(totals[currency]));
     });
-    var displaySpend = hasSourceTotals ? Number(convertedTotal.toFixed(2)) : Number(summary.adSpend || 0);
+    var displaySpend = Number(aggregate.spend || 0);
     var convertedText = formatNumber(displaySpend, 2) + (targetCurrency ? ' ' + targetCurrency : '');
     if (currencies.length === 1) {
       var sourceCurrency = currencies[0];

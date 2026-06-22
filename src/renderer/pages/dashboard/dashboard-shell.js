@@ -193,7 +193,7 @@
             '<button type="button" id="dashboard-date-to" class="dashboard-date-input"></button>' +
           '</span>' +
           '<button type="button" id="dashboard-view-range-btn" class="dashboard-view-range-btn" disabled aria-disabled="true">' +
-            '<span class="dashboard-view-range-icon">' + icon('calendar', 'currentColor') + '<span class="dashboard-view-range-check" aria-hidden="true">âœ“</span></span>' +
+            '<span class="dashboard-view-range-icon">' + icon('calendar', 'currentColor') + '<span class="dashboard-view-range-check" aria-hidden="true">✓</span></span>' +
             '<span>' + tr('period.viewRange') + '</span>' +
           '</button>' +
         '</div>' +

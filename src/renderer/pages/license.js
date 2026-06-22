@@ -1,8 +1,13 @@
-// ── LICENSE PAGE ──
+// LICENSE PAGE
 window.renderLicense = function (onUnlocked) {
   function render() {
   const t  = window._t;
   const el = document.getElementById("page-license");
+
+  function licenseText(key, fallback) {
+    const value = t(key);
+    return value && value !== key ? value : fallback;
+  }
 
   el.innerHTML = `
     <div style="
@@ -20,7 +25,7 @@ window.renderLicense = function (onUnlocked) {
             font-size:38px;margin:0 auto;
             box-shadow:0 0 40px rgba(124,106,247,0.45);
             animation:lic-pulse 2.5s ease-in-out infinite;
-          ">🔐</div>
+          ">&#128274;</div>
         </div>
 
         <div style="font-size:26px;font-weight:800;color:var(--text);margin-bottom:8px;letter-spacing:-0.5px">
@@ -36,7 +41,6 @@ window.renderLicense = function (onUnlocked) {
           padding:4px 14px;border-radius:99px;margin-bottom:28px;
         "> </div>
 
-        <!-- Input area -->
         <div style="
           background:var(--bg2);border:1px solid var(--border);
           border-radius:var(--radius);padding:24px;margin-bottom:16px;
@@ -86,8 +90,26 @@ window.renderLicense = function (onUnlocked) {
           transition:border-color 0.2s,color 0.2s;
           margin-bottom:18px;
         ">
-          ${t("license.btn_support") !== "license.btn_support" ? t("license.btn_support") : ((window._kbotLang || "en") === "ar" ? "تواصل مع الدعم" : "Contact Support")}
+          ${licenseText("license.btn_support", "Contact Support")}
         </button>
+
+        <div id="lic-restore-box" style="
+          display:none;background:rgba(0,214,143,0.08);border:1px solid rgba(0,214,143,0.28);
+          border-radius:10px;padding:14px;text-align:left;margin-bottom:16px;
+        ">
+          <div id="lic-restore-title" style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:6px"></div>
+          <div id="lic-restore-body" style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px"></div>
+          <div style="display:flex;gap:8px">
+            <button id="lic-restore-btn" type="button" style="
+              flex:1;padding:10px;border:none;border-radius:8px;cursor:pointer;
+              background:#00b370;color:white;font-size:13px;font-weight:800;
+            "></button>
+            <button id="lic-skip-restore-btn" type="button" style="
+              flex:1;padding:10px;border-radius:8px;cursor:pointer;
+              background:transparent;border:1px solid var(--border);color:var(--text2);font-size:13px;font-weight:800;
+            "></button>
+          </div>
+        </div>
 
         <div style="font-size:11px;color:var(--text2);line-height:1.7">
           ${t("license.support_hint")}<br>
@@ -117,6 +139,11 @@ window.renderLicense = function (onUnlocked) {
   const btn   = document.getElementById("lic-btn");
   const supportBtn = document.getElementById("lic-support-btn");
   const errEl = document.getElementById("lic-error");
+  const restoreBox = document.getElementById("lic-restore-box");
+  const restoreTitle = document.getElementById("lic-restore-title");
+  const restoreBody = document.getElementById("lic-restore-body");
+  const restoreBtn = document.getElementById("lic-restore-btn");
+  const skipRestoreBtn = document.getElementById("lic-skip-restore-btn");
 
   function showError(msg) {
     errEl.textContent = msg;
@@ -127,10 +154,39 @@ window.renderLicense = function (onUnlocked) {
   }
   function clearError() { errEl.style.display = "none"; input.style.borderColor = "var(--border)"; }
 
+  function showCredentialRestorePrompt(status) {
+    if (!restoreBox) return false;
+    const count = status && status.accountCount ? Number(status.accountCount) : 0;
+    restoreTitle.textContent = licenseText("license.restore_title", "Saved credentials found");
+    restoreBody.textContent = licenseText("license.restore_body", `Restore ${count || "your"} saved Taager/EasyOrders account credential${count === 1 ? "" : "s"} on this device. Orders and local reports will stay local to each machine.`);
+    restoreBtn.textContent = licenseText("license.restore_btn", "Restore credentials");
+    skipRestoreBtn.textContent = licenseText("license.restore_skip", "Skip for now");
+    restoreBox.style.display = "block";
+    return true;
+  }
+
   input.addEventListener("input", clearError);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") btn.click(); });
   supportBtn?.addEventListener("click", () => {
     if (window.TaagerSupport && typeof window.TaagerSupport.open === "function") window.TaagerSupport.open();
+  });
+  skipRestoreBtn?.addEventListener("click", () => onUnlocked());
+  restoreBtn?.addEventListener("click", async () => {
+    restoreBtn.disabled = true;
+    skipRestoreBtn.disabled = true;
+    restoreBtn.textContent = licenseText("license.restore_working", "Restoring...");
+    const restored = window.api.restoreLicenseCredentials
+      ? await window.api.restoreLicenseCredentials()
+      : { success: false, reason: "restore_unavailable" };
+    if (restored && restored.success) {
+      restoreBtn.textContent = licenseText("license.restore_done", "Restored");
+      setTimeout(() => onUnlocked(), 350);
+      return;
+    }
+    restoreBtn.disabled = false;
+    skipRestoreBtn.disabled = false;
+    restoreBtn.textContent = licenseText("license.restore_btn", "Restore credentials");
+    showError((restored && restored.reason) || licenseText("license.restore_failed", "Could not restore saved credentials."));
   });
 
   btn.addEventListener("click", async () => {
@@ -150,6 +206,16 @@ window.renderLicense = function (onUnlocked) {
         if (badge) { const daysFn = t("license.days_remaining");
           badge.textContent = typeof daysFn === "function" ? daysFn(result.daysLeft) : daysFn; }
       }
+      let backupStatus = null;
+      try {
+        backupStatus = window.api.getLicenseCredentialBackupStatus
+          ? await window.api.getLicenseCredentialBackupStatus()
+          : null;
+      } catch (_) {}
+      if (backupStatus && backupStatus.available) {
+        showCredentialRestorePrompt(backupStatus);
+        return;
+      }
       setTimeout(() => onUnlocked(), 900);
     } else {
       btn.textContent = t("license.btn_activate");
@@ -157,7 +223,7 @@ window.renderLicense = function (onUnlocked) {
       showError(result.reason || t("license.err_invalid"));
     }
   });
-  } // end render()
+  }
 
   window._renderLicenseInPlace = render;
   render();

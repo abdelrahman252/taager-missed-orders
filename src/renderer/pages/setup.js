@@ -18,6 +18,7 @@ window.renderSetup = function (onComplete, initialStep) {
   let accounts    = [];
   let maxAccounts = 1;
   let remoteAccountSlots = null;
+  let credentialBackupPrompt = null;
   let editingId   = null;
 
   // Step state: "accounts" | "run"
@@ -45,6 +46,9 @@ window.renderSetup = function (onComplete, initialStep) {
       accounts    = creds.accounts || [];
       maxAccounts = creds.maxAccounts || 1;
       remoteAccountSlots = creds.remoteAccountSlots || null;
+      credentialBackupPrompt = window.api.getLicenseCredentialBackupPromptStatus
+        ? await window.api.getLicenseCredentialBackupPromptStatus()
+        : null;
 
       if (!accounts.length && creds.easyEmail) {
         accounts = [{
@@ -98,6 +102,9 @@ window.renderSetup = function (onComplete, initialStep) {
     window._kbotAccounts = accounts;
     maxAccounts = fresh.maxAccounts || maxAccounts;
     remoteAccountSlots = fresh.remoteAccountSlots || null;
+    credentialBackupPrompt = window.api.getLicenseCredentialBackupPromptStatus
+      ? await window.api.getLicenseCredentialBackupPromptStatus()
+      : null;
 
     if (window.invalidateDashboardCache) window.invalidateDashboardCache(reason);
     if (typeof invalidatePage === "function") {
@@ -2927,6 +2934,7 @@ window.renderSetup = function (onComplete, initialStep) {
     const recoveryBody = typeof recoveryBodyFn === "function"
       ? recoveryBodyFn(remoteCount)
       : `We found ${remoteCount} saved license slot(s) in the admin panel, but local credentials are missing on this install. Re-add the same Taager merchant/account details to re-link them, or ask admin to clear stale slots if this is a new setup.`;
+    const showBackupPrompt = !!(credentialBackupPrompt && credentialBackupPrompt.show && accounts.length > 0);
 
     content.innerHTML = `
       <div class="sv3-page-title">${t("setup.manage_title")}</div>
@@ -2939,6 +2947,19 @@ window.renderSetup = function (onComplete, initialStep) {
             <strong>${esc(recoveryTitle)}</strong>
             <span>${esc(recoveryBody)}</span>
           </div>
+        </div>
+      ` : ""}
+
+      ${showBackupPrompt ? `
+        <div class="sv3-recovery-note" id="sv3-credential-backup-prompt" style="border-color:rgba(0,214,143,.32);background:rgba(0,214,143,.08)">
+          <div class="sv3-recovery-note-badge" style="background:#00b370;color:white">✓</div>
+          <div style="flex:1;min-width:0">
+            <strong>${esc(setupText("setup.backup_prompt_title", "Back up your saved accounts"))}</strong>
+            <span>${esc(setupText("setup.backup_prompt_body", "Create an encrypted backup of the accounts saved on this device so you can restore them on another approved device."))}</span>
+          </div>
+          <button type="button" class="sv3-act-btn" id="sv3-backup-now-btn" style="white-space:nowrap;background:#00b370;color:#fff;border-color:#00b370">
+            ${esc(setupText("setup.backup_prompt_btn", "Back up now"))}
+          </button>
         </div>
       ` : ""}
 
@@ -3000,6 +3021,28 @@ window.renderSetup = function (onComplete, initialStep) {
 
     document.getElementById("sv3-btn-add")?.addEventListener("click", () => {
       if (canAdd) openForm(null);
+    });
+
+    document.getElementById("sv3-backup-now-btn")?.addEventListener("click", async (event) => {
+      const btn = event.currentTarget;
+      btn.disabled = true;
+      btn.textContent = setupText("setup.backup_prompt_working", "Backing up...");
+      const result = window.api.backupLicenseCredentialsNow
+        ? await window.api.backupLicenseCredentialsNow()
+        : { ok: false, reason: "backup_unavailable" };
+      if (result && result.ok) {
+        credentialBackupPrompt = Object.assign({}, credentialBackupPrompt, { show: false });
+        if (window.TaagerUI && window.TaagerUI.toast) {
+          window.TaagerUI.toast(setupText("setup.backup_prompt_done", "Encrypted backup saved."), { kind: "success" });
+        }
+        renderStep();
+        return;
+      }
+      btn.disabled = false;
+      btn.textContent = setupText("setup.backup_prompt_btn", "Back up now");
+      if (window.TaagerUI && window.TaagerUI.toast) {
+        window.TaagerUI.toast(setupText("setup.backup_prompt_failed", "Could not back up credentials. Try again."), { kind: "error" });
+      }
     });
 
     document.getElementById("sv3-next-btn")?.addEventListener("click", () => {

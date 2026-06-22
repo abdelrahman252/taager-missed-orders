@@ -1,6 +1,6 @@
 /* ------------------------------------------------------------------------------
    section8-master.js
-   Renders Section 8 — ???? ?????? (Master Dashboard)
+   Renders Section 8 — الرؤى السريعة (Master Dashboard)
 
    window.renderSection8(mountEl, data, ctx)
      mountEl  — the <div> to inject HTML into (cleared first)
@@ -151,7 +151,11 @@ window.renderSection8 = function (mountEl, data, ctx) {
     ? convert(Number(_roiLiveRaw.adSpend) || 0, roiCurrency, targetCurrency)
     : (d.roi ? convert(Number(d.roi.adSpend) || 0, d.roi.currency || roiCurrency, targetCurrency) : 250);
   if (syncedSpendActive) {
-    if (!sourceBreakdown.length) {
+    if (window.DashboardMarketingSpend && typeof window.DashboardMarketingSpend.aggregateSummary === "function") {
+      finalAdSpend = Number(window.DashboardMarketingSpend.aggregateSummary(marketingState.summary, targetCurrency, {
+        egpRate: egpRate,
+      }).spend || 0);
+    } else if (!sourceBreakdown.length) {
       finalAdSpend = convert(
         Number((marketingState.summary && marketingState.summary.adSpend) || 0),
         (marketingState.summary && marketingState.summary.currency) || targetCurrency,
@@ -159,7 +163,12 @@ window.renderSection8 = function (mountEl, data, ctx) {
       );
     } else {
       var convertedTotal = sourceBreakdown.reduce(function (total, source) {
-        return total + convert(Number(source.rawSpend || 0), source.currency || "SAR", targetCurrency);
+        var rawSpend = Number(source.rawSpend || source.nativeRawSpend || 0);
+        var convertedSpend = Number(source.convertedSpend || 0);
+        if (convertedSpend > 0 && rawSpend <= 0) {
+          return total + convert(convertedSpend, source.targetCurrency || marketingState.summary.currency || targetCurrency, targetCurrency);
+        }
+        return total + convert(rawSpend, source.currency || source.rawCurrency || "SAR", targetCurrency);
       }, 0);
       finalAdSpend = Number(convertedTotal.toFixed(2));
     }
@@ -199,10 +208,10 @@ window.renderSection8 = function (mountEl, data, ctx) {
   // KPI Cards mapping
   // Taager dashboard/status/NDR migration: commission-named values are Taager profit.
   var KPI_CARDS = [
-    { label: s8Txt('Earned Profit After Tax', '??? ???? ?????? ??? ???????'), value: earnedCommission, unit: nativeCurrency, delta: overview.earnedCommission ? overview.earnedCommission.delta : 0, color: 'green',  spark: (overview.sparklines && overview.sparklines.earned) || [0], iconType: 'green', tooltip: s8Txt('Earned Profit After Tax = sum(order profit - tax profit) for delivered orders.', '??? ???? ?????? ??? ??????? = ????? (??? ????? - ??? ???????) ??????? ???????.') },
-    { label: s8Txt('Incoming Profit After Tax', '??? ???? ?????? ??? ???????'),    value: incomingCommission, unit: nativeCurrency, delta: overview.incomingCommission ? overview.incomingCommission.delta : 0, color: 'orange', spark: (overview.sparklines && overview.sparklines.incoming) || [0], iconType: 'orange', tooltip: s8Txt('Incoming Profit After Tax = sum(order profit - tax profit) for active non-delivered orders.', '??? ???? ?????? ??? ??????? = ????? (??? ????? - ??? ???????) ??????? ?????? ??? ???????.') },
-    { label: s8Txt('Lost Profit After Tax', '??? ???? ?????? ??? ???????'),   value: lostCommission, unit: nativeCurrency, delta: overview.lostCommission ? overview.lostCommission.delta : 0, color: 'red',    spark: (overview.sparklines && overview.sparklines.lost) || [0], iconType: 'red', tooltip: s8Txt('Lost Profit After Tax = sum(order profit - tax profit) for failed and canceled orders, excluding Canceled by you.', '??? ???? ?????? ??? ??????? = ????? (??? ????? - ??? ???????) ??????? ??????? ????????.') },
-    { label: s8Txt('Total / Net Orders', '?????? / ???? ???????'), value: netTotalOrders, displayValue: totalOrdersDisplay, staticDisplay: true, unit: s8Txt('orders', '???'), delta: overview.totalOrders ? overview.totalOrders.delta : 0, color: 'blue', spark: (overview.sparklines && overview.sparklines.orders) || [0], iconType: 'blue', tooltip: tx('kpi.orders.tooltip', 'Total / Net Orders = raw orders / orders after excluding Canceled by you. Business metrics use net orders.') },
+    { label: s8Txt('Earned Profit After Tax', 'الربح المحصل بعد الضريبة'), value: earnedCommission, unit: nativeCurrency, delta: overview.earnedCommission ? overview.earnedCommission.delta : 0, color: 'green',  spark: (overview.sparklines && overview.sparklines.earned) || [0], iconType: 'green', tooltip: s8Txt('Earned Profit After Tax = sum(order profit - tax profit) for delivered orders.', 'الربح المحصل بعد الضريبة = مجموع (ربح الطلب - ضريبة الربح) للطلبات المسلمة.') },
+    { label: s8Txt('Incoming Profit After Tax', 'الربح القادم بعد الضريبة'),    value: incomingCommission, unit: nativeCurrency, delta: overview.incomingCommission ? overview.incomingCommission.delta : 0, color: 'orange', spark: (overview.sparklines && overview.sparklines.incoming) || [0], iconType: 'orange', tooltip: s8Txt('Incoming Profit After Tax = sum(order profit - tax profit) for active non-delivered orders.', 'الربح القادم بعد الضريبة = مجموع (ربح الطلب - ضريبة الربح) للطلبات النشطة غير المسلمة.') },
+    { label: s8Txt('Lost Profit After Tax', 'الربح المفقود بعد الضريبة'),   value: lostCommission, unit: nativeCurrency, delta: overview.lostCommission ? overview.lostCommission.delta : 0, color: 'red',    spark: (overview.sparklines && overview.sparklines.lost) || [0], iconType: 'red', tooltip: s8Txt('Lost Profit After Tax = sum(order profit - tax profit) for failed and canceled orders, excluding Canceled by you.', 'الربح المفقود بعد الضريبة = مجموع (ربح الطلب - ضريبة الربح) للطلبات الفاشلة والملغاة، مع استبعاد الملغي بواسطتك.') },
+    { label: s8Txt('Total / Net Orders', 'إجمالي / صافي الطلبات'), value: netTotalOrders, displayValue: totalOrdersDisplay, staticDisplay: true, unit: s8Txt('orders', 'طلبات'), delta: overview.totalOrders ? overview.totalOrders.delta : 0, color: 'blue', spark: (overview.sparklines && overview.sparklines.orders) || [0], iconType: 'blue', tooltip: tx('kpi.orders.tooltip', 'Total / Net Orders = raw orders / orders after excluding Canceled by you. Business metrics use net orders.') },
   ];
 
   var deliveredSalesInTarget = convert((overview.totalDeliveredSales && overview.totalDeliveredSales.value) || 0, nativeCurrency, targetCurrency);
@@ -211,26 +220,26 @@ window.renderSection8 = function (mountEl, data, ctx) {
   var netRoasDelta = overview.netRoas && overview.netRoas.delta != null ? Number(overview.netRoas.delta || 0) : 0;
 
   var NEW_KPI_CARDS = [
-    { label: s8Txt('Net Total Sales', '???? ?????? ????????'), value: overview.totalSales ? overview.totalSales.value : 0, unit: nativeCurrency, delta: overview.totalSales ? overview.totalSales.delta : 0, color: 'green', spark: [], iconType: 'green', tooltip: tx('kpi.totalSales.tooltip', 'Net total sales = sum of prices for net orders only, excluding Canceled by you.') },
-    { label: s8Txt('Average Order Value (AOV)', '????? ???? ????? (AOV)'), value: overview.overallAov ? overview.overallAov.value : 0, unit: nativeCurrency, delta: overview.overallAov ? overview.overallAov.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.overallAov.tooltip', '????? ???? ????? ???????? ????? ????? ?????? ???????? ??? ?????? ???????.') },
-    { label: s8Txt('Net Total Delivered Sales', '???? ?????? ??????? ???????'), value: overview.totalDeliveredSales ? overview.totalDeliveredSales.value : 0, unit: nativeCurrency, delta: overview.totalDeliveredSales ? overview.totalDeliveredSales.delta : 0, color: 'green', spark: [], iconType: 'green', tooltip: tx('kpi.totalDeliveredSales.tooltip', 'Net total delivered sales = sum of prices for delivered net orders only, excluding Canceled by you.') },
-    { label: s8Txt('Average Order Value (Delivered)', '????? ???? ????? ??????'), value: overview.deliveredAov ? overview.deliveredAov.value : 0, unit: nativeCurrency, delta: overview.deliveredAov ? overview.deliveredAov.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.deliveredAov.tooltip', 'Delivered AOV = net delivered sales / delivered orders.') },
+    { label: s8Txt('Net Total Sales', 'صافي إجمالي المبيعات'), value: overview.totalSales ? overview.totalSales.value : 0, unit: nativeCurrency, delta: overview.totalSales ? overview.totalSales.delta : 0, color: 'green', spark: [], iconType: 'green', tooltip: tx('kpi.totalSales.tooltip', 'Net total sales = sum of prices for net orders only, excluding Canceled by you.') },
+    { label: s8Txt('Average Order Value (AOV)', 'متوسط قيمة الطلب (AOV)'), value: overview.overallAov ? overview.overallAov.value : 0, unit: nativeCurrency, delta: overview.overallAov ? overview.overallAov.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.overallAov.tooltip', 'متوسط قيمة الطلب الإجمالي ويحسب بقسمة إجمالي المبيعات على إجمالي الطلبات في الفترة المحددة.') },
+    { label: s8Txt('Net Total Delivered Sales', 'صافي مبيعات الطلبات المسلمة'), value: overview.totalDeliveredSales ? overview.totalDeliveredSales.value : 0, unit: nativeCurrency, delta: overview.totalDeliveredSales ? overview.totalDeliveredSales.delta : 0, color: 'green', spark: [], iconType: 'green', tooltip: tx('kpi.totalDeliveredSales.tooltip', 'Net total delivered sales = sum of prices for delivered net orders only, excluding Canceled by you.') },
+    { label: s8Txt('Average Order Value (Delivered)', 'متوسط قيمة الطلب المسلم'), value: overview.deliveredAov ? overview.deliveredAov.value : 0, unit: nativeCurrency, delta: overview.deliveredAov ? overview.deliveredAov.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.deliveredAov.tooltip', 'Delivered AOV = net delivered sales / delivered orders.') },
     { label: s8Txt('Confirmation Rate', 'نسبة التأكيد'), value: overview.confirmationRate ? overview.confirmationRate.value : 0, unit: '%', delta: overview.confirmationRate ? overview.confirmationRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.confirmationRate.tooltip', 'Confirmation Rate = progressed statuses / all orders. Confirmation + cancel + pending = 100%.') },
     { label: s8Txt('DR Rate', 'نسبة DR'), value: overview.drRate ? overview.drRate.value : 0, unit: '%', delta: overview.drRate ? overview.drRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.drRate.tooltip', 'DR = delivered orders / confirmed orders.') },
     { label: s8Txt('NDR Rate', 'نسبة NDR'), value: overview.ndrRate ? overview.ndrRate.value : (cod.ndrPct != null ? num(cod.ndrPct, 0) : 0), unit: '%', delta: overview.ndrRate ? overview.ndrRate.delta : 0, color: 'orange', spark: [], iconType: 'orange', tooltip: tx('kpi.ndrRate.tooltip', 'NDR = delivered orders / net placed orders.') },
-    { label: s8Txt('Net ROAS', '?????? ?????? ??? ???????'), value: netRoasUnavailable ? 0 : netRoas.toFixed(2), displayValue: netRoasUnavailable ? '—' : netRoas.toFixed(2), unit: 'x', delta: netRoasDelta, hideDelta: netRoasUnavailable, color: 'purple', spark: [], iconType: 'purple', tooltip: tx('kpi.netRoas.tooltip', s8Txt('Net ROAS = delivered sales divided by ad spend. It uses only successfully delivered order revenue, so pending, canceled, and returned orders do not inflate ad performance.', '?????? ?????? ??? ??????? = ?????? ??????? ??????? ?????? ??? ??????? ????????. ?????? ?????? ??????? ??????? ??? ??? ?? ???? ??????? ??????? ?? ??????? ?? ???????? ????? ???????.')) }
+    { label: s8Txt('Net ROAS', 'العائد الصافي على الإعلان'), value: netRoasUnavailable ? 0 : netRoas.toFixed(2), displayValue: netRoasUnavailable ? '—' : netRoas.toFixed(2), unit: 'x', delta: netRoasDelta, hideDelta: netRoasUnavailable, color: 'purple', spark: [], iconType: 'purple', tooltip: tx('kpi.netRoas.tooltip', s8Txt('Net ROAS = delivered sales divided by ad spend. It uses only successfully delivered order revenue, so pending, canceled, and returned orders do not inflate ad performance.', 'العائد الصافي على الإعلان يساوي المبيعات المسلمة مقسومة على الإنفاق الإعلاني، ويستخدم فقط إيرادات الطلبات المسلمة بنجاح حتى لا تضخم الطلبات المعلقة أو الملغاة أو المرتجعة أداء الإعلانات.')) }
   ];
 
   // Keep Performance Overview balanced as two rows of six cards.
   KPI_CARDS = KPI_CARDS.concat(NEW_KPI_CARDS.splice(0, 2));
 
   var STAGES = pipeline.stages || [
-    { id: 'received', label: s8Txt('Order received', '??????? ???????'), count: 0, pct: '0%',  color: '#3b82f6' },
-    { label: s8Txt('Confirmed', '????'),           count: 0, pct: '0%',  color: '#3b82f6' },
-    { label: s8Txt('Processing', '??? ????????'),   count: 0, pct: '0%',  color: '#3b82f6' },
-    { label: s8Txt('On Hold', '??? ????????'),   count: 0, pct: '0%',  color: '#64748b' },
-    { label: s8Txt('Shipping', '??? ?????'),      count: 0, pct: '0%', color: '#f59e0b', sar: '0' },
-    { label: s8Txt('Delivered', '?? ???????'),     count: 0, pct: '0%', color: '#00e676', sar: '0', highlight: 'green' },
+    { id: 'received', label: s8Txt('Order received', 'تم استلام الطلب'), count: 0, pct: '0%',  color: '#3b82f6' },
+    { label: s8Txt('Confirmed', 'مؤكد'),           count: 0, pct: '0%',  color: '#3b82f6' },
+    { label: s8Txt('Processing', 'قيد المعالجة'),   count: 0, pct: '0%',  color: '#3b82f6' },
+    { label: s8Txt('On Hold', 'قيد الانتظار'),   count: 0, pct: '0%',  color: '#64748b' },
+    { label: s8Txt('Shipping', 'قيد الشحن'),      count: 0, pct: '0%', color: '#f59e0b', sar: '0' },
+    { label: s8Txt('Delivered', 'تم التسليم'),     count: 0, pct: '0%', color: '#00e676', sar: '0', highlight: 'green' },
     { label: s8Txt('Failed', 'فشل'),    count: 0, pct: '0%', color: '#ef4444', sar: '0', highlight: 'red' },
   ];
 
@@ -250,10 +259,10 @@ window.renderSection8 = function (mountEl, data, ctx) {
   
   var PIPELINE_SUMMARY = [
     { label: s8Txt('Net Orders', 'صافي الطلبات'),  value: String(totalOrders),  color: '#fff'    },
-    { label: s8Txt('Net Delivery Rate (NDR)', '???? ???????'),    value: s8PctValue(pNdr) + '%', color: pNdrColor },
+    { label: s8Txt('Net Delivery Rate (NDR)', 'معدل التسليم الصافي (NDR)'),    value: s8PctValue(pNdr) + '%', color: pNdrColor },
     { label: s8Txt('Confirmation Rate', 'نسبة التأكيد'), value: s8PctValue(pConfirmation) + '%', color: '#3b82f6' },
     { label: s8Txt('DR Rate', 'نسبة DR'), value: s8PctValue(pDr) + '%', color: '#22d3ee' },
-    { label: s8Txt('Average Delivery Time', '????? ??? ???????'), value: (cod.avgDays == null ? s8Txt('Unavailable', '??? ????') : s8Txt(cod.avgDays + ' days', cod.avgDays + ' ???')), color: '#fff' },
+    { label: s8Txt('Average Delivery Time', 'متوسط وقت التسليم'), value: (cod.avgDays == null ? s8Txt('Unavailable', 'غير متاح') : s8Txt(cod.avgDays + ' days', cod.avgDays + ' يوم')), color: '#fff' },
   ];
 
   PIPELINE_SUMMARY[1].tooltip = s8Txt(
@@ -285,8 +294,8 @@ window.renderSection8 = function (mountEl, data, ctx) {
   var COD_METRICS = [
     { label: 'DR', value: s8PctValue(drPct) + '%',  pct: drDeliveredOrders + ' / ' + drBaseOrders,  color: codDrColor, icon: 'box'    },
     { label: 'NDR', value: s8PctValue(codNdrPct) + '%', pct: drDeliveredOrders + ' / ' + ndrBaseOrders, color: codNdrColor, icon: 'box'    },
-    { label: s8Txt('Collected', '?? ???????'), value: fmt(collected), pct: s8Txt(drDeliveredOrders + ' orders', drDeliveredOrders + ' ???'), color: '#00e676', icon: 'box'  },
-    { label: s8Txt('Gap', '??????'),     value: fmt(remaining), pct: remainingRate.toFixed(1) + '%', color: '#ef4444', icon: 'xcircle'},
+    { label: s8Txt('Collected', 'تم التحصيل'), value: fmt(collected), pct: s8Txt(drDeliveredOrders + ' orders', drDeliveredOrders + ' طلب'), color: '#00e676', icon: 'box'  },
+    { label: s8Txt('Gap', 'الفجوة'),     value: fmt(remaining), pct: remainingRate.toFixed(1) + '%', color: '#ef4444', icon: 'xcircle'},
   ];
   COD_METRICS[0].tooltip = s8Txt('DR = delivered orders / confirmed base orders.', 'DR = delivered orders / confirmed base orders.');
   COD_METRICS[1].tooltip = s8Txt('NDR = delivered orders / net placed orders in the NDR cohort.', 'NDR = delivered orders / net placed orders in the NDR cohort.');
@@ -335,19 +344,19 @@ window.renderSection8 = function (mountEl, data, ctx) {
     displayCommissionVal = incomingCommission;
     displayDeltaVal = overview.incomingCommission ? overview.incomingCommission.delta : 0;
     displayColor = '#f59e0b';
-    displayTitle = s8Txt('Incoming Taager Profit After Tax', '??? ???? ?????? ??? ???????');
+    displayTitle = s8Txt('Incoming Taager Profit After Tax', 'الربح القادم بعد الضريبة');
   } else if (s8CommissionType === 'lost') {
     activePeriodsObj = trend.lostPeriods || {};
     displayCommissionVal = lostCommission;
     displayDeltaVal = overview.lostCommission ? overview.lostCommission.delta : 0;
     displayColor = '#ef4444';
-    displayTitle = s8Txt('Lost Taager Profit After Tax', '??? ???? ?????? ??? ???????');
+    displayTitle = s8Txt('Lost Taager Profit After Tax', 'الربح المفقود بعد الضريبة');
   } else {
     activePeriodsObj = trend.periods || {};
     displayCommissionVal = earnedCommission;
     displayDeltaVal = overview.earnedCommission ? overview.earnedCommission.delta : 0;
     displayColor = '#22c55e';
-    displayTitle = s8Txt('Earned Taager Profit After Tax', '??? ???? ?????? ??? ???????');
+    displayTitle = s8Txt('Earned Taager Profit After Tax', 'الربح المحصل بعد الضريبة');
   }
 
   var CHART_DATA = activePeriodsObj['30'] || [];
@@ -366,18 +375,18 @@ window.renderSection8 = function (mountEl, data, ctx) {
   var worstDayObj = CHART_DATA.find(function (x) { return x.v === CHART_WORST; });
   var CHART_WORST_DAY = worstDayObj ? worstDayObj.d : '—';
   
-  var chartDeltaSign = displayDeltaVal >= 0 ? s8Txt('Upward ?', '???? ?') : s8Txt('Downward ?', '???? ?');
+  var chartDeltaSign = displayDeltaVal >= 0 ? s8Txt('Upward', 'اتجاه صاعد') : s8Txt('Downward', 'اتجاه هابط');
   var chartDeltaColor = displayDeltaVal >= 0 ? '#22c55e' : '#ef4444';
 
   var CHART_STATS = [
-    { label: s8Txt('Average Daily Profit', '????? ??? ???? ??????'), value: CHART_AVG.toLocaleString("en-US") + ' ' + nativeCurrency, color: 'rgba(255,255,255,0.6)', sub: null             },
-    { label: s8Txt('Best Day', '???? ???'),              value: CHART_BEST.toLocaleString("en-US") + ' ' + nativeCurrency, color: '#fbbf24',               sub: CHART_BEST_DAY   },
-    { label: s8Txt('Worst Day', '???? ???'),              value: CHART_WORST.toLocaleString("en-US") + ' ' + nativeCurrency, color: '#ef4444',               sub: CHART_WORST_DAY  },
-    { label: s8Txt('Days Above Average', '???? ??? ???????'),      value: s8Txt(CHART_ABOVE + ' days', CHART_ABOVE + ' ????'),                color: '#3b82f6',               sub: null             },
-    { label: s8Txt('General Trend', '??????? ?????'),          value: chartDeltaSign,                      color: chartDeltaColor,         sub: null             },
+    { label: s8Txt('Average Daily Profit', 'متوسط الربح اليومي'), value: CHART_AVG.toLocaleString("en-US") + ' ' + nativeCurrency, color: 'rgba(255,255,255,0.6)', sub: null             },
+    { label: s8Txt('Best Day', 'أفضل يوم'),              value: CHART_BEST.toLocaleString("en-US") + ' ' + nativeCurrency, color: '#fbbf24',               sub: CHART_BEST_DAY   },
+    { label: s8Txt('Worst Day', 'أضعف يوم'),              value: CHART_WORST.toLocaleString("en-US") + ' ' + nativeCurrency, color: '#ef4444',               sub: CHART_WORST_DAY  },
+    { label: s8Txt('Days Above Average', 'أيام فوق المتوسط'),      value: s8Txt(CHART_ABOVE + ' days', CHART_ABOVE + ' يوم'),                color: '#3b82f6',               sub: null             },
+    { label: s8Txt('General Trend', 'الاتجاه العام'),          value: chartDeltaSign,                      color: chartDeltaColor,         sub: null             },
   ];
   
-  var topDisplayDeltaSign = displayDeltaVal >= 0 ? '? ' : '? ';
+  var topDisplayDeltaSign = displayDeltaVal >= 0 ? '+ ' : '- ';
   var topDisplayDeltaColor = displayDeltaVal >= 0 ? '#84cc16' : '#ef4444';
 
 
@@ -421,18 +430,18 @@ window.renderSection8 = function (mountEl, data, ctx) {
   var ndrMetricColor = window.dashboardRateColor ? window.dashboardRateColor(ndrPct) : (ndrPct >= 40 ? '#22d3ee' : ndrPct >= 30 ? '#00e676' : ndrPct >= 20 ? '#f59e0b' : '#ef4444');
   var drMetricColor = window.dashboardRateColor ? window.dashboardRateColor(drPct) : (drPct >= 40 ? '#22d3ee' : drPct >= 30 ? '#00e676' : drPct >= 20 ? '#f59e0b' : '#ef4444');
   var earnedDelta = overview.earnedCommission ? overview.earnedCommission.delta : 0;
-  var deltaSign = earnedDelta >= 0 ? '? ' : '? ';
+  var deltaSign = earnedDelta >= 0 ? '+ ' : '- ';
   var deltaColor = earnedDelta >= 0 ? '#84cc16' : '#ef4444';
 
   var SUMMARY_ITEMS = [
-    { id: 1, label: s8Txt('Products driving 80% of Taager Profit After Tax', '?????? ???? 80% ?? ??? ???? ??? ???????'), iconColor: '#3b82f6', value: String(top80PctProducts), sub: s8Txt('products', '??????'), iconType: 'pie' },
-    { id: 2, label: s8Txt('Net delivery rate', '???? ????? ???????'), iconColor: ndrMetricColor, value: ndrVal, sub: ndrSub, iconType: 'shield' },
-    { id: 3, label: s8Txt('Average delivery time', '????? ??? ???????'), iconColor: '#06b6d4', value: avgShippingValue == null ? '—' : avgShippingValue, sub: avgShippingValue == null ? s8Txt('Unavailable', '??? ????') : dayLabel(avgShippingValue), iconType: 'clock' },
-    { id: 4, label: s8Txt('Average delivered order value', '????? ???? ??????? ???????'), iconColor: '#8b5cf6', value: averageDeliveredOrderValue.toFixed(1), sub: null, suffix: nativeCurrency, iconType: 'tag' },
-    { id: 5, label: s8Txt('Active cities', '?????? ????? ??????'), iconColor: '#f59e0b', value: String(activeCitiesCount), sub: s8Txt('cities', '???'), iconType: 'map' },
-    { id: 6, label: s8Txt('Delivery Rate (DR)', '???? ??????? (DR)'), iconColor: drMetricColor, value: drVal, sub: drSub, iconType: 'shield' },
-    { id: 7, label: s8Txt('Taager Profit After Tax growth', '??? ??? ???? ??? ???????'), iconColor: '#84cc16', value: deltaSign + Math.abs(earnedDelta).toFixed(1) + '%', sub: s8Txt('vs previous period', '?? ?????? ???????'), valueColor: deltaColor, iconType: 'trend' },
-    { id: 8, label: s8Txt('Delivered sales', '?????? ??????? ???????'), iconColor: '#00e676', value: fmt(deliveredSalesValue), sub: null, iconType: 'money' },
+    { id: 1, label: s8Txt('Products driving 80% of Taager Profit After Tax', 'منتجات تحقق 80% من الربح بعد الضريبة'), iconColor: '#3b82f6', value: String(top80PctProducts), sub: s8Txt('products', 'منتجات'), iconType: 'pie' },
+    { id: 2, label: s8Txt('Net delivery rate', 'معدل التسليم الصافي'), iconColor: ndrMetricColor, value: ndrVal, sub: ndrSub, iconType: 'shield' },
+    { id: 3, label: s8Txt('Average delivery time', 'متوسط وقت التسليم'), iconColor: '#06b6d4', value: avgShippingValue == null ? '—' : avgShippingValue, sub: avgShippingValue == null ? s8Txt('Unavailable', 'غير متاح') : dayLabel(avgShippingValue), iconType: 'clock' },
+    { id: 4, label: s8Txt('Average delivered order value', 'متوسط قيمة الطلب المسلم'), iconColor: '#8b5cf6', value: averageDeliveredOrderValue.toFixed(1), sub: null, suffix: nativeCurrency, iconType: 'tag' },
+    { id: 5, label: s8Txt('Active cities', 'المدن النشطة'), iconColor: '#f59e0b', value: String(activeCitiesCount), sub: s8Txt('cities', 'مدن'), iconType: 'map' },
+    { id: 6, label: s8Txt('Delivery Rate (DR)', 'معدل التسليم (DR)'), iconColor: drMetricColor, value: drVal, sub: drSub, iconType: 'shield' },
+    { id: 7, label: s8Txt('Taager Profit After Tax growth', 'نمو الربح بعد الضريبة'), iconColor: '#84cc16', value: deltaSign + Math.abs(earnedDelta).toFixed(1) + '%', sub: s8Txt('vs previous period', 'مقارنة بالفترة السابقة'), valueColor: deltaColor, iconType: 'trend' },
+    { id: 8, label: s8Txt('Delivered sales', 'المبيعات المسلمة'), iconColor: '#00e676', value: fmt(deliveredSalesValue), sub: null, iconType: 'money' },
   ];
 
   SUMMARY_ITEMS[1].tooltip = s8Txt(
@@ -674,7 +683,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
     var needle = gaugePoint(pct, R - 10);
     var needleColor = roi < 0 ? '#ef4444' : roi < 50 ? '#f59e0b' : '#00e676';
     var roiLabel = (roi > 0 ? '+' : '') + roi.toFixed(1) + '%';
-    var badgeLabel = roi >= 50 ? s8Txt('Profitable ROI', '???? ????') : roi >= 0 ? s8Txt('Near break-even', '???? ?? ???????') : s8Txt('Losing ROI', '???? ????');
+    var badgeLabel = roi >= 50 ? s8Txt('Profitable ROI', 'عائد مربح') : roi >= 0 ? s8Txt('Near break-even', 'قريب من التعادل') : s8Txt('Losing ROI', 'عائد خاسر');
     var ticks = [
       { t: 0,    l: '-100%' },
       { t: 0.25, l: '0%'    },
@@ -985,7 +994,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
   }
 
   var viewAllBtnHtml = '<button id="s8-btn-products-bottom" style="margin-top:16px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:8px;padding:8px 14px;font-size:11px;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:700;cursor:pointer;width:100%;font-family:inherit;box-shadow:0 4px 10px rgba(0,0,0,0.2);">' +
-    s8Txt('VIEW ALL PRODUCTS', '??? ك? ????????') +
+    s8Txt('VIEW ALL PRODUCTS', 'عرض كل المنتجات') +
   '</button>';
 
   var chartStatsHtml = CHART_STATS.map(function (s, i) {
@@ -1053,12 +1062,12 @@ window.renderSection8 = function (mountEl, data, ctx) {
   var roiReturnPerSar = roiDefaultBudget > 0 ? roiRevenue / roiDefaultBudget : 0;
   var roiBreakEvenDeliveries = avgCommissionInTarget > 0 ? Math.ceil(roiDefaultBudget / avgCommissionInTarget) : 0;
   var roiProfitColor = roiNetProfit >= 0 ? '#00e676' : '#ef4444';
-  var roiStateLabel = roiPct >= 50 ? s8Txt('Profitable', '?????') : roiPct >= 0 ? s8Txt('Near break-even', '????? ?? ???????') : s8Txt('Losing', '?????');
+  var roiStateLabel = roiPct >= 50 ? s8Txt('Profitable', 'مربح') : roiPct >= 0 ? s8Txt('Near break-even', 'قريب من التعادل') : s8Txt('Losing', 'خاسر');
   var roiAdvice = roiPct >= 50
-    ? s8Txt('The calculator shows healthy returns. Review Section 7 before scaling spend.', '??????? ??????? ????. ???? ??????? ?? ????? 7 ??? ????? ???????.')
+    ? s8Txt('The calculator shows healthy returns. Review Section 7 before scaling spend.', 'تظهر الحاسبة عوائد صحية. راجع القسم 7 قبل زيادة الإنفاق.')
     : roiPct >= 0
-      ? s8Txt('Returns are positive but tight. Use Section 7 to test NDR, simulator profit after tax, and budget scenarios.', '?????? ?????? ???? ???. ?????? ????? 7 ??????? ?????????? ??????? ???? ??????? ??? ??????? ??????????.')
-      : s8Txt('Current calculator inputs point to a loss. Open Section 7 to find the break-even lever.', '?????? ??????? ??????? ???? ??? ?????. ???? ????? 7 ?????? ???? ???????.');
+      ? s8Txt('Returns are positive but tight. Use Section 7 to test NDR, simulator profit after tax, and budget scenarios.', 'العوائد إيجابية لكنها محدودة. استخدم القسم 7 لاختبار NDR وربح المحاكاة بعد الضريبة وسيناريوهات الميزانية.')
+      : s8Txt('Current calculator inputs point to a loss. Open Section 7 to find the break-even lever.', 'مدخلات الحاسبة الحالية تشير إلى خسارة. افتح القسم 7 للعثور على عامل التعادل.');
 
   function roiMetricCard(label, value, sub, color, iconSvg) {
     return '<div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;background:' + color + '0d;border:1px solid ' + color + '33;padding:12px;border-radius:14px;min-width:0;width:100%;box-sizing:border-box;">' +
@@ -1077,39 +1086,39 @@ window.renderSection8 = function (mountEl, data, ctx) {
       '<div style="display:flex;align-items:center;gap:10px;">' +
       '<div style="width:20px;height:20px;border-radius:50%;border:1px solid #a855f7;background:rgba(168,85,247,0.1);display:flex;align-items:center;justify-content:center;color:#a855f7;font-size:10px;font-weight:800;box-shadow:0 0 10px rgba(168,85,247,0.3);">6</div>' +
         '<div>' +
-          '<div style="font-size:15px;font-weight:800;color:#fff;font-family:Cairo;">' + s8Txt('Calculator Results Preview', '???? ????? ???????') + '</div>' +
-          '<div style="font-size:10.5px;color:rgba(255,255,255,0.36);font-weight:700;margin-top:3px;">' + s8Txt('Read-only snapshot from Account Calculator', '???? ????? ??? ?? ????? ??????') + '</div>' +
+          '<div style="font-size:15px;font-weight:800;color:#fff;font-family:Cairo;">' + s8Txt('Calculator Results Preview', 'معاينة نتائج الحاسبة') + '</div>' +
+          '<div style="font-size:10.5px;color:rgba(255,255,255,0.36);font-weight:700;margin-top:3px;">' + s8Txt('Read-only snapshot from Account Calculator', 'لقطة قراءة فقط من حاسبة الحساب') + '</div>' +
         '</div>' +
       '</div>' +
       '<span style="font-size:10px;font-weight:900;color:' + roiProfitColor + ';background:' + roiProfitColor + '18;border:1px solid ' + roiProfitColor + '38;border-radius:999px;padding:6px 10px;white-space:nowrap;">' + roiStateLabel + '</span>' +
     '</div>' +
     '<div style="display:grid;grid-template-columns:minmax(0,1.05fr) minmax(260px,.95fr);gap:18px;align-items:stretch;flex:1;" class="s8-roi-preview-grid">' +
       '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-content:start;">' +
-        roiMetricCard(s8Txt('Ad spend', '??????? ????????'), roiMoney(roiDefaultBudget), s8Txt('from calculator', '?? ???????'), '#3b82f6', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>') +
-        roiMetricCard(s8Txt('Delivered orders', '??????? ???????'), fmtCount(roiDeliveredOrders), fmtCount(roiTotalOrders) + ' × ' + ndrVal, ndrMetricColor, '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>') +
-        roiMetricCard(s8Txt('Revenue', '???????'), roiMoney(roiRevenue), s8Txt('delivered × simulator profit after tax per delivered order', '?????? × ??? ??????? ??? ?? ???? ??????'), '#06b6d4', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-7"/></svg>') +
-        roiMetricCard(s8Txt('Net profit', '???? ?????'), roiMoney(roiNetProfit), s8Txt('revenue - spend', '??????? - ???????'), roiProfitColor, '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"/><path d="M8.21 13.89 7 23l5-3 5 3-1.21-9.12"/></svg>') +
+        roiMetricCard(s8Txt('Ad spend', 'الإنفاق الإعلاني'), roiMoney(roiDefaultBudget), s8Txt('from calculator', 'من الحاسبة'), '#3b82f6', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>') +
+        roiMetricCard(s8Txt('Delivered orders', 'الطلبات المسلمة'), fmtCount(roiDeliveredOrders), fmtCount(roiTotalOrders) + ' × ' + ndrVal, ndrMetricColor, '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>') +
+        roiMetricCard(s8Txt('Revenue', 'الإيرادات'), roiMoney(roiRevenue), s8Txt('delivered × simulator profit after tax per delivered order', 'المسلم × ربح المحاكاة بعد الضريبة لكل طلب مسلم'), '#06b6d4', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-7"/></svg>') +
+        roiMetricCard(s8Txt('Net profit', 'صافي الربح'), roiMoney(roiNetProfit), s8Txt('revenue - spend', 'الإيرادات - الإنفاق'), roiProfitColor, '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"/><path d="M8.21 13.89 7 23l5-3 5 3-1.21-9.12"/></svg>') +
         roiMetricCard('CPA', roiMoney(roiCpa, 2), s8Txt('spend ÷ net orders', 'الإنفاق ÷ صافي الطلبات'), '#a855f7', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>') +
-        roiMetricCard(s8Txt('Break-even deliveries', '????? ???????'), fmtCount(roiBreakEvenDeliveries), s8Txt('needed to cover spend', '?????? ?????? ???????'), '#f59e0b', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16"/><path d="M12 4v16"/></svg>') +
+        roiMetricCard(s8Txt('Break-even deliveries', 'تسليمات التعادل'), fmtCount(roiBreakEvenDeliveries), s8Txt('needed to cover spend', 'المطلوبة لتغطية الإنفاق'), '#f59e0b', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16"/><path d="M12 4v16"/></svg>') +
       '</div>' +
       '<div style="display:flex;flex-direction:column;gap:12px;border:1px solid rgba(255,255,255,0.06);border-radius:16px;background:rgba(255,255,255,0.025);padding:16px;min-width:0;">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">' +
           '<div>' +
-            '<div style="font-size:11px;color:rgba(255,255,255,0.48);font-weight:800;">' + s8Txt('Return on investment', '?????? ??? ?????????') + '</div>' +
+            '<div style="font-size:11px;color:rgba(255,255,255,0.48);font-weight:800;">' + s8Txt('Return on investment', 'العائد على الاستثمار') + '</div>' +
             '<div style="font-size:28px;font-weight:950;color:' + roiProfitColor + ';line-height:1.1;direction:ltr;text-align:left;">' + (roiPct > 0 ? '+' : '') + roiPct.toFixed(1) + '%</div>' +
           '</div>' +
           '<div style="font-size:10px;color:rgba(255,255,255,0.42);font-weight:800;direction:ltr;text-align:right;">ROAS<br><span style="color:#fff;font-size:14px;">' + roiReturnPerSar.toFixed(2) + 'x</span></div>' +
         '</div>' +
         '<div style="min-height:150px;display:flex;align-items:center;justify-content:center;">' + roiPreviewGauge + '</div>' +
         '<div style="background:rgba(16,185,129,0.05);border:1px dashed rgba(16,185,129,0.3);border-radius:12px;padding:12px;direction:' + (isAr ? 'rtl' : 'ltr') + ';">' +
-          '<div style="font-size:11px;font-weight:900;color:#10b981;margin-bottom:6px;">' + s8Txt('Calculator note', '?????? ???????') + '</div>' +
+          '<div style="font-size:11px;font-weight:900;color:#10b981;margin-bottom:6px;">' + s8Txt('Calculator note', 'ملاحظة الحاسبة') + '</div>' +
           '<div style="font-size:10.5px;color:rgba(255,255,255,0.68);line-height:1.55;">' + roiAdvice + '</div>' +
         '</div>' +
         '<button id="s8-btn-calculator" type="button" style="margin-top:auto;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg, rgba(168,85,247,0.25), rgba(168,85,247,0.1));border:1px solid rgba(168,85,247,0.5);box-shadow:0 4px 12px rgba(168,85,247,0.2);color:' + (document.documentElement.getAttribute('data-theme') === 'light' ? '#7c3aed' : '#e9d5ff') + ';border-radius:12px;padding:12px 14px;font-size:11.5px;font-weight:900;cursor:pointer;font-family:inherit;transition:all 0.25s ease;text-shadow:0 1px 2px rgba(0,0,0,0.4);" ' +
           'onmouseenter="this.style.transform=\'translateY(-2px)\';this.style.boxShadow=\'0 6px 18px rgba(168,85,247,0.35)\';this.style.background=\'linear-gradient(135deg, rgba(168,85,247,0.35), rgba(168,85,247,0.15))\'" ' +
           'onmouseleave="this.style.transform=\'none\';this.style.boxShadow=\'0 4px 12px rgba(168,85,247,0.2)\';this.style.background=\'linear-gradient(135deg, rgba(168,85,247,0.25), rgba(168,85,247,0.1))\'">' +
           '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h2M14 10h2M8 14h2M14 14h2M8 18h2M14 18h2"/></svg>' +
-          s8Txt('Calculate more details in Account Calculator', '???? ?????? ???? ?? ????? ??????') +
+          s8Txt('Calculate more details in Account Calculator', 'احسب تفاصيل أكثر في حاسبة الحساب') +
         '</button>' +
       '</div>' +
     '</div>' +
@@ -1137,14 +1146,14 @@ window.renderSection8 = function (mountEl, data, ctx) {
       '</div>' +
 
       /* KPI Cards */
-      sectionBadge('1', s8Txt('Performance Overview', '???? ???? ??? ??????'), '#00e676') +
+      sectionBadge('1', s8Txt('Performance Overview', 'نظرة عامة على الأداء'), '#00e676') +
       '<div class="s8-kpi-row" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;">' + kpiRowHtml + '</div>' +
       '<div class="s8-kpi-row" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;">' + newKpiRowHtml + '</div>' +
       '<div class="s8-kpi-row" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:22px;">' + financialKpiRowHtml + '</div>' +
 
       /* Row 2 & 3 badge */
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;justify-content:flex-end;">' +
-        '<span style="font-size:14px;font-weight:700;color:#fff;">' + s8Txt('Order Pipeline · COD Collection', '?? ??? ??????? · ????? COD') + '</span>' +
+        '<span style="font-size:14px;font-weight:700;color:#fff;">' + s8Txt('Order Pipeline · COD Collection', 'خط سير الطلبات · تحصيل COD') + '</span>' +
         '<div style="display:flex;align-items:center;gap:4px;padding:2px 10px;border-radius:20px;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.35);">' +
           '<div style="width:7px;height:7px;border-radius:50%;background:#3b82f6;"></div>' +
           '<div style="width:7px;height:7px;border-radius:50%;background:#00e676;"></div>' +
@@ -1159,7 +1168,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
         '<div class="s8-pipeline-panel" style="flex:1;min-width:320px;background:#0a0f18;border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:18px 16px;display:flex;flex-direction:column;box-shadow:inset 0 0 40px rgba(0,0,0,0.5);box-sizing:border-box;">' +
           '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">' +
             '<div style="width:20px;height:20px;border-radius:50%;border:1px solid #3b82f6;background:rgba(59,130,246,0.1);display:flex;align-items:center;justify-content:center;color:#3b82f6;font-size:10px;font-weight:800;box-shadow:0 0 10px rgba(59,130,246,0.3);">2</div>' +
-            '<span style="font-size:14px;font-weight:700;color:#fff;font-family:\'Inter\', \'Cairo\', sans-serif;">' + s8Txt('Order Pipeline (Fulfillment Funnel)', '?? ??? ??????? (??? ???????)') + '</span>' +
+            '<span style="font-size:14px;font-weight:700;color:#fff;font-family:\'Inter\', \'Cairo\', sans-serif;">' + s8Txt('Order Pipeline (Fulfillment Funnel)', 'خط سير الطلبات (قمع التنفيذ)') + '</span>' +
           '</div>' +
           '<div class="s8-pipeline-stages" style="display:flex;flex:1;gap:0;overflow-x:auto;">' + pipelineStagesHtml + '</div>' +
           '<div class="s8-pipeline-summary-box">' +
@@ -1167,7 +1176,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
             '<div class="s8-pipeline-summary-action">' +
               '<button id="s8-btn-pipeline" style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);color:#3b82f6;border-radius:8px;padding:7px 12px;font-size:10px;display:flex;align-items:center;gap:6px;font-weight:700;cursor:pointer;direction:' + (isAr ? 'rtl' : 'ltr') + ';box-shadow:0 0 10px rgba(59,130,246,0.15);font-family:inherit;flex-shrink:0;white-space:nowrap;">' +
                 '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="12" y1="18" x2="20" y2="18"/></svg>' +
-                s8Txt('View Order Details', '??? ?????? ???????') +
+                s8Txt('View Order Details', 'عرض تفاصيل الطلبات') +
               '</button>' +
             '</div>' +
           '</div>' +
@@ -1178,9 +1187,9 @@ window.renderSection8 = function (mountEl, data, ctx) {
           '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:6px;">' +
             '<div style="display:flex;align-items:center;gap:10px;">' +
               '<div style="width:20px;height:20px;border-radius:50%;border:1px solid #3b82f6;background:rgba(59,130,246,0.1);display:flex;align-items:center;justify-content:center;color:#3b82f6;font-size:10px;font-weight:800;box-shadow:0 0 10px rgba(59,130,246,0.3);">3</div>' +
-              '<span style="font-size:14px;font-weight:700;color:#fff;font-family:Cairo;">' + s8Txt('COD Collection', '????? COD') + '</span>' +
+              '<span style="font-size:14px;font-weight:700;color:#fff;font-family:Cairo;">' + s8Txt('COD Collection', 'تحصيل COD') + '</span>' +
             '</div>' +
-            '<span style="font-size:12px;color:rgba(255,255,255,0.6);font-family:Cairo;direction:' + (isAr ? 'rtl' : 'ltr') + ';font-weight:700;">' + s8Txt('Top Collected Cities', '???? ????? ?? ???????') + '</span>' +
+            '<span style="font-size:12px;color:rgba(255,255,255,0.6);font-family:Cairo;direction:' + (isAr ? 'rtl' : 'ltr') + ';font-weight:700;">' + s8Txt('Top Collected Cities', 'أعلى المدن تحصيلا') + '</span>' +
           '</div>' +
           '<div class="s8-cod-content" style="display:flex;flex-wrap:wrap;gap:16px;flex:1;min-width:0;">' +
             /* Left part: COD Donut and metrics */
@@ -1203,7 +1212,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
                 citiesHtml +
               '</div>' +
               '<button id="s8-btn-cod" style="margin-top:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);padding:7px 10px;border-radius:8px;color:rgba(255,255,255,0.6);font-size:10px;display:flex;align-items:center;justify-content:space-between;font-weight:600;cursor:pointer;direction:' + (isAr ? 'rtl' : 'ltr') + ';box-shadow:0 4px 10px rgba(0,0,0,0.2);width:100%;font-family:inherit;">' +
-                '<span>' + s8Txt('View All Cities', '??? ???? ?????') + '</span>' +
+                '<span>' + s8Txt('View All Cities', 'عرض كل المدن') + '</span>' +
                 '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="12" y1="18" x2="20" y2="18"/></svg>' +
               '</button>' +
             '</div>' +
@@ -1217,24 +1226,24 @@ window.renderSection8 = function (mountEl, data, ctx) {
 
         /* Section 5: Taager profit chart (flex: 1.2; min-width: 280px) */
         '<div style="flex:1.2;min-width:280px;display:flex;flex-direction:column;">' +
-          sectionBadge('5', s8Txt('Daily Taager Profit After Tax Trend', '????? ??? ???? ??? ???????'), '#22c55e') +
+          sectionBadge('5', s8Txt('Daily Taager Profit After Tax Trend', 'اتجاه الربح بعد الضريبة اليومي'), '#22c55e') +
           '<div style="flex:1;background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;box-sizing:border-box;">' +
             '<div style="display:flex;justify-content:space-between;align-items:center;">' +
               '<div style="display:flex;align-items:center;gap:8px;">' +
-                '<span style="font-size:13px;font-weight:700;color:#fff;direction:' + (isAr ? 'rtl' : 'ltr') + ';font-family:Cairo;">' + s8Txt('Daily Taager Profit After Tax Trend', '????? ??? ???? ??? ???????') + '</span>' +
+                '<span style="font-size:13px;font-weight:700;color:#fff;direction:' + (isAr ? 'rtl' : 'ltr') + ';font-family:Cairo;">' + s8Txt('Daily Taager Profit After Tax Trend', 'اتجاه الربح بعد الضريبة اليومي') + '</span>' +
                 '<div id="s8-commission-dot" style="width:4px;height:18px;border-radius:2px;background:' + displayColor + ';"></div>' +
               '</div>' +
               '<div id="s8-commission-type-wrap" style="width:130px;"></div>' +
             '</div>' +
             '<div style="direction:' + (isAr ? 'rtl' : 'ltr') + ';">' +
-              '<div id="s8-commission-subtitle" style="font-size:9px;color:rgba(255,255,255,0.32);margin-bottom:3px;">' + s8Txt('Total ', '?????? ') + displayTitle + '</div>' +
+              '<div id="s8-commission-subtitle" style="font-size:9px;color:rgba(255,255,255,0.32);margin-bottom:3px;">' + s8Txt('Total ', 'الإجمالي ') + displayTitle + '</div>' +
               '<div style="display:flex;align-items:baseline;gap:6px;">' +
                 '<span id="s8-commission-val" style="font-size:26px;font-weight:900;color:#fff;line-height:1;">' + displayCommissionVal.toLocaleString("en-US") + '</span>' +
                 '<span style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.42);">' + nativeCurrency + '</span>' +
               '</div>' +
               '<div style="font-size:10px;margin-top:4px;">' +
                 '<span id="s8-commission-delta" style="color:' + topDisplayDeltaColor + ';font-weight:700;">' + topDisplayDeltaSign + Math.abs(displayDeltaVal).toFixed(1) + '%</span>' +
-                '<span style="color:rgba(255,255,255,0.32);margin-right:6px;">' + s8Txt('vs previous period', '?? ?????? ???????') + '</span>' +
+                '<span style="color:rgba(255,255,255,0.32);margin-right:6px;">' + s8Txt('vs previous period', 'مقارنة بالفترة السابقة') + '</span>' +
               '</div>' +
             '</div>' +
             '<div style="flex:1;min-height:160px;position:relative;">' +
@@ -1248,17 +1257,17 @@ window.renderSection8 = function (mountEl, data, ctx) {
 
         /* Section 4: Products (flex: 0.8; min-width: 230px) */
         '<div style="flex:0.8;min-width:230px;display:flex;flex-direction:column;">' +
-          sectionBadge('4', s8Txt('Top Products', '???? ????????'), '#fbbf24') +
+          sectionBadge('4', s8Txt('Top Products', 'أفضل المنتجات'), '#fbbf24') +
           '<div style="flex:1;background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:18px 20px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box;">' +
             '<div style="display:flex;justify-content:space-between;align-items:center;">' +
               '<div style="display:flex;align-items:center;gap:8px;">' +
-                '<span style="font-size:13px;font-weight:700;color:#fff;direction:' + (isAr ? 'rtl' : 'ltr') + ';font-family:Cairo;">' + s8Txt('Top Products', '???? ????????') + '</span>' +
+                '<span style="font-size:13px;font-weight:700;color:#fff;direction:' + (isAr ? 'rtl' : 'ltr') + ';font-family:Cairo;">' + s8Txt('Top Products', 'أفضل المنتجات') + '</span>' +
                 '<div style="width:4px;height:18px;border-radius:2px;background:#fbbf24;"></div>' +
               '</div>' +
             '</div>' +
             '<div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.06);direction:' + (isAr ? 'rtl' : 'ltr') + ';">' +
-              '<span style="font-size:8px;color:rgba(255,255,255,0.28);font-weight:600;">' + s8Txt('Earned Taager Profit After Tax', '??? ???? ?????? ??? ???????') + '</span>' +
-              '<span style="font-size:8px;color:rgba(255,255,255,0.28);font-weight:600;">' + s8Txt('Delivered Count', '??? ?????????') + '</span>' +
+              '<span style="font-size:8px;color:rgba(255,255,255,0.28);font-weight:600;">' + s8Txt('Earned Taager Profit After Tax', 'الربح المحصل بعد الضريبة') + '</span>' +
+              '<span style="font-size:8px;color:rgba(255,255,255,0.28);font-weight:600;">' + s8Txt('Delivered Count', 'عدد التسليمات') + '</span>' +
             '</div>' +
             '<div style="display:flex;flex-direction:column;flex:1;">' + productsPagesHtml + '</div>' + paginationHtml + viewAllBtnHtml +
           '</div>' +
@@ -1266,7 +1275,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
 
         /* Section 6: ROI Calculator Snapshot (flex: 1.6; min-width: 320px) */
         '<div style="flex:1.6;min-width:320px;display:flex;flex-direction:column;">' +
-          sectionBadge('6', s8Txt('Calculator Snapshot', '???? ???????'), '#a855f7') +
+          sectionBadge('6', s8Txt('Calculator Snapshot', 'لقطة الحاسبة'), '#a855f7') +
           roiWidgetHtml +
         '</div>' +
 
@@ -1279,7 +1288,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
         '<div style="display:flex;align-items:center;gap:10px;direction:ltr;justify-content:flex-start;">' +
           '<div style="width:28px;height:28px;border-radius:50%;background:rgba(59,130,246,0.15);border:1.5px solid rgba(59,130,246,0.55);' +
             'box-shadow:0 0 10px rgba(59,130,246,0.45);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#3b82f6;flex-shrink:0;">7</div>' +
-          '<span style="font-size:16px;font-weight:700;color:#fff;font-family:Cairo;">' + s8Txt('Quick Indicator Summary', '???? ???? ????????') + '</span>' +
+          '<span style="font-size:16px;font-weight:700;color:#fff;font-family:Cairo;">' + s8Txt('Quick Indicator Summary', 'ملخص المؤشرات السريع') + '</span>' +
         '</div>' +
         '<div class="s8-summary-grid" style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px;width:100%;direction:ltr;">' +
           summaryItemsHtml +
@@ -1362,15 +1371,15 @@ window.renderSection8 = function (mountEl, data, ctx) {
             '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2.2" stroke-linecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>' +
           '</div>' +
           '<div>' +
-            '<div style="font-size:14px;font-weight:900;color:#fff">' + s8Txt('Best Expansion List', '????? ?????? ??????') + '</div>' +
-            '<div style="font-size:11px;color:rgba(255,255,255,0.38);margin-top:2px">' + s8Txt('Candidate cities for expansion based on index', '??? ????? ?????? ??? ???? ??????') + '</div>' +
+            '<div style="font-size:14px;font-weight:900;color:#fff">' + s8Txt('Best Expansion List', 'قائمة أفضل توسع') + '</div>' +
+            '<div style="font-size:11px;color:rgba(255,255,255,0.38);margin-top:2px">' + s8Txt('Candidate cities for expansion based on index', 'مدن مرشحة للتوسع حسب المؤشر') + '</div>' +
           '</div>' +
         '</div>' +
         '<div style="padding:0 12px 6px;display:grid;grid-template-columns:28px 1fr 70px 60px 60px 60px;' +
           'gap:10px;font-size:10px;font-weight:700;color:rgba(255,255,255,0.3);border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:8px;margin-bottom:8px;">' +
-          '<div style="text-align:center">#</div><div>' + s8Txt('City', '???????') + '</div>' +
-          '<div style="text-align:center">' + s8Txt('Orders', '???????') + '</div><div style="text-align:center">NDR%</div>' +
-          '<div style="text-align:center">' + s8Txt('Expansion', '??????') + '</div><div style="text-align:center">' + s8Txt('Risk', '????????') + '</div>' +
+          '<div style="text-align:center">#</div><div>' + s8Txt('City', 'المدينة') + '</div>' +
+          '<div style="text-align:center">' + s8Txt('Orders', 'الطلبات') + '</div><div style="text-align:center">NDR%</div>' +
+          '<div style="text-align:center">' + s8Txt('Expansion', 'التوسع') + '</div><div style="text-align:center">' + s8Txt('Risk', 'المخاطر') + '</div>' +
         '</div>' +
         '<div style="display:flex;flex-direction:column;gap:6px;padding:0 12px;">' + rows + '</div>' +
       '</div>';
@@ -1428,19 +1437,19 @@ window.renderSection8 = function (mountEl, data, ctx) {
       dispComm = incomingCommission;
       dispDelta = overview.incomingCommission ? overview.incomingCommission.delta : 0;
       dispColor = '#f59e0b';
-      dispTitle = s8Txt('Incoming Taager Profit After Tax', '??? ???? ?????? ??? ???????');
+      dispTitle = s8Txt('Incoming Taager Profit After Tax', 'الربح القادم بعد الضريبة');
     } else if (type === 'lost') {
       activePeriodsObj = trend.lostPeriods || {};
       dispComm = lostCommission;
       dispDelta = overview.lostCommission ? overview.lostCommission.delta : 0;
       dispColor = '#ef4444';
-      dispTitle = s8Txt('Lost Taager Profit After Tax', '??? ???? ?????? ??? ???????');
+      dispTitle = s8Txt('Lost Taager Profit After Tax', 'الربح المفقود بعد الضريبة');
     } else {
       activePeriodsObj = trend.periods || {};
       dispComm = earnedCommission;
       dispDelta = overview.earnedCommission ? overview.earnedCommission.delta : 0;
       dispColor = '#22c55e';
-      dispTitle = s8Txt('Earned Taager Profit After Tax', '??? ???? ?????? ??? ???????');
+      dispTitle = s8Txt('Earned Taager Profit After Tax', 'الربح المحصل بعد الضريبة');
     }
 
     var chartData = activePeriodsObj['30'] || [];
@@ -1456,7 +1465,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
       var deltaEl = mountEl.querySelector('#s8-commission-delta');
       
       if (dotEl) dotEl.style.background = dispColor;
-      if (subtitleEl) subtitleEl.textContent = s8Txt('Total ', '?????? ') + dispTitle;
+      if (subtitleEl) subtitleEl.textContent = s8Txt('Total ', 'الإجمالي ') + dispTitle;
       if (valEl) valEl.textContent = dispComm.toLocaleString("en-US");
       if (deltaEl) {
         deltaEl.style.color = topDeltaColor;
@@ -1474,15 +1483,15 @@ window.renderSection8 = function (mountEl, data, ctx) {
       var cBestDay = (chartData.find(function (x) { return x.v === cBest; }) || {}).d || '—';
       var cWorstDay = (chartData.find(function (x) { return x.v === cWorst; }) || {}).d || '—';
       
-      var cDeltaSign = dispDelta >= 0 ? s8Txt('Upward ?', '???? ?') : s8Txt('Downward ?', '???? ?');
+      var cDeltaSign = dispDelta >= 0 ? s8Txt('Upward', 'اتجاه صاعد') : s8Txt('Downward', 'اتجاه هابط');
       var cDeltaColor = dispDelta >= 0 ? '#22c55e' : '#ef4444';
 
       var cStats = [
-        { label: s8Txt('Average Daily Profit', '????? ??? ???? ??????'), value: cAvg.toLocaleString("en-US") + ' ' + nativeCurrency, color: 'rgba(255,255,255,0.6)', sub: null },
-        { label: s8Txt('Best Day', '???? ???'),              value: cBest.toLocaleString("en-US") + ' ' + nativeCurrency, color: '#fbbf24',               sub: cBestDay },
-        { label: s8Txt('Worst Day', '???? ???'),              value: cWorst.toLocaleString("en-US") + ' ' + nativeCurrency, color: '#ef4444',               sub: cWorstDay },
-        { label: s8Txt('Days Above Average', '???? ??? ???????'),      value: s8Txt(cAbove + ' days', cAbove + ' ????'),                color: '#3b82f6',               sub: null },
-        { label: s8Txt('General Trend', '??????? ?????'),          value: cDeltaSign,                      color: cDeltaColor,         sub: null },
+        { label: s8Txt('Average Daily Profit', 'متوسط الربح اليومي'), value: cAvg.toLocaleString("en-US") + ' ' + nativeCurrency, color: 'rgba(255,255,255,0.6)', sub: null },
+        { label: s8Txt('Best Day', 'أفضل يوم'),              value: cBest.toLocaleString("en-US") + ' ' + nativeCurrency, color: '#fbbf24',               sub: cBestDay },
+        { label: s8Txt('Worst Day', 'أضعف يوم'),              value: cWorst.toLocaleString("en-US") + ' ' + nativeCurrency, color: '#ef4444',               sub: cWorstDay },
+        { label: s8Txt('Days Above Average', 'أيام فوق المتوسط'),      value: s8Txt(cAbove + ' days', cAbove + ' يوم'),                color: '#3b82f6',               sub: null },
+        { label: s8Txt('General Trend', 'الاتجاه العام'),          value: cDeltaSign,                      color: cDeltaColor,         sub: null },
       ];
 
       var statsWrap = mountEl.querySelector('#s8-commission-stats');
@@ -1596,9 +1605,9 @@ window.renderSection8 = function (mountEl, data, ctx) {
     var typeWrap = mountEl.querySelector('#s8-commission-type-wrap');
     if (typeWrap) {
       dropdown(typeWrap, [
-        { value: 'earned', label: s8Txt('Earned Taager Profit After Tax', '??? ???? ?????? ??? ???????') },
-        { value: 'incoming', label: s8Txt('Incoming Taager Profit After Tax', '??? ???? ?????? ??? ???????') },
-        { value: 'lost', label: s8Txt('Lost Taager Profit After Tax', '??? ???? ?????? ??? ???????') }
+        { value: 'earned', label: s8Txt('Earned Taager Profit After Tax', 'الربح المحصل بعد الضريبة') },
+        { value: 'incoming', label: s8Txt('Incoming Taager Profit After Tax', 'الربح القادم بعد الضريبة') },
+        { value: 'lost', label: s8Txt('Lost Taager Profit After Tax', 'الربح المفقود بعد الضريبة') }
       ], s8CommissionType, function (value) {
         mountEl._s8CommissionType = value;
         mountEl._updateCommissionChart(value, false);

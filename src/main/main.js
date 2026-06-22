@@ -814,6 +814,244 @@ function _buildAccountIdents() {
   } catch { return []; }
 }
 
+const LICENSE_CREDENTIAL_BACKUP_VERSION = 1;
+const LICENSE_CREDENTIAL_BACKUP_PROMPT_VERSION = 1;
+const LICENSE_CREDENTIAL_BACKUP_AAD = Buffer.from("taager-license-credentials-v1");
+
+function deriveLicenseCredentialBackupKey(licenseKey, salt) {
+  return crypto.pbkdf2Sync(
+    String(licenseKey || "").trim().toUpperCase(),
+    `taager-license-credentials-v1:${salt}`,
+    100000,
+    32,
+    "sha256"
+  );
+}
+
+function encryptLicenseCredentialBackup(payload, licenseKey) {
+  const salt = crypto.randomBytes(16).toString("base64");
+  const iv = crypto.randomBytes(12);
+  const key = deriveLicenseCredentialBackupKey(licenseKey, salt);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  cipher.setAAD(LICENSE_CREDENTIAL_BACKUP_AAD);
+  const plaintext = Buffer.from(JSON.stringify(payload), "utf8");
+  const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  return {
+    v: 1,
+    alg: "aes-256-gcm",
+    kdf: "pbkdf2-sha256",
+    iterations: 100000,
+    salt,
+    iv: iv.toString("base64"),
+    tag: cipher.getAuthTag().toString("base64"),
+    ciphertext: encrypted.toString("base64"),
+  };
+}
+
+function decryptLicenseCredentialBackup(envelope, licenseKey) {
+  if (!envelope || envelope.v !== 1 || envelope.alg !== "aes-256-gcm") {
+    throw new Error("unsupported_credential_backup");
+  }
+  const key = deriveLicenseCredentialBackupKey(licenseKey, envelope.salt);
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(envelope.iv, "base64"));
+  decipher.setAAD(LICENSE_CREDENTIAL_BACKUP_AAD);
+  decipher.setAuthTag(Buffer.from(envelope.tag, "base64"));
+  const decrypted = Buffer.concat([
+    decipher.update(Buffer.from(envelope.ciphertext, "base64")),
+    decipher.final(),
+  ]);
+  return JSON.parse(decrypted.toString("utf8"));
+}
+
+function backupString(value, max = 512) {
+  return String(value == null ? "" : value).trim().slice(0, max);
+}
+
+function accountForCredentialBackup(account) {
+  const id = backupString(account && account.id, 80);
+  return {
+    id,
+    memberName: backupString(account && account.memberName, 120),
+    label: backupString(account && account.label, 160),
+    licenseAccountHash: backupString(account && account.licenseAccountHash, 160),
+    licenseIdentityKey: backupString(account && account.licenseIdentityKey, 512),
+    easyEmail: backupString(account && account.easyEmail, 320),
+    easyPassword: id ? store.get(`pwd_easy_${id}`, "") : "",
+    easyStore: backupString(account && account.easyStore, 180),
+    dashboardEnrichmentProvider: account && account.dashboardEnrichmentProvider === "easyorders" ? "easyorders" : "none",
+    easyOrdersLookbackDays: Number(account && account.easyOrdersLookbackDays || 60),
+    taagerLoginMethod: taagerLoginMethodOf(account),
+    taagerEmail: backupString(account && account.taagerEmail, 320),
+    taagerPhone: backupString(account && account.taagerPhone, 80),
+    taagerPassword: id ? store.get(`pwd_taager_${id}`, "") : "",
+    taagerCountry: backupString(account && account.taagerCountry || "sa", 12).toLowerCase() || "sa",
+    taagerAffiliateCode: backupString(account && account.taagerAffiliateCode, 80),
+  };
+}
+
+function legacyAccountForCredentialBackup() {
+  const easyEmail = backupString(store.get("easyEmail", ""), 320);
+  if (!easyEmail) return null;
+  const id = "__single__";
+  return {
+    id,
+    memberName: "",
+    label: backupString(store.get("easyStore", "") || easyEmail, 160),
+    licenseAccountHash: "",
+    licenseIdentityKey: "",
+    easyEmail,
+    easyPassword: String(store.get("easyPassword", "") || ""),
+    easyStore: backupString(store.get("easyStore", ""), 180),
+    dashboardEnrichmentProvider: store.get("dashboardEnrichmentProvider", "none") === "easyorders" ? "easyorders" : "none",
+    easyOrdersLookbackDays: Number(store.get("easyOrdersLookbackDays", 60) || 60),
+    taagerLoginMethod: store.get("taagerLoginMethod", "email") || "email",
+    taagerEmail: backupString(store.get("taagerEmail", ""), 320),
+    taagerPhone: backupString(store.get("taagerPhone", ""), 80),
+    taagerPassword: String(store.get("taagerPassword", "") || ""),
+    taagerCountry: backupString(store.get("taagerCountry", "sa") || "sa", 12).toLowerCase() || "sa",
+    taagerAffiliateCode: backupString(store.get("taagerAffiliateCode", ""), 80),
+  };
+}
+
+function localCredentialBackupAccountCount() {
+  const accounts = store.get("accounts", []) || [];
+  if (accounts.length) return accounts.length;
+  return legacyAccountForCredentialBackup() ? 1 : 0;
+}
+
+function buildLicenseCredentialBackupPayload() {
+  let accounts = (store.get("accounts", []) || []).map(accountForCredentialBackup).filter(a => a.id);
+  if (!accounts.length) {
+    const legacy = legacyAccountForCredentialBackup();
+    if (legacy) accounts = [legacy];
+  }
+  return {
+    version: LICENSE_CREDENTIAL_BACKUP_VERSION,
+    updatedAt: new Date().toISOString(),
+    accounts,
+  };
+}
+
+function normalizeRestoredCredentialAccount(raw, index) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  const fallbackId = `account_${Date.now()}_${index}`;
+  const id = backupString(src.id || fallbackId, 80).replace(/[^\w-]/g, "_") || fallbackId;
+  const restored = {
+    id,
+    memberName: backupString(src.memberName, 120),
+    label: backupString(src.label, 160),
+    easyEmail: backupString(src.easyEmail, 320),
+    easyPassword: String(src.easyPassword || ""),
+    easyStore: backupString(src.easyStore, 180),
+    dashboardEnrichmentProvider: src.dashboardEnrichmentProvider === "easyorders" ? "easyorders" : "none",
+    easyOrdersLookbackDays: Number(src.easyOrdersLookbackDays || 60),
+    taagerLoginMethod: taagerLoginMethodOf(src),
+    taagerEmail: backupString(src.taagerEmail, 320),
+    taagerPhone: backupString(src.taagerPhone, 80),
+    taagerPassword: String(src.taagerPassword || ""),
+    taagerCountry: backupString(src.taagerCountry || "sa", 12).toLowerCase() || "sa",
+    taagerAffiliateCode: backupString(src.taagerAffiliateCode, 80),
+  };
+  const identityKey = accountIdentityKey(restored);
+  if (src.licenseAccountHash && src.licenseIdentityKey === identityKey) {
+    restored.licenseAccountHash = backupString(src.licenseAccountHash, 160);
+    restored.licenseIdentityKey = identityKey;
+  }
+  return restored;
+}
+
+async function getLicenseCredentialBackupStatus() {
+  const licKey = licenseStore.get("licenseKey", "");
+  if (!licKey) return { ok: false, available: false, reason: "no_license" };
+  try {
+    const status = await supabaseRpc("taager_get_license_credential_backup_status", {
+      p_license_key: licKey,
+      p_machine_uuid: _getOrCreateMachineUUID(),
+      p_device_id: getDeviceFingerprint(),
+    });
+    return {
+      ok: status && status.ok === true,
+      available: status && status.available === true,
+      accountCount: Number(status && status.account_count || 0),
+      updatedAt: status && status.updated_at || null,
+      reason: status && status.reason || "",
+    };
+  } catch (error) {
+    log.warn("[LicenseCredentials] Backup status failed:", error && error.message ? error.message : error);
+    return { ok: false, available: false, reason: "backup_status_failed" };
+  }
+}
+
+async function getLicenseCredentialBackupPromptStatus() {
+  const licKey = licenseStore.get("licenseKey", "");
+  const accountCount = localCredentialBackupAccountCount();
+  if (!licKey) return { show: false, reason: "no_license", version: LICENSE_CREDENTIAL_BACKUP_PROMPT_VERSION };
+  if (!accountCount) return { show: false, reason: "no_accounts", version: LICENSE_CREDENTIAL_BACKUP_PROMPT_VERSION };
+  if (store.get("licenseCredentialBackupPromptDoneVersion", 0) >= LICENSE_CREDENTIAL_BACKUP_PROMPT_VERSION) {
+    return { show: false, reason: "already_done", version: LICENSE_CREDENTIAL_BACKUP_PROMPT_VERSION };
+  }
+  const status = await getLicenseCredentialBackupStatus();
+  if (status && status.ok === false) {
+    return {
+      show: false,
+      reason: status.reason || "backup_status_unavailable",
+      version: LICENSE_CREDENTIAL_BACKUP_PROMPT_VERSION,
+      accountCount,
+    };
+  }
+  if (status && status.available) {
+    store.set("licenseCredentialBackupPromptDoneVersion", LICENSE_CREDENTIAL_BACKUP_PROMPT_VERSION);
+    return {
+      show: false,
+      reason: "backup_exists",
+      version: LICENSE_CREDENTIAL_BACKUP_PROMPT_VERSION,
+      accountCount: status.accountCount || accountCount,
+      updatedAt: status.updatedAt || null,
+    };
+  }
+  return {
+    show: true,
+    reason: status && status.reason || "backup_missing",
+    version: LICENSE_CREDENTIAL_BACKUP_PROMPT_VERSION,
+    accountCount,
+  };
+}
+
+async function syncLicenseCredentialsBackup(reason = "credentials-updated") {
+  const licKey = licenseStore.get("licenseKey", "");
+  if (!licKey) return { ok: false, reason: "no_license" };
+  const payload = buildLicenseCredentialBackupPayload();
+  if (!payload.accounts.length) return { ok: false, reason: "no_accounts" };
+  const encrypted = encryptLicenseCredentialBackup(payload, licKey);
+  try {
+    const result = await supabaseRpc("taager_upsert_license_credential_backup", {
+      p_license_key: licKey,
+      p_machine_uuid: _getOrCreateMachineUUID(),
+      p_device_id: getDeviceFingerprint(),
+      p_payload_version: LICENSE_CREDENTIAL_BACKUP_VERSION,
+      p_encrypted_payload: encrypted,
+      p_account_count: payload.accounts.length,
+      p_account_hashes: payload.accounts.map(a => accountHash(a)),
+    });
+    if (!result || result.ok !== true) {
+      log.warn("[LicenseCredentials] Backup rejected:", result && result.reason || "unknown");
+      return { ok: false, reason: result && result.reason || "backup_rejected" };
+    }
+    log.info("[LicenseCredentials] Credential backup synced:", { reason, accounts: payload.accounts.length });
+    return { ok: true, accountCount: payload.accounts.length };
+  } catch (error) {
+    log.warn("[LicenseCredentials] Backup sync failed:", error && error.message ? error.message : error);
+    return { ok: false, reason: "backup_sync_failed" };
+  }
+}
+
+async function backupLicenseCredentialsNow() {
+  const result = await syncLicenseCredentialsBackup("manual-backup-prompt");
+  if (result && result.ok === true) {
+    store.set("licenseCredentialBackupPromptDoneVersion", LICENSE_CREDENTIAL_BACKUP_PROMPT_VERSION);
+  }
+  return Object.assign({ version: LICENSE_CREDENTIAL_BACKUP_PROMPT_VERSION }, result || { ok: false, reason: "backup_failed" });
+}
 function looksLikeEmail(value) {
   return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
@@ -2039,6 +2277,10 @@ async function _checkLicenseImpl(bustCache) {
 
 ipcMain.handle("check-license", async () => _checkLicenseImpl(false));
 ipcMain.handle("check-license-nocache", async () => _checkLicenseImpl(true));
+ipcMain.handle("get-license-credential-backup-status", async () => getLicenseCredentialBackupStatus());
+ipcMain.handle("get-license-credential-backup-prompt-status", async () => getLicenseCredentialBackupPromptStatus());
+ipcMain.handle("backup-license-credentials-now", async () => backupLicenseCredentialsNow());
+ipcMain.handle("restore-license-credentials", async () => restoreLicenseCredentialsFromBackup());
 ipcMain.handle("submit-license", async (_, key) => {
   const clean = key.trim().toUpperCase();
   if (!isValidKeyFormat(clean)) return { success: false, reason: "Invalid format. Keys look like: TAAGER-XXXX-XXXX-XXXX-XXXX" };
@@ -2339,6 +2581,7 @@ ipcMain.handle("save-credentials", async (_, creds) => {
   store.set("taagerCountry",  creds.taagerCountry  || creds.taagerCountry  || "sa");
   store.set("taagerAffiliateCode", creds.taagerAffiliateCode || "");
   invalidateAnalyticsRunsCache();
+  syncLicenseCredentialsBackup("save-credentials").catch(() => {});
   return { success: true };
 });
 
@@ -2424,6 +2667,114 @@ function persistAccountsWithoutDeleting(accounts, maxAccounts) {
   invalidateAnalyticsRunsCache();
 }
 
+async function syncRestoredAccountLicenseSlots(accounts, maxAccounts) {
+  const licKey = licenseStore.get("licenseKey", "");
+  if (!licKey) return { success: true };
+  const dbRows = await supabaseRpc("taager_get_license_accounts", { p_license_key: licKey }) || [];
+  const dbHashes = dbRows.map(r => r.account_hash);
+  const missingAccounts = [];
+
+  for (const account of accounts) {
+    if (account.licenseAccountHash && dbHashes.includes(account.licenseAccountHash)) continue;
+    const matchingRow = dbRows.find(row => licenseRowMatchesAccount(row, account));
+    if (matchingRow && matchingRow.account_hash) {
+      account.licenseAccountHash = matchingRow.account_hash;
+      account.licenseIdentityKey = accountIdentityKey(account);
+      continue;
+    }
+    const hash = accountHash(account);
+    if (!dbHashes.includes(hash)) missingAccounts.push(account);
+  }
+
+  if (dbHashes.length + missingAccounts.length > maxAccounts) {
+    return { success: false, reason: "remote_slots_full", remoteAccountSlots: summarizeRemoteLicenseAccounts(dbRows) };
+  }
+
+  for (const account of missingAccounts) {
+    const hash = accountHash(account);
+    const insertRes = await supabaseRpc("taager_insert_license_account", {
+      p_license_key: licKey,
+      p_account_hash: hash,
+      p_easy_email: (account.easyEmail || "").toLowerCase().trim() || null,
+      p_easy_store: String(account.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase() || null,
+      p_taager_email: taagerLoginIdentityOf(account) || null,
+      p_taager_login_method: taagerLoginMethodOf(account),
+      p_unlocked: false,
+    });
+    if (insertRes && insertRes.success === false) {
+      return { success: false, reason: insertRes.reason || "license_account_sync_failed" };
+    }
+    account.licenseAccountHash = hash;
+    account.licenseIdentityKey = accountIdentityKey(account);
+  }
+
+  return { success: true };
+}
+
+async function restoreLicenseCredentialsFromBackup() {
+  const licKey = licenseStore.get("licenseKey", "");
+  if (!licKey) return { success: false, reason: "no_license" };
+  if ((store.get("accounts", []) || []).length > 0) {
+    return { success: false, reason: "local_credentials_exist" };
+  }
+
+  const license = await _checkLicenseImpl(true);
+  if (!license || !license.valid) return { success: false, reason: license && license.reason || "license_invalid" };
+
+  let remote;
+  try {
+    remote = await supabaseRpc("taager_get_license_credential_backup", {
+      p_license_key: licKey,
+      p_machine_uuid: _getOrCreateMachineUUID(),
+      p_device_id: getDeviceFingerprint(),
+    });
+  } catch (error) {
+    log.warn("[LicenseCredentials] Restore fetch failed:", error && error.message ? error.message : error);
+    return { success: false, reason: "restore_fetch_failed" };
+  }
+
+  if (!remote || remote.ok !== true) return { success: false, reason: remote && remote.reason || "restore_not_allowed" };
+  if (remote.available !== true || !remote.encrypted_payload) return { success: false, reason: "no_backup" };
+
+  let payload;
+  try {
+    payload = decryptLicenseCredentialBackup(remote.encrypted_payload, licKey);
+  } catch (error) {
+    log.warn("[LicenseCredentials] Restore decrypt failed:", error && error.message ? error.message : error);
+    return { success: false, reason: "restore_decrypt_failed" };
+  }
+
+  if (!payload || payload.version !== LICENSE_CREDENTIAL_BACKUP_VERSION || !Array.isArray(payload.accounts)) {
+    return { success: false, reason: "invalid_backup" };
+  }
+
+  const maxAccounts = await getMaxAccounts();
+  const restoredAccounts = payload.accounts
+    .slice(0, Math.max(0, maxAccounts))
+    .map(normalizeRestoredCredentialAccount);
+
+  if (!restoredAccounts.length) return { success: false, reason: "no_backup_accounts" };
+  if (payload.accounts.length > maxAccounts) return { success: false, reason: "limit_reached" };
+
+  for (const account of restoredAccounts) {
+    const validation = validateAccountCredentialsForSave(account);
+    if (!validation.success) return validation;
+  }
+
+  try {
+    const slotSync = await syncRestoredAccountLicenseSlots(restoredAccounts, maxAccounts);
+    if (!slotSync.success) return slotSync;
+  } catch (error) {
+    log.warn("[LicenseCredentials] Restore slot sync failed:", error && error.message ? error.message : error);
+    return { success: false, reason: "license_account_sync_failed" };
+  }
+
+  persistAccountsWithoutDeleting(restoredAccounts, maxAccounts);
+  _credCache = null;
+  _credCacheAt = 0;
+  log.info("[LicenseCredentials] Restored credential backup:", { accounts: restoredAccounts.length });
+  return { success: true, accountCount: restoredAccounts.length };
+}
 async function syncSingleEditedAccountLicenseSlot(oldAccount, newAccount, maxAccounts) {
   const licKey = licenseStore.get("licenseKey", "");
   if (!licKey) return { success: true };
@@ -2557,6 +2908,7 @@ ipcMain.handle("update-account", async (_, data = {}) => {
   if (!licenseSync.success) return licenseSync;
 
   persistAccountsWithoutDeleting(nextAccounts, maxAccounts);
+  syncLicenseCredentialsBackup("update-account").catch(() => {});
   return { success: true };
 });
 
@@ -2806,6 +3158,7 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
   _credCache = null;
   _credCacheAt = 0;
   invalidateAnalyticsRunsCache();
+  syncLicenseCredentialsBackup("save-all-accounts").catch(() => {});
   return { success: true };
 });
 
@@ -4353,7 +4706,7 @@ ipcMain.handle("sync-all-marketing-data", async (_, platform = "tiktok", range =
 ipcMain.handle("open-external-url", async (_, externalUrl) => {
   try {
     const parsed = new URL(String(externalUrl || ""));
-    const allowedHosts = new Set(["onboard.windsor.ai", "taager.com", "www.taager.com"]);
+    const allowedHosts = new Set(["onboard.windsor.ai", "taager.com", "www.taager.com", "wa.me", "api.whatsapp.com", "web.whatsapp.com"]);
     if (parsed.protocol !== "https:" || !allowedHosts.has(parsed.hostname)) {
       return { ok: false, error: "URL_NOT_ALLOWED" };
     }

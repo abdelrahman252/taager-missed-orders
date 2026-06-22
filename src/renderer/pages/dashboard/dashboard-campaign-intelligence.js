@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   "use strict";
 
   var PLATFORMS = ["tiktok", "snapchat", "facebook"];
@@ -283,20 +283,27 @@
   }
 
   function campaignSpendToReporting(row, fallbackCurrency, targetCurrency, egpRate) {
-    var amount = parseNumber(row && (
+    var target = targetCurrency || window.dashboardActiveCurrency || "SAR";
+    if (window.DashboardMarketingSpend && typeof window.DashboardMarketingSpend.sourceSpend === "function") {
+      return window.DashboardMarketingSpend.sourceSpend(row || {}, target, {
+        egpRate: egpRate,
+        summaryCurrency: fallbackCurrency || target,
+        sourceCurrency: fallbackCurrency || target
+      }).spend;
+    }
+    var rawAmount = parseNumber(row && (
       row.rawSpend != null ? row.rawSpend :
       row.spend != null ? row.spend :
       row.adSpend != null ? row.adSpend :
       row.cost != null ? row.cost :
       row.amount_spent
     ) || 0);
-    var currency = String(row && row.currency || fallbackCurrency || "SAR").toUpperCase();
-    if (window.TaagerCurrency && typeof window.TaagerCurrency.convert === "function") {
-      return window.TaagerCurrency.convert(amount, currency, targetCurrency || window.dashboardActiveCurrency || "SAR");
-    }
-    return convertReportingMoney(amount, currency, targetCurrency || window.dashboardActiveCurrency || "SAR", egpRate);
+    var convertedAmount = parseNumber(row && row.convertedSpend != null ? row.convertedSpend : 0);
+    var useConverted = convertedAmount > 0 && rawAmount <= 0;
+    var amount = useConverted ? convertedAmount : rawAmount;
+    var currency = String(row && (useConverted ? row.targetCurrency : row.currency) || fallbackCurrency || "SAR").toUpperCase();
+    return convertReportingMoney(amount, currency, target, egpRate);
   }
-
   function convertReportingMoney(value, fromCurrency, targetCurrency, egpRate) {
     var amount = parseNumber(value);
     var source = String(fromCurrency || window.dashboardActiveCurrency || "SAR").toUpperCase();
@@ -358,6 +365,13 @@
   function campaignPerformance(row, spend, fallbackCurrency) {
     var rawCurrency = fallbackCurrency || "SAR";
     var rawSpend = metric(row, ["rawSpend", "spend", "adSpend", "cost", "amount_spent"]);
+    if (!rawSpend && window.DashboardMarketingSpend && typeof window.DashboardMarketingSpend.sourceSpend === "function") {
+      var spendSource = window.DashboardMarketingSpend.sourceSpend(row || {}, fallbackCurrency || window.dashboardActiveCurrency || "SAR", { summaryCurrency: fallbackCurrency || "SAR" });
+      if (spendSource.hasSpend) {
+        rawSpend = spendSource.sourceAmount;
+        rawCurrency = spendSource.sourceCurrency || rawCurrency;
+      }
+    }
     var impressions = metric(row, ["impressions", "reach"]);
     var clicks = metric(row, ["clicks", "link_clicks", "outbound_clicks_outbound_click", "unique_clicks"]);
     var views = trafficViewMetrics(row);

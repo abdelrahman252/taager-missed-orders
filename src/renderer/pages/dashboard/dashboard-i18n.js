@@ -28,6 +28,15 @@
     return letters.length > 0 && /^[?؟]+$/.test(letters);
   }
 
+  function isGarbledFallbackText(text) {
+    text = String(text == null ? '' : text).trim();
+    if (!text) return false;
+    var questionMarks = (text.match(/[?؟]/g) || []).length;
+    if (questionMarks < 3) return false;
+    var readableLetters = text.replace(/[?؟\s\d.,:;()[\]{}+\-*/%|_'"`~!@#$^&=<>\\]/g, '');
+    return questionMarks >= readableLetters.length * 2;
+  }
+
   function textUnavailable() {
     return isRtl() ? 'نص غير متوفر' : 'Text unavailable';
   }
@@ -58,6 +67,9 @@
     'Total Delivered Sales': 'إجمالي مبيعات الطلبات المسلمة',
     'Average Order Value (Delivered)': 'متوسط قيمة الطلب المسلم',
     'Net ROAS': 'العائد الصافي على الإعلان',
+    'Net Total Sales': 'صافي إجمالي المبيعات',
+    'Net Total Delivered Sales': 'صافي مبيعات الطلبات المسلمة',
+    'Total / Net Orders': 'إجمالي / صافي الطلبات',
     'Earned': 'محصل',
     'Incoming': 'قادم',
     'Lost': 'مفقود',
@@ -70,6 +82,7 @@
     'Shipping': 'قيد الشحن',
     'In Shipping': 'قيد الشحن',
     'Delivered': 'تم التسليم',
+    'Order received': 'تم استلام الطلب',
     'Failed / Canceled': 'فشل / ملغي',
     'Failed': 'فشل',
     'Canceled': 'ملغي',
@@ -98,6 +111,8 @@
     'Worst Day': 'أضعف يوم',
     'Days Above Average': 'أيام فوق المتوسط',
     'General Trend': 'الاتجاه العام',
+    'Upward': 'اتجاه صاعد',
+    'Downward': 'اتجاه هابط',
     'Upward ?': 'اتجاه صاعد',
     'Downward ?': 'اتجاه هابط',
     'View Order Details': 'عرض تفاصيل الطلبات',
@@ -117,11 +132,13 @@
     'Revenue': 'الإيرادات',
     'delivered × simulator profit after tax per delivered order': 'المسلم × ربح المحاكاة بعد الضريبة لكل طلب مسلم',
     'Net profit': 'صافي الربح',
+    'Net Profit': 'صافي الربح',
     'revenue - spend': 'الإيرادات - الإنفاق',
     'spend ÷ total orders': 'الإنفاق ÷ إجمالي الطلبات',
     'Break-even deliveries': 'تسليمات التعادل',
     'needed to cover spend': 'المطلوبة لتغطية الإنفاق',
     'Return on investment': 'العائد على الاستثمار',
+    'Return on Investment': 'العائد على الاستثمار',
     'Calculator note': 'ملاحظة الحاسبة',
     'Calculate more details in Account Calculator': 'احسب تفاصيل أكثر في حاسبة الحساب',
     'Quick Indicator Summary': 'ملخص المؤشرات السريع',
@@ -160,9 +177,14 @@
     'Cost per Order CPA': 'تكلفة الطلب CPA',
     'Cost per Order (CPA)': 'تكلفة الطلب (CPA)',
     'Break-even CPA': 'تكلفة التعادل',
+    'Account Net Profit': 'صافي ربح الحساب',
+    'Total Profit Before Ad Spend': 'إجمالي الربح قبل الإنفاق الإعلاني',
     'Total Revenue': 'إجمالي الإيرادات',
     'Return on Investment (ROI)': 'العائد على الاستثمار (ROI)',
     'For each 1 SAR spent': 'لكل 1 SAR يتم إنفاقه',
+    'For each 1 ': 'لكل 1 ',
+    ' spent': ' يتم إنفاقه',
+    'x per ': 'x لكل ',
     'Return per Currency Unit (ROAS)': 'العائد لكل وحدة عملة (ROAS)',
     'Campaign Status': 'حالة الحملة',
     'Formula': 'المعادلة',
@@ -217,7 +239,11 @@
     'Net Delivery Rate': 'معدل التسليم الصافي',
     'Break-even Achieved': 'تم تحقيق التعادل',
     'Break-even Simulator': 'محاكي نقطة التعادل',
+    '? Break-even Achieved': 'تم تحقيق التعادل',
+    '? Break-even Simulator': 'محاكي نقطة التعادل',
+    '? Current': 'الحالي',
     'To break even at ': 'للوصول إلى التعادل عند ',
+    ' spend, you need at least one of:': ' إنفاق، تحتاج إلى واحد على الأقل من الآتي:',
     'PROFITABILITY BLOCKER': 'عائق الربحية',
     'PROFITABILITY STATUS': 'حالة الربحية',
     'UNIT ECONOMICS': 'اقتصاديات الوحدة',
@@ -234,7 +260,18 @@
     'Orders ×2': 'الطلبات ×2',
     'Net ROAS: ': 'العائد الصافي على الإعلان: ',
     'Return: ': 'العائد: ',
-    'For each 1 SAR spent': 'لكل 1 SAR يتم إنفاقه',
+    'profitable': 'مربح',
+    'losing': 'خاسر',
+    'Average Profit / Delivered Order': 'متوسط الربح لكل طلب مسلم',
+    'Global exchange rates': 'أسعار الصرف العامة',
+    'Refresh or edit currency rates from the dashboard top bar.': 'حدّث أو عدّل أسعار العملات من شريط لوحة التحكم العلوي.',
+    'Simulate KPI changes · Detect break-even thresholds · Validate scaling safety': 'محاكاة تغييرات المؤشرات · اكتشاف حدود التعادل · التحقق من أمان التوسع',
+    'Marketing ad accounts': 'حسابات التسويق الإعلانية',
+    'Currency': 'العملة',
+    'Converted for calculator': 'محول للحاسبة',
+    'Spend synced for the selected dashboard period.': 'تمت مزامنة الإنفاق للفترة المحددة في لوحة التحكم.',
+    'Assigned accounts are ready. Click Sync Now in Marketing Connections to pull spend.': 'الحسابات المخصصة جاهزة. اضغط مزامنة الآن في ربط التسويق لسحب الإنفاق.',
+    'Synced spend': 'الإنفاق المتزامن',
     'used for CPA & ROI': 'يستخدم في CPA و ROI',
     'X-axis shows budget multiples. Hover any point to see the exact budget.': 'المحور الأفقي يعرض مضاعفات الميزانية. مرر على أي نقطة لرؤية الميزانية الدقيقة.',
     'Total ': 'الإجمالي ',
@@ -242,12 +279,72 @@
     'The calculator shows healthy returns. Review Section 7 before scaling spend.': 'تظهر الحاسبة عوائد صحية. راجع القسم 7 قبل زيادة الإنفاق.',
     'Returns are positive but tight. Use Section 7 to test NDR, simulator profit after tax, and budget scenarios.': 'العوائد إيجابية لكنها محدودة. استخدم القسم 7 لاختبار NDR وربح المحاكاة بعد الضريبة وسيناريوهات الميزانية.',
     'Current calculator inputs point to a loss. Open Section 7 to find the break-even lever.': 'مدخلات الحاسبة الحالية تشير إلى خسارة. افتح القسم 7 للعثور على عامل التعادل.',
-    'Net ROAS = delivered sales divided by ad spend. It uses only successfully delivered order revenue, so pending, canceled, and returned orders do not inflate ad performance.': 'العائد الصافي على الإعلان يساوي المبيعات المسلمة مقسومة على الإنفاق الإعلاني، ويستخدم فقط إيرادات الطلبات المسلمة بنجاح حتى لا تضخم الطلبات المعلقة أو الملغاة أو المرتجعة أداء الإعلانات.'
+    'Net ROAS = delivered sales divided by ad spend. It uses only successfully delivered order revenue, so pending, canceled, and returned orders do not inflate ad performance.': 'العائد الصافي على الإعلان يساوي المبيعات المسلمة مقسومة على الإنفاق الإعلاني، ويستخدم فقط إيرادات الطلبات المسلمة بنجاح حتى لا تضخم الطلبات المعلقة أو الملغاة أو المرتجعة أداء الإعلانات.',
+    'Earned Profit After Tax = sum(order profit - tax profit) for delivered orders.': 'الربح المحصل بعد الضريبة = مجموع (ربح الطلب - ضريبة الربح) للطلبات المسلمة.',
+    'Incoming Profit After Tax = sum(order profit - tax profit) for active non-delivered orders.': 'الربح القادم بعد الضريبة = مجموع (ربح الطلب - ضريبة الربح) للطلبات النشطة غير المسلمة.',
+    'Lost Profit After Tax = sum(order profit - tax profit) for failed and canceled orders, excluding Canceled by you.': 'الربح المفقود بعد الضريبة = مجموع (ربح الطلب - ضريبة الربح) للطلبات الفاشلة والملغاة، مع استبعاد الملغي بواسطتك.',
+    'Original platform spend is converted into your calculator currency.': 'يتم تحويل إنفاق المنصة الأصلي إلى عملة الحاسبة.',
+    'Net orders entered in the simulation. You can edit it for testing.': 'صافي الطلبات المدخل في المحاكاة. يمكنك تعديله للاختبار.',
+    'Orders that reached the customer based on the simulated delivery rate.': 'طلبات وصلت للعميل بناء على معدل التسليم في المحاكاة.',
+    'Total expected income from delivered orders multiplied by the average profit per delivered order.': 'إجمالي الدخل المتوقع من الطلبات المسلمة مضروبا في متوسط الربح لكل طلب مسلم.',
+    'Net profit or loss after subtracting ad spend from revenue.': 'صافي الربح أو الخسارة بعد طرح الإنفاق الإعلاني من الإيرادات.',
+    'Return percentage compared with spend. 100% means doubling your money.': 'نسبة العائد مقارنة بالإنفاق. 100% تعني مضاعفة أموالك.',
+    'Cost to acquire one order. It should be lower than average profit per delivered order to stay profitable.': 'تكلفة اكتساب طلب واحد. يجب أن تكون أقل من متوسط الربح لكل طلب مسلم للبقاء مربحا.',
+    'Campaign is profitable. Exceeds spend by ': 'الحملة مربحة. تتجاوز الإنفاق بمقدار ',
+    'Campaign is <span class="hi-red">losing ': 'الحملة <span class="hi-red">تخسر ',
+    '</span> net. Revenue of <strong>': '</span> صافي. إيرادات بقيمة <strong>',
+    '</strong> does not cover spend of <strong>': '</strong> لا تغطي إنفاقا بقيمة <strong>',
+    'Campaign is <span class="hi-green">profitable</span> — net profit <strong>': 'الحملة <span class="hi-green">مربحة</span> - صافي الربح <strong>',
+    '</strong> on <strong>': '</strong> على إيرادات <strong>',
+    '<span class="hi-red">CPA (': '<span class="hi-red">تكلفة الطلب (',
+    ')</span> exceeds revenue per delivered order <strong>(': ')</span> أعلى من الإيراد لكل طلب مسلم <strong>(',
+    ')</strong>. Scaling will compound losses, not profits.': ')</strong>. التوسع سيضاعف الخسائر لا الأرباح.',
+    'Revenue per delivered order <span class="hi-green">(': 'الإيراد لكل طلب مسلم <span class="hi-green">(',
+    ')</span> exceeds CPA <strong>(': ')</span> أعلى من تكلفة الطلب <strong>(',
+    ')</strong>. Unit economics are positive — scaling is viable.': ')</strong>. اقتصاديات الوحدة إيجابية والتوسع ممكن.',
+    'NDR of <span class="hi-red">': 'معدل التسليم الصافي <span class="hi-red">',
+    'NDR of <span class="hi-yellow">': 'معدل التسليم الصافي <span class="hi-yellow">',
+    'NDR of <span class="hi-cyan">': 'معدل التسليم الصافي <span class="hi-cyan">',
+    '%</span> is critically below the danger threshold (20%). <strong>': '%</span> أقل بكثير من حد الخطر (20%). <strong>',
+    ' orders</strong> are failing — primary driver of losses.': ' طلب</strong> تفشل وهي المحرك الأساسي للخسائر.',
+    '%</span> is below healthy baseline (30%). Improving to 30%+ would materially impact profitability.': '%</span> أقل من خط الصحة الأساسي (30%). التحسن إلى 30% أو أكثر يؤثر بوضوح على الربحية.',
+    '%</span> reaches the top delivery tier (40%). Strong delivery enables confident budget scaling.': '%</span> يصل إلى أعلى مستوى تسليم (40%). التسليم القوي يسمح بزيادة الميزانية بثقة.',
+    'You are losing <span class="hi-red">': 'تخسر <span class="hi-red">',
+    '</span> per delivered order. Doubling budget doubles losses.': '</span> لكل طلب مسلم. مضاعفة الميزانية تضاعف الخسائر.',
+    'Doubling budget to <strong>': 'مضاعفة الميزانية إلى <strong>',
+    '</strong> projects <span class="hi-red">': '</strong> تتوقع <span class="hi-red">',
+    ' loss</span>. Scaling losses, not profits. Fix unit economics first.': ' خسارة</span>. هذا توسع للخسائر لا الأرباح. أصلح اقتصاديات الوحدة أولا.',
+    'Scaling to 2× budget projects <span class="hi-green">': 'التوسع إلى 2x من الميزانية يتوقع <span class="hi-green">',
+    ' net profit</span> at <strong>': ' صافي ربح</span> عند <strong>',
+    '% ROI</strong>. Safe to scale.': '% ROI</strong>. آمن للتوسع.',
+    'Increasing average profit by <span class="hi-blue">': 'زيادة متوسط الربح بمقدار <span class="hi-blue">',
+    'Total number of orders received from the bot during the selected period.': 'إجمالي عدد الطلبات المستلمة من البوت خلال الفترة المحددة.',
+    'Forecast delivered orders from net orders x delivery rate.': 'توقع الطلبات المسلمة من صافي الطلبات x معدل التسليم.',
+    'Orders that actually reached the customer, counted from delivered sheet status.': 'الطلبات التي وصلت فعليا للعميل، محسوبة من حالة التسليم في الملف.',
+    'Percentage of orders delivered successfully. Healthy benchmark starts at 30%, with top tier at 40%+.': 'نسبة الطلبات التي تم تسليمها بنجاح. يبدأ المعيار الصحي من 30%، والمستوى الأعلى عند 40% أو أكثر.',
+    'Selecting a period from the top dashboard bar syncs connected marketing automatically. Update Dashboard also refreshes marketing after fetching live order data.': 'اختيار فترة من شريط لوحة التحكم العلوي يزامن التسويق المتصل تلقائيا. تحديث لوحة التحكم يحدّث التسويق أيضا بعد جلب بيانات الطلبات المباشرة.',
+    'Calculator spend after converting the entered or synced spend into the selected calculator currency.': 'إنفاق الحاسبة بعد تحويل الإنفاق المدخل أو المتزامن إلى عملة الحاسبة المحددة.',
+    'Cost to acquire one order. Lower CPA means the campaign is more efficient.': 'تكلفة اكتساب طلب واحد. انخفاض CPA يعني أن الحملة أكثر كفاءة.',
+    'Maximum CPA before the campaign starts losing money. This simulator uses the editable Taager profit per delivered order assumption multiplied by NDR.': 'أقصى تكلفة طلب قبل أن تبدأ الحملة في خسارة المال. يستخدم هذا المحاكي افتراض ربح Taager القابل للتعديل لكل طلب مسلم مضروبا في NDR.',
+    'Expected delivered orders multiplied by the editable average profit per delivered order.': 'الطلبات المسلمة المتوقعة مضروبة في متوسط الربح القابل للتعديل لكل طلب مسلم.',
+    'Actual earned profit after tax from delivered orders before subtracting synced ad spend.': 'الربح المحصل فعليا بعد الضريبة من الطلبات المسلمة قبل طرح الإنفاق الإعلاني المتزامن.',
+    'Whole-account profit after subtracting total synced ad spend. This can differ from SKU-matched Campaigns profit.': 'ربح الحساب بالكامل بعد طرح إجمالي الإنفاق الإعلاني المتزامن. قد يختلف هذا عن ربح الحملات المطابق للمنتجات.',
+    'Measures campaign profitability. Zero means break-even, positive means profit, negative means loss.': 'يقيس ربحية الحملة. الصفر يعني التعادل، والموجب يعني ربحا، والسالب يعني خسارة.',
+    'For each unit spent, how much revenue do you get back? More than 1 means revenue exceeds spend.': 'لكل وحدة يتم إنفاقها، كم إيرادا يعود لك؟ أكبر من 1 يعني أن الإيراد يتجاوز الإنفاق.',
+    'For each unit spent, how much do you get back in revenue? More than 1 means revenue exceeds spend.': 'لكل وحدة يتم إنفاقها، كم تحصل كإيراد؟ أكبر من 1 يعني أن الإيراد يتجاوز الإنفاق.',
+    'Actual delivered sales divided by ad spend. This ignores pending and canceled orders.': 'المبيعات المسلمة الفعلية مقسومة على الإنفاق الإعلاني. يتجاهل هذا الطلبات المعلقة والملغاة.',
+    'This budget is creating a loss. Improve targeting or increase delivery rate (NDR) before adding more spend.': 'هذه الميزانية تسبب خسارة. حسّن الاستهداف أو ارفع معدل التسليم (NDR) قبل إضافة إنفاق أكبر.',
+    'Weak performance close to break-even. Profit margin is thin. Improve performance before scaling.': 'أداء ضعيف قريب من التعادل. هامش الربح محدود. حسّن الأداء قبل التوسع.',
+    'Excellent and profitable performance. Your campaign is generating a healthy return. Continue or raise budget carefully.': 'أداء ممتاز ومربح. حملتك تحقق عائدا صحيا. استمر أو ارفع الميزانية بحذر.'
   };
 
   function fallbackArabicFromEnglish(en) {
     en = String(en == null ? '' : en);
     if (AR_FALLBACKS[en]) return AR_FALLBACKS[en];
+    var currencyTail = en.match(/^ ([A-Z]{3})\)<\/span> per delivery \(from $/);
+    if (currencyTail) return ' ' + currencyTail[1] + '</span> لكل تسليم (من ';
+    var breakevenTail = en.match(/^ ([A-Z]{3})\) would achieve break-even\.$/);
+    if (breakevenTail) return ' ' + breakevenTail[1] + ') تحقق التعادل.';
     var days = en.match(/^(\d+(?:\.\d+)?) days$/i);
     if (days) return days[1] + ' يوم';
     var orders = en.match(/^(\d+(?:\.\d+)?) orders$/i);
@@ -406,7 +503,7 @@
   function pick(en, ar) {
     var chosen = isRtl() ? ar : en;
     chosen = decodeMojibake(chosen == null ? '' : chosen);
-    if (isRtl() && isQuestionMarkText(chosen)) {
+    if (isRtl() && (isQuestionMarkText(chosen) || isGarbledFallbackText(chosen))) {
       var enPack = localeCache.en || {};
       var arPack = localeCache.ar || {};
       var enStrings = enPack.strings || {};
@@ -418,9 +515,9 @@
           break;
         }
       }
-      if (isQuestionMarkText(chosen)) chosen = fallbackArabicFromEnglish(en) || en;
+      if (isQuestionMarkText(chosen) || isGarbledFallbackText(chosen)) chosen = fallbackArabicFromEnglish(en) || en;
     }
-    if (isQuestionMarkText(chosen)) chosen = en || '';
+    if (isQuestionMarkText(chosen) || isGarbledFallbackText(chosen)) chosen = en || '';
     return cleanText(chosen);
   }
 

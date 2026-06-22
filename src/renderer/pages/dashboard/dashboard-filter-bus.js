@@ -1,4 +1,4 @@
-/* ══════════════════════════════════════════════════════════════════════════════
+﻿/* ══════════════════════════════════════════════════════════════════════════════
    dashboard-filter-bus.js  (T-13)
    Global pub/sub state manager for cross-section filter synchronisation.
    No DOM dependencies — pure state object with subscriber notifications.
@@ -423,6 +423,155 @@
   var _marketingLoadedAt = {};
   var MARKETING_STATUS_TTL = 15 * 60 * 1000;
 
+  function marketingNumber(value) {
+    if (typeof value === 'number') return isFinite(value) ? value : 0;
+    var parsed = Number(String(value == null ? '' : value).replace(/[^0-9.-]/g, ''));
+    return isFinite(parsed) ? parsed : 0;
+  }
+
+  function cleanMarketingCurrency(currency, fallback) {
+    var clean = String(currency || fallback || window.dashboardActiveCurrency || 'SAR').toUpperCase();
+    var fallbackClean = String(fallback || window.dashboardActiveCurrency || 'SAR').toUpperCase();
+    if (window.TaagerCurrency && typeof window.TaagerCurrency.cleanCurrency === 'function') {
+      clean = window.TaagerCurrency.cleanCurrency(clean, fallbackClean);
+    }
+    return ROI_CURRENCIES[clean] ? clean : (ROI_CURRENCIES[fallbackClean] ? fallbackClean : 'SAR');
+  }
+
+  function convertMarketingSpendAmount(amount, fromCurrency, toCurrency, egpRate) {
+    var value = marketingNumber(amount);
+    var from = cleanMarketingCurrency(fromCurrency, toCurrency || 'SAR');
+    var to = cleanMarketingCurrency(toCurrency, from);
+    if (from === to) return value;
+    if (window.TaagerCurrency && typeof window.TaagerCurrency.convert === 'function') {
+      return window.TaagerCurrency.convert(value, from, to);
+    }
+    var rates = { USD: 1, SAR: 3.75, EGP: Number(egpRate || 52) || 52, AED: 3.6725, IQD: 1310, OMR: 0.385 };
+    if (!rates[from] || !rates[to]) return value;
+    return (value / rates[from]) * rates[to];
+  }
+
+  function normalizeMarketingSpendSource(source, targetCurrency, options) {
+    source = source || {};
+    options = options || {};
+    var target = cleanMarketingCurrency(targetCurrency, options.fallbackCurrency || options.summaryCurrency || 'SAR');
+    var nativeCurrency = cleanMarketingCurrency(
+      source.nativeRawCurrency ||
+      source.rawCurrency ||
+      source.currency ||
+      source.account_currency ||
+      options.sourceCurrency ||
+      options.summaryCurrency ||
+      target,
+      target
+    );
+    var convertedCurrency = cleanMarketingCurrency(
+      source.targetCurrency ||
+      source.reportingCurrency ||
+      options.summaryCurrency ||
+      target,
+      target
+    );
+    var hasNativeSpend = source.rawSpend != null && source.rawSpend !== '';
+    var hasNativeAlias = !hasNativeSpend && source.nativeRawSpend != null && source.nativeRawSpend !== '';
+    var hasConvertedSpend = source.convertedSpend != null && source.convertedSpend !== '';
+    var hasSpend = source.spend != null && source.spend !== '';
+    var hasAdSpend = source.adSpend != null && source.adSpend !== '';
+    var hasCost = source.cost != null && source.cost !== '';
+    var amount = 0;
+    var sourceAmount = 0;
+    var sourceCurrency = nativeCurrency;
+    var sourceKind = 'none';
+
+    var nativeAmount = hasNativeSpend || hasNativeAlias
+      ? marketingNumber(hasNativeSpend ? source.rawSpend : source.nativeRawSpend)
+      : 0;
+    var convertedAmount = hasConvertedSpend ? marketingNumber(source.convertedSpend) : 0;
+
+    if ((hasNativeSpend || hasNativeAlias) && (nativeAmount > 0 || convertedAmount <= 0)) {
+      sourceAmount = nativeAmount;
+      sourceCurrency = nativeCurrency;
+      amount = convertMarketingSpendAmount(sourceAmount, sourceCurrency, target, options.egpRate);
+      sourceKind = 'raw';
+    } else if (hasConvertedSpend) {
+      sourceAmount = convertedAmount;
+      sourceCurrency = convertedCurrency;
+      amount = convertMarketingSpendAmount(sourceAmount, sourceCurrency, target, options.egpRate);
+      sourceKind = 'converted';
+    } else if (hasSpend) {
+      sourceAmount = marketingNumber(source.spend);
+      sourceCurrency = source.currency || source.rawCurrency ? nativeCurrency : convertedCurrency;
+      amount = convertMarketingSpendAmount(sourceAmount, sourceCurrency, target, options.egpRate);
+      sourceKind = source.currency || source.rawCurrency ? 'raw' : 'converted';
+    } else if (hasAdSpend || hasCost) {
+      sourceAmount = marketingNumber(hasAdSpend ? source.adSpend : source.cost);
+      sourceCurrency = convertedCurrency;
+      amount = convertMarketingSpendAmount(sourceAmount, sourceCurrency, target, options.egpRate);
+      sourceKind = 'converted';
+    }
+
+    return {
+      spend: Number(amount.toFixed(2)),
+      currency: target,
+      sourceAmount: Number(sourceAmount.toFixed(2)),
+      sourceCurrency: cleanMarketingCurrency(sourceCurrency, target),
+      rawSpend: sourceKind === 'raw' ? Number(sourceAmount.toFixed(2)) : null,
+      rawCurrency: sourceKind === 'raw' ? cleanMarketingCurrency(sourceCurrency, target) : '',
+      convertedSpend: sourceKind !== 'none' ? Number(amount.toFixed(2)) : null,
+      hasSpend: sourceKind !== 'none',
+      sourceKind: sourceKind,
+    };
+  }
+
+  function aggregateMarketingSpendSummary(summary, targetCurrency, options) {
+    summary = summary || {};
+    options = options || {};
+    var target = cleanMarketingCurrency(targetCurrency || summary.currency || window.dashboardActiveCurrency || 'SAR', 'SAR');
+    var egpRate = options.egpRate || summary.egpRate || 52;
+    var sources = Array.isArray(summary.sourceBreakdown) ? summary.sourceBreakdown : [];
+    var rows = [];
+    var spend = 0;
+    var rawSpendByCurrency = {};
+    sources.forEach(function (source) {
+      var row = normalizeMarketingSpendSource(source, target, {
+        egpRate: egpRate,
+        summaryCurrency: summary.currency || target,
+      });
+      if (!row.hasSpend) return;
+      spend += row.spend;
+      if (row.rawCurrency) {
+        rawSpendByCurrency[row.rawCurrency] = (rawSpendByCurrency[row.rawCurrency] || 0) + row.rawSpend;
+      }
+      rows.push(Object.assign({}, source, {
+        normalizedSpend: row.spend,
+        normalizedCurrency: row.currency,
+        displaySpend: row.sourceAmount,
+        displayCurrency: row.sourceCurrency,
+        displaySpendKind: row.sourceKind,
+      }));
+    });
+    if (!rows.length && summary.adSpend != null && summary.adSpend !== '') {
+      var fallbackCurrency = cleanMarketingCurrency(summary.currency || target, target);
+      spend = convertMarketingSpendAmount(summary.adSpend, fallbackCurrency, target, egpRate);
+    }
+    Object.keys(rawSpendByCurrency).forEach(function (currency) {
+      rawSpendByCurrency[currency] = Number(rawSpendByCurrency[currency].toFixed(2));
+    });
+    return {
+      spend: Number(spend.toFixed(2)),
+      currency: target,
+      sourceBreakdown: rows,
+      rawSpendByCurrency: rawSpendByCurrency,
+      hasSourceBreakdown: rows.length > 0,
+    };
+  }
+
+  window.DashboardMarketingSpend = {
+    aggregateSummary: aggregateMarketingSpendSummary,
+    sourceSpend: normalizeMarketingSpendSource,
+    convert: convertMarketingSpendAmount,
+    cleanCurrency: cleanMarketingCurrency,
+  };
   function normalizeMarketingPlatform(platform) {
     platform = String(platform || 'tiktok').toLowerCase();
     return MARKETING_PLATFORMS.indexOf(platform) === -1 ? 'tiktok' : platform;
@@ -965,13 +1114,9 @@
         }
       }
       var source = s.summary || {};
-      var sourceCurrency = source.currency || 'USD';
+      var sourceSpend = aggregateMarketingSpendSummary(source, reportingCurrency, { egpRate: source.egpRate || 52 });
 
-      var convertedSpend = window.TaagerCurrency && typeof window.TaagerCurrency.convert === 'function'
-        ? window.TaagerCurrency.convert(source.adSpend || 0, sourceCurrency, reportingCurrency)
-        : source.adSpend || 0;
-
-      adSpend += Number(convertedSpend || 0);
+      adSpend += Number(sourceSpend.spend || 0);
       impressions += Number(source.impressions || 0);
       clicks += Number(source.clicks || 0);
       purchases += Number(source.purchases || 0);
@@ -1105,9 +1250,10 @@
     var selectedSourceAccounts = [];
     var sourceBreakdown = [];
     var campaignBreakdown = [];
+    var reportingCurrency = window.dashboardActiveCurrency || dashboardAccountCurrency(id);
     var summary = activeStatuses.length ? {
       adSpend: 0,
-      currency: (activeStatuses[0].summary && activeStatuses[0].summary.currency) || dashboardAccountCurrency(accountId),
+      currency: reportingCurrency,
       egpRate: 52,
       impressions: 0,
       clicks: 0,
@@ -1140,7 +1286,8 @@
       }
       if (!summary || !(status.status === 'connected' && status.summary && !status.manualOverride)) return;
       var source = status.summary || {};
-      summary.adSpend += Number(source.adSpend || 0);
+      var sourceSpend = aggregateMarketingSpendSummary(source, summary.currency, { egpRate: source.egpRate || summary.egpRate });
+      summary.adSpend += Number(sourceSpend.spend || 0);
       summary.impressions += Number(source.impressions || 0);
       summary.clicks += Number(source.clicks || 0);
       summary.purchases += Number(source.purchases || 0);
@@ -1158,7 +1305,8 @@
       summary.platformBreakdown.push({
         platform: status.platform,
         label: status.platformLabel,
-        adSpend: Number(source.adSpend || 0),
+        adSpend: Number(sourceSpend.spend || 0),
+        currency: summary.currency,
         impressions: Number(source.impressions || 0),
         clicks: Number(source.clicks || 0),
         purchases: Number(source.purchases || 0),

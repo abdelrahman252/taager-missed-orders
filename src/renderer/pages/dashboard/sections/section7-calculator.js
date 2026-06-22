@@ -109,16 +109,17 @@ window.renderSection7 = function (mountEl, data, ctx) {
     var _syncedCurrency = String((marketingState.summary && marketingState.summary.currency) || 'SAR').toUpperCase();
     var _roiCurrency = String(d.currency || window.dashboardActiveCurrency || 'SAR').toUpperCase();
     var _convertedSyncedSpend = _rawSyncedSpend;
-    console.log('[DIAGNOSTIC][S7] syncedSpendActive is active. Raw adSpend:', _rawSyncedSpend, 'Synced Currency:', _syncedCurrency, 'ROI Currency:', _roiCurrency);
-    if (_syncedCurrency !== _roiCurrency) {
+    if (window.DashboardMarketingSpend && typeof window.DashboardMarketingSpend.aggregateSummary === "function") {
+      _convertedSyncedSpend = window.DashboardMarketingSpend.aggregateSummary(marketingState.summary, _roiCurrency, {
+        egpRate: marketingState.summary.egpRate || d.egpRate || 52,
+      }).spend;
+    } else if (_syncedCurrency !== _roiCurrency) {
       if (window.TaagerCurrency && typeof window.TaagerCurrency.convert === 'function') {
         _convertedSyncedSpend = window.TaagerCurrency.convert(_rawSyncedSpend, _syncedCurrency, _roiCurrency);
-        console.log('[DIAGNOSTIC][S7] Conversion via window.TaagerCurrency.convert:', _convertedSyncedSpend);
       } else {
         var _rates = { USD: 1, SAR: 3.75, EGP: 52, AED: 3.6725, IQD: 1310, OMR: 0.385 };
         var _fr = _rates[_syncedCurrency]; var _tr = _rates[_roiCurrency];
         if (_fr && _tr) _convertedSyncedSpend = (_rawSyncedSpend / _fr) * _tr;
-        console.log('[DIAGNOSTIC][S7] Conversion via local rates fallback:', _convertedSyncedSpend);
       }
     }
     d = Object.assign({}, d, { adSpend: _convertedSyncedSpend });
@@ -294,28 +295,50 @@ window.renderSection7 = function (mountEl, data, ctx) {
       .replace(/'/g, "&#39;");
   }
 
+  function marketingSummarySpend(targetCurrency) {
+    var summary = marketingState && marketingState.summary ? marketingState.summary : {};
+    var target = targetCurrency || state.currency || nativeCurrency || window.dashboardActiveCurrency || "SAR";
+    if (window.DashboardMarketingSpend && typeof window.DashboardMarketingSpend.aggregateSummary === "function") {
+      return window.DashboardMarketingSpend.aggregateSummary(summary, target, {
+        egpRate: summary.egpRate || state.egpRate || d.egpRate || 52,
+      });
+    }
+    var spend = Number(summary.adSpend || 0);
+    var from = String(summary.currency || target).toUpperCase();
+    return {
+      spend: convert(spend, from, target),
+      currency: target,
+      sourceBreakdown: sourceBreakdown,
+      rawSpendByCurrency: {},
+      hasSourceBreakdown: sourceBreakdown.length > 0,
+    };
+  }
+
+  function marketingSourceSpend(source, targetCurrency) {
+    var target = targetCurrency || state.currency || nativeCurrency || window.dashboardActiveCurrency || "SAR";
+    if (window.DashboardMarketingSpend && typeof window.DashboardMarketingSpend.sourceSpend === "function") {
+      return window.DashboardMarketingSpend.sourceSpend(source || {}, target, {
+        egpRate: state.egpRate || d.egpRate || 52,
+        summaryCurrency: marketingState && marketingState.summary && marketingState.summary.currency || target,
+      });
+    }
+    var hasRaw = source && source.rawSpend != null && source.rawSpend !== "";
+    var hasConverted = source && source.convertedSpend != null && source.convertedSpend !== "";
+    var sourceAmount = Number(hasRaw ? source.rawSpend : (hasConverted ? source.convertedSpend : 0));
+    var sourceCurrency = String(hasRaw ? (source.currency || source.rawCurrency || target) : (source.targetCurrency || target)).toUpperCase();
+    var spend = convert(sourceAmount, sourceCurrency, target);
+    return {
+      spend: Number(spend.toFixed(2)),
+      currency: target,
+      sourceAmount: Number(sourceAmount.toFixed(2)),
+      sourceCurrency: sourceCurrency,
+      hasSpend: hasRaw || hasConverted,
+      sourceKind: hasRaw ? "raw" : (hasConverted ? "converted" : "none"),
+    };
+  }
+
   function syncedBudgetInCurrency() {
-    if (!sourceBreakdown.length)
-      return Number(
-        (marketingState &&
-          marketingState.summary &&
-          marketingState.summary.adSpend) ||
-          0,
-      );
-    return Number(
-      sourceBreakdown
-        .reduce(function (total, source) {
-          return (
-            total +
-            convert(
-              Number(source.rawSpend || 0),
-              source.currency || "SAR",
-              state.currency,
-            )
-          );
-        }, 0)
-        .toFixed(2),
-    );
+    return Number(marketingSummarySpend(state.currency).spend || 0);
   }
 
   function realBudgetInNativeCurrency() {
@@ -396,7 +419,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
   function periodRangeLabel(from, to) {
     if (from && to && from !== to) return from + " - " + to;
     if (from || to) return from || to;
-    return s7Txt("Selected dashboard period", "???? ???? ?????? ???????");
+    return s7Txt("Selected dashboard period", "فترة لوحة التحكم المحددة");
   }
 
   function selectedDashboardPeriodLabel() {
@@ -456,7 +479,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       totalItems: pageInfo.total,
       startItem: pageInfo.start,
       endItem: pageInfo.end,
-      itemLabel: s7Txt("ad accounts", "?????? ???????"),
+      itemLabel: s7Txt("ad accounts", "حسابات إعلانية"),
       pageButtonClass: "s7-source-page-btn",
       prevClass: "s7-source-page-prev",
       nextClass: "s7-source-page-next",
@@ -491,12 +514,9 @@ window.renderSection7 = function (mountEl, data, ctx) {
     var pageInfo = marketingSourcePageInfo();
     var rows = pageInfo.rows
       .map(function (source) {
-        var converted = convert(
-          Number(source.rawSpend || 0),
-          source.currency || "SAR",
-          state.currency,
-        );
-        var hasSpend = source.rawSpend != null || source.convertedSpend != null;
+        var spendInfo = marketingSourceSpend(source, state.currency);
+        var converted = Number(spendInfo.spend || 0);
+        var hasSpend = spendInfo.hasSpend;
         return (
           '<div class="s7-source-row">' +
           '<div class="s7-source-account"><strong>' +
@@ -505,14 +525,14 @@ window.renderSection7 = function (mountEl, data, ctx) {
           escapeSourceText(source.id) +
           "</small></div>" +
           "<div><span>" +
-          s7Txt("Original spend", "??????? ??????") +
+          s7Txt("Original spend", "الإنفاق الأصلي") +
           "</span><strong>" +
-          fmt(Number(source.rawSpend || 0), 2) +
+          fmt(Number(spendInfo.sourceAmount || 0), 2) +
           " " +
-          escapeSourceText(source.currency || "") +
+          escapeSourceText(spendInfo.sourceCurrency || source.currency || "") +
           "</strong></div>" +
           "<div><span>" +
-          s7Txt("Converted for calculator", "??? ???????") +
+          s7Txt("Converted for calculator", "محول للحاسبة") +
           '</span><strong class="s7-source-converted">' +
           fmt(converted, 2) +
           " " +
@@ -524,16 +544,16 @@ window.renderSection7 = function (mountEl, data, ctx) {
       .join("");
     return (
       '<div class="s7-source-head"><div><h3>' +
-      s7Txt("Advertising Sources", "????? ??????? ????????") +
+      s7Txt("Advertising Sources", "مصادر الإنفاق الإعلاني") +
       "</h3>" +
       "<p>" +
       s7Txt(
         "Original platform spend is converted into your calculator currency.",
-        "????? ??? ??? ??? ?????? ??? ???? ???????.",
+        "يتم تحويل إنفاق المنصة الأصلي إلى عملة الحاسبة.",
       ) +
       "</p></div>" +
       '<div class="s7-source-total"><span>' +
-      s7Txt("Synced spend", "??????? ????????") +
+      s7Txt("Synced spend", "الإنفاق المتزامن") +
       " (" +
       escapeSourceText(state.currency) +
       ")</span><strong>" +
@@ -571,12 +591,9 @@ window.renderSection7 = function (mountEl, data, ctx) {
     var pageInfo = marketingSourcePageInfo();
     var rows = pageInfo.rows
       .map(function (source) {
-        var converted = convert(
-          Number(source.rawSpend || 0),
-          source.currency || "SAR",
-          state.currency,
-        );
-        var hasSpend = source.rawSpend != null || source.convertedSpend != null;
+        var spendInfo = marketingSourceSpend(source, state.currency);
+        var converted = Number(spendInfo.spend || 0);
+        var hasSpend = spendInfo.hasSpend;
         return (
           '<div class="s7-source-row" style="background:' +
           rowBg +
@@ -600,7 +617,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
           textColor +
           '">' +
           (hasSpend
-            ? fmt(Number(source.rawSpend || 0), 2) + " " + escapeSourceText(source.currency || "")
+            ? fmt(Number(spendInfo.sourceAmount || 0), 2) + " " + escapeSourceText(spendInfo.sourceCurrency || source.currency || "")
             : escapeSourceText(source.currency || "--")) +
           "</strong></div>" +
           '<div><span style="color:' +
@@ -638,7 +655,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       '<div class="s7-source-meta"><span style="color:' +
       (isLight ? "#64748b" : "rgba(255,255,255,.45)") +
       '">' +
-      s7Txt("Synced period", "?????? ?????????") +
+      s7Txt("Synced period", "الفترة المتزامنة") +
       '</span><strong style="color:' +
       (isLight ? "#1e293b" : "#f3f4f6") +
       '">' +
@@ -1086,12 +1103,12 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (cy + 62) +
       '" text-anchor="middle" fill="' +
       roiColor +
-      '" font-size="13" font-weight="800" font-family="Cairo,sans-serif">? ' +
+      '" font-size="13" font-weight="800" font-family="Cairo,sans-serif">' +
       (roi < 0
-        ? s7Txt("Losing", "?????")
+        ? s7Txt("Losing", "خاسر")
         : roi < 50
-          ? s7Txt("Near break-even", "???? ?? ???????")
-          : s7Txt("Profitable", "????")) +
+          ? s7Txt("Near break-even", "قريب من التعادل")
+          : s7Txt("Profitable", "مربح")) +
       "</text>" +
       "</svg>"
     );
@@ -1158,7 +1175,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
           {
             label: s7Txt(
               "Expected Net Result (" + state.currency + ")",
-              "???? ????? ??????? (" + state.currency + ")",
+              "صافي النتيجة المتوقع (" + state.currency + ")",
             ),
             data: netData,
             borderColor: netColor,
@@ -1177,7 +1194,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
             },
           },
           {
-            label: s7Txt("Total Expected Orders", "?????? ??????? ????????"),
+            label: s7Txt("Total Expected Orders", "إجمالي الطلبات المتوقعة"),
             data: ordData,
             borderColor: "#3b82f6",
             borderWidth: 2,
@@ -1214,13 +1231,13 @@ window.renderSection7 = function (mountEl, data, ctx) {
             callbacks: {
               title: function (items) {
                 var idx = items && items.length ? items[0].dataIndex : 0;
-                return s7Txt("Budget", "?????????") + ": " + fmt(budgetData[idx] || 0, 0) + " " + state.currency;
+                return s7Txt("Budget", "الميزانية") + ": " + fmt(budgetData[idx] || 0, 0) + " " + state.currency;
               },
               label: function (ctx) {
                 if (ctx.dataset && ctx.dataset.yAxisID === "yNet") {
-                  return s7Txt("Net result", "???? ???????") + ": " + fmt(ctx.parsed.y || 0, 0) + " " + state.currency;
+                  return s7Txt("Net result", "صافي النتيجة") + ": " + fmt(ctx.parsed.y || 0, 0) + " " + state.currency;
                 }
-                return s7Txt("Expected orders", "??????? ????????") + ": " + fmt(ctx.parsed.y || 0, 0);
+                return s7Txt("Expected orders", "الطلبات المتوقعة") + ": " + fmt(ctx.parsed.y || 0, 0);
               },
             },
           },
@@ -1230,7 +1247,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
             grid: { color: theme.grid },
             title: {
               display: true,
-              text: s7Txt("Budget multiplier vs current spend", "????? ????????? ?????? ???????? ??????"),
+              text: s7Txt("Budget multiplier vs current spend", "مضاعف الميزانية مقابل الإنفاق الحالي"),
               color: theme.muted,
               font: { size: 11, family: "Cairo", weight: "700" },
             },
@@ -1241,7 +1258,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
             grid: { color: theme.grid },
             title: {
               display: true,
-              text: s7Txt("Net result", "???? ???????"),
+              text: s7Txt("Net result", "صافي النتيجة"),
               color: netColor,
               font: { size: 11, family: "Cairo", weight: "700" },
             },
@@ -1258,7 +1275,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
             grid: { display: false },
             title: {
               display: true,
-              text: s7Txt("Orders", "???????"),
+              text: s7Txt("Orders", "الطلبات"),
               color: "#3b82f6",
               font: { size: 11, family: "Cairo", weight: "700" },
             },
@@ -1281,29 +1298,29 @@ window.renderSection7 = function (mountEl, data, ctx) {
     if (baseSpendSAR <= 0) {
       list.innerHTML =
         '<div style="text-align:center;color:rgba(255,255,255,0.4);padding:10px">' +
-        s7Txt("Please enter a valid budget", "???? ????? ??????? ?????") +
+        s7Txt("Please enter a valid budget", "يرجى إدخال ميزانية صحيحة") +
         "</div>";
       return;
     }
     var html = "";
     var scens = [
       {
-        name: s7Txt("Half Budget", "??? ?????????"),
+        name: s7Txt("Half Budget", "نصف الميزانية"),
         color: "#ef4444",
         bud: baseSpendSAR * 0.5,
       },
       {
-        name: s7Txt("Current", "???????"),
+        name: s7Txt("Current", "الحالي"),
         color: "#0ea5e9",
         bud: baseSpendSAR,
       },
       {
-        name: s7Txt("Increase 50%", "????? 50%"),
+        name: s7Txt("Increase 50%", "زيادة 50%"),
         color: "#10b981",
         bud: baseSpendSAR * 1.5,
       },
       {
-        name: s7Txt("Double 2x", "?????? 2×"),
+        name: s7Txt("Double 2x", "مضاعفة 2x"),
         color: "#8b5cf6",
         bud: baseSpendSAR * 2.0,
       },
@@ -1477,54 +1494,54 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "sfe-neutral",
         s7Txt("Net Orders", "صافي الطلبات"),
         s7Num(Math.round(s.totalOrders)),
-        s7Txt("simulation input", "???? ??????"),
+        s7Txt("simulation input", "مدخل المحاكاة"),
         s7Txt("Net Orders", "صافي الطلبات"),
         s7Txt(
           "Net orders entered in the simulation. You can edit it for testing.",
-          "????? ????? ??????? ??????? ?? ???????? — ????? ?????? ???????.",
+          "صافي الطلبات المدخل في المحاكاة. يمكنك تعديله للاختبار.",
         ),
         null,
         "??",
       ) +
       card(
         "sfe-neutral",
-        s7Txt("Delivered", "?? ???????"),
+        s7Txt("Delivered", "تم التسليم"),
         s7Num(Math.round(c.deliveredOrders)),
         s7RatioPctValue(s.ndr) + "% NDR",
-        s7Txt("Delivered Orders", "??????? ???????"),
+        s7Txt("Delivered Orders", "الطلبات المسلمة"),
         s7Txt(
           "Orders that reached the customer based on the simulated delivery rate.",
-          "??? ??????? ???? ???? ?????? ????? ??? ???? ??????? ????????.",
+          "طلبات وصلت للعميل بناء على معدل التسليم في المحاكاة.",
         ),
         "delivered = netOrders * NDR",
         "?",
       ) +
       card(
         "sfe-neutral",
-        s7Txt("Revenue", "?????????"),
+        s7Txt("Revenue", "الإيرادات"),
         sfeFmt(c.revenue),
-        c.returnPerSar.toFixed(2) + s7Txt("x per ", "× ??? ") + sfeCurrLabel(),
-        s7Txt("Revenue", "?????????"),
+        c.returnPerSar.toFixed(2) + s7Txt("x per ", "x لكل ") + sfeCurrLabel(),
+        s7Txt("Revenue", "الإيرادات"),
         s7Txt(
           "Total expected income from delivered orders multiplied by the average profit per delivered order.",
-          "?????? ????? ??????? ?? ??????? ??????? ?????? ?? ????? ??? ????.",
+          "إجمالي الدخل المتوقع من الطلبات المسلمة مضروبا في متوسط الربح لكل طلب مسلم.",
         ),
         "totalProfitBeforeAdSpend = expectedDeliveriesExact * averageProfitPerDeliveredOrder",
         "??",
       ) +
       card(
         profCls,
-        s7Txt("Net Profit", "???? ?????"),
+        s7Txt("Net Profit", "صافي الربح"),
         '<span style="color:' +
           (c.netProfit >= 0 ? greenColor : "#ff3b5c") +
           '">' +
           sfeFmt(c.netProfit) +
           "</span>",
-        s7Txt("rev - spend", "??????? - ???????"),
-        s7Txt("Net Profit", "????? ??????"),
+        s7Txt("rev - spend", "الإيرادات - الإنفاق"),
+        s7Txt("Net Profit", "صافي الربح"),
         s7Txt(
           "Net profit or loss after subtracting ad spend from revenue.",
-          "????? ?? ??????? ??????? ??? ??? ??????? ???????? ?? ?????????.",
+          "صافي الربح أو الخسارة بعد طرح الإنفاق الإعلاني من الإيرادات.",
         ),
         "netProfit = revenue - adSpend",
         "??",
@@ -1537,11 +1554,11 @@ window.renderSection7 = function (mountEl, data, ctx) {
           '">' +
           c.roi.toFixed(1) +
           "%</span>",
-        c.roi >= 0 ? s7Txt("profitable", "?????") : s7Txt("losing", "?????"),
-        s7Txt("Return on Investment", "?????? ??? ?????????"),
+        c.roi >= 0 ? s7Txt("profitable", "مربح") : s7Txt("losing", "خاسر"),
+        s7Txt("Return on Investment", "العائد على الاستثمار"),
         s7Txt(
           "Return percentage compared with spend. 100% means doubling your money.",
-          "?????? ??????? ?????? ?????? ????????. 100% ???? ?????? ??????.",
+          "نسبة العائد مقارنة بالإنفاق. 100% تعني مضاعفة أموالك.",
         ),
         "ROI = (netProfit / adSpend) * 100%",
         "??",
@@ -1550,11 +1567,11 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "sfe-neutral",
         "CPA",
         sfeFmt(c.cpa, 2),
-        s7Txt("per acquired order", "??? ??? ?????"),
-        s7Txt("Cost per Order (CPA)", "????? ????? (CPA)"),
+        s7Txt("per acquired order", "لكل طلب مكتسب"),
+        s7Txt("Cost per Order (CPA)", "تكلفة الطلب (CPA)"),
         s7Txt(
           "Cost to acquire one order. It should be lower than average profit per delivered order to stay profitable.",
-          "????? ?????? ??? ??? ????. ??? ?? ???? ??? ?? ??? ???? ????? ?????.",
+          "تكلفة اكتساب طلب واحد. يجب أن تكون أقل من متوسط الربح لكل طلب مسلم للبقاء مربحا.",
         ),
         "CPA = adSpend / netOrders",
         "??",
@@ -1569,29 +1586,29 @@ window.renderSection7 = function (mountEl, data, ctx) {
     var safeColor = isLight ? "#10b981" : "#00e5a0";
     _renderScoreBlock(
       "sfe-profit-score",
-      s7Txt("PROFITABILITY SCORE", "???? ???????"),
+      s7Txt("PROFITABILITY SCORE", "درجة الربحية"),
       profScore,
       profScore >= 60 ? safeColor : profScore >= 40 ? "#f5a623" : "#ff3b5c",
       profScore >= 70
-        ? s7Txt("Strong", "????")
+        ? s7Txt("Strong", "قوي")
         : profScore >= 50
-          ? s7Txt("Moderate", "??????")
+          ? s7Txt("Moderate", "متوسط")
           : profScore >= 30
-            ? s7Txt("Weak", "?????")
-            : s7Txt("Critical", "????"),
+            ? s7Txt("Weak", "ضعيف")
+            : s7Txt("Critical", "حرج"),
     );
     _renderScoreBlock(
       "sfe-risk-score",
-      s7Txt("SCALING SAFETY", "???? ??????"),
+      s7Txt("SCALING SAFETY", "أمان التوسع"),
       riskScore,
       riskScore >= 65 ? safeColor : riskScore >= 45 ? "#f5a623" : "#ff3b5c",
       riskScore >= 70
-        ? s7Txt("Safe to scale", "??? ??????")
+        ? s7Txt("Safe to scale", "آمن للتوسع")
         : riskScore >= 50
-          ? s7Txt("Caution", "????")
+          ? s7Txt("Caution", "تنبيه")
           : riskScore >= 30
-            ? s7Txt("High risk", "?????? ?????")
-            : s7Txt("Do not scale", "?? ???? ????"),
+            ? s7Txt("High risk", "مخاطر عالية")
+            : s7Txt("Do not scale", "لا تتوسع"),
     );
   }
 
@@ -1663,7 +1680,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     if (c.netProfit >= 0) {
       el.innerHTML =
         '<div class="sfe-be-title">' +
-        s7Txt("? Break-even Achieved", "? ?? ?????? ????? ???????") +
+        s7Txt("Break-even Achieved", "تم تحقيق التعادل") +
         "</div>" +
         '<div class="sfe-be-subtitle" style="color:' +
         (document.documentElement.getAttribute("data-theme") === "light"
@@ -1672,19 +1689,19 @@ window.renderSection7 = function (mountEl, data, ctx) {
         '">' +
         s7Txt(
           "Campaign is profitable. Exceeds spend by ",
-          "?????? ?????. ?????? ??????? ?????? ",
+          "الحملة مربحة. تتجاوز الإنفاق بمقدار ",
         ) +
         "<strong>" +
         sfeFmt(c.netProfit) +
         "</strong>. " +
-        s7Txt("Scale with confidence.", "????? ?????? ????.") +
+        s7Txt("Scale with confidence.", "توسع بثقة.") +
         "</div>";
       return;
     }
     var rows = "";
     if (c.ndrRequired !== null && c.ndrRequired <= 1) {
       rows += _beRow(
-        s7Txt("Net Delivery Rate", "???? ???????"),
+        s7Txt("Net Delivery Rate", "معدل التسليم الصافي"),
         s7RatioPctValue(s.ndr) + "%",
         s7RatioPctValue(c.ndrRequired) + "%",
         "+" + s7PctValue((c.ndrRequired - s.ndr) * 100) + "pp",
@@ -1700,7 +1717,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     }
     if (c.delivRequired !== null) {
       rows += _beRow(
-        s7Txt("Delivered Orders", "??????? ???????"),
+        s7Txt("Delivered Orders", "الطلبات المسلمة"),
         s7Num(Math.round(c.deliveredOrders)),
         s7Num(Math.round(c.delivRequired)),
         "+" + s7Num(Math.round(c.delivRequired - c.deliveredOrders)),
@@ -1708,16 +1725,16 @@ window.renderSection7 = function (mountEl, data, ctx) {
     }
     el.innerHTML =
       '<div class="sfe-be-title">' +
-      s7Txt("? Break-even Simulator", "? ????? ???? ???????") +
+      s7Txt("Break-even Simulator", "محاكي نقطة التعادل") +
       "</div>" +
       '<div class="sfe-be-subtitle">' +
-      s7Txt("To break even at ", "?????? ??? ??????? ??? ????? ") +
+      s7Txt("To break even at ", "للوصول إلى التعادل عند ") +
       "<strong>" +
       sfeFmt(s.adSpend) +
       "</strong>" +
       s7Txt(
         " spend, you need at least one of:",
-        "? ????? ??? ???? ??? ????? ?? ?????:",
+        " إنفاق، تحتاج إلى واحد على الأقل من الآتي:",
       ) +
       "</div>" +
       '<div class="sfe-be-options">' +
@@ -1746,7 +1763,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       from +
       '</span><span class="sfe-be-arrow" style="color:' +
       arrowColor +
-      '">?</span>' +
+      '">' + (isAr ? "&larr;" : "&rarr;") + "</span>" +
       '<span class="sfe-be-to">' +
       to +
       '</span><span class="sfe-be-delta">' +
@@ -1767,21 +1784,21 @@ window.renderSection7 = function (mountEl, data, ctx) {
       insights.push({
         type: "critical",
         icon: "??",
-        cat: s7Txt("PROFITABILITY BLOCKER", "???? ???????"),
+        cat: s7Txt("PROFITABILITY BLOCKER", "عائق الربحية"),
         text:
           s7Txt(
             'Campaign is <span class="hi-red">losing ',
-            '?????? <span class="hi-red">???? ',
+            'الحملة <span class="hi-red">تخسر ',
           ) +
           sfeFmt(Math.abs(c.netProfit)) +
           s7Txt(
             "</span> net. Revenue of <strong>",
-            "</span> ????. ????? <strong>",
+            "</span> صافي. إيرادات بقيمة <strong>",
           ) +
           sfeFmt(c.revenue) +
           s7Txt(
             "</strong> does not cover spend of <strong>",
-            "</strong> ?? ???? ????? <strong>",
+            "</strong> لا تغطي إنفاقا بقيمة <strong>",
           ) +
           sfeFmt(s.adSpend) +
           "</strong>.",
@@ -1790,14 +1807,14 @@ window.renderSection7 = function (mountEl, data, ctx) {
       insights.push({
         type: "positive",
         icon: "??",
-        cat: s7Txt("PROFITABILITY STATUS", "???? ???????"),
+        cat: s7Txt("PROFITABILITY STATUS", "حالة الربحية"),
         text:
           s7Txt(
             'Campaign is <span class="hi-green">profitable</span> — net profit <strong>',
-            '?????? <span class="hi-green">?????</span> — ???? ????? <strong>',
+            'الحملة <span class="hi-green">مربحة</span> - صافي الربح <strong>',
           ) +
           sfeFmt(c.netProfit) +
-          s7Txt("</strong> on <strong>", "</strong> ?? ????? <strong>") +
+          s7Txt("</strong> on <strong>", "</strong> على إيرادات <strong>") +
           sfeFmt(c.revenue) +
           "</strong>.",
       });
@@ -1808,42 +1825,42 @@ window.renderSection7 = function (mountEl, data, ctx) {
       insights.push({
         type: "negative",
         icon: "??",
-        cat: s7Txt("UNIT ECONOMICS", "????????? ?????"),
+        cat: s7Txt("UNIT ECONOMICS", "اقتصاديات الوحدة"),
         text:
           s7Txt(
             '<span class="hi-red">CPA (',
-            '<span class="hi-red">????? ????? (',
+            '<span class="hi-red">تكلفة الطلب (',
           ) +
           sfeFmt(c.cpa, 2) +
           s7Txt(
             ")</span> exceeds revenue per delivered order <strong>(",
-            ")</span> ???? ?? ????? ????? ?????? <strong>(",
+            ")</span> أعلى من الإيراد لكل طلب مسلم <strong>(",
           ) +
           sfeFmt(c.revenuePerDel, 2) +
           s7Txt(
             ")</strong>. Scaling will compound losses, not profits.",
-            ")</strong>. ?????? ????? ??????? ?? ???????.",
+            ")</strong>. التوسع سيضاعف الخسائر لا الأرباح.",
           ),
       });
     } else if (c.revenuePerDel > 0 && s.adSpend > 0) {
       insights.push({
         type: "positive",
         icon: "??",
-        cat: s7Txt("UNIT ECONOMICS", "????????? ?????"),
+        cat: s7Txt("UNIT ECONOMICS", "اقتصاديات الوحدة"),
         text:
           s7Txt(
             'Revenue per delivered order <span class="hi-green">(',
-            '????? ????? ?????? <span class="hi-green">(',
+            'الإيراد لكل طلب مسلم <span class="hi-green">(',
           ) +
           sfeFmt(c.revenuePerDel, 2) +
           s7Txt(
             ")</span> exceeds CPA <strong>(",
-            ")</span> ???? ?? ????? ????? <strong>(",
+            ")</span> أعلى من تكلفة الطلب <strong>(",
           ) +
           sfeFmt(c.cpa, 2) +
           s7Txt(
             ")</strong>. Unit economics are positive — scaling is viable.",
-            ")</strong>. ????????? ????? ??????? ??????? ????.",
+            ")</strong>. اقتصاديات الوحدة إيجابية والتوسع ممكن.",
           ),
       });
     }
@@ -1853,53 +1870,53 @@ window.renderSection7 = function (mountEl, data, ctx) {
       insights.push({
         type: "negative",
         icon: "??",
-        cat: s7Txt("NDR ANALYSIS", "????? ???? ???????"),
+        cat: s7Txt("NDR ANALYSIS", "تحليل معدل التسليم الصافي"),
         text:
           s7Txt(
             'NDR of <span class="hi-red">',
-            '???? ??????? <span class="hi-red">',
+            'معدل التسليم الصافي <span class="hi-red">',
           ) +
           ndrPct +
           s7Txt(
             "%</span> is critically below the danger threshold (20%). <strong>",
-            "%</span> ??? ?? ?? ????? (20%). ???? <strong>",
+            "%</span> أقل بكثير من حد الخطر (20%). <strong>",
           ) +
           s7Num(Math.round((1 - s.ndr) * s.totalOrders)) +
           s7Txt(
             " orders</strong> are failing — primary driver of losses.",
-            " ???</strong> ??????? ???? ??? ????? ???????.",
+            " طلب</strong> تفشل وهي المحرك الأساسي للخسائر.",
           ),
       });
     } else if (s.ndr < 0.30) {
       insights.push({
         type: "warning",
         icon: "??",
-        cat: s7Txt("NDR ANALYSIS", "????? ???? ???????"),
+        cat: s7Txt("NDR ANALYSIS", "تحليل معدل التسليم الصافي"),
         text:
           s7Txt(
             'NDR of <span class="hi-yellow">',
-            '???? ??????? <span class="hi-yellow">',
+            'معدل التسليم الصافي <span class="hi-yellow">',
           ) +
           ndrPct +
           s7Txt(
             "%</span> is below healthy baseline (30%). Improving to 30%+ would materially impact profitability.",
-            "%</span> ??? ?? ??????? ????? (30%). ????? ??? 30% ????? ??????? ?????.",
+            "%</span> أقل من خط الصحة الأساسي (30%). التحسن إلى 30% أو أكثر يؤثر بوضوح على الربحية.",
           ),
       });
     } else if (s.ndr >= 0.40) {
       insights.push({
         type: "positive",
         icon: "?",
-        cat: s7Txt("NDR ANALYSIS", "????? ???? ???????"),
+        cat: s7Txt("NDR ANALYSIS", "تحليل معدل التسليم الصافي"),
         text:
           s7Txt(
             'NDR of <span class="hi-cyan">',
-            '???? ??????? <span class="hi-cyan">',
+            'معدل التسليم الصافي <span class="hi-cyan">',
           ) +
           ndrPct +
           s7Txt(
             "%</span> reaches the top delivery tier (40%). Strong delivery enables confident budget scaling.",
-            "%</span> ???? ?? ?? ?????? ????? (40%). ???? ??????? ??? ????? ??? ????????? ????.",
+            "%</span> يصل إلى أعلى مستوى تسليم (40%). التسليم القوي يسمح بزيادة الميزانية بثقة.",
           ),
       });
     }
@@ -1911,16 +1928,16 @@ window.renderSection7 = function (mountEl, data, ctx) {
       insights.push({
         type: "negative",
         icon: "??",
-        cat: s7Txt("COST ANALYSIS", "????? ???????"),
+        cat: s7Txt("COST ANALYSIS", "تحليل التكلفة"),
         text:
           s7Txt(
             'You are losing <span class="hi-red">',
-            '???? <span class="hi-red">',
+            'تخسر <span class="hi-red">',
           ) +
           sfeFmt(lossPerDel) +
           s7Txt(
             "</span> per delivered order. Doubling budget doubles losses.",
-            "</span> ??? ??? ????. ?????? ????????? ?????? ???????.",
+            "</span> لكل طلب مسلم. مضاعفة الميزانية تضاعف الخسائر.",
           ),
       });
     }
@@ -1930,42 +1947,42 @@ window.renderSection7 = function (mountEl, data, ctx) {
       insights.push({
         type: "critical",
         icon: "??",
-        cat: s7Txt("SCALING SAFETY", "???? ??????"),
+        cat: s7Txt("SCALING SAFETY", "أمان التوسع"),
         text:
           s7Txt(
             "Doubling budget to <strong>",
-            "?????? ????????? ??? <strong>",
+            "مضاعفة الميزانية إلى <strong>",
           ) +
           sfeFmt(c.projBudget) +
           s7Txt(
             '</strong> projects <span class="hi-red">',
-            '</strong> ????? <span class="hi-red">',
+            '</strong> تتوقع <span class="hi-red">',
           ) +
           sfeFmt(Math.abs(c.projNet)) +
           s7Txt(
             " loss</span>. Scaling losses, not profits. Fix unit economics first.",
-            " ?????</span>. ???? ????????? ????? ??? ??????.",
+            " خسارة</span>. هذا توسع للخسائر لا الأرباح. أصلح اقتصاديات الوحدة أولا.",
           ),
       });
     } else if (c.projNet > 0 && c.netProfit > 0) {
       insights.push({
         type: "positive",
         icon: "??",
-        cat: s7Txt("SCALING OPPORTUNITY", "???? ????"),
+        cat: s7Txt("SCALING OPPORTUNITY", "فرصة التوسع"),
         text:
           s7Txt(
             'Scaling to 2× budget projects <span class="hi-green">',
-            '?????? ??? ??? ????????? ????? <span class="hi-green">',
+            'التوسع إلى 2x من الميزانية يتوقع <span class="hi-green">',
           ) +
           sfeFmt(c.projNet) +
           s7Txt(
             " net profit</span> at <strong>",
-            " ???? ???</span> ??? <strong>",
+            " صافي ربح</span> عند <strong>",
           ) +
           c.projRoi.toFixed(1) +
           s7Txt(
             "% ROI</strong>. Safe to scale.",
-            "% ROI</strong>. ?????? ???.",
+            "% ROI</strong>. آمن للتوسع.",
           ),
       });
     }
@@ -1975,7 +1992,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       var lift = Math.ceil(c.commRequired - s.avgCommission);
       insights.push({
         type: "info",
-        icon: "???",
+        icon: "i",
         cat: s7Txt("AVERAGE PROFIT OPTIMIZATION", "تحسين متوسط الربح"),
         text:
           s7Txt(
@@ -1985,12 +2002,12 @@ window.renderSection7 = function (mountEl, data, ctx) {
           lift +
           s7Txt(
             " " + state.currency + "</span> per delivery (from ",
-            " " + state.currency + "</span> ??? ????? (?? ",
+            " " + state.currency + "</span> لكل تسليم (من ",
           ) +
           s.avgCommission +
           " ? " +
           Math.ceil(c.commRequired) +
-          s7Txt(" " + state.currency + ") would achieve break-even.", " " + state.currency + ") ???? ???? ???????."),
+          s7Txt(" " + state.currency + ") would achieve break-even.", " " + state.currency + ") تحقق التعادل."),
       });
     }
 
@@ -2043,7 +2060,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         spend: s.adSpend,
       },
       {
-        label: s7Txt("? Current", "? ??????"),
+        label: s7Txt("Current", "الحالي"),
         ndr: s.ndr,
         comm: s.avgCommission,
         orders: s.totalOrders,
@@ -2065,14 +2082,14 @@ window.renderSection7 = function (mountEl, data, ctx) {
         spend: s.adSpend,
       },
       {
-        label: s7Txt("Profit +20%", "????? +20%"),
+        label: s7Txt("Profit +20%", "الربح +20%"),
         ndr: s.ndr,
         comm: Number((s.avgCommission * 1.2).toFixed(2)),
         orders: s.totalOrders,
         spend: s.adSpend,
       },
       {
-        label: s7Txt("Orders ×2", "??????? ×2"),
+        label: s7Txt("Orders ×2", "الطلبات ×2"),
         ndr: s.ndr,
         comm: s.avgCommission,
         orders: s.totalOrders * 2,
@@ -2122,15 +2139,15 @@ window.renderSection7 = function (mountEl, data, ctx) {
     el.innerHTML =
       '<table class="sfe-table">' +
       "<thead><tr><th>" +
-      s7Txt("Scenario", "?????????") +
+      s7Txt("Scenario", "السيناريو") +
       "</th><th>NDR</th><th>" +
-      s7Txt("Avg Profit", "????? ?????") +
+      s7Txt("Avg Profit", "متوسط الربح") +
       "</th><th>" +
-      s7Txt("Delivered", "???????") +
+      s7Txt("Delivered", "تم التسليم") +
       "</th><th>" +
-      s7Txt("Revenue", "???????") +
+      s7Txt("Revenue", "الإيرادات") +
       "</th><th>" +
-      s7Txt("Net Profit", "???? ?????") +
+      s7Txt("Net Profit", "صافي الربح") +
       "</th><th>ROI</th></tr></thead>" +
       "<tbody>" +
       rows +
@@ -2263,18 +2280,18 @@ window.renderSection7 = function (mountEl, data, ctx) {
       roasTextEl.innerHTML =
         s7Txt(
           "For each 1 " + state.currency + " spent",
-          "??? 1 " + state.currency + " ?????",
+          "لكل 1 " + state.currency + " يتم إنفاقه",
         ) +
         " " +
         _tip(
           "??",
           s7Txt(
             "Return per Currency Unit (ROAS)",
-            "?????? ??? ???? ???? (ROAS)",
+            "العائد لكل وحدة عملة (ROAS)",
           ),
           s7Txt(
             "For each unit spent, how much do you get back in revenue? More than 1 means revenue exceeds spend.",
-            "??? ???? ???? ??????? ?? ???? ???? ??????? ???? ?? 1 ???? ?? ??????? ???? ?? ???????.",
+            "لكل وحدة يتم إنفاقها، كم تحصل كإيراد؟ أكبر من 1 يعني أن الإيراد يتجاوز الإنفاق.",
           ),
           "ROAS = revenue / adSpend",
         );
@@ -2298,13 +2315,13 @@ window.renderSection7 = function (mountEl, data, ctx) {
       tipEl && tipEl.parentElement && tipEl.parentElement.parentElement;
     var tip = "",
       tipIcon = "??",
-      tipTitle = s7Txt("Campaign Status", "???? ??????"),
+      tipTitle = s7Txt("Campaign Status", "حالة الحملة"),
       tipBg,
       tipBorder;
     if (res.roi < 0) {
       tip = s7Txt(
         "This budget is creating a loss. Improve targeting or increase delivery rate (NDR) before adding more spend.",
-        "??? ????????? ????? ?? ?????. ???? ????? ????????? ?? ??? ???? ??????? (NDR) ??? ?? ??????.",
+        "هذه الميزانية تسبب خسارة. حسّن الاستهداف أو ارفع معدل التسليم (NDR) قبل إضافة إنفاق أكبر.",
       );
       tipIcon = "??";
       tipBg = "rgba(239,68,68,0.1)";
@@ -2315,7 +2332,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     } else if (res.roi < 50) {
       tip = s7Txt(
         "Weak performance close to break-even. Profit margin is thin. Improve performance before scaling.",
-        "???? ???? ?????? ?? ???? ???????. ???? ????? ???? ????. ????? ????? ?????? ?????? ??????.",
+        "أداء ضعيف قريب من التعادل. هامش الربح محدود. حسّن الأداء قبل التوسع.",
       );
       tipIcon = "?";
       tipBg = "rgba(245,158,11,0.1)";
@@ -2326,7 +2343,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     } else {
       tip = s7Txt(
         "Excellent and profitable performance. Your campaign is generating a healthy return. Continue or raise budget carefully.",
-        "???? ????? ?????. ????? ???? ?????? ?????. ???? ?????????? ?? ??? ????????? ????.",
+        "أداء ممتاز ومربح. حملتك تحقق عائدا صحيا. استمر أو ارفع الميزانية بحذر.",
       );
       tipIcon = "??";
       tipBg =
@@ -2842,17 +2859,17 @@ window.renderSection7 = function (mountEl, data, ctx) {
         : "rgba(255,255,255,0.06)") +
       ';border-radius:16px;padding:24px">' +
       '<h3 style="margin:0 0 20px;font-size:15px;font-weight:900;text-align:center;display:flex;align-items:center;justify-content:center;gap:8px">' +
-      s7Txt("Enter your campaign data", "???? ?????? ?????") +
-      " <span>???</span></h3>" +
+      s7Txt("Enter your campaign data", "أدخل بيانات حملتك") +
+      ' <span aria-hidden="true">+</span></h3>' +
       '<div style="display:flex;flex-direction:column;gap:14px">' +
       // Budget input
       '<div class="s7-input-wrap">' +
       '<div class="s7-lbl">' +
-      s7Txt("AD SPEND", "???? ??????? ????????") +
+      s7Txt("AD SPEND", "الإنفاق الإعلاني") +
       "</div>" +
       '<div style="display:flex;align-items:center;gap:12px">' +
       '<input type="text" inputmode="numeric" id="s7-in-budget" class="s7-input-num" placeholder="' +
-      s7Txt("Enter campaign budget", "???? ??????? ??????") +
+      s7Txt("Enter campaign budget", "أدخل ميزانية الحملة") +
       '" />' +
       '<span id="s7-budget-curr-label" style="font-size:13px;font-weight:800;color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
@@ -2877,7 +2894,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       // Marketing sync uses the one authoritative dashboard period selector in the top bar.
       '<div class="s7-sync-period">' +
       '<div class="s7-lbl">' +
-      s7Txt("Marketing Spend Date Filter", "???? ????? ???????") +
+      s7Txt("Marketing Spend Date Filter", "فلتر تاريخ الإنفاق التسويقي") +
       "</div>" +
       '<div class="s7-sync-period-range">' +
       escapeSourceText(selectedDashboardPeriodLabel()) +
@@ -2885,7 +2902,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       '<div class="s7-sync-period-note">' +
       s7Txt(
         "Selecting a period from the top dashboard bar syncs connected marketing automatically. Update Dashboard also refreshes marketing after fetching live order data.",
-        "?????? ??? ??????? ???? ???? ??????? ?? ?????? ?????? ?????? ?? ???? ????? ???? ??????? ?? ?????? ????.",
+        "اختيار فترة من شريط لوحة التحكم العلوي يزامن التسويق المتصل تلقائيا. تحديث لوحة التحكم يحدّث التسويق أيضا بعد جلب بيانات الطلبات المباشرة.",
       ) +
       "</div>" +
       "</div>" +
@@ -2902,7 +2919,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         : "rgba(255,255,255,0.06)") +
       ';border-radius:16px;padding:24px">' +
       '<div style="font-size:13px;font-weight:900;display:flex;align-items:center;gap:8px;margin-bottom:16px"><span style="color:#f59e0b">?</span> ' +
-      s7Txt("Real Bot Indicators", "?????? ????? ????????") +
+      s7Txt("Real Bot Indicators", "مؤشرات البوت الحقيقية") +
       "</div>" +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
       // Taager dashboard/status/NDR migration:
@@ -2917,7 +2934,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         s7Txt("Net Orders", "صافي الطلبات"),
         s7Txt(
           "Total number of orders received from the bot during the selected period.",
-          "????? ????? ??????? ??????? ?? ????? ???? ?????? ???????.",
+          "إجمالي عدد الطلبات المستلمة من البوت خلال الفترة المحددة.",
         ),
         null,
       ) +
@@ -2934,30 +2951,30 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "confirmedOrders = netOrders * confirmationRate",
       ) +
       _kpiMiniTip(
-        s7Txt("Delivered Orders", "??????? ???????"),
+        s7Txt("Delivered Orders", "الطلبات المسلمة"),
         s7Num(realExpectedDvl),
         document.documentElement.getAttribute("data-theme") === "light"
           ? "#10b981"
           : "#00e676",
         "?",
-        s7Txt("Delivered Orders", "??????? ???????"),
+        s7Txt("Delivered Orders", "الطلبات المسلمة"),
         s7Txt(
           isExpectedRateMode
             ? "Forecast delivered orders from net orders x delivery rate."
             : "Orders that actually reached the customer, counted from delivered sheet status.",
-          "??????? ???? ???? ?????? ??????. ???? ?? ?????? ??????? × ???? ???????.",
+          "طلبات وصلت للعميل بناء على معدل التسليم. محسوبة من صافي الطلبات × معدل التسليم.",
         ),
         isExpectedRateMode ? "delivered = netOrders * NDR%" : "delivered = sheet delivered status",
       ) +
       _kpiMiniTip(
-        s7Txt("Delivery Rate NDR", "???? ??????? NDR"),
+        s7Txt("Delivery Rate NDR", "معدل التسليم NDR"),
         s7PctValue(realNdrPct) + "%",
         "#f59e0b",
         "??",
-        s7Txt("Delivery Rate (NDR)", "???? ??????? (NDR)"),
+        s7Txt("Delivery Rate (NDR)", "معدل التسليم (NDR)"),
         s7Txt(
           "Percentage of orders delivered successfully. Healthy benchmark starts at 30%, with top tier at 40%+.",
-          "?????? ??????? ??????? ???? ?? ??????? ?????. ??????? ????? ???? ?? 30%.",
+          "نسبة الطلبات التي تم تسليمها بنجاح. يبدأ المعيار الصحي من 30%، والمستوى الأعلى عند 40% أو أكثر.",
         ),
         "NDR = deliveredOrders / netOrders * 100",
       ) +
@@ -2998,7 +3015,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         : "rgba(255,255,255,0.06)") +
       ';border-radius:16px;padding:20px">' +
       '<div style="font-size:13px;font-weight:900;margin-bottom:14px;display:flex;align-items:center;gap:8px"><span style="color:#3b82f6">??</span> ' +
-      s7Txt("Quick Budget Scenarios", "?????????? ????? ?????????") +
+      s7Txt("Quick Budget Scenarios", "سيناريوهات ميزانية سريعة") +
       "</div>" +
       '<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr 0.7fr;text-align:center;padding-bottom:10px;border-bottom:1px solid ' +
       (document.documentElement.getAttribute("data-theme") === "light"
@@ -3010,11 +3027,11 @@ window.renderSection7 = function (mountEl, data, ctx) {
         : "rgba(255,255,255,0.4)") +
       ';font-weight:800">' +
       "<span>" +
-      s7Txt("Scenario", "???????") +
+      s7Txt("Scenario", "السيناريو") +
       "</span><span>" +
-      s7Txt("Budget", "?????????") +
+      s7Txt("Budget", "الميزانية") +
       "</span><span>" +
-      s7Txt("Net Profit", "???? ?????") +
+      s7Txt("Net Profit", "صافي الربح") +
       "</span><span>ROI</span>" +
       "</div>" +
       '<div id="s7-scen-list" style="margin-top:8px"></div>' +
@@ -3039,7 +3056,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         ? "#1e293b"
         : "#f0f1f3") +
       '">' +
-      s7Txt("Budget Forecast Results", "????? ???? ?????????") +
+      s7Txt("Budget Forecast Results", "نتائج توقع الميزانية") +
       "</span>" +
       "</div>" +
       '<div style="display:flex;align-items:center;gap:2px;flex-wrap:wrap;justify-content:flex-end">' +
@@ -3053,14 +3070,14 @@ window.renderSection7 = function (mountEl, data, ctx) {
         ? "#64748b"
         : "rgba(255,255,255,0.5)") +
       ';font-weight:700;display:flex;align-items:center;gap:5px">' +
-      s7Txt("Total Spend", "?????? ???????") +
+      s7Txt("Total Spend", "إجمالي الإنفاق") +
       " " +
       _tip(
         "??",
-        s7Txt("Total Spend", "?????? ???????"),
+        s7Txt("Total Spend", "إجمالي الإنفاق"),
         s7Txt(
           "Calculator spend after converting the entered or synced spend into the selected calculator currency.",
-          "?????? ?????? ???????? ??? ????? ????????? ??????? ?? ??????? ??? ???? ?????? ??????.",
+          "إنفاق الحاسبة بعد تحويل الإنفاق المدخل أو المتزامن إلى عملة الحاسبة المحددة.",
         ),
         "calculatorSpend = convert(spend, sourceCurrency -> calculatorCurrency)",
       ) +
@@ -3076,14 +3093,14 @@ window.renderSection7 = function (mountEl, data, ctx) {
       state.viewCurrency +
       "</div></div>" +
       '<div class="s7-card"><div style="font-size:12px;color:#a855f7;font-weight:700;display:flex;align-items:center;gap:5px">' +
-      s7Txt("Cost per Order CPA", "????? ????? CPA") +
+      s7Txt("Cost per Order CPA", "تكلفة الطلب CPA") +
       " " +
       _tip(
         "??",
-        s7Txt("Cost per Order (CPA)", "????? ????? (CPA)"),
+        s7Txt("Cost per Order (CPA)", "تكلفة الطلب (CPA)"),
         s7Txt(
           "Cost to acquire one order. Lower CPA means the campaign is more efficient.",
-          "????? ?????? ??? ??? ????. ???? ?????? ???? ?????? ???? ?????.",
+          "تكلفة اكتساب طلب واحد. انخفاض CPA يعني أن الحملة أكثر كفاءة.",
         ),
         "CPA = adSpend / netOrders",
       ) +
@@ -3099,14 +3116,14 @@ window.renderSection7 = function (mountEl, data, ctx) {
       state.viewCurrency +
       "</div></div>" +
       '<div class="s7-card"><div style="font-size:12px;color:#f59e0b;font-weight:700;display:flex;align-items:center;gap:5px">' +
-      s7Txt("Break-even CPA", "????? ???????") +
+      s7Txt("Break-even CPA", "تكلفة التعادل") +
       " " +
       _tip(
         "??",
-        s7Txt("Break-even CPA", "????? ???????? ??? ???????"),
+        s7Txt("Break-even CPA", "تكلفة التعادل"),
         s7Txt(
           "Maximum CPA before the campaign starts losing money. This simulator uses the editable Taager profit per delivered order assumption multiplied by NDR.",
-          "???? ????? ?????? ??? ?? ???? ?????? ????????. ???? ?? ????? ??? ???? ??? ??? ???? ?????? ?? ???? ??????? ??????.",
+          "أقصى تكلفة طلب قبل أن تبدأ الحملة في خسارة المال. يستخدم هذا المحاكي افتراض ربح Taager القابل للتعديل لكل طلب مسلم مضروبا في NDR.",
         ),
         "Break-even CPA = taagerProfitPerDeliveredOrder * NDR",
       ) +
@@ -3122,16 +3139,16 @@ window.renderSection7 = function (mountEl, data, ctx) {
       state.viewCurrency +
       "</div></div>" +
       '<div class="s7-card"><div style="font-size:12px;color:#3b82f6;font-weight:700;display:flex;align-items:center;gap:5px">' +
-      s7Txt("Total Profit Before Ad Spend", "?????? ????? ??? ???????") +
+      s7Txt("Total Profit Before Ad Spend", "إجمالي الربح قبل الإنفاق الإعلاني") +
       " " +
       _tip(
         "??",
-        s7Txt("Total Profit Before Ad Spend", "?????? ????? ??? ???????"),
+        s7Txt("Total Profit Before Ad Spend", "إجمالي الربح قبل الإنفاق الإعلاني"),
         s7Txt(
           isExpectedRateMode
             ? "Expected delivered orders multiplied by the editable average profit per delivered order."
             : "Actual earned profit after tax from delivered orders before subtracting synced ad spend.",
-          "????? ??????? ?? ??????? ??????? × ????? ??? ????.",
+          "الطلبات المسلمة المتوقعة × متوسط الربح لكل طلب.",
         ),
         isExpectedRateMode
           ? "totalProfitBeforeAdSpend = expectedDeliveriesExact * averageProfitPerDeliveredOrder"
@@ -3149,14 +3166,14 @@ window.renderSection7 = function (mountEl, data, ctx) {
       state.viewCurrency +
       "</div></div>" +
       '<div class="s7-card"><div style="font-size:12px;color:#00e676;font-weight:700;display:flex;align-items:center;gap:5px">' +
-      s7Txt("Account Net Profit", "????? ??????") +
+      s7Txt("Account Net Profit", "صافي ربح الحساب") +
       " " +
       _tip(
         "??",
-        s7Txt("Account Net Profit", "????? ??????"),
+        s7Txt("Account Net Profit", "صافي ربح الحساب"),
         s7Txt(
           "Whole-account profit after subtracting total synced ad spend. This can differ from SKU-matched Campaigns profit.",
-          "???? ????? ??? ??? ?????? ??????? ?? ?????????. ??? ???? ?????? ????? ???? ?? ?????.",
+          "ربح الحساب بالكامل بعد طرح إجمالي الإنفاق الإعلاني المتزامن. قد يختلف هذا عن ربح الحملات المطابق للمنتجات.",
         ),
         "netProfit = revenue - adSpend",
       ) +
@@ -3230,14 +3247,14 @@ window.renderSection7 = function (mountEl, data, ctx) {
       ';border-radius:16px;overflow:hidden">' +
       '<div style="flex:1;padding:24px;display:flex;flex-direction:column;align-items:center;position:relative">' +
       '<div style="font-size:15px;font-weight:900;margin-bottom:12px;display:flex;align-items:center;gap:8px">' +
-      s7Txt("Return on Investment (ROI)", "?????? ??? ????????? (ROI)") +
+      s7Txt("Return on Investment (ROI)", "العائد على الاستثمار (ROI)") +
       " " +
       _tip(
         "??",
-        s7Txt("Return on Investment (ROI)", "?????? ??? ????????? (ROI)"),
+        s7Txt("Return on Investment (ROI)", "العائد على الاستثمار (ROI)"),
         s7Txt(
           "Measures campaign profitability. Zero means break-even, positive means profit, negative means loss.",
-          "???? ??? ????? ?????. ??? ???? ?????? ???? ???? ???? ???? ???? ?????.",
+          "يقيس ربحية الحملة. الصفر يعني التعادل، والموجب يعني ربحا، والسالب يعني خسارة.",
         ),
         "ROI = (netProfit / adSpend) * 100%",
       ) +
@@ -3255,14 +3272,14 @@ window.renderSection7 = function (mountEl, data, ctx) {
         ? "#64748b"
         : "rgba(255,255,255,0.6)") +
       ';font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:5px" id="s7-roas-text">' +
-      s7Txt("For each 1 ", "??? 1 ") + state.currency + s7Txt(" spent", " ?????") +
+      s7Txt("For each 1 ", "لكل 1 ") + state.currency + s7Txt(" spent", " يتم إنفاقه") +
       " " +
       _tip(
         "??",
-        s7Txt("Return per Currency Unit (ROAS)", "?????? ??? ???? (ROAS)"),
+        s7Txt("Return per Currency Unit (ROAS)", "العائد لكل وحدة عملة (ROAS)"),
         s7Txt(
           "For each unit spent, how much revenue do you get back? More than 1 means revenue exceeds spend.",
-          "??? ???? ?????? ?? ???? ???? ??????? ???? ?? 1 ???? ?? ??????? ???? ?? ???????.",
+          "لكل وحدة يتم إنفاقها، كم إيرادا يعود لك؟ أكبر من 1 يعني أن الإيراد يتجاوز الإنفاق.",
         ),
         "ROAS = revenue / adSpend",
       ) +
@@ -3271,10 +3288,10 @@ window.renderSection7 = function (mountEl, data, ctx) {
       '<div style="font-size:13px;font-weight:900;color:#22d3ee;margin-top:6px;display:flex;align-items:center;gap:5px" id="s7-net-roas-row"><span id="s7-out-net-roas">--</span> ' +
       _tip(
         "??",
-        s7Txt("Net ROAS", "?????? ?????? ??? ???????"),
+        s7Txt("Net ROAS", "العائد الصافي على الإعلان"),
         s7Txt(
           "Actual delivered sales divided by ad spend. This ignores pending and canceled orders.",
-          "?????? ?????? ??????? ??????? ?????? ??? ??????? ????????. ?? ????? ??????? ??????? ?? ???????.",
+          "المبيعات المسلمة الفعلية مقسومة على الإنفاق الإعلاني. يتجاهل هذا الطلبات المعلقة والملغاة.",
         ),
         "Net ROAS = deliveredSales / adSpend",
       ) +
@@ -3284,7 +3301,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       '<div style="font-size:20px;margin-top:2px">??</div>' +
       "<div>" +
       '<div style="font-size:12px;font-weight:900;color:#00e676;margin-bottom:4px">' +
-      s7Txt("Campaign Status", "???? ??????") +
+      s7Txt("Campaign Status", "حالة الحملة") +
       "</div>" +
       '<div style="font-size:11px;color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
@@ -3307,21 +3324,21 @@ window.renderSection7 = function (mountEl, data, ctx) {
       ';border-radius:16px;padding:24px">' +
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:16px;flex-wrap:wrap">' +
       '<div><div style="font-size:15px;font-weight:900;display:flex;align-items:center;gap:8px"><span style="color:#00e676">??</span> ' +
-      s7Txt("Budget Scenario Forecast", "?????? ?????????? ?????????") +
+      s7Txt("Budget Scenario Forecast", "توقع سيناريو الميزانية") +
       "</div>" +
       '<div style="font-size:11px;color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.48)") +
       ';margin-top:4px">' +
-      s7Txt("X-axis shows budget multiples. Hover any point to see the exact budget.", "???? ?????? ?????? ??????? ?????????. ??? ??? ?? ???? ????? ????????? ???????.") +
+      s7Txt("X-axis shows budget multiples. Hover any point to see the exact budget.", "المحور الأفقي يعرض مضاعفات الميزانية. مرر على أي نقطة لرؤية الميزانية الدقيقة.") +
       "</div></div>" +
       '<div style="display:flex;gap:16px;font-size:11px;font-weight:700;min-height:22px;align-items:center">' +
       '<div style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;background:linear-gradient(135deg,#ef4444,#00e676);border-radius:3px;box-shadow:0 0 8px rgba(0,230,118,.35);display:inline-block"></span>' +
-      s7Txt("Net Result", "???? ???????") +
+      s7Txt("Net Result", "صافي النتيجة") +
       "</div>" +
       '<div style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;background:#3b82f6;border-radius:3px;box-shadow:0 0 8px #3b82f6;display:inline-block"></span>' +
-      s7Txt("Orders", "???????") +
+      s7Txt("Orders", "الطلبات") +
       "</div>" +
       "</div>" +
       "</div>" +
@@ -3349,7 +3366,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         ? "#1e293b"
         : "#f0f1f3") +
       '">' +
-      s7Txt("Budget Forecast Results", "????? ???? ?????????") +
+      s7Txt("Budget Forecast Results", "نتائج توقع الميزانية") +
       "</span>" +
       "</div>" +
       '<div style="display:flex;align-items:center;gap:2px;flex-wrap:wrap;justify-content:flex-end">' +
@@ -3359,25 +3376,25 @@ window.renderSection7 = function (mountEl, data, ctx) {
       '<div class="sfe-header">' +
       "<div>" +
       '<div class="sfe-header-badge">' +
-      s7Txt("SMART FORECASTING ENGINE", "???? ?????? ?????") +
+      s7Txt("SMART FORECASTING ENGINE", "محرك التوقع الذكي") +
       "</div>" +
       '<div class="sfe-header-title">' +
-      s7Txt("Profitability Optimization Studio", "??????? ????? ???????") +
+      s7Txt("Profitability Optimization Studio", "استوديو تحسين الربحية") +
       "</div>" +
       '<div class="sfe-header-sub">' +
       s7Txt(
         "Simulate KPI changes · Detect break-even thresholds · Validate scaling safety",
-        "???? ??????? ?????? · ???? ???? ??????? · ???? ?? ???? ??????",
+        "محاكاة تغييرات المؤشرات · اكتشاف حدود التعادل · التحقق من أمان التوسع",
       ) +
       "</div>" +
       "</div>" +
       '<div class="sfe-header-right">' +
       '<div class="sfe-sim-badge" id="sfe-sim-badge" style="display:none">' +
       '<span class="sfe-sim-dot"></span>' +
-      s7Txt("SIMULATION MODE — local only", "??? ???????? — ???? ???") +
+      s7Txt("SIMULATION MODE — local only", "وضع المحاكاة - محلي فقط") +
       "</div>" +
       '<button class="sfe-reset-btn" id="sfe-reset-btn">? ' +
-      s7Txt("Reset to Real Data", "?????? ???????? ????????") +
+      s7Txt("Reset to Real Data", "إعادة البيانات الحقيقية") +
       "</button>" +
       "</div>" +
       "</div>" +
@@ -3388,7 +3405,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       // LEFT: Simulation Controls
       '<div class="sfe-panel">' +
       '<div class="sfe-panel-label">' +
-      s7Txt("SIMULATION CONTROLS", "????? ?????? ?? ????????") +
+      s7Txt("SIMULATION CONTROLS", "تحكم المحاكاة") +
       "</div>" +
       '<div class="sfe-control-group">' +
       '<div class="sfe-control-pair">' +
@@ -3397,23 +3414,23 @@ window.renderSection7 = function (mountEl, data, ctx) {
       s7Txt("Net Orders", "صافي الطلبات") +
       "</label>" +
       '<div class="sfe-input-wrap2"><input type="number" id="sfe-orders" class="sfe-input2" min="1" step="1"><span class="sfe-input-unit2">' +
-      s7Txt("orders", "???") +
+      s7Txt("orders", "طلبات") +
       "</span></div>" +
       "</div>" +
       '<div class="sfe-control-row">' +
       '<label class="sfe-label">' +
-      s7Txt("Delivered Orders", "??????? ???????") +
+      s7Txt("Delivered Orders", "الطلبات المسلمة") +
       "</label>" +
       '<div class="sfe-input-wrap2"><input type="number" id="sfe-delivered-orders" class="sfe-input2" min="0" step="1"><span class="sfe-input-unit2">' +
-      s7Txt("orders", "???") +
+      s7Txt("orders", "طلبات") +
       "</span></div>" +
       "</div>" +
       "</div>" +
       '<div class="sfe-control-row">' +
       '<label class="sfe-label">' +
-      s7Txt("Ad Spend", "??????? ????????") +
+      s7Txt("Ad Spend", "الإنفاق الإعلاني") +
       ' <span class="sfe-label-hint" style="font-size:10px;color:#8b8fa8">' +
-      s7Txt("used for CPA & ROI", "?????? ????? CPA ? ROI") +
+      s7Txt("used for CPA & ROI", "يستخدم في CPA و ROI") +
       "</span></label>" +
       '<div class="sfe-input-wrap2"><input type="number" id="sfe-adspend" class="sfe-input2" min="0" step="500"><span class="sfe-input-unit2" id="sfe-lbl-adspend-curr">' +
       state.currency +
@@ -3421,19 +3438,19 @@ window.renderSection7 = function (mountEl, data, ctx) {
       "</div>" +
       '<div class="sfe-control-row">' +
       '<label class="sfe-label">' +
-      s7Txt("Net Delivery Rate", "???? ???????") +
+      s7Txt("Net Delivery Rate", "معدل التسليم الصافي") +
       ' <span class="sfe-label-hint" id="sfe-ndr-hint">0%</span></label>' +
       '<div class="sfe-input-wrap2"><input type="number" id="sfe-ndr" class="sfe-input2" min="0" max="100" step="any" inputmode="decimal"><span class="sfe-input-unit2">%</span></div>' +
       '<div class="sfe-health-scale" aria-hidden="true"></div>' +
       '<div class="sfe-slider-markers">' +
       '<span class="sfe-marker sfe-marker--danger">' +
-      s7Txt("DANGER", "???") +
+      s7Txt("DANGER", "خطر") +
       "<br>20%</span>" +
       '<span class="sfe-marker sfe-marker--mid">' +
-      s7Txt("MARKET", "?????") +
+      s7Txt("MARKET", "السوق") +
       "<br>30%</span>" +
       '<span class="sfe-marker sfe-marker--safe">' +
-      s7Txt("SAFE", "???") +
+      s7Txt("SAFE", "آمن") +
       "<br>40%+</span>" +
       "</div>" +
       "</div>" +
@@ -3444,15 +3461,15 @@ window.renderSection7 = function (mountEl, data, ctx) {
       '<div class="sfe-input-wrap2"><input type="number" id="sfe-comm" class="sfe-input2" min="0" step="0.5" inputmode="decimal"><span class="sfe-input-unit2">' + state.currency + '</span></div>' +
       "</div>" +
       '<div class="sfe-global-rate-note">' +
-      '<strong>' + s7Txt("Global exchange rates", "????? ????? ??????") + "</strong>" +
-      '<span>' + s7Txt("Refresh or edit currency rates from the dashboard top bar.", "???? ?????? ?? ????? ??????? ?? ?????? ?????? ??????.") + "</span>" +
+      '<strong>' + s7Txt("Global exchange rates", "أسعار الصرف العامة") + "</strong>" +
+      '<span>' + s7Txt("Refresh or edit currency rates from the dashboard top bar.", "حدّث أو عدّل أسعار العملات من شريط لوحة التحكم العلوي.") + "</span>" +
       "</div>" +
       "</div>" +
       "</div>" +
       // RIGHT: Intelligence Engine
       '<div class="sfe-panel">' +
       '<div class="sfe-panel-label">' +
-      s7Txt("INTELLIGENCE ENGINE", "???? ??????? ?????") +
+      s7Txt("INTELLIGENCE ENGINE", "محرك الذكاء") +
       "</div>" +
       '<div class="sfe-score-row">' +
       '<div class="sfe-score-block" id="sfe-profit-score"></div>' +
@@ -3465,7 +3482,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       // SFE Scenario Table
       '<div class="sfe-scenario-section">' +
       '<div class="sfe-panel-label">' +
-      s7Txt("ADVANCED SCENARIO PROJECTIONS", "?????? ???????????? ????????") +
+      s7Txt("ADVANCED SCENARIO PROJECTIONS", "توقعات السيناريوهات المتقدمة") +
       "</div>" +
       '<div style="overflow-x:auto" id="sfe-scenario-table"></div>' +
       "</div>" +
@@ -3494,7 +3511,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "aria-label",
         s7Txt(
           "Ad spend synced from marketing platforms and locked",
-          "??????? ???????? ?????? ?? ??? ??? ?????",
+          "الإنفاق الإعلاني متزامن من منصات التسويق ومقفل",
         ),
       );
     }
@@ -3733,7 +3750,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       titleEl.textContent = (icon ? icon + " " : "") + title;
       descEl.textContent = desc;
       if (formula) {
-        flbl.textContent = s7Txt("Formula", "????????");
+        flbl.textContent = s7Txt("Formula", "المعادلة");
         flbl.style.display = "block";
         fbox.textContent = formula;
         fbox.style.display = "block";

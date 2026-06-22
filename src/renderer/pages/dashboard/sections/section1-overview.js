@@ -113,11 +113,20 @@ window.renderSection1 = function (mountEl, data, ctx) {
 
   var finalAdSpend = roiLiveRaw.adSpend != null ? roiLiveRaw.adSpend : 250;
   if (syncedSpendActive) {
-    if (!sourceBreakdown.length) {
+    if (window.DashboardMarketingSpend && typeof window.DashboardMarketingSpend.aggregateSummary === "function") {
+      finalAdSpend = Number(window.DashboardMarketingSpend.aggregateSummary(marketingState.summary, targetCurrency, {
+        egpRate: egpRate,
+      }).spend || 0);
+    } else if (!sourceBreakdown.length) {
       finalAdSpend = Number((marketingState.summary && marketingState.summary.adSpend) || 0);
     } else {
       var convertedTotal = sourceBreakdown.reduce(function (total, source) {
-        return total + convertCurrency(Number(source.rawSpend || 0), source.currency || "SAR", targetCurrency);
+        var rawSpend = Number(source.rawSpend || source.nativeRawSpend || 0);
+        var convertedSpend = Number(source.convertedSpend || 0);
+        if (convertedSpend > 0 && rawSpend <= 0) {
+          return total + convertCurrency(convertedSpend, source.targetCurrency || marketingState.summary.currency || targetCurrency, targetCurrency);
+        }
+        return total + convertCurrency(rawSpend, source.currency || source.rawCurrency || "SAR", targetCurrency);
       }, 0);
       finalAdSpend = Number(convertedTotal.toFixed(2));
     }

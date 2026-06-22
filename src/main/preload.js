@@ -114,6 +114,10 @@ contextBridge.exposeInMainWorld("api", {
   checkLicense:        () => monitoredInvoke("check-license"),
   checkLicenseNocache: () => monitoredInvoke("check-license-nocache"),
   submitLicense:       (key) => monitoredInvoke("submit-license", key),
+  getLicenseCredentialBackupStatus: () => monitoredInvoke("get-license-credential-backup-status"),
+  getLicenseCredentialBackupPromptStatus: () => monitoredInvoke("get-license-credential-backup-prompt-status"),
+  backupLicenseCredentialsNow: () => monitoredInvoke("backup-license-credentials-now"),
+  restoreLicenseCredentials: () => monitoredInvoke("restore-license-credentials"),
 
   // Credentials
   getCredentials:      () => monitoredInvoke("get-credentials"),

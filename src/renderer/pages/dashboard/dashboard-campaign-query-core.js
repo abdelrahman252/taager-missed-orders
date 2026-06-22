@@ -153,6 +153,43 @@ function rawCampaignSpend(row) {
   return metric(row, ["rawSpend", "spend", "adSpend", "cost", "amount_spent"]);
 }
 
+function campaignSpendAmounts(row, reportingCurrency, egpRate, ratesOverride) {
+  const rawFieldsAvailable = row && (
+    row.rawSpend != null ||
+    row.nativeRawSpend != null ||
+    row.spend != null ||
+    row.adSpend != null ||
+    row.cost != null ||
+    row.amount_spent != null
+  );
+  const convertedAvailable = row && row.convertedSpend != null && row.convertedSpend !== "";
+  const rawSpendValue = rawFieldsAvailable
+    ? number(row.rawSpend ?? row.nativeRawSpend ?? row.spend ?? row.adSpend ?? row.cost ?? row.amount_spent)
+    : 0;
+  const convertedSpendValue = convertedAvailable ? number(row.convertedSpend) : 0;
+  if (rawFieldsAvailable && (rawSpendValue > 0 || convertedSpendValue <= 0)) {
+    const rawCurrency = currency(row.rawCurrency || row.nativeRawCurrency || row.currency || row.account_currency || reportingCurrency || "SAR");
+    const rawSpend = rawSpendValue;
+    return {
+      hasSpend: rawSpend > 0,
+      rawSpend,
+      rawCurrency,
+      spend: convert(rawSpend, rawCurrency, reportingCurrency, egpRate, ratesOverride),
+    };
+  }
+  if (convertedAvailable) {
+    const convertedCurrency = currency(row.targetCurrency || row.reportingCurrency || row.currency || reportingCurrency || "SAR");
+    const convertedSpend = convertedSpendValue;
+    return {
+      hasSpend: convertedSpend > 0,
+      rawSpend: convertedSpend,
+      rawCurrency: convertedCurrency,
+      spend: convert(convertedSpend, convertedCurrency, reportingCurrency, egpRate, ratesOverride),
+    };
+  }
+  return { hasSpend: false, rawSpend: 0, rawCurrency: currency(reportingCurrency || "SAR"), spend: 0 };
+}
+
 function compareRows(field, direction) {
   const factor = direction === "asc" ? 1 : -1;
   return (a, b) => {
@@ -338,10 +375,11 @@ function buildCampaignIntelligence(input) {
   };
 
   (input.campaignRows || []).forEach((source) => {
-    const rawCurrency = currency(source.rawCurrency || source.currency || source.account_currency || "SAR");
-    const rawSpend = rawCampaignSpend(source);
-    if (rawSpend <= 0) return;
-    const spend = convert(rawSpend, rawCurrency, reportingCurrency, egpRate, ratesOverride);
+    const spendAmounts = campaignSpendAmounts(source, reportingCurrency, egpRate, ratesOverride);
+    const rawCurrency = spendAmounts.rawCurrency;
+    const rawSpend = spendAmounts.rawSpend;
+    if (!spendAmounts.hasSpend) return;
+    const spend = spendAmounts.spend;
     const impressions = metric(source, ["impressions", "reach"]);
     const clicks = metric(source, ["clicks", "link_clicks", "outbound_clicks_outbound_click", "unique_clicks"]);
     const views = trafficViewMetrics(source);

@@ -10,7 +10,9 @@
 
   function openSupport() {
     if (window.api && typeof window.api.openExternalUrl === "function") {
-      return window.api.openExternalUrl(supportUrl()).catch(function () {});
+      return window.api.openExternalUrl(supportUrl()).catch(function (error) {
+        return { ok: false, error: error && error.message ? error.message : "OPEN_EXTERNAL_FAILED" };
+      });
     }
     return Promise.resolve({ ok: false, error: "OPEN_EXTERNAL_UNAVAILABLE" });
   }
