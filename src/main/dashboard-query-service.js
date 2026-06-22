@@ -447,6 +447,33 @@ function pageInfo(input, total) {
   return { page, pageSize, total, totalPages, start, end: Math.min(start + pageSize, total) };
 }
 
+function latestRowDate(rows) {
+  return (Array.isArray(rows) ? rows : []).reduce((latest, row) => {
+    const key = dateKey(row && (row.createdAt || row.date || row.dashboardDate));
+    return key && (!latest || key > latest) ? key : latest;
+  }, "");
+}
+
+function datePlusDays(dateKeyValue, days) {
+  const parsed = new Date(dateKeyValue + "T00:00:00");
+  if (isNaN(parsed.getTime())) return "";
+  parsed.setDate(parsed.getDate() + days);
+  return dateKey(parsed);
+}
+
+function matchesOrderDateShortcut(row, shortcut, anchorDateKey) {
+  if (!shortcut) return true;
+  const rowDateKey = dateKey(row && (row.dashboardDate || row.createdAt || row.date));
+  if (!rowDateKey) return true;
+  const anchor = anchorDateKey || rowDateKey;
+  if (shortcut === "today") return rowDateKey === anchor;
+  if (shortcut === "yesterday") return rowDateKey === datePlusDays(anchor, -1);
+  const days = Number(shortcut);
+  if (!days) return true;
+  const start = datePlusDays(anchor, -(days - 1));
+  return !start || rowDateKey >= start;
+}
+
 function compareRows(sortBy, sortDir) {
   const field = sortBy === "default" ? "rank" : sortBy;
   const factor = sortDir === "asc" ? 1 : -1;
@@ -791,10 +818,19 @@ function createDashboardQueryService(options) {
       if (!input.includeCanceled) orders = orders.filter((row) => statusBucket(row) !== "canceled_by_you");
       const filters = input.filters || {};
       const query = lower(filters.search);
+      const anchorDateKey = latestRowDate(orders);
       orders = orders.filter((row) => {
-        if (filters.status && statusBucket(row) !== filters.status && text(row.orderStatus || row.status) !== text(filters.status)) return false;
+        const bucket = statusBucket(row);
+        if (filters.stageId) {
+          const stageId = text(filters.stageId);
+          const exactBucket = stageId.indexOf("status:") === 0 ? stageId.slice(7) : stageId;
+          if (bucket !== exactBucket) return false;
+        }
+        if (filters.statusBucket && bucket !== text(filters.statusBucket)) return false;
+        if (filters.status && bucket !== filters.status && text(row.orderStatus || row.status) !== text(filters.status)) return false;
         if (filters.product && rowProduct(row) !== text(filters.product)) return false;
         if (filters.city && rowCity(row) !== text(filters.city)) return false;
+        if (filters.dateShortcut && !matchesOrderDateShortcut(row, filters.dateShortcut, anchorDateKey)) return false;
         if (!query) return true;
         return lower([
           row.taagerOrderNumber, row.orderNumber, row.customerName, row.name, row.phone, row.phone1,

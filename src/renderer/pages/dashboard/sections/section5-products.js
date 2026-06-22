@@ -1077,7 +1077,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
     backendProductsPendingKey = key;
     backendProductsLoading = true;
     backendProductsPendingPromise = window.DashboardQueryRuntime.query('products', params, data).then(function (result) {
-      if (requestId !== backendProductsRequest || !mountEl.isConnected || mountEl._s5RenderToken !== renderToken) return false;
+      if (requestId !== backendProductsRequest || !mountEl.isConnected || mountEl.hidden || mountEl._s5RenderToken !== renderToken) return false;
       backendProductsLoading = false;
       backendProductsPendingPromise = null;
       backendProductsPendingKey = '';
@@ -2839,7 +2839,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         }
 
         requestBackendProductPage(false).then(function (ok) {
-          if (mountEl.isConnected && mountEl._s5RenderToken === renderToken) {
+          if (ok && mountEl.isConnected && !mountEl.hidden && mountEl._s5RenderToken === renderToken) {
             renderProductPage(Object.assign({}, options, { backendReady: true }));
           }
         });
@@ -2876,15 +2876,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
     if (rowsEl) {
       rowsEl.style.opacity = '1';
       if (visibleProducts.length === 0) {
-        rowsEl.innerHTML = `
-          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;margin-bottom:12px;">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" style="margin-bottom:16px;">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <div style="font-size:16px;font-weight:800;color:rgba(255,255,255,0.6);margin-bottom:8px;">${s5Txt('No products match the filter', 'لا توجد منتجات تطابق الفلتر')}</div>
-            <div style="font-size:12px;color:rgba(255,255,255,0.3);">${s5Txt('Try changing the filters or search to show results.', 'جرب تغيير خيارات التصفية أو البحث لعرض النتائج.')}</div>
-          </div>`;
+        rowsEl.innerHTML = noProductsMatchHTML();
       } else {
         rowsEl.innerHTML = visibleProducts.map((p, i) => productRowHTML(p, i)).join('');
       }
@@ -2907,7 +2899,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         .map(function (p) { return p.key; });
       if (_prefetchKeys.length) {
         var _doPrefetch = function () {
-          if (mountEl.isConnected && mountEl._s5RenderToken === renderToken) {
+          if (mountEl.isConnected && !mountEl.hidden && mountEl._s5RenderToken === renderToken) {
             loadBackendProductDetails(_prefetchKeys);
           }
         };
@@ -2918,6 +2910,36 @@ window.renderSection5 = function (mountEl, data, ctx) {
         }
       }
     }
+  }
+
+  function noProductsMatchHTML() {
+    return `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;margin-bottom:12px;">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" style="margin-bottom:16px;">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <div style="font-size:16px;font-weight:800;color:rgba(255,255,255,0.6);margin-bottom:8px;">${s5Txt('No products match the filter', 'لا توجد منتجات تطابق الفلتر')}</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.3);">${s5Txt('Try changing the filters or search to show results.', 'جرب تغيير خيارات التصفية أو البحث لعرض النتائج.')}</div>
+      </div>`;
+  }
+
+  function applyImmediateProductSearchFeedback(query, startedAt) {
+    var rowsEl = mountEl.querySelector('#s5-rows');
+    if (!rowsEl) return;
+    var q = s5SearchKey(query);
+    if (!q) return;
+    var source = backendProductsActive && backendProductsRows.length ? backendProductsRows : PRODUCTS_RAW;
+    var hasVisibleMatch = source.some(function (product) {
+      return productSearchKey(product).indexOf(q) !== -1;
+    });
+    if (hasVisibleMatch) return;
+    rowsEl.innerHTML = noProductsMatchHTML();
+    var pagerEl = mountEl.querySelector('#s5-pagination-wrap');
+    if (pagerEl) pagerEl.innerHTML = '';
+    mountEl._s5LastSearchDurationMs = performance && performance.now
+      ? performance.now() - startedAt
+      : 0;
   }
 
   function syncSearchClearButton() {
@@ -3146,10 +3168,12 @@ window.renderSection5 = function (mountEl, data, ctx) {
       ensureSearchClearButton(searchEl);
       var _searchDebounce = null;
       searchEl.addEventListener('input', function() {
+        var searchStartedAt = performance && performance.now ? performance.now() : 0;
         const val = this.value.trim();
         filterState.search = val;
         currentPage = 1;
         syncSearchClearButton();
+        applyImmediateProductSearchFeedback(val, searchStartedAt);
         // Debounce: wait 120ms after last keystroke before re-rendering
         if (_searchDebounce) clearTimeout(_searchDebounce);
         _searchDebounce = setTimeout(function () {

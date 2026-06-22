@@ -3303,6 +3303,29 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       refreshResetButtonState();
     }
 
+    function applyImmediateCitySearchFeedback(rawValue) {
+      var searchVal = normalizeSearch(rawValue || "");
+      if (!searchVal) return;
+      mountEl.querySelectorAll(".sc-lb-row").forEach(function (el) {
+        var city = el.dataset.city || "";
+        var provName = el.dataset.provname || "";
+        var sTxt = normalizeSearch(city) + " " + normalizeSearch(provName);
+        SEARCH_ALIASES.forEach(function (group) {
+          var normGroup = group.map(normalizeSearch);
+          var rowInGroup = normGroup.some(function (alias) {
+            return alias.length > 1 && sTxt.indexOf(alias) !== -1;
+          });
+          if (rowInGroup) sTxt += " " + normGroup.join(" ");
+        });
+        var show = sTxt.indexOf(searchVal) !== -1;
+        el.dataset.lbFilterMatch = show ? "1" : "0";
+        if (!show) el.style.display = "none";
+      });
+      leaderboardPaginationState.page = 1;
+      renderCityLeaderboardPage({ resetPage: true });
+      mountEl._citiesLastSearchDurationMs = 0;
+    }
+
     /* applyProductView: rewrite leaderboard values for selected product */
     function applyProductView(productKey) {
       var geoData = window.dashboardGeoData;
@@ -3542,6 +3565,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     if (fbSearch) {
       fbSearch.addEventListener("input", function () {
         mountEl._citiesSearchValue = fbSearch.value; // Save state!
+        applyImmediateCitySearchFeedback(fbSearch.value);
         if (citiesSearchTimer) window.clearTimeout(citiesSearchTimer);
         citiesSearchTimer = window.setTimeout(function () {
           citiesSearchTimer = null;

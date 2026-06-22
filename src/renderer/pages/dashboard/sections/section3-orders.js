@@ -612,6 +612,31 @@ window.renderSection3 = function (mountEl, data, ctx) {
     return Boolean(searchTerm || productFilter || cityFilter || statusFilter || dateFilter);
   }
 
+  function backendStatusBucketForLabel(label) {
+    if (!label) return '';
+    if (!window.TaagerStatus || !Array.isArray(window.TaagerStatus.all)) return '';
+    for (var i = 0; i < window.TaagerStatus.all.length; i++) {
+      var meta = window.TaagerStatus.all[i];
+      var display = window.TaagerStatus.display(meta.bucket, { locale: isRtl ? 'ar' : 'en' });
+      if (display === label) return meta.bucket;
+    }
+    return '';
+  }
+
+  function backendOrderFilters() {
+    var filters = {
+      search: searchTerm,
+      product: productFilter,
+      city: cityFilter,
+      dateShortcut: dateFilter
+    };
+    if (activeStageId !== 'all') filters.stageId = activeStageId;
+    var statusBucket = backendStatusBucketForLabel(statusFilter);
+    if (statusBucket) filters.statusBucket = statusBucket;
+    else if (statusFilter) filters.status = statusFilter;
+    return filters;
+  }
+
   (function buildSectionIndexes() {
     var productsSeen = {};
     var citiesSeen = {};
@@ -1099,7 +1124,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
           exportBtn.disabled = true;
           window.DashboardQueryRuntime.exportOrders(Object.assign({
             includeCanceled: true,
-            filters: { search: searchTerm, product: productFilter, city: cityFilter }
+            filters: backendOrderFilters()
           }, backendSort), data).finally(function () {
             exportBtn.disabled = false;
           });
@@ -1331,9 +1356,6 @@ window.renderSection3 = function (mountEl, data, ctx) {
 
   function canUseBackendOrdersPage() {
     return backendOrdersEnabled &&
-      activeStageId === 'all' &&
-      !statusFilter &&
-      !dateFilter &&
       window.DashboardQueryRuntime &&
       typeof window.DashboardQueryRuntime.query === 'function';
   }
@@ -1355,11 +1377,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
         includeCanceled: true,
         sortBy: backendSort.sortBy,
         sortDir: backendSort.sortDir,
-        filters: {
-          search: searchTerm,
-          product: productFilter,
-          city: cityFilter
-        }
+        filters: backendOrderFilters()
       }, data).catch(function () { return null; });
       if (requestId !== backendOrdersRequest || !mountEl.isConnected) return;
       if (!backendPage || !backendPage.ok) backendPage = null;
