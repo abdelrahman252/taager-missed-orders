@@ -175,8 +175,13 @@
         var pipelineHealth      = callScoring('computePipelineHealth',      scoringStats, undefined);
         var scalingScore        = callScoring('computeScalingScore',        scoringStats, nationalAverages);
 
+        var prepaidBaseForDecision = prepaidNdrBase || cp.prepaidCount || 0;
+        var codBaseForDecision = codNdrBase || cp.codCount || 0;
         var shouldForcePrepaid =
-          (cp.codCount || 0) >= 10 &&
+          prepaidBaseForDecision >= 10 &&
+          codBaseForDecision >= 10 &&
+          (prepaidDelivered || 0) >= 3 &&
+          prepaidNdr >= T.NDR_SAFE &&
           (prepaidNdr - codNdr) > T.PREPAID_ADVANTAGE_THRESHOLD;
 
         geoProductMap[cityKey][productKey] = {
@@ -454,10 +459,12 @@
           });
         }
         if (cell.codNdr < T.NDR_DANGER && (cell.codCount || 0) >= 10) {
+          var prepaidBaseForCombo = cell.prepaidNdrBaseOrders || cell.prepaidCount || 0;
+          var prepaidReadyForCombo = prepaidBaseForCombo >= 10 && (cell.prepaidDelivered || 0) >= 3 && cell.prepaidNdr >= T.NDR_SAFE;
           codDangerousCombos.push({
             city: city, product: product,
             codNdr: cell.codNdr, prepaidNdr: cell.prepaidNdr,
-            recommendation: cell.prepaidNdr >= T.NDR_SAFE
+            recommendation: prepaidReadyForCombo
               ? 'تطبيق الدفع المسبق فوراً'
               : 'مراجعة الحملة في هذه المدينة'
           });

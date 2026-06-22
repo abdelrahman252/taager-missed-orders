@@ -2598,6 +2598,68 @@ async function readTaagerLanguageButtonText(page) {
   return String(await button.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
 }
 
+async function hasTaagerAuthenticatedShell(page) {
+  assertUsableTaagerPage(page, "auth-shell");
+  if (isOnLoginPage(page.url())) return false;
+  return page.evaluate(() => {
+    const selectors = [
+      "#complaints-suggestions-link",
+      "#shipping-info-link",
+      "#taager-course-link",
+      "#suggest-product-btn",
+      "#orders-search-button",
+      "#multipleCustomers-tab-btn",
+      "#upload-file-btn",
+      "#confirm-bulk-orders",
+      "[data-affiliate-id]",
+      "[data-user]",
+      "[data-email]",
+      "header a[href]:not([href*='login']):not([href*='auth'])",
+    ];
+    return selectors.some((selector) => document.querySelector(selector));
+  }).catch(() => false);
+}
+
+const TAAGER_HOME_FALLBACK_PATHS = ["/home", "/legacy/home"];
+
+async function ensureTaagerAuthenticatedHomeRoute(page, where = "taager-home") {
+  assertUsableTaagerPage(page, where);
+  await clearTaagerInterruptionBounded(page, `${where}-before-home-fallback`).catch(() => {});
+  if (await hasTaagerAuthenticatedShell(page)) {
+    log(`Taager ${where}: authenticated shell visible at ${page.url()}`);
+    return page;
+  }
+
+  let lastError = null;
+  for (const path of TAAGER_HOME_FALLBACK_PATHS) {
+    log(`Taager ${where}: authenticated shell missing; opening ${path}`);
+    const ok = await gotoWithNetworkRetries(page, taagerCountryUrl(path), `Taager ${where} ${path}`, {
+      attempts: 2,
+      timeout: 45000,
+      waitMs: 3000,
+    }).then(() => true).catch((error) => {
+      lastError = error;
+      log(`Taager ${where}: ${path} fallback failed: ${error.message}`);
+      return false;
+    });
+    if (!ok) continue;
+    await page.waitForTimeout(1000).catch(() => {});
+    await clearTaagerInterruptionBounded(page, `${where}-${path.replace(/[^a-z0-9]+/gi, "-")}`).catch(() => {});
+    if (isOnLoginPage(page.url())) {
+      log(`Taager ${where}: ${path} landed on login at ${page.url()}`);
+      return page;
+    }
+    if (await hasTaagerAuthenticatedShell(page)) {
+      log(`Taager ${where}: authenticated shell visible via ${path} at ${page.url()}`);
+      return page;
+    }
+  }
+
+  const title = await page.title().catch(() => "");
+  const detail = lastError ? ` | last fallback error: ${lastError.message}` : "";
+  throw new Error(`SESSION_UNVERIFIED: Taager home fallback did not expose auth DOM at ${where} | url=${page.url()} | title="${title}"${detail}`);
+}
+
 function isTaagerAlreadyArabicLanguageText(text) {
   return /^english$/i.test(String(text || "").trim());
 }
@@ -2640,6 +2702,17 @@ async function ensureTaagerArabic(page, where = "taager", options = {}) {
     });
     if (!text) {
       if (options.requireButton) {
+        if (attempt === 1) {
+          log(`Taager language button missing at ${where}; reloading once before continuing`);
+          await reloadWithNetworkRetries(page, `Taager language button recovery ${where}`, { attempts: 1, timeout: 45000, waitMs: 3000 }).catch(() => {});
+          await page.waitForTimeout(1000).catch(() => {});
+          await clearTaagerInterruptionBounded(page, `${where}-after-language-button-reload`).catch(() => {});
+          continue;
+        }
+        if (await hasTaagerAuthenticatedShell(page)) {
+          log(`Taager language button still missing at ${where}, but authenticated shell is visible; continuing with session verification`);
+          return page;
+        }
         throw new Error(`TAAGER_LANGUAGE_BUTTON_MISSING: #change-language-btn not visible at ${where}`);
       }
       return page;
@@ -2700,13 +2773,22 @@ async function taagerLogin(page) {
 
   if (!page.url().includes("/login") && !page.url().includes("/auth")) {
     log("Taager: already logged in");
-    await ensureTaagerArabic(page, "login-reused", { requireButton: true });
-    await assertTaagerSession(page);
-    await verifyTaagerIdentity(page, "login-reused").catch((err) => {
-      log(`Taager identity verification after reused login failed: ${err.message}`);
-      throw err;
-    });
-    return page;
+    try {
+      page = await ensureTaagerAuthenticatedHomeRoute(page, "login-reused");
+    } catch (error) {
+      log(`Taager reused session home fallback failed: ${error.message}; reopening login`);
+      await gotoWithNetworkRetries(page, taagerCountryUrl("/auth/login"), "Taager login after reused-session fallback failed", { attempts: 2, timeout: 45000, waitMs: 3000 });
+    }
+    if (!page.url().includes("/login") && !page.url().includes("/auth")) {
+      await ensureTaagerArabic(page, "login-reused", { requireButton: true });
+      await assertTaagerSession(page);
+      await verifyTaagerIdentity(page, "login-reused").catch((err) => {
+        log(`Taager identity verification after reused login failed: ${err.message}`);
+        throw err;
+      });
+      return page;
+    }
+    log("Taager reused session fallback landed on login; continuing with credential login");
   }
 
   const method = config.taagerLoginMethod || config.taagerLoginMethod || "email";
@@ -2720,6 +2802,7 @@ async function taagerLogin(page) {
     if (await tryAutomatedGooglePopupLogin(page, email, log)) {
       log(`[GoogleLogin][Auto] Taager session detected after popup login url=${page.url()}`);
       process.send && process.send({ type: "google-login-complete" });
+      page = await ensureTaagerAuthenticatedHomeRoute(page, "google-auto-login-confirmed");
       await ensureTaagerArabic(page, "login-confirmed", { requireButton: true });
       await assertTaagerSession(page);
       await verifyTaagerIdentity(page, "login-confirmed");
@@ -2738,7 +2821,7 @@ async function taagerLogin(page) {
     const relaunched = await launchRunnerContext(config.profilePath, config.chromePath || findChrome());
     page = relaunched.page;
     await ensureTaagerArabic(page, "google-manual-relaunch", { requireButton: false });
-    await gotoWithNetworkRetries(page, taagerCountryUrl("/home"), "Taager home after Google login", { attempts: 3, timeout: 45000, waitMs: 5000 });
+    page = await ensureTaagerAuthenticatedHomeRoute(page, "google-manual-login-confirmed");
     await page.waitForTimeout(1500);
     if (page.url().includes("/login") || page.url().includes("/auth")) {
       throw new Error("Google login not detected. Log in with Google in the opened Chrome window, close it, then click 'I finished Google login'.");
@@ -2779,6 +2862,11 @@ async function taagerLogin(page) {
     const url = page.url();
     if (url.includes("/home") || url.includes("/orders") || url.includes("/products")) {
       log("Taager login confirmed");
+      page = await ensureTaagerAuthenticatedHomeRoute(page, "login-confirmed");
+      if (page.url().includes("/login") || page.url().includes("/auth")) {
+        log("Taager login confirmation fallback landed on login; continuing to wait");
+        continue;
+      }
       await ensureTaagerArabic(page, "login-confirmed", { requireButton: true });
       await assertTaagerSession(page);
       await verifyTaagerIdentity(page, "login-confirmed");

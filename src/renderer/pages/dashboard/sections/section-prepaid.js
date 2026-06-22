@@ -350,6 +350,7 @@
     var codNdr = pi ? Number(pi.codNdr || 0) : 0;
     var prepaidNdr = pi ? Number(pi.prepaidNdr || pi.globalPrepaidDr || pi.prepaidDr || 0) : 0;
     var hasData = avgCommission > 0 && codNdr > 0 && prepaidNdr > 0;
+    var prepaidBeatsCod = hasData && prepaidNdr > codNdr;
 
     if (!hasData) {
       return sectionCard(
@@ -365,7 +366,7 @@
     }
 
     var codExpected = avgCommission * codNdr;
-    var maxDiscountSar = Math.max(0, avgCommission - (codExpected / prepaidNdr));
+    var maxDiscountSar = prepaidBeatsCod ? Math.max(0, avgCommission - (codExpected / prepaidNdr)) : 0;
     var maxDiscountPct = avgCommission > 0 ? (maxDiscountSar / avgCommission) * 100 : 0;
     var suggestedPct = Math.max(0, Math.min(30, Math.floor(maxDiscountPct)));
     var code = suggestedPct > 0 ? 'PREPAID' + suggestedPct : 'PREPAID';
@@ -386,8 +387,8 @@
           'أنشئ كود خصم للدفع المسبق فقط داخل المتجر، ثم استخدم هذا النص في الإعلان.'
         )
       : sTx(
-          'The data does not show enough room for a prepaid discount. Keep the regular offer for now.',
-          'البيانات لا تعطي مساحة كافية لخصم الدفع المسبق. استخدم العرض العادي حاليا.'
+          prepaidBeatsCod ? 'The data does not show enough margin room for a prepaid discount yet. Keep the regular offer for now.' : 'Prepaid is not delivering better than COD in this period. Do not push a prepaid discount yet.',
+          prepaidBeatsCod ? 'البيانات لا تعطي مساحة ربح كافية لخصم الدفع المسبق حتى الآن. استخدم العرض العادي حاليا.' : 'الدفع المسبق لا يحقق تسليما أفضل من COD في هذه الفترة. لا تدفع خصم الدفع المسبق الآن.'
         );
     var creativeText = suggestedPct > 0
       ? sTx(
@@ -447,9 +448,12 @@
           sTx('Copy ad text', 'نسخ نص الإعلان') +
         '</button>' +
       '</div>' : '') +
-      '<div style="font-size:12px;color:' + C.muted + ';line-height:1.8;margin-bottom:12px;">' +
+      '<div style="font-size:12px;color:' + C.muted + ';line-height:1.8;margin-bottom:12px;display:' + (prepaidBeatsCod ? 'block' : 'none') + ';">' +
         sTx('Why: prepaid orders deliver better than COD, so you can spend part of that improvement as a discount without hurting margin.', 'السبب: طلبات الدفع المسبق تصل أفضل من COD، لذلك يمكنك استخدام جزء من هذا التحسن كخصم بدون تدمير الهامش.') +
       '</div>' +
+      (!prepaidBeatsCod ? '<div style="font-size:12px;color:' + C.muted + ';line-height:1.8;margin-bottom:12px;">' +
+        sTx('Why: prepaid orders are not delivering better than COD in this period, so a prepaid discount would likely hurt margin instead of improving delivery quality.', 'السبب: طلبات الدفع المسبق لا تصل أفضل من COD في هذه الفترة، لذلك خصم الدفع المسبق غالبا سيضر الهامش بدل تحسين جودة التسليم.') +
+      '</div>' : '') +
       '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
         '<span style="font-size:11px;color:' + C.muted + ';font-weight:800;">' + sTx('Target cities:', 'المدن المستهدفة:') + '</span>' +
         (cityChips || '<span style="font-size:11px;color:' + C.muted + ';line-height:1.7;">' + sTx('No specific city has enough bad COD data yet. Test this prepaid offer broadly, or wait until a city shows many COD orders with weak delivery.', 'لا توجد مدينة محددة لديها بيانات COD سيئة كافية بعد. اختبر عرض الدفع المسبق بشكل عام، أو انتظر حتى تظهر مدينة فيها طلبات COD كثيرة مع تسليم ضعيف.') + '</span>') +
@@ -631,7 +635,7 @@
         'border-radius:3px;background:' + C.prepaid + ';"></div>' + sTx('Prepaid', 'مسبق') + '</div>' +
       '<div style="display:flex;align-items:center;gap:4px;"><div style="width:10px;height:10px;' +
         'border-radius:3px;background:' + C.cod + '55;"></div>COD</div>' +
-      '<span style="margin-right:auto;">' + sTx('NDR | Orders', 'NDR | الطلبات') + '</span>' +
+      '<span style="margin-right:auto;">' + sTx('Total NDR | Orders', 'إجمالي NDR | الطلبات') + '</span>' +
     '</div>';
 
     function citySortHdr(key, label, align) {
@@ -646,7 +650,7 @@
       'gap:12px;padding:0 12px;margin-bottom:8px;">' +
       '<span style="font-size:10px;color:' + C.muted + ';">' + sTx('City', 'المدينة') + '</span>' +
       '<span style="font-size:10px;color:' + C.muted + ';">' + sTx('Payment Mix', 'توزيع أسلوب الدفع') + '</span>' +
-      citySortHdr('ndr', 'NDR', 'center') +
+      citySortHdr('ndr', sTx('Total NDR', 'إجمالي NDR'), 'center') +
       '<span style="font-size:10px;color:' + C.muted + ';text-align:center;">' + sTx('Orders', 'طلبات') + '</span>' +
     '</div>';
 
@@ -655,7 +659,7 @@
         '<div style="display:grid;grid-template-columns:140px 1fr 70px 60px;gap:12px;padding:0 12px;margin-bottom:8px;">' +
         citySortHdr('name', sTx('City', 'المدينة')) +
         citySortHdr('prepaidPct', sTx('Payment Mix', 'توزيع أسلوب الدفع')) +
-        citySortHdr('ndr', 'NDR', 'center') +
+        citySortHdr('ndr', sTx('Total NDR', 'إجمالي NDR'), 'center') +
         citySortHdr('orders', sTx('Orders', 'طلبات'), 'center') +
         '</div>'
       ) +
@@ -741,6 +745,9 @@
     var recStyles = {
       force:   { label: sTx('Mandatory Prepaid', 'إلزامي مسبق'), bg: C.green  + '18', color: C.green,  border: C.green  + '44' },
       prefer:  { label: sTx('Prefer Prepaid', 'يُفضَّل مسبق'), bg: C.prepaid + '18', color: C.prepaid, border: C.prepaid + '44' },
+      avoid:   { label: sTx('Avoid Prepaid', 'تجنب الدفع المسبق'), bg: C.red + '18', color: C.red, border: C.red + '44' },
+      cod:     { label: sTx('Prefer COD', 'يفضل COD'), bg: C.cod + '18', color: C.cod, border: C.cod + '44' },
+      sample:  { label: sTx('Low Sample', 'عينة قليلة'), bg: 'rgba(255,255,255,0.04)', color: C.muted, border: C.border },
       ok:      { label: sTx('Both Acceptable', 'كلاهما مقبول'), bg: 'rgba(255,255,255,0.05)', color: C.muted,  border: C.border },
       unknown: { label: sTx('Incomplete Data', 'بيانات ناقصة'), bg: 'rgba(255,255,255,0.04)', color: C.muted,  border: C.border }
     };
@@ -769,8 +776,9 @@
 
       var prepaidPct = p.totalOrders > 0 ? Math.round(p.prepaidOrders / p.totalOrders * 100) : 0;
       var codPct     = p.totalOrders > 0 ? Math.round(p.codOrders     / p.totalOrders * 100) : 0;
+      var netPct     = p.totalOrders > 0 ? Math.round(p.netOrders / p.totalOrders * 100) : 0;
 
-      return '<div class="sp-product-row" style="display:grid;grid-template-columns:1fr 90px 90px 100px 100px 110px 130px;' +
+      return '<div class="sp-product-row" style="display:grid;grid-template-columns:1fr 86px 86px 86px 92px 92px 100px 128px;' +
         'gap:8px;align-items:center;padding:12px 14px;border-radius:10px;' +
         'transition:background 0.15s;margin-bottom:4px;" ' +
         'onmouseover="this.style.background=\'rgba(255,255,255,0.04)\'" ' +
@@ -781,6 +789,10 @@
             // Taager dashboard/status/NDR migration: totalCommission is Taager Profit After Tax.
             'COD ' + sTx(fmtSAR(p.totalCommission) + ' Taager Profit After Tax', fmtSAR(p.totalCommission) + ' ربح تاجر بعد الضريبة') +
           '</div>' +
+        '</div>' +
+        '<div style="text-align:center;">' +
+          '<div style="font-size:13px;font-weight:900;color:' + C.text + ';">' + p.netOrders.toLocaleString('en-US') + '</div>' +
+          '<div style="font-size:9px;color:' + C.muted + ';margin-top:2px;font-weight:600;">' + sTx('total ', 'إجمالي ') + p.totalOrders.toLocaleString('en-US') + ' · ' + netPct + '%</div>' +
         '</div>' +
         '<div style="text-align:center;">' +
           '<div style="font-size:13px;font-weight:800;color:' + C.prepaid + ';">' + p.prepaidOrders.toLocaleString('en-US') + '</div>' +
@@ -872,12 +884,16 @@
       p.productName = (pStat && pStat.name) ? pStat.name : p.name;
       p.sku = (pStat && pStat.sku) ? pStat.sku : '';
       p.displayName = p.sku && p.sku !== p.productName ? p.productName + ' (' + p.sku + ')' : p.productName;
+      p.netOrders = (p.prepaidNdrBase || 0) + (p.codNdrBase || 0);
       p.prepaidNdr = p.prepaidNdrBase > 0 ? clamp(p.prepaidDelivered / p.prepaidNdrBase, 0, 1) : null;
       p.codNdr     = p.codNdrBase     > 0 ? clamp(p.codDelivered / p.codNdrBase, 0, 1) : null;
       p.ndrDiff    = (p.prepaidNdr !== null && p.codNdr !== null) ? (p.prepaidNdr - p.codNdr) : null;
       p.rec = p.ndrDiff === null ? 'unknown'
-        : p.ndrDiff > 0.15 ? 'force'
+        : (p.prepaidNdrBase < 10 || p.codNdrBase < 10) ? 'sample'
+        : (p.ndrDiff > 0.15 && p.prepaidNdr >= 0.40) ? 'force'
         : p.ndrDiff > 0.05 ? 'prefer'
+        : p.ndrDiff < -0.15 ? 'avoid'
+        : p.ndrDiff < -0.05 ? 'cod'
         : 'ok';
     });
 
@@ -923,13 +939,14 @@
     }
 
     var header =
-      '<div class="sp-product-header" style="display:grid;grid-template-columns:1fr 90px 90px 100px 100px 110px 130px;' +
+      '<div class="sp-product-header" style="display:grid;grid-template-columns:1fr 86px 86px 86px 92px 92px 100px 128px;' +
       'gap:8px;padding:10px 14px 12px;border-bottom:1px solid ' + C.border + ';margin-bottom:6px;' +
       'background:rgba(255,255,255,0.015);border-radius:10px 10px 0 0;">' +
         '<div style="display:flex;flex-direction:column;gap:2px;">' +
           '<span style="font-size:10px;font-weight:800;color:' + C.text + ';letter-spacing:0.5px;text-transform:uppercase;">' + sTx('Product', 'المنتج') + '</span>' +
           '<span style="font-size:9px;color:' + C.muted + ';font-weight:500;">' + sTx('Name · SKU · Taager Profit After Tax', 'الاسم · الكود · ربح تاجر بعد الضريبة') + '</span>' +
         '</div>' +
+        sortHdr('netOrders',    C.text,    sTx('Net Orders', 'صافي الطلبات'), sTx('Net / Total', 'الصافي / الإجمالي')) +
         sortHdr('prepaidOrders', C.prepaid, sTx('Prepaid', 'مسبق'),  sTx('Orders', 'طلبات')) +
         sortHdr('codOrders',     C.cod,     'COD',                   sTx('Orders', 'طلبات')) +
         sortHdr('prepaidNdr',    C.prepaid, sTx('Prepaid', 'مسبق'),  'NDR') +
@@ -1002,6 +1019,7 @@
             prepaidNdr: cell.prepaidNdr, codNdr: cell.codNdr,
             codCount: cell.codCount, prepaidCount: cell.prepaidCount,
             prepaidNdrBaseOrders: cell.prepaidNdrBaseOrders,
+            codNdrBaseOrders: cell.codNdrBaseOrders,
             prepaidDelivered: cell.prepaidDelivered
           });
         });
@@ -1009,7 +1027,9 @@
 
       allCells.forEach(function(cell) {
         var diff = (cell.prepaidNdr !== undefined && cell.codNdr !== undefined) ? (cell.prepaidNdr - cell.codNdr) : 0;
-        if (diff > 0.05 && diff <= 0.15 && (cell.codCount || 0) >= 5 && (cell.prepaidCount || 0) >= 5) {
+        var prepaidBase = cell.prepaidNdrBaseOrders || cell.prepaidCount || 0;
+        var codBase = cell.codNdrBaseOrders || cell.codCount || 0;
+        if (diff > 0.05 && diff <= 0.15 && codBase >= 10 && prepaidBase >= 10) {
           recsState.data.opportunities.push({
             type: 'opportunity', emoji: 'UP', title: sTx('Performance Improvement Opportunity', 'فرصة تحسين الأداء'),
             city: cell.city, product: cell.product,

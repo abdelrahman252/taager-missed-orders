@@ -120,6 +120,11 @@ function paymentClassification(method) {
   return isPrepaid(method) ? "prepaid" : "cod";
 }
 
+function dateKeyFromValue(value) {
+  const parsed = parseExcelDate(value);
+  return parsed ? dateKey(parsed) : "";
+}
+
 function mostFrequent(freq) {
   return Object.entries(freq || {}).sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0]?.[0] || "";
 }
@@ -181,12 +186,15 @@ function parseEasyOrdersEnrichment(buffer, nameDateFrom, nameDateTo, paymentDate
     cacheHits: 0,
     structuredPaymentPreserved: 0,
     paymentRows: 0,
+    paymentTargets: 0,
+    prepaidTargetItemRows: 0,
     headerMap: idx,
   };
   const skuNameFreq = {};
   const cachedNames = normalizeSkuNameMap(cachedSkuNameMap);
   const paymentByOrderId = new Map();
   const paymentMethodsByPhoneSku = new Map();
+  const paymentTargets = [];
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i] || [];
@@ -212,11 +220,25 @@ function parseEasyOrdersEnrichment(buffer, nameDateFrom, nameDateTo, paymentDate
       diagnostics.paymentRowsScanned++;
       const method = paymentMethod(idx.paymentMethod >= 0 ? row[idx.paymentMethod] : "");
       const phone = idx.phone >= 0 ? normalizePhone(row[idx.phone], country) : "";
+      const createdKey = idx.created >= 0 ? dateKeyFromValue(row[idx.created]) : "";
       const orderIds = [idx.orderId >= 0 ? row[idx.orderId] : "", idx.externalOrderId >= 0 ? row[idx.externalOrderId] : ""]
         .map((value) => String(value || "").trim()).filter(Boolean);
       skus.forEach((sku) => {
-        if (method && phone) {
+        if (method) {
           diagnostics.paymentRows++;
+          diagnostics.paymentTargets++;
+          const classification = paymentClassification(method);
+          if (classification === "prepaid") diagnostics.prepaidTargetItemRows++;
+          paymentTargets.push({
+            method,
+            classification,
+            phone,
+            sku,
+            createdKey,
+            orderIds,
+          });
+        }
+        if (method && phone) {
           const key = `${phone}|${sku}`;
           if (!paymentMethodsByPhoneSku.has(key)) paymentMethodsByPhoneSku.set(key, new Set());
           paymentMethodsByPhoneSku.get(key).add(method);
@@ -241,7 +263,7 @@ function parseEasyOrdersEnrichment(buffer, nameDateFrom, nameDateTo, paymentDate
   });
   diagnostics.uniquePaymentPhoneSku = paymentByPhoneSku.size;
   diagnostics.uniquePaymentOrderIds = paymentByOrderId.size;
-  return { skuNameMap, learnedSkuNameMap, paymentByOrderId, paymentByPhoneSku, diagnostics };
+  return { skuNameMap, learnedSkuNameMap, paymentByOrderId, paymentByPhoneSku, paymentTargets, diagnostics };
 }
 
 function hasKnownStructuredPayment(row) {
@@ -250,9 +272,149 @@ function hasKnownStructuredPayment(row) {
   return !!source && (classification === "cod" || classification === "prepaid");
 }
 
+function rowPaymentAssignmentKey(row, index) {
+  const order = String(row && (row.taagerOrderNumber || row.orderNumber || row.orderId || row.reference) || "").trim();
+  const sku = String(row && (row.sku || row.products || row.productName || row.product) || "").trim();
+  const sourceIndex = row && row.sourceOrderRowIndex != null ? row.sourceOrderRowIndex : index;
+  const itemIndex = row && row.orderItemIndex != null ? row.orderItemIndex : 0;
+  return `${order}|${sku}|${sourceIndex}|${itemIndex}`;
+}
+
+function rowPaymentBusinessKey(row) {
+  return [
+    String(row && (row.taagerOrderNumber || row.orderNumber || row.orderId || row.reference) || "").trim(),
+    String(row && (row.sku || row.products || row.productName || row.product) || "").trim(),
+  ].join("|");
+}
+
+function pushIndex(map, key, index) {
+  if (!key) return;
+  if (!map.has(key)) map.set(key, []);
+  map.get(key).push(index);
+}
+
+function uniqueIndexes(indexes) {
+  return Array.from(new Set((indexes || []).filter((value) => value != null)));
+}
+
+function buildEasyOrdersPaymentAssignments(rows, enrichment, country = "sa") {
+  const targets = Array.isArray(enrichment.paymentTargets) ? enrichment.paymentTargets : [];
+  const diagnostics = {
+    paymentMatchSources: {},
+    paymentMatchConflicts: 0,
+    prepaidTargetMatchedItemRows: 0,
+    prepaidTargetMatchedRows: 0,
+    prepaidTargetUnmatchedRows: 0,
+  };
+  if (!targets.length) return { assignments: new Map(), diagnostics };
+
+  const exact = new Map();
+  const phoneSku = new Map();
+  const phoneSkuDate = new Map();
+
+  rows.forEach((row, index) => {
+    const sku = String(row && (row.sku || row.products || "") || "").trim();
+    if (!sku) return;
+    const ids = [
+      row.storeOrderNumber,
+      row.taagerOrderNumber,
+      row.orderNumber,
+      row.orderId,
+      row.reference,
+    ].map((value) => String(value || "").trim()).filter(Boolean);
+    ids.forEach((id) => pushIndex(exact, `${id}|${sku}`, index));
+
+    const phone = normalizePhone(row.phone1 || row.phone || row.rawPhone || "", country);
+    if (phone) {
+      const baseKey = `${phone}|${sku}`;
+      pushIndex(phoneSku, baseKey, index);
+      const createdKey = dateKeyFromValue(row.createdAt || row.date || row.dashboardDate);
+      if (createdKey) pushIndex(phoneSkuDate, `${baseKey}|${createdKey}`, index);
+    }
+  });
+
+  function resolveTarget(target) {
+    const sku = String(target.sku || "").trim();
+    if (!sku || !target.method) return null;
+
+    const resolvedFromCandidates = (candidates, source, priority) => {
+      candidates = uniqueIndexes(candidates);
+      if (candidates.length === 1) return { indexes: candidates, source, priority };
+      if (candidates.length > 1) {
+        const businessKeys = Array.from(new Set(candidates.map((index) => rowPaymentBusinessKey(rows[index])).filter(Boolean)));
+        if (businessKeys.length === 1) return { indexes: candidates, source, priority };
+      }
+      return null;
+    };
+
+    for (const id of target.orderIds || []) {
+      const exactMatch = resolvedFromCandidates(exact.get(`${id}|${sku}`), "easyorders-id", 100);
+      if (exactMatch) return exactMatch;
+    }
+
+    const phone = String(target.phone || "").trim();
+    if (phone) {
+      const baseKey = `${phone}|${sku}`;
+      if (target.createdKey) {
+        const datedMatch = resolvedFromCandidates(phoneSkuDate.get(`${baseKey}|${target.createdKey}`), "easyorders-phone-sku-date", 70);
+        if (datedMatch) return datedMatch;
+      }
+      const uniqueMatch = resolvedFromCandidates(phoneSku.get(baseKey), "easyorders-phone-sku-unique", 60);
+      if (uniqueMatch && uniqueIndexes(phoneSku.get(baseKey)).length === uniqueMatch.indexes.length) return uniqueMatch;
+    }
+
+    return null;
+  }
+
+  const rowCandidates = new Map();
+  let prepaidTargetCount = 0;
+  const assignedPrepaidTargets = new Set();
+  targets.forEach((target, targetIndex) => {
+    if (target.classification === "prepaid") prepaidTargetCount++;
+    const resolved = resolveTarget(target);
+    if (!resolved) return;
+    resolved.indexes.forEach((index) => {
+      if (!rowCandidates.has(index)) rowCandidates.set(index, []);
+      rowCandidates.get(index).push({
+        targetIndex,
+        method: target.method,
+        classification: target.classification,
+        source: resolved.source,
+        priority: resolved.priority,
+      });
+    });
+  });
+
+  const assignments = new Map();
+  const prepaidMatchedRows = new Set();
+  rowCandidates.forEach((candidates, index) => {
+    const maxPriority = Math.max(...candidates.map((item) => item.priority));
+    const best = candidates.filter((item) => item.priority === maxPriority);
+    const methods = Array.from(new Set(best.map((item) => item.method)));
+    if (methods.length !== 1) {
+      diagnostics.paymentMatchConflicts++;
+      return;
+    }
+    const assignment = best[0];
+    assignments.set(rowPaymentAssignmentKey(rows[index], index), assignment);
+    diagnostics.paymentMatchSources[assignment.source] = (diagnostics.paymentMatchSources[assignment.source] || 0) + 1;
+    if (assignment.classification === "prepaid") {
+      best.forEach((item) => assignedPrepaidTargets.add(item.targetIndex));
+      prepaidMatchedRows.add(rowPaymentBusinessKey(rows[index]));
+    }
+  });
+
+  diagnostics.prepaidTargetMatchedItemRows = assignedPrepaidTargets.size;
+  diagnostics.prepaidTargetMatchedRows = prepaidMatchedRows.size;
+  diagnostics.prepaidTargetUnmatchedRows = Math.max(0, prepaidTargetCount - assignedPrepaidTargets.size);
+  return { assignments, diagnostics };
+}
+
 function enrichRowsFromEasyOrders(rows, enrichment, country = "sa") {
   const diagnostics = Object.assign({ productNameMatches: 0, paymentMatches: 0, unmatchedPaymentRows: 0 }, enrichment.diagnostics || {});
-  const enrichedRows = rows.map((row) => {
+  const paymentAssignments = buildEasyOrdersPaymentAssignments(rows, enrichment, country);
+  Object.assign(diagnostics, paymentAssignments.diagnostics);
+  const enrichedRows = rows.map((row, index) => {
     const next = { ...row };
     const sku = String(next.sku || next.products || "").trim();
     const name = enrichment.skuNameMap[sku] || "";
@@ -265,25 +427,22 @@ function enrichRowsFromEasyOrders(rows, enrichment, country = "sa") {
     }
 
     let method = "";
+    let methodSource = "";
     const preservesStructuredPayment = hasKnownStructuredPayment(next);
     if (!preservesStructuredPayment) {
-      const ids = [next.storeOrderNumber, next.taagerOrderNumber, next.orderNumber, next.orderId].map((value) => String(value || "").trim()).filter(Boolean);
-      for (const id of ids) {
-        method = enrichment.paymentByOrderId.get(id) || "";
-        if (method) break;
-      }
-      if (!method) {
-        const phone = normalizePhone(next.phone1 || next.phone || next.rawPhone || "", country);
-        if (phone && sku) method = enrichment.paymentByPhoneSku.get(`${phone}|${sku}`) || "";
+      const assignment = paymentAssignments.assignments.get(rowPaymentAssignmentKey(next, index));
+      if (assignment) {
+        method = assignment.method || "";
+        methodSource = assignment.source || "easyorders";
       }
     } else {
       diagnostics.structuredPaymentPreserved++;
     }
     if (method) {
       next.paymentMethod = method;
-      next.paymentMethodSource = "easyorders";
+      next.paymentMethodSource = methodSource || "easyorders";
       next.paymentClassification = paymentClassification(method);
-      next.paymentEvidenceSource = "easyorders";
+      next.paymentEvidenceSource = methodSource || "easyorders";
       diagnostics.paymentMatches++;
     } else {
       next.paymentMethod = next.paymentMethod || "cod";

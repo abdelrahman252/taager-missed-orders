@@ -1431,7 +1431,8 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
           const lastChild = logEl.lastElementChild;
           if (lastChild && isInlineCountdownLog(lastChild.textContent)) {
             lastChild.textContent = cleanMsg;
-            return;
+          } else {
+            liveAppendLog("log-output", cleanMsg, cls);
           }
         }
       }
