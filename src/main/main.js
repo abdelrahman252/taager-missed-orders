@@ -167,7 +167,7 @@ app.commandLine.appendSwitch("renderer-process-limit", "1");
 app.commandLine.appendSwitch("js-flags", "--max-old-space-size=256");
 
 autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.autoInstallOnAppQuit = false;
 try {
   autoUpdater.verifyUpdateCodeSignature = false;
 } catch (_) {}
@@ -2054,13 +2054,58 @@ ipcMain.handle("install-update", () => {
     return null;
   }
 
+  function killChildProcess(child) {
+    if (!child || child.killed) return;
+    try { child.kill("SIGKILL"); } catch (_) {}
+  }
+
+  function launchInstallerAfterExit(installerPath) {
+    if (process.platform !== "win32") {
+      const child = spawn(installerPath, ["--updated"], {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: false,
+      });
+      child.unref();
+      return child;
+    }
+
+    // Start NSIS from a detached helper after this process has disappeared.
+    // Launching the installer directly races NSIS's "is the app still open?"
+    // check and intermittently shows "Taager Orders cannot be closed".
+    const comspec = process.env.ComSpec || "cmd.exe";
+    const quotedInstaller = `"${String(installerPath).replace(/"/g, '""')}"`;
+    const command = `ping 127.0.0.1 -n 3 > nul & start "" ${quotedInstaller} --updated`;
+    const child = spawn(comspec, ["/d", "/s", "/c", command], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    child.unref();
+    return child;
+  }
+
   // 1. Tear everything down
   app.isQuitting = true;
   app.__sentryFlushed = true;
   clearAutoRun();
 
   const toKill = botChildren.length ? botChildren : (currentBotChild ? [currentBotChild] : []);
-  for (const child of toKill) { try { child.kill("SIGKILL"); } catch (_) {} }
+  for (const child of toKill) killChildProcess(child);
+  if (typeof dashboardFetchChildren !== "undefined") {
+    for (const child of dashboardFetchChildren) killChildProcess(child);
+    dashboardFetchChildren.clear();
+  }
+  if (typeof manualChromeChildren !== "undefined") {
+    for (const child of manualChromeChildren) killChildProcess(child);
+    manualChromeChildren.clear();
+  }
+  if (typeof pendingGoogleLoginRequests !== "undefined") {
+    pendingGoogleLoginRequests.clear();
+  }
+  currentBotChild = null;
+  botChildren = [];
+  botRunning = false;
 
   try {
     if (tray && !tray.isDestroyed()) {
@@ -2081,22 +2126,16 @@ ipcMain.handle("install-update", () => {
 
   if (installerPath && fs.existsSync(installerPath)) {
     try {
-      // Spawn the NSIS installer fully detached so it survives this process exiting.
-      // "--updated" is the silent flag electron-builder's NSIS script looks for
-      // to know it was launched by the app (triggers the "updated" finish screen).
-      const child = spawn(installerPath, ["--updated"], {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: false,
-      });
-      child.unref(); // do NOT wait for it
-      log.info("[AutoUpdate] Installer spawned detached, exiting now");
+      // "--updated" tells electron-builder's NSIS script this was launched by
+      // the app, while the helper delays the actual installer start until exit.
+      launchInstallerAfterExit(installerPath);
+      log.info("[AutoUpdate] Delayed installer helper spawned, exiting now");
     } catch (spawnErr) {
       log.error("[AutoUpdate] Failed to spawn installer:", spawnErr.message);
       // Fall through to quitAndInstall below
     }
-    // Hard-exit immediately — installer is running on its own
-    setTimeout(() => process.exit(0), 200);
+    // Hard-exit immediately; the helper will start the installer after exit.
+    process.exit(0);
     return;
   }
 
@@ -3228,6 +3267,8 @@ ipcMain.handle("set-auto-confirm", (_, v) => { store.set("autoConfirm", v); retu
 
 let currentBotChild = null;
 const pendingGoogleLoginRequests = new Map();
+const dashboardFetchChildren = new Set();
+const manualChromeChildren = new Set();
 ipcMain.on("bot-started", () => { botRunning = true; });
 ipcMain.on("bot-finished", () => { botRunning = false; currentBotChild = null; botChildren = []; });
 ipcMain.on("kill-bot", () => {
@@ -3271,7 +3312,9 @@ function openManualGoogleLoginChrome(message, child, fallback = {}) {
     stdio: "ignore",
     windowsHide: false,
   });
+  manualChromeChildren.add(chrome);
   chrome.once("error", (error) => {
+    manualChromeChildren.delete(chrome);
     pendingGoogleLoginRequests.delete(requestId);
     try {
       child.send({ type: "google-login-failed", requestId, error: error && error.message || String(error) });
@@ -3288,6 +3331,7 @@ function openManualGoogleLoginChrome(message, child, fallback = {}) {
   const chromeStartedAt = Date.now();
   pendingGoogleLoginRequests.set(requestId, { child, payload, chromeStartedAt });
   chrome.once("exit", () => {
+    manualChromeChildren.delete(chrome);
     const pending = pendingGoogleLoginRequests.get(requestId);
     if (!pending || pending.child !== child) return;
     if (Date.now() - chromeStartedAt < 3000 || child.killed) return;
@@ -3505,6 +3549,7 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo } 
       silent: true,
       execArgv: ["--max-old-space-size=256"],
     });
+    dashboardFetchChildren.add(child);
 
     const accountLabel = accountDisplayName(acc, dashboardAccountId);
 
@@ -3544,6 +3589,7 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo } 
       if (!resolved) {
         resolved = true;
         clearTimeout(watchdog);
+        dashboardFetchChildren.delete(child);
         resolve(v);
       }
     };
