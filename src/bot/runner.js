@@ -1613,7 +1613,7 @@ async function readTaagerIdentity(page) {
 
 async function readTaagerIdentityRobust(page) {
   await openTaagerAccountDropdown(page);
-  const identity = await page.evaluate(() => {
+  const fallbackIdentity = await page.evaluate(() => {
     const values = [];
     const add = (value) => {
       const text = String(value || "").trim();
@@ -1623,7 +1623,6 @@ async function readTaagerIdentityRobust(page) {
     const roots = [
       document.querySelector("#accountNavbarDropdown"),
       document.querySelector("#complaints-suggestions-link"),
-      document.body,
     ].filter(Boolean);
 
     for (const root of roots) {
@@ -1655,59 +1654,87 @@ async function readTaagerIdentityRobust(page) {
       merchantEmail = url.searchParams.get("merchantEmail") || "";
     } catch (_) {}
 
-    const codeMatch = all.match(/(?:code|merchantId|merchant_id|affiliateCode|affiliate_code)\s*[:=]?\s*([0-9A-Za-z_-]+)/i);
+    const dataAffiliateId = document.querySelector("[data-affiliate-id]")?.getAttribute("data-affiliate-id") || "";
     const name = merchantName || (document.querySelector("#accountNavbarDropdown .card-title")?.textContent || "").trim();
     const country = (location.pathname.match(/^\/([a-z]{2})(?:\/|$)/i) || [])[1] || "";
     return {
       email: (merchantEmail || email).trim().toLowerCase(),
-      affiliateCode: (merchantId || (codeMatch ? codeMatch[1] : "")).trim(),
+      affiliateCode: (merchantId || dataAffiliateId).trim(),
       country,
       name,
+      source: merchantId ? "complaints-link" : (dataAffiliateId ? "data-affiliate-id" : "fallback"),
     };
   });
-  if (identity.affiliateCode) return identity;
-  return readTaagerProfileIdentity(page, identity);
+  return readTaagerProfileIdentity(page, fallbackIdentity).catch((error) => {
+    if (fallbackIdentity.affiliateCode) {
+      log(`[IDENTITY][Taager] profile identity read failed (${error.message}); using fallback source=${fallbackIdentity.source || "fallback"}`);
+      return fallbackIdentity;
+    }
+    throw error;
+  });
 }
 
 async function readTaagerProfileIdentity(page, fallbackIdentity = {}) {
   const originalUrl = page.url();
   const profileUrl = taagerCountryUrl("/profile");
+  let lastError = null;
   try {
-    await ensureTaagerArabic(page);
-    await page.goto(profileUrl, { waitUntil: "domcontentloaded" });
-    await ensureTaagerArabic(page);
-    await page.waitForSelector("#taager-id-input", { timeout: 15000 });
-    const profileIdentity = await page.evaluate(() => {
-      const valueOf = (selector) => {
-        const el = document.querySelector(selector);
-        return String((el && (el.value || el.textContent)) || "").trim();
-      };
-      const country = (location.pathname.match(/^\/([a-z]{2})(?:\/|$)/i) || [])[1] || "";
-      return {
-        affiliateCode: valueOf("#taager-id-input"),
-        name: valueOf("#full-name-input"),
-        phone: valueOf("#phone-number-input"),
-        email: valueOf("#email-input").toLowerCase(),
-        country,
-      };
-    });
-    return {
-      ...fallbackIdentity,
-      ...profileIdentity,
-      email: profileIdentity.email || fallbackIdentity.email || "",
-      affiliateCode: profileIdentity.affiliateCode || fallbackIdentity.affiliateCode || "",
-      country: profileIdentity.country || fallbackIdentity.country || "",
-      name: profileIdentity.name || fallbackIdentity.name || "",
-    };
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        log(`[IDENTITY][Taager] reading profile identity from ${profileUrl}${attempt > 1 ? ` (retry ${attempt}/3)` : ""}`);
+        await ensureTaagerArabic(page, `profile-identity-before-${attempt}`, { requireButton: false });
+        await gotoWithNetworkRetries(page, profileUrl, "Taager profile identity", { attempts: 2, timeout: 45000, waitMs: 5000 });
+        await ensureTaagerArabic(page, `profile-identity-after-${attempt}`, { requireButton: false }).catch((languageError) => {
+          log(`[IDENTITY][Taager] profile language prep skipped: ${languageError.message}`);
+        });
+        await page.waitForSelector("#taager-id-input", { timeout: 15000 });
+        const profileIdentity = await page.evaluate(() => {
+          const valueOf = (selector) => {
+            const el = document.querySelector(selector);
+            return String((el && (el.value || el.textContent)) || "").trim();
+          };
+          const country = (location.pathname.match(/^\/([a-z]{2})(?:\/|$)/i) || [])[1] || "";
+          return {
+            affiliateCode: valueOf("#taager-id-input"),
+            name: valueOf("#full-name-input"),
+            phone: valueOf("#phone-number-input"),
+            email: valueOf("#email-input").toLowerCase(),
+            country,
+            source: "profile",
+          };
+        });
+        if (!profileIdentity.affiliateCode) {
+          throw new Error("TAAGER_PROFILE_IDENTITY_EMPTY: #taager-id-input was visible but empty");
+        }
+        return {
+          ...fallbackIdentity,
+          ...profileIdentity,
+          email: profileIdentity.email || fallbackIdentity.email || "",
+          affiliateCode: profileIdentity.affiliateCode || fallbackIdentity.affiliateCode || "",
+          country: profileIdentity.country || fallbackIdentity.country || "",
+          name: profileIdentity.name || fallbackIdentity.name || "",
+          source: "profile",
+        };
+      } catch (error) {
+        lastError = error;
+        if (isOnLoginPage(page.url())) throw error;
+        log(`[IDENTITY][Taager] profile identity attempt ${attempt}/3 failed: ${error.message}`);
+        await debugScreenshot(page, `taager-profile-identity-attempt-${attempt}`).catch(() => {});
+        if (attempt < 3) {
+          await reloadWithNetworkRetries(page, "Taager profile identity retry", { attempts: 1, timeout: 30000, waitMs: 3000 }).catch(() => {});
+          await page.waitForTimeout(1000).catch(() => {});
+        }
+      }
+    }
+    throw lastError || new Error("TAAGER_PROFILE_IDENTITY_UNAVAILABLE");
   } finally {
     if (originalUrl && originalUrl !== "about:blank" && !originalUrl.includes("/profile")) {
-      await page.goto(originalUrl, { waitUntil: "domcontentloaded" }).catch(() => {});
+      await gotoWithNetworkRetries(page, originalUrl, "Taager restore after profile identity", { attempts: 2, timeout: 45000, waitMs: 3000 }).catch(() => {});
       await ensureTaagerArabic(page).catch(() => {});
       await page.waitForTimeout(500).catch(() => {});
     }
   }
 }
-
 async function verifyTaagerIdentity(page, where = "session") {
   const expectedEmail = normalizeEmail(config.taagerEmail);
   const expectedCode = normalizeAffiliateCode(config.taagerAffiliateCode);
@@ -1717,7 +1744,10 @@ async function verifyTaagerIdentity(page, where = "session") {
   const actualEmail = normalizeEmail(identity.email);
   const actualCode = normalizeAffiliateCode(identity.affiliateCode);
   const actualCountry = String(identity.country || "").toLowerCase();
-  log(`[IDENTITY][Taager] expected country=${expectedCountry}, expected email=${expectedEmail || "(not-set)"}, expected code=${expectedCode || "(first-bind)"}, detected country=${actualCountry || "unknown"}, detected email=${actualEmail || "unknown"}, detected code=${actualCode || "unknown"}, where=${where}`);
+  log(`[IDENTITY][Taager] expected country=${expectedCountry}, expected email=${expectedEmail || "(not-set)"}, expected code=${expectedCode || "(first-bind)"}, detected country=${actualCountry || "unknown"}, detected email=${actualEmail || "unknown"}, detected code=${actualCode || "unknown"}, source=${identity.source || "unknown"}, where=${where}`);
+  if (expectedCode && expectedCode !== actualCode && identity.source !== "profile") {
+    throw new Error(`TAAGER_PROFILE_IDENTITY_UNVERIFIED: profile merchant ID was unavailable; fallback source=${identity.source || "unknown"} detected ${actualCode || "unknown"}`);
+  }
   if ((expectedCode && expectedCode !== actualCode) || !actualCode || (actualCountry && expectedCountry !== actualCountry)) {
     await debugScreenshot(page, `taager-identity-mismatch-${where}`);
   }
@@ -3065,6 +3095,8 @@ function isRecoverableTaagerError(error, page) {
     message.includes("SESSION_UNVERIFIED") ||
     message.includes("TAAGER_STEP_TIMEOUT") ||
     message.includes("TAAGER_LANGUAGE_NOT_ARABIC") ||
+    message.includes("TAAGER_PROFILE_IDENTITY") ||
+    message.includes("TAAGER_IDENTITY_UNVERIFIED") ||
     message.includes("TAAGER_LANGUAGE_BUTTON_MISSING") ||
     message.includes("TAAGER_TARGET_TIMEOUT") ||
     message.includes("TAAGER_PAGE_CLOSED") ||
