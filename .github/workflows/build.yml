@@ -28,7 +28,20 @@ jobs:
           echo "TAAGER_DASHBOARD_QUERY_CAMPAIGNS=1" >> .env
           echo "TAAGER_MARKETING_INCREMENTAL_SYNC=1" >> .env
       - name: Build macOS x64 and arm64
-        run: npm exec -- electron-builder --mac --x64 --arm64 --publish never
+        run: |
+          for i in {1..3}; do
+            echo "Build attempt $i..."
+            if npm exec -- electron-builder --mac --x64 --arm64 --publish never; then
+              echo "Build succeeded!"
+              exit 0
+            else
+              echo "Build failed. Cleaning up mount points and retrying..."
+              hdiutil detach "/Volumes/Taager Orders" -force 2>/dev/null || true
+              sleep 10
+            fi
+          done
+          echo "Build failed after 3 attempts."
+          exit 1
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
           CSC_IDENTITY_AUTO_DISCOVERY: false
