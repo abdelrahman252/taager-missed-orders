@@ -4256,6 +4256,7 @@ async function phase5_uploadToTaager(page, orders) {
       sku:         o.sku || "",
       qty:         o.qty || 1,
       unitPrice:   o.unitPrice || "",
+      subtotal:    o.subtotal || 0,
       date:        o.date || "",
       city:        o.city || "",
       region:      o.region || "",

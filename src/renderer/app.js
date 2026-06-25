@@ -175,6 +175,7 @@ const _STRINGS = {
     "setup.sub_title":          "Setup",
     "setup.reset_creds_btn":    "Reset Credentials",
     "setup.check_updates_btn":  "Check for Updates",
+    "setup.report_issue_btn":  "Report an Issue",
     "setup.app_version":        (v) => `App version is v${v}`,
     "setup.checking_updates":   "\u{23F3} Checking...",
     "update.btn_title_checking": "Checking for updates...",
@@ -655,6 +656,7 @@ const _STRINGS = {
     "setup.sub_title":          "الإعداد",
     "setup.reset_creds_btn":    "إعادة تعيين بيانات الدخول",
     "setup.check_updates_btn":  "\u0627\u0644\u062a\u062d\u0642\u0642 \u0645\u0646 \u0627\u0644\u062a\u062d\u062f\u064a\u062b\u0627\u062a",
+    "setup.report_issue_btn":  "\u0627\u0644\u0625\u0628\u0644\u0627\u063a \u0639\u0646 \u0645\u0634\u0643\u0644\u0629",
     "setup.app_version":        (v) => `\u0625\u0635\u062f\u0627\u0631 \u0627\u0644\u062a\u0637\u0628\u064a\u0642 \u0647\u0648 v${v}`,
     "setup.checking_updates":   "\u{23F3} \u062c\u0627\u0631\u064d \u0627\u0644\u062a\u062d\u0642\u0642...",
     "update.btn_title_checking": "\u062c\u0627\u0631\u064d \u0627\u0644\u062a\u062d\u0642\u0642 \u0645\u0646 \u0627\u0644\u062a\u062d\u062f\u064a\u062b\u0627\u062a...",
@@ -3576,13 +3578,39 @@ function _fmtUi(key, values, fallback) {
   return text;
 }
 
+function _renderDashboardStyleUpdateOverlay(state) {
+  const overlays = document.querySelectorAll("[data-dashboard-update-overlay]");
+  if (!overlays.length) return;
+  const esc = TaagerUI && TaagerUI.esc ? TaagerUI.esc : (value) => String(value ?? "");
+  overlays.forEach((overlay) => {
+    state = state || {};
+    const active = !!state.active;
+    overlay.hidden = !active;
+    overlay.setAttribute("aria-busy", active ? "true" : "false");
+    if (!active) {
+      overlay.innerHTML = "";
+      return;
+    }
+    overlay.innerHTML = `
+      <div class="dashboard-update-panel" role="status">
+        <span class="taager-spinner" aria-hidden="true"></span>
+        <div class="dashboard-update-copy">
+          <strong>${esc(state.title || TaagerUI.t("analytics.uploadedUpdate.loadingTitle", "Updating uploaded orders..."))}</strong>
+          <span>${esc(state.body || TaagerUI.t("analytics.uploadedUpdate.loadingBody", "Fetching latest Taager statuses for uploaded orders in the selected range."))}</span>
+        </div>
+      </div>`;
+  });
+}
+
 function _setDashboardFetchUi(state) {
   window._dashboardFetchState = state || {};
   if (typeof window.setDashboardUpdateOverlay === "function") {
     window.setDashboardUpdateOverlay(window._dashboardFetchState);
   }
+  _renderDashboardStyleUpdateOverlay(window._dashboardFetchState);
   const status = document.getElementById("sv3-dashboard-fetch-status");
   const btn = document.getElementById("dashboard-update-btn");
+  const uploadedBtns = document.querySelectorAll(".analytics-uploaded-update-btn");
   const runBtn = document.getElementById("sv3-run-final");
   if (btn) {
     if (!btn.dataset.defaultLabel) btn.dataset.defaultLabel = btn.innerHTML;
@@ -3592,6 +3620,14 @@ function _setDashboardFetchUi(state) {
       ? `<span class="taager-spinner" aria-hidden="true"></span> ${TaagerUI.esc(TaagerUI.t("dashboard.fetching_title", "Updating dashboard..."))}`
       : btn.dataset.defaultLabel;
   }
+  uploadedBtns.forEach((uploadedBtn) => {
+    if (!uploadedBtn.dataset.defaultLabel) uploadedBtn.dataset.defaultLabel = uploadedBtn.innerHTML;
+    uploadedBtn.disabled = !!state.active;
+    uploadedBtn.setAttribute("aria-busy", state.active ? "true" : "false");
+    uploadedBtn.innerHTML = state.active
+      ? `<span class="taager-spinner" aria-hidden="true"></span> ${TaagerUI.esc(TaagerUI.t("analytics.uploadedUpdate.loadingShort", "Updating..."))}`
+      : uploadedBtn.dataset.defaultLabel;
+  });
   if (typeof window.syncDashboardRangeActions === "function") {
     window.syncDashboardRangeActions();
   }
@@ -3675,6 +3711,15 @@ async function _onRunForDashboard(selectedAccountIds, period, options) {
     acc.memberName || acc.easyEmail || acc.email || acc.taagerEmail || acc.easyStore || acc.storeName || acc.label || acc.name || acc.id || acc.value
   ]));
   window._dashboardFetchLastChildLog = "";
+  let dashboardFetchLastActivityAt = Date.now();
+  let dashboardFetchQuietNoticeTimer = null;
+  const markDashboardFetchActivity = () => {
+    dashboardFetchLastActivityAt = Date.now();
+  };
+  const stopDashboardFetchQuietNotice = () => {
+    if (dashboardFetchQuietNoticeTimer) clearInterval(dashboardFetchQuietNoticeTimer);
+    dashboardFetchQuietNoticeTimer = null;
+  };
   if (window.api && typeof window.api.removeAllListeners === "function") {
     window.api.removeAllListeners("bot-2fa-needed");
     window.api.removeAllListeners("bot-dashboard-log");
@@ -3684,6 +3729,7 @@ async function _onRunForDashboard(selectedAccountIds, period, options) {
     if (!payload || ids.indexOf(payload.accountId) === -1) return;
     const message = String(payload.message || "").trim();
     if (!message) return;
+    markDashboardFetchActivity();
     window._dashboardFetchLastChildLog = `${payload.accountLabel || payload.accountId}: ${message}`;
     console.log(`[Dashboard child] ${window._dashboardFetchLastChildLog}`);
     if (window._dashboardFetchState && window._dashboardFetchState.active) {
@@ -3695,6 +3741,7 @@ async function _onRunForDashboard(selectedAccountIds, period, options) {
   };
   const dashboardStageHandler = (payload) => {
     if (!payload || ids.indexOf(payload.accountId) === -1) return;
+    markDashboardFetchActivity();
     const stageText = `${payload.accountLabel || payload.accountId}: ${payload.stage || payload.lastStage || "dashboard"} ${payload.status ? `(${payload.status})` : ""}${payload.message ? ` - ${payload.message}` : ""}`;
     window._dashboardFetchLastChildLog = stageText;
     console.log("[Dashboard stage]", payload);
@@ -3735,11 +3782,24 @@ async function _onRunForDashboard(selectedAccountIds, period, options) {
     title: TaagerUI.t("dashboard.fetching_title", "Updating dashboard..."),
     body: TaagerUI.t("dashboard.fetching_body", "Fetching live Taager data. This may take a few minutes. Keep the app open.")
   });
+  dashboardFetchQuietNoticeTimer = setInterval(() => {
+    if (!window._dashboardFetchState || !window._dashboardFetchState.active) return;
+    const quietSeconds = Math.round((Date.now() - dashboardFetchLastActivityAt) / 1000);
+    if (quietSeconds < 90) return;
+    const detail = `Still working. No new browser update for ${quietSeconds}s. Last detail: ${window._dashboardFetchLastChildLog || "dashboard fetch started"}`;
+    console.warn("[Dashboard] Fetch quiet notice:", detail);
+    _setDashboardFetchUi({
+      ...window._dashboardFetchState,
+      childLog: detail
+    });
+    dashboardFetchLastActivityAt = Date.now();
+  }, 30000);
 
   for (let i = 0; i < ids.length; i++) {
     const accountId = ids[i];
     try {
       console.log(`[Dashboard] Manual fetch for ${accountId}...`);
+      markDashboardFetchActivity();
       _setDashboardFetchUi({
         active: true,
         title: TaagerUI.t("dashboard.fetching_title", "Updating dashboard..."),
@@ -3750,6 +3810,7 @@ async function _onRunForDashboard(selectedAccountIds, period, options) {
         dateFrom: range?.dateFrom,
         dateTo: range?.dateTo
       });
+      markDashboardFetchActivity();
       if (fetchRes?.success) {
         totalRows += Number(fetchRes.rows || 0);
         successCount += 1;
@@ -3768,10 +3829,14 @@ async function _onRunForDashboard(selectedAccountIds, period, options) {
           });
         }
       } else {
-        failures.push({ accountId, label: accountLabels.get(accountId) || accountId, error: fetchRes?.error || "UNKNOWN_ERROR" });
+        const recentLogs = Array.isArray(fetchRes && fetchRes.recentLogs) && fetchRes.recentLogs.length
+          ? ` Recent logs: ${fetchRes.recentLogs.slice(-3).join(" | ")}`
+          : "";
+        failures.push({ accountId, label: accountLabels.get(accountId) || accountId, error: (fetchRes?.error || "UNKNOWN_ERROR") + recentLogs });
         console.warn(`[Dashboard] Manual fetch failed for ${accountId}:`, fetchRes?.error);
       }
     } catch (e) {
+      markDashboardFetchActivity();
       failures.push({ accountId, label: accountLabels.get(accountId) || accountId, error: e.message || "UNKNOWN_ERROR" });
       console.warn(`[Dashboard] Manual fetch error for ${accountId}:`, e.message);
       if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(e, {
@@ -3780,6 +3845,7 @@ async function _onRunForDashboard(selectedAccountIds, period, options) {
       });
     }
   }
+  stopDashboardFetchQuietNotice();
   if (window.api && typeof window.api.removeAllListeners === "function") {
     window.api.removeAllListeners("bot-2fa-needed");
     window.api.removeAllListeners("bot-dashboard-log");
@@ -3883,6 +3949,164 @@ async function _onRunForDashboard(selectedAccountIds, period, options) {
   };
 }
 window._onRunForDashboard = _onRunForDashboard;
+
+async function _onUpdateUploadedOrdersForAnalytics(options) {
+  options = options || {};
+  const ids = Array.from(new Set((Array.isArray(options.accountIds) ? options.accountIds : []).filter(Boolean)));
+  const dateFrom = options.dateFrom || "";
+  const dateTo = options.dateTo || "";
+  if (!ids.length) {
+    TaagerUI.toast(TaagerUI.t("analytics.uploadedUpdate.none", "No uploaded orders found in the selected range."), { kind: "info" });
+    return { success: false, skipped: true };
+  }
+
+  const accountLabels = new Map((window._kbotAccounts || window.dashboardAccountsList || []).map((acc) => [
+    acc.id || acc.value,
+    acc.memberName || acc.easyEmail || acc.email || acc.taagerEmail || acc.easyStore || acc.storeName || acc.label || acc.name || acc.id || acc.value
+  ]));
+  window._dashboardFetchLastChildLog = "";
+
+  if (window.api && typeof window.api.removeAllListeners === "function") {
+    window.api.removeAllListeners("bot-2fa-needed");
+    window.api.removeAllListeners("bot-dashboard-log");
+    window.api.removeAllListeners("bot-dashboard-stage");
+  }
+
+  const updateProgress = (detail) => {
+    if (!detail || !window._dashboardFetchState || !window._dashboardFetchState.active) return;
+    _setDashboardFetchUi({
+      ...window._dashboardFetchState,
+      childLog: detail
+    });
+  };
+  const dashboardLogHandler = (payload) => {
+    if (!payload || ids.indexOf(payload.accountId) === -1) return;
+    const message = String(payload.message || "").trim();
+    if (!message) return;
+    window._dashboardFetchLastChildLog = `${payload.accountLabel || payload.accountId}: ${message}`;
+    updateProgress(window._dashboardFetchLastChildLog);
+  };
+  const dashboardStageHandler = (payload) => {
+    if (!payload || ids.indexOf(payload.accountId) === -1) return;
+    const stageText = `${payload.accountLabel || payload.accountId}: ${payload.stage || payload.lastStage || "uploaded orders"} ${payload.status ? `(${payload.status})` : ""}${payload.message ? ` - ${payload.message}` : ""}`;
+    window._dashboardFetchLastChildLog = stageText;
+    updateProgress(stageText);
+  };
+  if (window.api && typeof window.api.onDashboardLog === "function") {
+    window.api.onDashboardLog(dashboardLogHandler);
+  } else if (window.api && typeof window.api.on === "function") {
+    window.api.on("bot-dashboard-log", dashboardLogHandler);
+  }
+  if (window.api && typeof window.api.onDashboardStage === "function") {
+    window.api.onDashboardStage(dashboardStageHandler);
+  } else if (window.api && typeof window.api.on === "function") {
+    window.api.on("bot-dashboard-stage", dashboardStageHandler);
+  }
+  if (window.api && typeof window.api.on2faNeeded === "function") {
+    window.api.on2faNeeded((message) => {
+      const body = TaagerUI.t("dashboard.fetching_2fa", "Complete the EasyOrders verification code in the browser window. Dashboard Update will continue automatically.");
+      const accountLabel = message && (message.accountLabel || accountLabels.get(message.accountId));
+      _setDashboardFetchUi({
+        active: true,
+        title: TaagerUI.t("run.2fa_title", "2FA Required"),
+        body: accountLabel ? `${accountLabel}: ${body}` : body
+      });
+      TaagerUI.toast(body, { kind: "info", timeout: 12000 });
+    });
+  }
+
+  _setDashboardFetchUi({
+    active: true,
+    title: TaagerUI.t("analytics.uploadedUpdate.loadingTitle", "Updating uploaded orders..."),
+    body: TaagerUI.t("analytics.uploadedUpdate.loadingBody", "Fetching latest Taager statuses for uploaded orders in the selected range.")
+  });
+
+  let totalRows = 0;
+  let enriched = 0;
+  let successCount = 0;
+  const failures = [];
+
+  for (let i = 0; i < ids.length; i++) {
+    const accountId = ids[i];
+    const label = accountLabels.get(accountId) || accountId;
+    try {
+      _setDashboardFetchUi({
+        active: true,
+        title: TaagerUI.t("analytics.uploadedUpdate.loadingTitle", "Updating uploaded orders..."),
+        body: _fmtUi("analytics.uploadedUpdate.account", { current: i + 1, total: ids.length, account: label }, `Updating uploaded orders ${i + 1} of ${ids.length}: ${label}`)
+      });
+      const fetchRes = await window.api.runDashboardFetch({
+        accountId,
+        dateFrom,
+        dateTo,
+        analyticsOnly: true,
+        uploadedOnly: true
+      });
+      if (fetchRes && fetchRes.success) {
+        successCount += 1;
+        totalRows += Number(fetchRes.rows || 0);
+        enriched += Number(fetchRes.enriched || 0);
+      } else {
+        failures.push({ accountId, label, error: fetchRes && fetchRes.error || "UNKNOWN_ERROR" });
+      }
+    } catch (error) {
+      failures.push({ accountId, label, error: error.message || String(error) });
+      if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(error, {
+        operation: "analytics.uploadedOrdersUpdate.account",
+        accountId,
+      });
+    }
+  }
+
+  if (window.api && typeof window.api.removeAllListeners === "function") {
+    window.api.removeAllListeners("bot-2fa-needed");
+    window.api.removeAllListeners("bot-dashboard-log");
+    window.api.removeAllListeners("bot-dashboard-stage");
+  }
+
+  const partial = successCount > 0 && failures.length > 0;
+  const result = { success: successCount > 0, partial, totalRows, enriched, successCount, failures };
+  if (result.success) {
+    window.dispatchEvent(new CustomEvent("taager-analytics-runs-updated"));
+    if (typeof options.onComplete === "function") {
+      await options.onComplete(result);
+    }
+  }
+
+  if (!result.success) {
+    const body = failures.map(f => `${f.label}: ${f.error}`).join(", ") || TaagerUI.t("analytics.uploadedUpdate.errorBody", "Uploaded orders update failed.");
+    _setDashboardFetchUi({
+      kind: "error",
+      title: TaagerUI.t("analytics.uploadedUpdate.errorTitle", "Uploaded orders update failed"),
+      body
+    });
+    TaagerUI.toast(body, { kind: "error", timeout: 9000 });
+  } else if (partial) {
+    const body = _fmtUi(
+      "analytics.uploadedUpdate.partialBody",
+      { count: enriched, success: successCount, total: ids.length },
+      `Updated ${enriched} uploaded orders from ${successCount} of ${ids.length} account(s). Some accounts failed.`
+    );
+    _setDashboardFetchUi({
+      kind: "error",
+      title: TaagerUI.t("analytics.uploadedUpdate.partialTitle", "Uploaded orders partially updated"),
+      body
+    });
+    TaagerUI.toast(body, { kind: "error", timeout: 9000 });
+  } else {
+    const body = enriched > 0
+      ? _fmtUi("analytics.uploadedUpdate.successBody", { count: enriched }, `Updated ${enriched} uploaded orders. Status and revenue refreshed.`)
+      : TaagerUI.t("analytics.uploadedUpdate.noChanges", "Uploaded orders are already up to date.");
+    _setDashboardFetchUi({
+      kind: "success",
+      title: TaagerUI.t("analytics.uploadedUpdate.successTitle", "Uploaded orders updated"),
+      body
+    });
+    TaagerUI.toast(body, { kind: "success" });
+  }
+  return result;
+}
+window._onUpdateUploadedOrdersForAnalytics = _onUpdateUploadedOrdersForAnalytics;
 
 // ── Re-render current page when language switches ──
 async function reRenderCurrentPage() {

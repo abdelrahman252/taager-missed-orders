@@ -2842,6 +2842,10 @@ window.renderSetup = function (onComplete, initialStep) {
           </div>
 
           <div class="sv3-sidebar-footer">
+            <button class="sv3-report-btn" onclick="if (window.TaagerSupport && typeof window.TaagerSupport.open === 'function') window.TaagerSupport.open()" style="display:flex;align-items:center;justify-content:center;gap:6px">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+              <span>${t("setup.report_issue_btn")}</span>
+            </button>
             <button class="sv3-update-btn" id="sv3-update-btn" onclick="checkForUpdatesManual()" style="display:flex;align-items:center;justify-content:center;gap:6px">
               <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
               <span id="sv3-update-btn-label">${t("setup.check_updates_btn")}</span>

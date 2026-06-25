@@ -19,6 +19,9 @@
       to: "to",
       apply: "Apply"
     },
+    actions: {
+      updateUploadedOrders: "Update Uploaded Orders"
+    },
     runBanner: {
       singleRun: "Viewing single run from",
       showAll: "✕ Show all"

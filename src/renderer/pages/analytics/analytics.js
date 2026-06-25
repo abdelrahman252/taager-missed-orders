@@ -105,6 +105,10 @@ async function renderAnalytics(onBack) {
             <button class="btn-apply-inline" id="custom-apply-btn-inline">${window.t_anl('dateCustom.apply')}</button>
           </div>
 
+          <button type="button" class="analytics-uploaded-update-btn" id="analytics-uploaded-update-btn">
+            ${window.t_anl('actions.updateUploadedOrders', { default: 'Update Uploaded Orders' })}
+          </button>
+
           <!-- Sleek Micro-Animated Premium Refresh Button -->
           <button class="analytics-refresh-btn-premium" id="analytics-refresh-btn" title="Refresh Data">
             <svg class="refresh-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -167,6 +171,7 @@ async function renderAnalytics(onBack) {
       </div>
 
     </div><!-- /analytics-page -->
+    <div class="dashboard-update-overlay analytics-uploaded-update-overlay" data-dashboard-update-overlay hidden aria-live="polite" aria-busy="false"></div>
       </div><!-- /scrollable content -->
     </div><!-- /sv3-shell -->`;
   // ── Load data & settings in parallel; skeleton stays until real render ──────
@@ -238,6 +243,24 @@ async function renderAnalytics(onBack) {
       if (svgIcon) svgIcon.classList.remove("rotating");
       _renderPage();
     }, 600);
+  });
+
+  document.getElementById("analytics-uploaded-update-btn")?.addEventListener("click", async () => {
+    if (typeof window._onUpdateUploadedOrdersForAnalytics !== "function") return;
+    const range = _resolveDateRange();
+    if (!range) {
+      if (window.TaagerUI) window.TaagerUI.toast("Choose a date range before updating uploaded orders.", { kind: "info" });
+      return;
+    }
+    await window._onUpdateUploadedOrdersForAnalytics({
+      accountIds: _uploadedUpdateAccountIds(range),
+      dateFrom: _dateParam(range.from),
+      dateTo: _dateParam(range.to),
+      onComplete: async function () {
+        _allRuns = await _loadAnalyticsRuns();
+        _renderPage();
+      }
+    });
   });
 
   if (window.TaagerGuidedTour) {
@@ -521,6 +544,33 @@ async function renderAnalytics(onBack) {
     return runs;
   }
 
+  function _dateParam(date) {
+    if (!(date instanceof Date) || isNaN(date.getTime())) return "";
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  function _isUploadedAnalyticsOrder(order) {
+    const source = String(order && order.source || "real").toLowerCase();
+    return source === "missed" || source === "real";
+  }
+
+  function _uploadedUpdateAccountIds(dateRange) {
+    const runs = _filterRuns(_allRuns, dateRange);
+    const scopedRuns = _activeAccount
+      ? runs.filter(r => accountMatches(r, _activeAccount))
+      : runs;
+    const ids = [];
+    scopedRuns.forEach(function (run) {
+      if (!Array.isArray(run.orders) || !run.orders.some(_isUploadedAnalyticsOrder)) return;
+      const id = run.accountId || "__single__";
+      if (ids.indexOf(id) === -1) ids.push(id);
+    });
+    return ids;
+  }
+
   // ── Account tabs ─────────────────────────────────────────────────────────────
   function _renderAccountTabs(filteredRuns) {
     const tabBar = document.getElementById("analytics-account-tabs");
@@ -629,8 +679,9 @@ async function renderAnalytics(onBack) {
 
     const counts = {};
     orders.forEach(o => {
-      const s = o.orderStatus || "Unknown";
-      counts[s] = (counts[s] || 0) + 1;
+      const raw = o.orderStatus || "Unknown";
+      const bucket = window.TaagerStatus ? window.TaagerStatus.normalize(raw).bucket : raw;
+      counts[bucket] = (counts[bucket] || 0) + 1;
     });
 
     const total   = orders.length || 1;
@@ -647,8 +698,11 @@ async function renderAnalytics(onBack) {
       "canceled",
       "cancelled"
     ];
-    const statusRank = status => {
-      const key = String(status || "").toLowerCase();
+    const statusRank = bucket => {
+      if (window.TaagerStatus) {
+        return window.TaagerStatus.statusInfo(bucket).order || 999;
+      }
+      const key = String(bucket || "").toLowerCase();
       const idx = statusOrder.indexOf(key);
       return idx === -1 ? statusOrder.length : idx;
     };
@@ -664,9 +718,9 @@ async function renderAnalytics(onBack) {
         <div class="status-breakdown-list">
           ${entries.length === 0
             ? `<div style="color:var(--text3);font-size:13px;padding:12px">${window.t_anl('insights.noData')}</div>`
-            : entries.map(([status, count]) => {
-                const sc  = getStatusColor(status);
-                const statusLabel = typeof analyticsStatusLabel === "function" ? analyticsStatusLabel(status) : status;
+            : entries.map(([bucket, count]) => {
+                const sc  = getStatusColor(bucket);
+                const statusLabel = typeof analyticsStatusLabel === "function" ? analyticsStatusLabel(bucket) : bucket;
                 const pct = Math.round((count / total) * 100);
                 return `
                   <div class="status-breakdown-item">

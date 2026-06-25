@@ -218,7 +218,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
           status = 'في الشحن';
         } else if (lowerStatus === 'awaiting confirmation' || lowerStatus === 'بانتظار التأكيد' || lowerStatus === 'pending') {
           status = 'تم استلام الطلب';
-        } else if (lowerStatus === 'confirmed' || lowerStatus === 'مؤكد') {
+        } else if (lowerStatus === 'confirmed' || lowerStatus === 'مؤكد' || lowerStatus === 'تم التأكيد') {
           status = 'مؤكد';
         } else if (lowerStatus === 'under processing' || lowerStatus === 'قيد المعالجة' || lowerStatus === 'processing') {
           status = 'قيد المعالجة';

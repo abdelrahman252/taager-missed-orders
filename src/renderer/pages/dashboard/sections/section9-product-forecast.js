@@ -387,7 +387,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     if (!assignment) return;
     sim.realAdSpend = Number(assignment.spend.toFixed(2));
     sim.adSpend = sim.isModified ? sim.adSpend : sim.realAdSpend;
-    sim.syncedAdSpend = true;
+    sim.syncedAdSpend = sim.realAdSpend > 0;
     sim.syncMatchMethod = assignment.methods.sku && assignment.methods.name ? 'sku+name' :
       (assignment.methods.sku ? 'sku' : 'name');
     sim.syncMatchDetail = Object.keys(assignment.details || {}).length === 1
@@ -399,6 +399,10 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   // ── Helper: profit CSS class ────────────────────────────────────────────────
   function profitClass(val) {
     return val < 0 ? 's9-profit-negative' : val > 0 ? 's9-profit-positive' : 's9-profit-zero';
+  }
+
+  function isSpendLocked(sim) {
+    return !!(sim && sim.syncedAdSpend && Number(sim.realAdSpend || 0) > 0);
   }
 
   // ── 3. Computation ──────────────────────────────────────────────────────────
@@ -837,7 +841,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       var displaySpend = s.realAdSpend === 0
         ? (s.platformSpendFiltered ? '0' : '')
         : Math.round(toDisplay(s.realAdSpend));
-      var spendLocked = s.platformSpendFiltered
+      var spendLocked = isSpendLocked(s)
         ? ' disabled title="' + p9Txt('Filtered from marketing campaign spend', 'تمت تصفية الإنفاق من حملات التسويق') + '"'
         : '';
 
@@ -1102,10 +1106,10 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
           '<span style="font-size:11px;color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + formatMoney(s.realAdSpend, true) + '</span>' +
         '</div>' +
         '<div class="sfe-input-wrap2">' +
-          '<input type="number" class="s9-sim-spend-input sfe-input2" min="0" step="1" value="' + Math.round(toDisplay(s.adSpend)) + '" placeholder="0" style="direction:ltr;">' +
+          '<input type="number" class="s9-sim-spend-input sfe-input2" min="0" step="1" value="' + Math.round(toDisplay(s.adSpend)) + '" placeholder="0" style="direction:ltr;"' + (isSpendLocked(s) ? ' disabled title="' + p9Txt('Synced from marketing platforms', 'متزامن من منصات التسويق') + '"' : '') + '>' +
           '<span class="sfe-input-unit2">' + viewCurrency + '</span>' +
         '</div>' +
-        (s.syncedAdSpend ? '<div style="font-size:10px;color:#2dd4bf;font-weight:800;margin-top:8px">' + p9Txt('Actual spend is synced from marketing platforms for ', 'تمت مزامنة الإنفاق الفعلي من منصات التسويق للفترة ') + productSyncPeriodLabel() + '. ' + p9Txt('This scenario budget remains editable; Reset to Actual Data restores synced values.', 'تبقى ميزانية السيناريو قابلة للتعديل؛ زر الرجوع للبيانات الفعلية يعيد القيم المتزامنة.') + '</div>' : '') +
+        (isSpendLocked(s) ? '<div style="font-size:10px;color:#2dd4bf;font-weight:800;margin-top:8px">' + p9Txt('Actual spend is synced from marketing platforms for ', 'تمت مزامنة الإنفاق الفعلي من منصات التسويق للفترة ') + productSyncPeriodLabel() + '. ' + p9Txt('This spend is locked because it came from a connected marketing platform.', 'هذا الإنفاق مقفل لأنه جاء من منصة تسويق متصلة.') + '</div>' : '') +
       '</div>';
 
     var ordersInputHtml =
@@ -1749,6 +1753,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     eventRoot.querySelectorAll('.s9-spend-input').forEach(function (inp) {
       inp.addEventListener('input', function (e) {
         var idx = parseInt(e.target.getAttribute('data-idx'));
+        if (isSpendLocked(simulations[idx])) return;
         var val = parseFloat(e.target.value.replace(/,/g, '')) || 0;
         var newSpend = toSAR(val);
         simulations[idx].realAdSpend = newSpend;
@@ -1769,6 +1774,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     var simSpendInp = eventRoot.querySelector('.s9-sim-spend-input');
     if (simSpendInp) {
       simSpendInp.addEventListener('input', function (e) {
+        if (isSpendLocked(simulations[selectedIdx])) return;
         var v = parseFloat(e.target.value);
         if (isNaN(v) || v < 0) return;
         simulations[selectedIdx].adSpend = toSAR(v);

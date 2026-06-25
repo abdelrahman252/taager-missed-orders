@@ -738,6 +738,20 @@ textarea:focus-visible,
   display: flex; align-items: center; justify-content: center; gap: 6px;
 }
 .sv3-update-btn:hover { background: rgba(123,92,240,.12); border-color: #a78bfa; }
+.sv3-report-btn {
+  width: 100%; padding: 9px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text2);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.sv3-report-btn:hover {
+  background: rgba(0, 214, 143, 0.08);
+  border-color: var(--success);
+  color: var(--success);
+}
 .sv3-reset-btn {
   width: 100%; padding: 9px;
   background: transparent;

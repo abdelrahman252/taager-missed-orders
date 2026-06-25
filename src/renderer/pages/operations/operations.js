@@ -64,6 +64,9 @@ async function renderOperations(onBack) {
             <input type="date" class="date-input-inline" id="ops-custom-to">
             <button class="btn-apply-inline" id="ops-custom-apply-btn">${window.t_anl('dateCustom.apply')}</button>
           </div>
+          <button type="button" class="analytics-uploaded-update-btn" id="ops-uploaded-update-btn">
+            ${window.t_ops('actions.updateUploadedOrders', { default: 'Update Uploaded Orders' })}
+          </button>
           <button type="button" class="taager-tour-quick-guide" id="ops-tour-btn" title="${window.t_ops('tour.common.quickGuide', { default: 'Quick Guide' })}">
             <span class="taager-tour-guide-mark">?</span><span>${window.t_ops('tour.common.quickGuide', { default: 'Quick Guide' })}</span>
           </button>
@@ -107,6 +110,7 @@ async function renderOperations(onBack) {
 
       </div>
     </div><!-- /ops-page -->
+    <div class="dashboard-update-overlay analytics-uploaded-update-overlay" data-dashboard-update-overlay hidden aria-live="polite" aria-busy="false"></div>
       </div><!-- /scrollable content -->
     </div><!-- /sv3-shell -->`;
   // ── Fetch data first; the optimized IPC path keeps this fast and stable ─────
@@ -188,6 +192,19 @@ async function renderOperations(onBack) {
     _selectedOrderIdx = 0;
     _renderPanels();
   });
+  root.querySelector("#ops-uploaded-update-btn")?.addEventListener("click", async () => {
+    if (typeof window._onUpdateUploadedOrdersForAnalytics !== "function") return;
+    const range = _resolveDateRange();
+    if (!range) {
+      if (window.TaagerUI) window.TaagerUI.toast("Choose a date range before updating uploaded orders.", { kind: "info" });
+      return;
+    }
+    await window._onUpdateUploadedOrdersForAnalytics({
+      accountIds: _uploadedUpdateAccountIds(range),
+      dateFrom: _dateParam(range.from),
+      dateTo: _dateParam(range.to)
+    });
+  });
   root.addEventListener("click", (e) => {
     if (e.target.closest("#ops-scroll-history")) _scrollToRunHistory();
     if (e.target.closest("#ops-first-run-btn") && typeof goToSetup === "function") goToSetup("run");
@@ -239,6 +256,33 @@ async function renderOperations(onBack) {
       return { from: _customFrom, to: _customTo };
     }
     return _resolvePresetDateRange(_activeFilter);
+  }
+
+  function _dateParam(date) {
+    if (!(date instanceof Date) || isNaN(date.getTime())) return "";
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  function _isUploadedAnalyticsOrder(order) {
+    const source = String(order && order.source || "real").toLowerCase();
+    return source === "missed" || source === "real";
+  }
+
+  function _uploadedUpdateAccountIds(dateRange) {
+    const runs = _filterRunsByDate(_allRuns, dateRange);
+    const scopedRuns = _activeAccount
+      ? runs.filter(r => _opsAccountMatches(r, _activeAccount))
+      : runs;
+    const ids = [];
+    scopedRuns.forEach(function (run) {
+      if (!Array.isArray(run.orders) || !run.orders.some(_isUploadedAnalyticsOrder)) return;
+      const id = run.accountId || "__single__";
+      if (ids.indexOf(id) === -1) ids.push(id);
+    });
+    return ids;
   }
 
   function _resolvePresetDateRange(filter) {

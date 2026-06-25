@@ -3,6 +3,9 @@
   window.TAAGER_LOCALES = window.TAAGER_LOCALES || {};
   window.TAAGER_LOCALES.ar = window.TAAGER_LOCALES.ar || {};
   window.TAAGER_LOCALES.ar.operations = {
+    actions: {
+      updateUploadedOrders: "\u062a\u062d\u062f\u064a\u062b \u0627\u0644\u0637\u0644\u0628\u0627\u062a \u0627\u0644\u0645\u0631\u0641\u0648\u0639\u0629"
+    },
     tour: {
       common: {
         quickGuide: "الدليل السريع"

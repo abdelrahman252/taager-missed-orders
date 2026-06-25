@@ -41,6 +41,16 @@ const {
   validateDashboardAiPayload,
   debugGeminiPing,
 } = require("./dashboard-ai-service");
+const {
+  MONTHLY_DATA_CLEANUP_DAY,
+  createMonthlyCleanupScheduler,
+  monthlyCleanupCutoff,
+  monthlyCleanupEligible,
+  monthlyCleanupMonthKey,
+  nextMonthlyCleanupDateKey,
+  pruneAnalyticsRunsForCurrentMonth,
+  pruneDashboardAccountsForCurrentMonth,
+} = require("./monthly-data-cleanup");
 
 function pathEquals(left, right) {
   return path.resolve(String(left || "")).toLowerCase() === path.resolve(String(right || "")).toLowerCase();
@@ -1569,7 +1579,30 @@ function replaceDashboardRowsInRange(existingRows, incomingRows, dateFrom, dateT
   });
 }
 
-function enrichAnalyticsRunsFromTaagerRows(accountId, rows) {
+function isUploadedAnalyticsOrder(order) {
+  const source = String(order && order.source || "real").trim().toLowerCase();
+  return source === "missed" || source === "real";
+}
+
+function analyticsRunWithinRange(run, dateFrom, dateTo) {
+  if (!dateFrom && !dateTo) return true;
+  const ts = Number(run && run.runTimestamp) || 0;
+  if (!ts) return false;
+  if (dateFrom) {
+    const from = new Date(dateFrom).getTime();
+    if (Number.isFinite(from) && ts < from) return false;
+  }
+  if (dateTo) {
+    const toDate = new Date(dateTo);
+    if (Number.isFinite(toDate.getTime())) {
+      toDate.setHours(23, 59, 59, 999);
+      if (ts > toDate.getTime()) return false;
+    }
+  }
+  return true;
+}
+
+function enrichAnalyticsRunsFromTaagerRows(accountId, rows, options = {}) {
   if (!Array.isArray(rows) || rows.length === 0) return 0;
 
   const taagerMap = new Map();
@@ -1584,10 +1617,12 @@ function enrichAnalyticsRunsFromTaagerRows(accountId, rows) {
   const accountsById = getStoredAccountsMap();
   const runs = storedRuns.map(run => normalizeAnalyticsRun(run, accountsById)).map((run) => {
     if (accountId && run.accountId !== accountId) return run;
+    if (!analyticsRunWithinRange(run, options.dateFrom, options.dateTo)) return run;
     if (!Array.isArray(run.orders) || run.orders.length === 0) return run;
 
     let runChanged = false;
     const orders = run.orders.map((order) => {
+      if (options.uploadedOnly && !isUploadedAnalyticsOrder(order)) return order;
       const taagerRow = taagerMap.get(analyticsOrderKey(order, run.taagerCountry));
       if (!taagerRow) return order;
       const merged = mergeTaagerRowIntoOrder(order, taagerRow);
@@ -1711,6 +1746,104 @@ function syncAnalyticsFromDashboardSnapshots() {
   if (total > 0) console.log(`[Analytics] Synced ${total} stored orders from dashboard snapshots`);
   return total;
 }
+
+const MONTHLY_DATA_CLEANUP_LAST_RUN_KEY = "monthlyDataCleanupLastRun";
+const MONTHLY_DATA_CLEANUP_LAST_RESULT_KEY = "monthlyDataCleanupLastResult";
+
+function getMonthlyCleanupStatus(options = {}) {
+  const now = options.now instanceof Date ? options.now : new Date(options.now || Date.now());
+  const cutoff = monthlyCleanupCutoff(now);
+  const lastRunMonth = String(dashboardStore.get(MONTHLY_DATA_CLEANUP_LAST_RUN_KEY, "") || "");
+  return {
+    ok: true,
+    cleanupDay: MONTHLY_DATA_CLEANUP_DAY,
+    currentMonth: monthlyCleanupMonthKey(now),
+    cutoffDate: cutoff.cutoffDateKey,
+    lastRunMonth,
+    eligible: monthlyCleanupEligible({
+      now,
+      cleanupDay: MONTHLY_DATA_CLEANUP_DAY,
+      lastRunMonth,
+      force: false,
+    }),
+    nextEligibleDate: nextMonthlyCleanupDateKey({
+      now,
+      cleanupDay: MONTHLY_DATA_CLEANUP_DAY,
+      lastRunMonth,
+    }),
+    lastResult: dashboardStore.get(MONTHLY_DATA_CLEANUP_LAST_RESULT_KEY, null),
+  };
+}
+
+function runMonthlyDataCleanup(options = {}) {
+  const now = options.now instanceof Date ? options.now : new Date(options.now || Date.now());
+  const force = options.force === true;
+  const status = getMonthlyCleanupStatus({ now });
+  if (!force && !status.eligible) {
+    return { ok: true, skipped: true, reason: "not_eligible", status };
+  }
+
+  const cutoff = monthlyCleanupCutoff(now);
+  const analyticsPrune = pruneAnalyticsRunsForCurrentMonth(
+    analyticsStore.get("runs", []),
+    cutoff.cutoffTime
+  );
+  const dashboardPrune = pruneDashboardAccountsForCurrentMonth(
+    dashboardStore.get("accounts", {}),
+    cutoff.cutoffDateKey,
+    dashboardRowDateKey
+  );
+
+  if (analyticsPrune.removed > 0) {
+    analyticsStore.set("runs", analyticsPrune.runs);
+    invalidateAnalyticsRunsCache();
+  }
+
+  if (dashboardPrune.changed) {
+    dashboardStore.set("accounts", dashboardPrune.accounts);
+    bumpDashboardSnapshotRevision();
+  }
+
+  const changed = analyticsPrune.removed > 0 || dashboardPrune.removedRows > 0;
+  if (changed) {
+    analyticsSnapshotSyncCacheKey = "";
+    dashboardQueryService.clearCache();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("reset-cache");
+    }
+  }
+
+  const result = {
+    ok: true,
+    skipped: false,
+    cleanupDay: MONTHLY_DATA_CLEANUP_DAY,
+    monthKey: cutoff.monthKey,
+    cutoffDate: cutoff.cutoffDateKey,
+    analyticsRunsRemoved: analyticsPrune.removed,
+    analyticsRunsKept: analyticsPrune.runs.length,
+    dashboardRowsRemoved: dashboardPrune.removedRows,
+    dashboardAccountsTouched: dashboardPrune.touchedAccounts,
+    changed,
+    ranAt: now.toISOString(),
+  };
+
+  dashboardStore.set(MONTHLY_DATA_CLEANUP_LAST_RUN_KEY, cutoff.monthKey);
+  dashboardStore.set(MONTHLY_DATA_CLEANUP_LAST_RESULT_KEY, result);
+  if (changed) {
+    log.info(`[MonthlyCleanup] Removed ${analyticsPrune.removed} analytics runs and ${dashboardPrune.removedRows} dashboard rows before ${cutoff.cutoffDateKey}.`);
+  } else {
+    log.info(`[MonthlyCleanup] Checked ${cutoff.monthKey}; no old reporting data found.`);
+  }
+  return result;
+}
+
+const monthlyDataCleanupScheduler = createMonthlyCleanupScheduler({
+  runCleanup: () => runMonthlyDataCleanup(),
+  onError: (error) => {
+    log.error("[MonthlyCleanup] Scheduled cleanup failed:", error && error.message ? error.message : error);
+    monitoring.captureException(error, { operation: "monthlyDataCleanup.scheduled" });
+  },
+});
 
 // ══════════════════════════════════════════════════════
 // LICENSE — server-only, random key, auto device lock
@@ -1906,24 +2039,13 @@ function clearAutoRun() {
   updateTrayMenu();
 }
 
-// ── Analytics: auto-purge old runs on startup ──────────────────────────────
-function purgeOldAnalyticsRuns(daysToKeep = 30) {
-  const runs = analyticsStore.get("runs", []);
-  const cutoff = Date.now() - (daysToKeep * 24 * 60 * 60 * 1000);
-  const filtered = runs.filter(r => r.runTimestamp >= cutoff);
-  if (filtered.length < runs.length) {
-    analyticsStore.set("runs", filtered);
-    invalidateAnalyticsRunsCache();
-    log.info(`[Analytics] Purged ${runs.length - filtered.length} old runs (>${daysToKeep}d)`);
-  }
-}
 
 app.whenReady().then(() => {
   createWindow();
   createTray();
   autoRunEnabled = store.get("autoRun", false);
   if (autoRunEnabled) scheduleAutoRun();
-  purgeOldAnalyticsRuns(store.get("analyticsPurgeDays", 30));
+  monthlyDataCleanupScheduler.start();
 
   if (app.isPackaged) {
     setTimeout(() => {
@@ -1937,7 +2059,10 @@ app.whenReady().then(() => {
     log.info("[AutoUpdate] Skipping startup update check - app is not packaged");
   }
 });
-app.on("before-quit", () => { app.isQuitting = true; });
+app.on("before-quit", () => {
+  app.isQuitting = true;
+  monthlyDataCleanupScheduler.stop();
+});
 
 app.on("window-all-closed", () => {});
 
@@ -3473,11 +3598,17 @@ ipcMain.handle("save-analytics-settings", async (_, { minutesPerOrder, purgeDays
 });
 
 const DASHBOARD_FETCH_ACCOUNT_TIMEOUT_MS = 8 * 60 * 1000;
+const DASHBOARD_FETCH_EASYORDERS_TIMEOUT_MS = 24 * 60 * 1000;
+const DASHBOARD_FETCH_IDLE_NOTICE_MS = 90 * 1000;
 
-// ── Dashboard Fetch — spawn dashboard-fetch.js (Taager-only, no Easy-Orders) ──
-ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo } = {}) => {
+// ── Dashboard Fetch — spawn dashboard-fetch.js (Taager + optional EasyOrders enrichment) ──
+ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, analyticsOnly, uploadedOnly } = {}) => {
   if (!(await isLicenseValid())) return { success: false, error: "LICENSE_INVALID" };
-  if (!licenseStore.get("dashboardEnabled", false)) return { success: false, error: "DASHBOARD_NOT_ENABLED" };
+  if (analyticsOnly) {
+    if (!isOperationsSuiteEnabled()) return { success: false, error: "ANALYTICS_NOT_ENABLED" };
+  } else if (!licenseStore.get("dashboardEnabled", false)) {
+    return { success: false, error: "DASHBOARD_NOT_ENABLED" };
+  }
   const rangeValidation = validateCurrentYearDashboardRange(dateFrom, dateTo);
   if (!rangeValidation.ok) return { success: false, error: rangeValidation.error };
 
@@ -3508,11 +3639,14 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo } 
   const userData = app.getPath("userData");
   const dashboardAccountId = accountId || acc.id || "__single__";
   const taagerLoginMethod = taagerLoginMethodOf(acc);
-  const dashboardEnrichmentProvider = String(acc.dashboardEnrichmentProvider || "none").toLowerCase() === "easyorders" ? "easyorders" : "none";
+  const dashboardEnrichmentProvider = !analyticsOnly && String(acc.dashboardEnrichmentProvider || "none").toLowerCase() === "easyorders" ? "easyorders" : "none";
   const taagerEmail = acc.taagerEmail || store.get("taagerEmail", "");
   const taagerPassword = acc.taagerPassword || (acc.id ? store.get(`pwd_taager_${acc.id}`, "") : "") || store.get("taagerPassword", "");
   const taagerPhone = acc.taagerPhone || store.get("taagerPhone", "");
   const easyPassword = acc.easyPassword || (acc.id ? store.get(`pwd_easy_${acc.id}`, "") : "") || store.get("easyPassword", "");
+  const accountTimeoutMs = dashboardEnrichmentProvider === "easyorders"
+    ? DASHBOARD_FETCH_EASYORDERS_TIMEOUT_MS
+    : DASHBOARD_FETCH_ACCOUNT_TIMEOUT_MS;
   if (taagerLoginMethod !== "google" && !taagerEmail && !taagerPhone) {
     const label = accountDisplayName(acc, dashboardAccountId);
     return { success: false, error: `Taager credentials missing for ${label}. Re-save this account, then retry dashboard update.` };
@@ -3556,15 +3690,29 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo } 
     let resolved = false;
     let lastStage = "dashboard.fetch.spawned";
     let killedByWatchdog = false;
+    let lastChildActivityAt = Date.now();
+    const childLogTail = [];
 
     const forwardDashboardLog = (text, options = {}) => {
       const message = String(text || "");
+      lastChildActivityAt = Date.now();
+      childLogTail.push(message);
+      if (childLogTail.length > 30) childLogTail.shift();
+      if (options.stream === "stderr") log.warn(`[Dashboard:${accountLabel}] ${message}`);
+      else log.info(`[Dashboard:${accountLabel}] ${message}`);
+      let logFilePath = "";
+      try {
+        logFilePath = log.transports && log.transports.file && typeof log.transports.file.getFile === "function"
+          ? (log.transports.file.getFile().path || "")
+          : "";
+      } catch (_) {}
       const payload = {
         accountId: dashboardAccountId,
         accountLabel,
         message,
         stream: options.stream || "stdout",
         timestamp: Date.now(),
+        logFilePath,
       };
       mainWindow.webContents.send("bot-dashboard-log", payload);
       mainWindow.webContents.send("bot-log", `[Dashboard:${accountLabel}]${options.stream === "stderr" ? "[ERR]" : ""} ${message}`);
@@ -3577,24 +3725,55 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo } 
       forwardDashboardLog(d.toString(), { stream: "stderr" });
     });
 
+    const idleNotice = setInterval(() => {
+      if (resolved) return;
+      const idleMs = Date.now() - lastChildActivityAt;
+      if (idleMs < DASHBOARD_FETCH_IDLE_NOTICE_MS) return;
+      const seconds = Math.round(idleMs / 1000);
+      const message = `Still waiting for dashboard fetch. No child update for ${seconds}s; last stage: ${lastStage}`;
+      lastChildActivityAt = Date.now();
+      const payload = {
+        type: "stage",
+        flow: "dashboard",
+        stage: lastStage,
+        status: "waiting",
+        message,
+        accountId: dashboardAccountId,
+        accountLabel,
+        lastStage,
+        timestamp: Date.now(),
+      };
+      log.warn(`[Dashboard:${accountLabel}] ${message}`);
+      mainWindow.webContents.send("bot-dashboard-stage", payload);
+      mainWindow.webContents.send("bot-dashboard-log", {
+        accountId: dashboardAccountId,
+        accountLabel,
+        message,
+        stream: "watchdog",
+        timestamp: Date.now(),
+      });
+    }, 30 * 1000);
+
     const watchdog = setTimeout(() => {
       killedByWatchdog = true;
-      const error = `DASHBOARD_FETCH_TIMEOUT: last stage was ${lastStage}`;
+      const error = `DASHBOARD_FETCH_TIMEOUT: last stage was ${lastStage}; timeout=${Math.round(accountTimeoutMs / 1000)}s; recent logs=${childLogTail.slice(-5).join(" | ")}`;
       forwardDashboardLog(error, { stream: "stderr" });
       try { child.kill(); } catch (_) {}
-      safeResolve({ success: false, error, lastStage });
-    }, DASHBOARD_FETCH_ACCOUNT_TIMEOUT_MS);
+      safeResolve({ success: false, error, lastStage, recentLogs: childLogTail.slice(-10) });
+    }, accountTimeoutMs);
 
     const safeResolve = (v) => {
       if (!resolved) {
         resolved = true;
         clearTimeout(watchdog);
+        clearInterval(idleNotice);
         dashboardFetchChildren.delete(child);
         resolve(v);
       }
     };
 
     child.on("message", async (msg) => {
+      lastChildActivityAt = Date.now();
       if (msg.type === "stage") {
         lastStage = msg.stage || lastStage;
         const payload = {
@@ -3613,52 +3792,64 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo } 
         try {
           const rangeFrom = msg.dateFrom || dateFrom || "";
           const rangeTo = msg.dateTo || dateTo || "";
-          const skuCacheUpdate = mergeDashboardSkuNameCache(dashboardAccountId, msg.learnedSkuNameMap || {});
-          if (msg.enrichmentDiagnostics && msg.enrichmentDiagnostics.provider === "easyorders") {
-            msg.enrichmentDiagnostics = {
-              ...msg.enrichmentDiagnostics,
-              skuNameCacheAdded: skuCacheUpdate.added,
-              skuNameCacheUpdated: skuCacheUpdate.updated,
-              skuNameCacheTotal: skuCacheUpdate.total,
-            };
-            if (msg.parseDiagnostics && msg.parseDiagnostics.enrichment) {
-              msg.parseDiagnostics.enrichment = msg.enrichmentDiagnostics;
+          let enriched = 0;
+          if (analyticsOnly) {
+            enriched = enrichAnalyticsRunsFromTaagerRows(dashboardAccountId, rows, {
+              uploadedOnly: uploadedOnly !== false,
+              dateFrom: rangeFrom,
+              dateTo: rangeTo,
+            });
+            console.log(`[Analytics] Uploaded-order status update for ${dashboardAccountId}: ${rows.length} Taager rows fetched, ${enriched} stored orders changed`);
+          } else {
+            const skuCacheUpdate = mergeDashboardSkuNameCache(dashboardAccountId, msg.learnedSkuNameMap || {});
+            if (msg.enrichmentDiagnostics && msg.enrichmentDiagnostics.provider === "easyorders") {
+              msg.enrichmentDiagnostics = {
+                ...msg.enrichmentDiagnostics,
+                skuNameCacheAdded: skuCacheUpdate.added,
+                skuNameCacheUpdated: skuCacheUpdate.updated,
+                skuNameCacheTotal: skuCacheUpdate.total,
+              };
+              if (msg.parseDiagnostics && msg.parseDiagnostics.enrichment) {
+                msg.parseDiagnostics.enrichment = msg.enrichmentDiagnostics;
+              }
             }
+            const existingRows = dashboardStore.get(`accounts.${dashboardAccountId}.snapshot`, []);
+            rows = preserveExistingDashboardProductNames(rows, existingRows);
+            const existingDebugSummary = dashboardDebugSummaryForRange(existingRows, rangeFrom, rangeTo, null);
+            const incomingDebugSummary = dashboardDebugSummaryForRange(rows, rangeFrom, rangeTo, msg.parseDiagnostics);
+            const persisted = persistDashboardSnapshot(dashboardAccountId, {
+              snapshot: rows,
+              dateFrom: rangeFrom,
+              dateTo: rangeTo,
+              exportDateFrom: msg.exportDateFrom || "",
+              exportDateTo: msg.exportDateTo || "",
+              snapshotMonth: msg.snapshotMonth || "",
+              parseDiagnostics: msg.parseDiagnostics || null,
+              enrichmentDiagnostics: msg.enrichmentDiagnostics || null,
+            }, { source: "live-fetch", timestampKey: "autoFetchTimestamp" });
+            enriched = persisted.enriched || 0;
+            const savedDebugSummary = dashboardDebugSummaryForRange(persisted.mergedRows, rangeFrom, rangeTo, null);
+            const debugLines = dashboardDebugLines(
+              accountLabel,
+              rangeFrom,
+              rangeTo,
+              msg.exportDateFrom || "",
+              msg.exportDateTo || "",
+              existingDebugSummary,
+              incomingDebugSummary,
+              savedDebugSummary
+            );
+            debugLines.forEach((line) => {
+              console.log(line);
+              mainWindow.webContents.send("bot-log", line);
+            });
+            console.log(`[Dashboard] Snapshot replaced ${rangeFrom || "?"}..${rangeTo || "?"} for ${dashboardAccountId}: ${rows.length} fetched, ${persisted.mergedRows.length} stored`);
+            if (skuCacheUpdate.added || skuCacheUpdate.updated) {
+              console.log(`[Dashboard] SKU name cache updated for ${dashboardAccountId}: +${skuCacheUpdate.added}, changed=${skuCacheUpdate.updated}, total=${skuCacheUpdate.total}`);
+            }
+            if (persisted.enriched > 0) console.log(`[Analytics] Enriched ${persisted.enriched} stored orders from dashboard fetch`);
           }
-          const existingRows = dashboardStore.get(`accounts.${dashboardAccountId}.snapshot`, []);
-          rows = preserveExistingDashboardProductNames(rows, existingRows);
-          const existingDebugSummary = dashboardDebugSummaryForRange(existingRows, rangeFrom, rangeTo, null);
-          const incomingDebugSummary = dashboardDebugSummaryForRange(rows, rangeFrom, rangeTo, msg.parseDiagnostics);
-          const persisted = persistDashboardSnapshot(dashboardAccountId, {
-            snapshot: rows,
-            dateFrom: rangeFrom,
-            dateTo: rangeTo,
-            exportDateFrom: msg.exportDateFrom || "",
-            exportDateTo: msg.exportDateTo || "",
-            snapshotMonth: msg.snapshotMonth || "",
-            parseDiagnostics: msg.parseDiagnostics || null,
-            enrichmentDiagnostics: msg.enrichmentDiagnostics || null,
-          }, { source: "live-fetch", timestampKey: "autoFetchTimestamp" });
-          const savedDebugSummary = dashboardDebugSummaryForRange(persisted.mergedRows, rangeFrom, rangeTo, null);
-          const debugLines = dashboardDebugLines(
-            accountLabel,
-            rangeFrom,
-            rangeTo,
-            msg.exportDateFrom || "",
-            msg.exportDateTo || "",
-            existingDebugSummary,
-            incomingDebugSummary,
-            savedDebugSummary
-          );
-          debugLines.forEach((line) => {
-            console.log(line);
-            mainWindow.webContents.send("bot-log", line);
-          });
-          console.log(`[Dashboard] Snapshot replaced ${rangeFrom || "?"}..${rangeTo || "?"} for ${dashboardAccountId}: ${rows.length} fetched, ${persisted.mergedRows.length} stored`);
-          if (skuCacheUpdate.added || skuCacheUpdate.updated) {
-            console.log(`[Dashboard] SKU name cache updated for ${dashboardAccountId}: +${skuCacheUpdate.added}, changed=${skuCacheUpdate.updated}, total=${skuCacheUpdate.total}`);
-          }
-          if (persisted.enriched > 0) console.log(`[Analytics] Enriched ${persisted.enriched} stored orders from dashboard fetch`);
+          msg._analyticsEnriched = enriched;
         } catch (e) {
           console.error("[Dashboard] Failed to save snapshot:", e.message);
           monitoring.captureException(e, { operation: "dashboard.fetch.saveSnapshot", extra: { accountId: dashboardAccountId } });
@@ -3666,16 +3857,21 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo } 
         safeResolve({
           success: true,
           rows: rows.length,
+          enriched: Number(msg._analyticsEnriched || 0),
           snapshotMonth: msg.snapshotMonth,
           parseDiagnostics: msg.parseDiagnostics || null,
           enrichmentDiagnostics: msg.enrichmentDiagnostics || (msg.parseDiagnostics && msg.parseDiagnostics.enrichment) || null,
           debugSummary: dashboardDebugSummaryForRange(rows, msg.dateFrom || dateFrom || "", msg.dateTo || dateTo || "", msg.parseDiagnostics),
-          lastStage
+          lastStage,
+          recentLogs: childLogTail.slice(-10)
         });
       } else if (msg.type === "error") {
-        safeResolve({ success: false, error: msg.error, lastStage });
+        safeResolve({ success: false, error: msg.error, lastStage, recentLogs: childLogTail.slice(-10) });
       } else if (msg.type === "export-timestamp") {
         lastExportTimestamp = msg.timestamp || Date.now();
+      } else if (msg.type === "debug-screenshot") {
+        const message = `Debug screenshot saved for ${msg.label || "dashboard fetch"}: ${msg.path || ""}`;
+        forwardDashboardLog(message, { stream: "debug" });
       } else if (msg.type === "taager-restart") {
         mainWindow.webContents.send("bot-log", `[Dashboard:${accountLabel}] Restarting export after ${msg.waitSeconds}s. Reason: ${msg.reason || "export retry"}`);
         mainWindow.webContents.send("bot-taager-restart", { ...msg, accountId: dashboardAccountId, accountLabel });
@@ -3701,10 +3897,10 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo } 
 
     child.on("error", (err) => {
       monitoring.captureException(err, { operation: "dashboard.fetch.childProcess", extra: { accountId: dashboardAccountId } });
-      safeResolve({ success: false, error: err.message, lastStage });
+      safeResolve({ success: false, error: err.message, lastStage, recentLogs: childLogTail.slice(-10) });
     });
     child.on("exit", (code) => {
-      if (!resolved && !killedByWatchdog) safeResolve({ success: false, error: `Process exited with code ${code}`, lastStage });
+      if (!resolved && !killedByWatchdog) safeResolve({ success: false, error: `Process exited with code ${code}`, lastStage, recentLogs: childLogTail.slice(-10) });
     });
   });
 });
@@ -5200,6 +5396,10 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
         if (msg.type === "export-timestamp") {
           lastExportTimestamp = msg.timestamp;
         }
+        if (msg.type === "debug-screenshot") {
+          mainWindow.webContents.send("bot-log", `[Debug] Screenshot saved for ${msg.label || "bot"}: ${msg.path || ""}`);
+          log.info(`[Bot] Debug screenshot saved for ${msg.label || "bot"}: ${msg.path || ""}`);
+        }
         if (msg.type === "stage") {
           mainWindow.webContents.send("bot-log", `[Stage:${msg.flow || "runner"}] ${msg.stage || "unknown"} ${msg.status ? `(${msg.status})` : ""}${msg.message ? ` - ${msg.message}` : ""}`);
         }
@@ -5340,6 +5540,10 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
         if (msg.type === "export-timestamp") {
           lastExportTimestamp = msg.timestamp;
           accountExportTimestamps[idx] = msg.timestamp;
+        }
+        if (msg.type === "debug-screenshot") {
+          mainWindow.webContents.send("bot-log", `${prefix}[Debug] Screenshot saved for ${msg.label || "bot"}: ${msg.path || ""}`);
+          log.info(`${prefix}[Bot] Debug screenshot saved for ${msg.label || "bot"}: ${msg.path || ""}`);
         }
         const tagged = { ...msg, accountId, accountEmail, accountLabel, accountIdx: idx, totalAccounts: accountsToRun.length };
         if (msg.type === "stage") {

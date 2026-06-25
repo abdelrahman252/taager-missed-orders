@@ -31,6 +31,7 @@
     "verify:stage2-recovery": "node scripts/verify-stage2-zoom-sync-recovery.js",
     "verify:stage3-recovery": "node scripts/verify-stage3-support-recovery.js",
     "verify:admin-cache-reset": "node scripts/verify-admin-cache-reset.js",
+    "verify:monthly-cleanup": "node scripts/verify-monthly-data-cleanup.js",
     "verify:app-zoom": "node scripts/verify-app-zoom.js",
     "verify:dashboard-year": "node scripts/verify-dashboard-current-year.js",
     "verify:license-warning": "node scripts/verify-license-expiry-warning.js",

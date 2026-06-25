@@ -335,7 +335,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         <td class="res-phone">${o.phone || "—"}</td>
         <td class="res-product" title="${(o.productName||"").replace(/"/g,"")}">${o.productName || "—"}</td>
         <td class="res-number">${o.qty || 1}</td>
-        <td class="res-number res-price">${o.unitPrice || "—"}</td>
+        <td class="res-number res-price">${o.subtotal || "—"}</td>
         <td class="res-date" title="${String(createdAt).replace(/"/g,"")}">${createdAt}</td>
         <td class="res-city" title="${String(o.city || "").replace(/"/g,"")}">${o.city || "—"}</td>
       </tr>`;

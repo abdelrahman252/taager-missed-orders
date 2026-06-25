@@ -89,7 +89,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
     marketingState &&
     marketingState.status === "connected" &&
     marketingState.summary &&
-    !marketingState.manualOverride
+    !marketingState.manualOverride &&
+    Number(marketingState.summary.adSpend || 0) > 0
   );
   var sourceBreakdown =
     marketingState &&

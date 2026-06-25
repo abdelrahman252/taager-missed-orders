@@ -19,6 +19,9 @@
       to: "إلى",
       apply: "تطبيق"
     },
+    actions: {
+      updateUploadedOrders: "\u062a\u062d\u062f\u064a\u062b \u0627\u0644\u0637\u0644\u0628\u0627\u062a \u0627\u0644\u0645\u0631\u0641\u0648\u0639\u0629"
+    },
     runBanner: {
       singleRun: "عرض تشغيل واحد من",
       showAll: "✕ عرض الكل"

@@ -67,7 +67,7 @@
     if (s === 'in shipping' || s === 'shipping' || s === 'في الشحن' || s === 'تم الشحن') return 'shipping';
     if (s === 'failed' || s === 'canceled' || s === 'cancelled' || s === 'ملغى' || s === 'مرتجع' || s === 'فشلت') return 'failed';
     if (s === 'awaiting confirmation' || s === 'pending' || s === 'بانتظار التأكيد') return 'pending';
-    if (s === 'confirmed' || s === 'مؤكد') return 'confirmed';
+    if (s === 'confirmed' || s === 'مؤكد' || s === 'تم التأكيد') return 'confirmed';
     if (s === 'under processing' || s === 'قيد المعالجة') return 'processing';
     if (s === 'waiting' || s === 'قيد الانتظار' || s === 'بانتظار الشحن') return 'waiting';
     return 'other';

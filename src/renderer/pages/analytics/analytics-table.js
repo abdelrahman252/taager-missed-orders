@@ -33,7 +33,25 @@ function renderOrdersExplorer(container, runs, allRuns) {
   _tableState.accountFilter = "";
   _tableState.sourceFilter  = "";
 
-  const statuses  = [...new Set(orders.map(o => o.orderStatus).filter(Boolean))].sort();
+  const statuses = [];
+  const statusLabelsSeen = new Set();
+  orders.forEach(o => {
+    const raw = o.orderStatus;
+    if (!raw) return;
+    const bucket = window.TaagerStatus ? window.TaagerStatus.normalize(raw).bucket : raw;
+    if (!statusLabelsSeen.has(bucket)) {
+      statusLabelsSeen.add(bucket);
+      statuses.push(raw);
+    }
+  });
+  statuses.sort((a, b) => {
+    if (window.TaagerStatus) {
+      const orderA = window.TaagerStatus.statusInfo(a).order || 999;
+      const orderB = window.TaagerStatus.statusInfo(b).order || 999;
+      return orderA - orderB;
+    }
+    return a.localeCompare(b);
+  });
   const accountMap = new Map();
   orders.forEach(o => {
     const key = accountKey(o);
@@ -104,7 +122,10 @@ function renderOrdersExplorer(container, runs, allRuns) {
   function renderStatusSelect() {
     const wrap = container.querySelector("#explorer-status-filter-wrap");
     if (!wrap) return;
-    const statusOptions = [{ value: "", label: window.t_anl('table.statusAll') }].concat(statuses.map(s => ({ value: s, label: analyticsStatusLabel(s) })));
+    const statusOptions = [{ value: "", label: window.t_anl('table.statusAll') }].concat(statuses.map(s => {
+      const bucket = window.TaagerStatus ? window.TaagerStatus.normalize(s).bucket : s;
+      return { value: bucket, label: analyticsStatusLabel(s) };
+    }));
     renderCustomSelect(wrap, statusOptions, _tableState.statusFilter, function(val) {
       _tableState.statusFilter = val;
       _tableState.page = 1;
@@ -196,7 +217,12 @@ function _applyFiltersAndRender(container) {
     });
   }
 
-  if (s.statusFilter)  results = results.filter(o => o.orderStatus  === s.statusFilter);
+  if (s.statusFilter) {
+    results = results.filter(o => {
+      const bucket = window.TaagerStatus ? window.TaagerStatus.normalize(o.orderStatus).bucket : o.orderStatus;
+      return bucket === s.statusFilter;
+    });
+  }
   if (s.accountFilter) results = results.filter(o => accountMatches(o, s.accountFilter));
   if (s.sourceFilter)  results = results.filter(o => o.source       === s.sourceFilter);
 

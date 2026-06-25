@@ -6,6 +6,7 @@
   var requestSeq = {};
   var latest = {};
   var prewarmKeys = {};
+  var DEFAULT_QUERY_TIMEOUT_MS = 25000;
 
   function loadFlags() {
     if (flagsPromise) return flagsPromise;
@@ -60,6 +61,38 @@
     };
   }
 
+  function timeoutResult(kind, requestKey, seq, payload, timeoutMs, registerTimer) {
+    return new Promise(function (resolve) {
+      var timer = window.setTimeout(function () {
+        if (requestSeq[requestKey] !== seq) {
+          resolve({ ok: false, stale: true });
+          return;
+        }
+        var scope = {
+          accountIds: payload.accountIds || [],
+          dateFrom: payload.dateFrom || "",
+          dateTo: payload.dateTo || "",
+          deliveredDateMode: payload.deliveredDateMode || ""
+        };
+        console.warn("[DashboardQuery] timed out", {
+          kind: kind,
+          requestChannel: payload.requestChannel || "active",
+          timeoutMs: timeoutMs,
+          scope: scope
+        });
+        resolve({
+          ok: false,
+          error: "DASHBOARD_QUERY_TIMEOUT",
+          timeout: true,
+          timeoutMs: timeoutMs,
+          kind: kind,
+          scope: scope
+        });
+      }, timeoutMs);
+      if (typeof registerTimer === "function") registerTimer(timer);
+    });
+  }
+
   function query(kind, params, data) {
     if (!window.api || typeof window.api.queryDashboardData !== "function") {
       return Promise.resolve({ ok: false, error: "DASHBOARD_QUERY_UNAVAILABLE" });
@@ -68,10 +101,26 @@
     var seq = (requestSeq[requestKey] || 0) + 1;
     requestSeq[requestKey] = seq;
     var payload = Object.assign({ kind: kind }, scopePayload(data), params || {});
-    return window.api.queryDashboardData(payload).then(function (result) {
+    var timeoutMs = Number(params && params.timeoutMs || DEFAULT_QUERY_TIMEOUT_MS);
+    var timeoutTimer = null;
+    return Promise.race([
+      window.api.queryDashboardData(payload),
+      timeoutResult(kind, requestKey, seq, payload, timeoutMs, function (timer) { timeoutTimer = timer; })
+    ]).then(function (result) {
       if (requestSeq[requestKey] !== seq) return { ok: false, stale: true };
+      if (result && result.timeout) requestSeq[requestKey] = (requestSeq[requestKey] || 0) + 1;
       if (result && result.ok) latest[kind] = result;
       return result;
+    }).catch(function (error) {
+      if (requestSeq[requestKey] !== seq) return { ok: false, stale: true };
+      console.warn("[DashboardQuery] failed", {
+        kind: kind,
+        requestChannel: payload.requestChannel || "active",
+        error: error && error.message ? error.message : String(error || "unknown")
+      });
+      return { ok: false, error: error && error.message ? error.message : String(error || "DASHBOARD_QUERY_FAILED"), kind: kind };
+    }).finally(function () {
+      if (timeoutTimer) window.clearTimeout(timeoutTimer);
     });
   }
 

@@ -129,12 +129,21 @@ function createEasyOrdersExportFlow(options = {}) {
   const config = options.config || {};
   const log = typeof options.log === "function" ? options.log : () => {};
   const emit = typeof options.emit === "function" ? options.emit : () => {};
+  const flow = options.flow || "easyorders";
+  const exportAttempts = Number(options.exportAttempts || 3);
+  const exportNotificationPolls = Number(options.exportNotificationPolls || 4);
+  const exportNotificationPollMs = Number(options.exportNotificationPollMs || 2500);
+  const exportCooldownMs = Number(options.exportCooldownMs || 6 * 60 * 1000);
   let identityCache = {
     verified: false,
     email: "",
     store: "",
     where: "",
   };
+
+  function stage(stageName, status, message, extra = {}) {
+    emit({ type: "stage", flow, stage: stageName, status, message, ...extra });
+  }
 
   function normalizeEmail(value) {
     return String(value || "").trim().toLowerCase();
@@ -188,7 +197,9 @@ function createEasyOrdersExportFlow(options = {}) {
       await page.screenshot({ path: filePath, fullPage: false });
       log(`[DEBUG] Screenshot saved: ${filePath}`);
       emit({ type: "debug-screenshot", path: filePath, label });
+      return filePath;
     } catch (_) {}
+    return "";
   }
 
   async function gotoWithNetworkRetries(page, url, label, opts = {}) {
@@ -523,9 +534,88 @@ function createEasyOrdersExportFlow(options = {}) {
     }, { keyword });
   }
 
+  async function summarizeNotifications(page, keyword) {
+    return page.evaluate(({ keyword }) => {
+      const normalize = (value) => String(value || "").replace(/\s+/g, " ").trim();
+      const lower = (value) => normalize(value).toLowerCase();
+      const rows = Array.from(document.querySelectorAll("tr, [role='row'], li, .MuiCard-root"))
+        .map((row) => {
+          const text = normalize(row.innerText || row.textContent || "");
+          const links = Array.from(row.querySelectorAll("a[href]"))
+            .map((link) => String(link.href || ""))
+            .filter(Boolean);
+          return { text, links };
+        })
+        .filter((row) => row.text)
+        .slice(0, 8);
+      const matchingRows = rows.filter((row) => {
+        const text = lower(row.text);
+        if (keyword === "missed-orders") {
+          return text.includes("missed orders") || text.includes("missed order");
+        }
+        return text.includes("orders exported") ||
+          text.includes("orders export") ||
+          text.includes("created orders excel") ||
+          text.includes("excel") ||
+          text.includes("orders");
+      });
+      return {
+        url: window.location.href,
+        title: document.title || "",
+        rowCount: rows.length,
+        matchingCount: matchingRows.length,
+        firstRows: rows.slice(0, 5).map((row) => row.text.slice(0, 220)),
+        firstMatchingRows: matchingRows.slice(0, 3).map((row) => row.text.slice(0, 260)),
+      };
+    }, { keyword }).catch((error) => ({
+      error: error && error.message ? error.message : String(error || "notification summary failed"),
+    }));
+  }
+
+  async function waitForExportLink(page, keyword, attempt) {
+    let lastSummary = null;
+    for (let poll = 1; poll <= exportNotificationPolls; poll++) {
+      stage("easyorders.notifications", "started", `Checking notifications ${poll}/${exportNotificationPolls}`, {
+        attempt,
+        maxAttempts: exportAttempts,
+        poll,
+        maxPolls: exportNotificationPolls,
+      });
+      await reloadWithNetworkRetries(page, "EasyOrders notifications");
+      await page.waitForTimeout(exportNotificationPollMs);
+      await ensureEnglish(page).catch((error) => {
+        log(`EasyOrders notification language check skipped: ${error.message}`);
+      });
+      const result = await findExportLink(page, keyword);
+      lastSummary = await summarizeNotifications(page, keyword);
+      log(`EasyOrders notifications poll ${poll}/${exportNotificationPolls} for ${keyword}: ` +
+        `matches=${lastSummary && lastSummary.matchingCount != null ? lastSummary.matchingCount : "?"}, ` +
+        `rows=${lastSummary && lastSummary.rowCount != null ? lastSummary.rowCount : "?"}, url=${page.url()}`);
+      if (lastSummary && Array.isArray(lastSummary.firstMatchingRows) && lastSummary.firstMatchingRows.length) {
+        log(`EasyOrders notification candidates: ${lastSummary.firstMatchingRows.join(" | ")}`);
+      }
+      if (result && result.href) {
+        stage("easyorders.notifications", "ok", "Export notification link found", {
+          attempt,
+          poll,
+          notificationText: result.text || "",
+        });
+        return { href: result.href, summary: lastSummary };
+      }
+    }
+    return { href: "", summary: lastSummary };
+  }
+
   async function triggerExport(page, exportFromDate, keyword) {
     const pageUrl = keyword === "missed-orders" ? "https://app.easy-orders.net/#/missed-orders" : "https://app.easy-orders.net/#/orders";
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    let lastFailure = "";
+    for (let attempt = 1; attempt <= exportAttempts; attempt++) {
+      stage("easyorders.export.attempt", "started", `Attempt ${attempt}/${exportAttempts} for ${keyword}`, {
+        attempt,
+        maxAttempts: exportAttempts,
+        keyword,
+        exportFromDate: formatDataDay(exportFromDate),
+      });
       await gotoWithNetworkRetries(page, pageUrl, `EasyOrders ${keyword}`);
       await page.waitForTimeout(1500);
       try {
@@ -535,6 +625,7 @@ function createEasyOrdersExportFlow(options = {}) {
         await gotoWithNetworkRetries(page, pageUrl, `EasyOrders ${keyword} after login`);
       }
       await ensureEnglish(page, { force: true });
+      stage("easyorders.export.dialog", "started", `Opening export dialog for ${keyword}`);
       const exportButton = page.locator('button.MuiButton-outlined:has-text("Export"), main button:has-text("Export"), button:has-text("Export")').first();
       await exportButton.waitFor({ state: "visible", timeout: 15000 });
       await exportButton.click();
@@ -542,6 +633,7 @@ function createEasyOrdersExportFlow(options = {}) {
       await dialog.waitFor({ state: "visible", timeout: 8000 });
       const dateInputs = dialog.locator(".react-datepicker-wrapper input");
       await dateInputs.first().click();
+      stage("easyorders.export.date", "started", `Selecting export start date ${formatDataDay(exportFromDate)}`);
       await pickDate(page, exportFromDate);
       await dialog.locator("h2").click().catch(() => {});
       await dialog.locator(".MuiDialogActions-root button").click();
@@ -549,34 +641,52 @@ function createEasyOrdersExportFlow(options = {}) {
       await page.waitForTimeout(1000);
       const toast = await page.locator('[role="alert"], .MuiSnackbarContent-root, .Toastify__toast').innerText().catch(() => "");
       const rateLimited = /5 minutes|5 دقائق|every|abuse/i.test(String(toast || ""));
+      if (toast) log(`EasyOrders export toast: ${String(toast).replace(/\s+/g, " ").trim()}`);
+      stage(
+        "easyorders.export.requested",
+        rateLimited ? "warning" : "ok",
+        rateLimited ? "EasyOrders asked us to wait before exporting again" : "Export request sent to EasyOrders",
+        { attempt, toast: String(toast || "").slice(0, 300) }
+      );
       if (!page.url().includes("notifications")) {
         await gotoWithNetworkRetries(page, "https://app.easy-orders.net/#/notifications", "EasyOrders notifications");
       }
-      await reloadWithNetworkRetries(page, "EasyOrders notifications");
-      await page.waitForTimeout(2500);
-      await reloadWithNetworkRetries(page, "EasyOrders notifications");
-      await page.waitForTimeout(2500);
-      await ensureEnglish(page);
-      let result = rateLimited ? null : await findExportLink(page, keyword);
-      if (result && result.href) {
+      const linkResult = rateLimited ? { href: "", summary: await summarizeNotifications(page, keyword) } : await waitForExportLink(page, keyword, attempt);
+      if (linkResult && linkResult.href) {
         emit({ type: "export-timestamp", timestamp: Date.now() });
-        return result.href;
+        return linkResult.href;
       }
-      if (attempt < 3) {
-        const waitMs = 6 * 60 * 1000;
-        emit({ type: "cooldown", seconds: waitMs / 1000, attempt, maxAttempts: 3 });
+      const screenshotPath = await debugScreenshot(page, `easy-orders-${keyword}-notification-missing-attempt-${attempt}`);
+      const summary = linkResult && linkResult.summary || {};
+      lastFailure = rateLimited
+        ? `rate limited by EasyOrders toast: ${String(toast || "unknown").replace(/\s+/g, " ").trim()}`
+        : `notification link not found; rows=${summary.rowCount == null ? "?" : summary.rowCount}, matches=${summary.matchingCount == null ? "?" : summary.matchingCount}`;
+      log(`EasyOrders export attempt ${attempt}/${exportAttempts} did not produce a download link for ${keyword}: ${lastFailure}${screenshotPath ? ` | screenshot=${screenshotPath}` : ""}`);
+      stage("easyorders.notifications", attempt < exportAttempts ? "warning" : "failed", lastFailure, {
+        attempt,
+        maxAttempts: exportAttempts,
+        screenshotPath,
+        notificationSummary: summary,
+      });
+      if (attempt < exportAttempts) {
+        const waitMs = exportCooldownMs;
+        emit({ type: "cooldown", seconds: waitMs / 1000, attempt, maxAttempts: exportAttempts });
         await page.waitForTimeout(waitMs);
       }
     }
-    throw new Error(`EasyOrders export failed after 3 attempts for "${keyword}"`);
+    throw new Error(`EASY_ORDERS_EXPORT_STUCK: ${keyword} failed after ${exportAttempts} attempts. Last state: ${lastFailure || "unknown"}`);
   }
 
   async function download(page, url) {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
+        stage("easyorders.download", "started", `Downloading EasyOrders export (${attempt}/3)`);
         const response = await page.context().request.get(url, { timeout: 60000 });
-        return Buffer.from(await response.body());
+        const buffer = Buffer.from(await response.body());
+        stage("easyorders.download", "ok", `Downloaded ${buffer.length} bytes`, { bytes: buffer.length });
+        return buffer;
       } catch (error) {
+        stage("easyorders.download", attempt >= 3 ? "failed" : "retry", error.message || String(error), { attempt, maxAttempts: 3 });
         if (!isNetworkNavigationError(error) || attempt >= 3) throw error;
         await page.waitForTimeout(8000);
       }

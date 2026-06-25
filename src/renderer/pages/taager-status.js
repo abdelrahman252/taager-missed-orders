@@ -46,6 +46,7 @@
   alias("معلق مؤقتا", "on_hold");
   alias("مسلمة", "delivered");
   alias("مؤكد", "confirmed");
+  alias("تم التأكيد", "confirmed");
   alias("بانتظار التأكيد", "received");
   alias("قيد المعالجة", "received");
   alias("بانتظار الشحن", "waiting");

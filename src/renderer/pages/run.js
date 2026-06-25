@@ -539,7 +539,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
                   <td style="color:var(--text2);text-align:center">${i + 1}</td>
                   <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.productName||"").replace(/"/g,"")}">${r.productName || "—"}</td>
                   <td style="font-weight:700;text-align:center">${r.qty}</td>
-                  <td style="color:var(--success);font-weight:600">${r.unitPrice || "—"}</td>
+                  <td style="color:var(--success);font-weight:600">${r.subtotal || "—"}</td>
                   <td style="color:var(--text2)">${r.date || "—"}</td>
                   <td style="direction:rtl;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.city || "—"}</td>
                   <td style="direction:rtl;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name || "—"}</td>
@@ -1033,7 +1033,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
               <td style="color:var(--text2);text-align:center">${i+1}</td>
               <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.productName||"").replace(/"/g,"")}">${r.productName||"—"}</td>
               <td style="font-weight:700;text-align:center">${r.qty||1}</td>
-              <td style="color:var(--success);font-weight:600">${r.unitPrice||"—"}</td>
+              <td style="color:var(--success);font-weight:600">${r.subtotal||"—"}</td>
               <td style="color:var(--text2)">${r.date||"—"}</td>
               <td style="direction:rtl;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.city||"—"}</td>
               <td style="direction:rtl;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name||"—"}</td>
@@ -1064,7 +1064,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
                 <td style="color:var(--text2);text-align:center">${i+1}</td>
                 <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.productName||"").replace(/"/g,"")}">${r.productName||"—"}</td>
                 <td style="font-weight:700;text-align:center">${r.qty||1}</td>
-                <td style="color:var(--success);font-weight:600">${r.unitPrice||"—"}</td>
+                <td style="color:var(--success);font-weight:600">${r.subtotal||"—"}</td>
                 <td style="color:var(--text2)">${r.date||"—"}</td>
                 <td style="direction:rtl;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.city||"—"}</td>
                 <td style="direction:rtl;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name||"—"}</td>

@@ -3,6 +3,9 @@
   window.TAAGER_LOCALES = window.TAAGER_LOCALES || {};
   window.TAAGER_LOCALES.en = window.TAAGER_LOCALES.en || {};
   window.TAAGER_LOCALES.en.operations = {
+    actions: {
+      updateUploadedOrders: "Update Uploaded Orders"
+    },
     tour: {
       common: {
         quickGuide: "Quick Guide"

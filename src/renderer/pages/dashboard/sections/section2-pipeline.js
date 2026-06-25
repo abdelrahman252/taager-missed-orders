@@ -194,7 +194,7 @@ window.renderSection2 = function (mountEl, data, ctx) {
     if (s === 'canceled by you' || s === 'cancelled by you' || s === 'طلب ملغي بواسطتك') return 'canceled_by_you';
     if (s === 'failed' || s === 'مرتجع' || s === 'فشلت' || s === 'فشل التسليم' || s === 'تم التحقق من الإرجاع' || s === 'العميل رفض التأكيد') return 'failed';
     if (s === 'awaiting confirmation' || s === 'pending' || s === 'بانتظار التأكيد') return 'received';
-    if (s === 'confirmed' || s === 'مؤكد') return 'confirmed';
+    if (s === 'confirmed' || s === 'مؤكد' || s === 'تم التأكيد') return 'confirmed';
     if (s === 'under processing' || s === 'قيد المعالجة') return 'processing';
     if (s === 'waiting' || s === 'قيد الانتظار' || s === 'بانتظار الشحن') return 'waiting';
     return 'processing';

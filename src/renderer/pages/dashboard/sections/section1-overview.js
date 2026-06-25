@@ -227,7 +227,7 @@ window.renderSection1 = function (mountEl, data, ctx) {
     }
     var s = String(status || '').toLowerCase();
     if (s.indexOf('delivered') !== -1 || s.indexOf('مسلم') !== -1 || s.indexOf('تسليم') !== -1) return 'delivered';
-    if (s.indexOf('shipping') !== -1 || s.indexOf('confirmed') !== -1 || s.indexOf('processing') !== -1 || s.indexOf('شحن') !== -1 || s.indexOf('مؤكد') !== -1 || s.indexOf('معالجة') !== -1) return 'incoming';
+    if (s.indexOf('shipping') !== -1 || s.indexOf('confirmed') !== -1 || s.indexOf('processing') !== -1 || s.indexOf('شحن') !== -1 || s.indexOf('مؤكد') !== -1 || s.indexOf('تأكيد') !== -1 || s.indexOf('معالجة') !== -1) return 'incoming';
     if (s.indexOf('failed') !== -1 || s.indexOf('cancel') !== -1 || s.indexOf('ملغ') !== -1 || s.indexOf('فشل') !== -1 || s.indexOf('مرتجع') !== -1) return 'lost';
     return 'other';
   }
