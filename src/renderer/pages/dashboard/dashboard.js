@@ -94,6 +94,7 @@
     var marketingStatusLoads = {};
     var marketingSectionRefreshes = {};
     var activeMarketingSyncPromise = null;
+    var activeMarketingSyncKey = '';
 
     function esc(value) {
       if (window.TaagerUI && typeof window.TaagerUI.esc === 'function') return window.TaagerUI.esc(value);
@@ -218,7 +219,7 @@
 
         var activeSection = shellMount._dashboardActiveSection || 'master';
         var shouldPrimeMarketing = sectionNeedsMarketing(activeSection);
-        if (!shouldPrimeMarketing) {
+        if (!shouldPrimeMarketing && !activeMarketingSyncPromise) {
           dashData._loading = false;
           window.dashboardGeoData = dashData;
           if (typeof window.refreshDashboardShell === 'function') {
@@ -241,7 +242,10 @@
           ensureMarketingStatusLoaded(dashData).catch(function () { return null; }),
           marketingPromise
         ]).then(function () {
-          if (activeMarketingSyncPromise === marketingPromise) activeMarketingSyncPromise = null;
+          if (activeMarketingSyncPromise === marketingPromise) {
+            activeMarketingSyncPromise = null;
+            activeMarketingSyncKey = '';
+          }
           dashData._loading = false;
           if (!shellMount.isConnected) {
             if (readyResolve) readyResolve(dashData);
@@ -269,7 +273,7 @@
       return readyPromise;
     }
 
-    function triggerMarketingSync() {
+    function triggerMarketingSync(reason) {
       var period = window.DashboardPeriodState ? window.DashboardPeriodState.get() : {};
       var activeId = window.getActiveAccountId ? window.getActiveAccountId() : '__all__';
       var roi = window.DashboardRoiState ? window.DashboardRoiState.get(activeId, {}) : {};
@@ -282,15 +286,25 @@
         mode: 'incremental'
       };
       if (store && typeof store.sync === 'function' && syncPayload.dateFrom && syncPayload.dateTo) {
-        console.log('[Marketing] Loading connections before background sync on dashboard settings change:', activeId, syncPayload);
+        var syncKey = [
+          activeId || '__all__',
+          syncPayload.dateFrom,
+          syncPayload.dateTo,
+          syncPayload.targetCurrency,
+          syncPayload.egpRate,
+          syncPayload.mode
+        ].join('|');
+        if (activeMarketingSyncPromise && activeMarketingSyncKey === syncKey) return activeMarketingSyncPromise;
+        console.log('[Marketing] Loading connections before dashboard auto-sync:', activeId, reason || 'dashboard', syncPayload);
         var connectionPromise = typeof store.load === 'function'
           ? store.load(activeId).catch(function (error) {
               console.warn('[Marketing] Could not load connections before dashboard auto-sync:', error);
               return null;
             })
           : Promise.resolve(null);
+        activeMarketingSyncKey = syncKey;
         activeMarketingSyncPromise = connectionPromise.then(function () {
-          console.log('[Marketing] Triggering background sync on dashboard settings change for account:', activeId, syncPayload);
+          console.log('[Marketing] Triggering dashboard auto-sync for account:', activeId, reason || 'dashboard', syncPayload);
           return store.sync(activeId, syncPayload);
         }).catch(function(e) {
           console.warn('[Marketing] Dashboard auto-sync failed:', e);
@@ -301,9 +315,17 @@
       return Promise.resolve();
     }
 
+    function syncMarketingAndRunAggregator(showLoader, reason) {
+      triggerMarketingSync(reason);
+      return runAggregator(showLoader);
+    }
+
+    window.syncDashboardMarketingOnOpen = function () {
+      return syncMarketingAndRunAggregator(true, 'dashboard-open');
+    };
+
     function handlePeriodChange() {
-      triggerMarketingSync();
-      runAggregator(true);
+      syncMarketingAndRunAggregator(true, 'period-change');
     }
 
     function handleDeliveredDateModeChange() {
@@ -313,7 +335,7 @@
     window.renderDashboardShell(shellMount, dashData, {
       onAccountChange: function (accountId) {
         if (window.setActiveAccountId) window.setActiveAccountId(accountId);
-        runAggregator(true);
+        syncMarketingAndRunAggregator(true, 'account-change');
       },
       onPeriodChange: handlePeriodChange,
       onDeliveredDateModeChange: handleDeliveredDateModeChange,
@@ -325,8 +347,7 @@
             window.DashboardRoiState.set({ currency: value }, activeId, currentRoi);
           }
         }
-        triggerMarketingSync();
-        runAggregator(true);
+        syncMarketingAndRunAggregator(true, 'currency-change');
       },
       onStaticUpdateComplete: function () {
         runAggregator(true);
@@ -361,7 +382,10 @@
           ensureMarketingStatusLoaded(dashData).catch(function () { return null; }),
           marketingPromise
         ]).then(function () {
-          if (activeMarketingSyncPromise === marketingPromise) activeMarketingSyncPromise = null;
+          if (activeMarketingSyncPromise === marketingPromise) {
+            activeMarketingSyncPromise = null;
+            activeMarketingSyncKey = '';
+          }
           if (!shellMount.isConnected || shellMount._dashboardActiveSection !== sectionId) return;
           if (sectionHandlesMarketingState(sectionId)) return;
           dashData._version = ++dashVersion;
@@ -395,7 +419,7 @@
       window.TaagerPerf.end(dashboardMountTimer, { ok: true });
     }
 
-    var initialReady = runAggregator(false);
+    var initialReady = syncMarketingAndRunAggregator(false, 'dashboard-open');
     if (window.TaagerPremiumPreview) window.TaagerPremiumPreview.mount(el, 'dashboard');
     return initialReady;
   };

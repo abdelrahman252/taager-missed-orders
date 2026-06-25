@@ -1140,6 +1140,20 @@ function isDangerousTaagerError(error) {
     message.includes("credentials are missing");
 }
 
+function isBrowserClosedError(error) {
+  const message = String(error && error.message || error || "");
+  const lower = message.toLowerCase();
+  return message.includes("Target page, context or browser has been closed") ||
+    lower.includes("target closed") ||
+    lower.includes("page closed") ||
+    lower.includes("browser has been closed") ||
+    lower.includes("browser closed");
+}
+
+function dashboardAccountClosedMessage() {
+  return "DASHBOARD_ACCOUNT_BROWSER_CLOSED: Chrome was closed for this account. Skipping to the next account.";
+}
+
 function isRecoverableTaagerError(error, page) {
   if (isDangerousTaagerError(error)) return false;
   const message = String(error && error.message || error || "");
@@ -1157,9 +1171,7 @@ function isRecoverableTaagerError(error, page) {
     message.includes("TAAGER_TARGET_TIMEOUT") ||
     message.includes("TAAGER_PAGE_CLOSED") ||
     message.toLowerCase().includes("download") ||
-    message.includes("Target page, context or browser has been closed") ||
-    message.toLowerCase().includes("page closed") ||
-    message.toLowerCase().includes("browser has been closed");
+    isBrowserClosedError(error);
 }
 
 async function recoverTaagerForRetry(page, stage, targetPath, error, attempt, maxAttempts) {
@@ -1168,6 +1180,10 @@ async function recoverTaagerForRetry(page, stage, targetPath, error, attempt, ma
   log(`Taager ${stage} attempt ${attempt}/${maxAttempts} failed: ${reason}`);
   if (!isClosedAutomationPage(recoveryPage)) {
     await debugScreenshot(recoveryPage, `taager-${stage}-attempt-${attempt}`).catch(() => {});
+  }
+  if (isBrowserClosedError(error) || isClosedAutomationPage(recoveryPage)) {
+    log(`Taager ${stage}: Chrome was closed; failing this account so Dashboard Update can continue with the next account.`);
+    throw new Error(dashboardAccountClosedMessage());
   }
   if (!isRecoverableTaagerError(error, recoveryPage)) throw error;
   if (attempt >= maxAttempts) return recoveryPage;
@@ -1477,9 +1493,10 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
       exportDateTo: toDateKey(exportDateTo),
     });
   } catch (err) {
-    log(`FATAL: ${err.message}`);
-    emitStage("dashboard.fetch", "failed", err.message || String(err));
-    process.send && process.send({ type: "error", error: err.message });
+    const fatalMessage = isBrowserClosedError(err) ? dashboardAccountClosedMessage() : (err.message || String(err));
+    log(`FATAL: ${fatalMessage}`);
+    emitStage("dashboard.fetch", "failed", fatalMessage);
+    process.send && process.send({ type: "error", error: fatalMessage });
   } finally {
     await (activeContext || context).close().catch(() => {});
   }

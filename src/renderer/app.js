@@ -3480,6 +3480,17 @@ async function goToDashboard() {
   if (dashboardState.mounted) {
     showPage("page-dashboard");
     if (!dashboardState.invalid) {
+      if (typeof window.syncDashboardMarketingOnOpen === "function") {
+        const syncResult = window.syncDashboardMarketingOnOpen();
+        if (syncResult && typeof syncResult.then === "function") {
+          syncResult.then(() => {
+            perfMark("route:page-dashboard:data-ready");
+            TaagerPerf.measure("route:page-dashboard:click-to-data-ready", "route:page-dashboard:click", "route:page-dashboard:data-ready", { pageId: "page-dashboard", remount: false });
+          }).catch((err) => {
+            if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(err, { operation: "dashboard.reopenMarketingSync" });
+          });
+        }
+      }
       if (window.prewarmDashboardSections) window.prewarmDashboardSections();
       return;
     }
@@ -3677,6 +3688,14 @@ function _setDashboardFetchUi(state) {
 // ── Manual "Update Dashboard" button handler ──────────────────────────────
 // Fetches the selected dashboard scope, then refreshes connected marketing data.
 // Opening or filtering the Dashboard never invokes this live-update path.
+function _dashboardFetchUserError(error) {
+  const text = String(error || "UNKNOWN_ERROR");
+  if (text.includes("DASHBOARD_ACCOUNT_BROWSER_CLOSED")) {
+    return "Chrome was closed for this account; moved to the next account.";
+  }
+  return text;
+}
+
 async function _onRunForDashboard(selectedAccountIds, period, options) {
   options = options || {};
   if (!window._dashboardEnabled) {
@@ -3832,12 +3851,12 @@ async function _onRunForDashboard(selectedAccountIds, period, options) {
         const recentLogs = Array.isArray(fetchRes && fetchRes.recentLogs) && fetchRes.recentLogs.length
           ? ` Recent logs: ${fetchRes.recentLogs.slice(-3).join(" | ")}`
           : "";
-        failures.push({ accountId, label: accountLabels.get(accountId) || accountId, error: (fetchRes?.error || "UNKNOWN_ERROR") + recentLogs });
+        failures.push({ accountId, label: accountLabels.get(accountId) || accountId, error: _dashboardFetchUserError(fetchRes?.error || "UNKNOWN_ERROR") + recentLogs });
         console.warn(`[Dashboard] Manual fetch failed for ${accountId}:`, fetchRes?.error);
       }
     } catch (e) {
       markDashboardFetchActivity();
-      failures.push({ accountId, label: accountLabels.get(accountId) || accountId, error: e.message || "UNKNOWN_ERROR" });
+      failures.push({ accountId, label: accountLabels.get(accountId) || accountId, error: _dashboardFetchUserError(e.message || "UNKNOWN_ERROR") });
       console.warn(`[Dashboard] Manual fetch error for ${accountId}:`, e.message);
       if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(e, {
         operation: "dashboard.manualFetch.account",
