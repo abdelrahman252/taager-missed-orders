@@ -1420,6 +1420,12 @@
         }
       }
       value = mergePendingMarketingUpdate(previous, value);
+      if (previous && previous.limit && !(value && value.limit)) {
+        value = Object.assign({}, value, { limit: previous.limit });
+      }
+      if (previous && previous.limits && !(value && value.limits)) {
+        value = Object.assign({}, value, { limits: previous.limits });
+      }
       if (isMarketingAuthorizationCancelled(id, platform) && isPendingOnlyMarketingAuthorization(value)) {
         value = Object.assign({}, value, {
           status: 'disconnected',
