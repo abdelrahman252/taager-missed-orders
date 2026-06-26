@@ -4416,6 +4416,14 @@ function marketingResultLogSummary(result) {
       discoveredAccountCount: diagnostics.discoveredAccountCount,
       sessionAccountCount: diagnostics.sessionAccountCount,
       staleMappingPrunedCount: diagnostics.staleMappingPrunedCount,
+      staleMappingPruneReason: diagnostics.staleMappingPruneReason,
+      providerGroupCount: diagnostics.providerGroupCount,
+      providerRefs: diagnostics.providerRefs,
+      sourceProviderRefs: diagnostics.sourceProviderRefs,
+      providerOwnershipCorrectedCount: diagnostics.providerOwnershipCorrectedCount,
+      claimProviderKeyId: diagnostics.claimProviderKeyId,
+      claimProviderChanged: diagnostics.claimProviderChanged,
+      releaseProviderKeyId: diagnostics.releaseProviderKeyId,
     },
     summary: summary ? {
       adSpend: summary.adSpend,
@@ -4712,7 +4720,7 @@ async function callMarketingBackend(action, accountId, platform, range) {
   }
   const result = await supabaseFunctionRequest("windsor-marketing", {
     clientRequestId,
-    diagnosticsRequested: action === "connect" || action === "status",
+    diagnosticsRequested: true,
     action,
     mode: range && range.mode ? range.mode : undefined,
     platform,
