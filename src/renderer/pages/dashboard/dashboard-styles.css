@@ -4390,7 +4390,8 @@ button {
   color: var(--dash-text);
   font-size: 12px;
   font-weight: 900;
-  white-space: nowrap;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 #page-dashboard .dashboard-best-ndr-metric-good strong {

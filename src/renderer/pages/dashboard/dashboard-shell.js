@@ -87,6 +87,12 @@
     return value && value !== key ? value : fallback;
   }
 
+  function shellPick(en, ar) {
+    return window.dashboardI18n && typeof window.dashboardI18n.pick === 'function'
+      ? window.dashboardI18n.pick(en, ar || en)
+      : (isRtl() ? (ar || en) : en);
+  }
+
   function appText(key, fallback) {
     var value = window._t ? window._t(key) : key;
     return typeof value === 'string' && value !== key ? value : (fallback || value || key);
@@ -227,8 +233,8 @@
           '<button type="button" id="dashboard-best-ndr-btn" class="dashboard-best-ndr-btn" aria-expanded="false" aria-controls="dashboard-best-ndr-panel" disabled>' +
             '<span class="dashboard-best-ndr-icon">' + icon('trendingUp', 'currentColor') + '</span>' +
             '<span class="dashboard-best-ndr-copy">' +
-              '<span class="dashboard-best-ndr-label">Best NDR Cycle</span>' +
-              '<strong id="dashboard-best-ndr-summary">Scanning</strong>' +
+              '<span class="dashboard-best-ndr-label">' + esc(shellPick('Best NDR Cycle', 'أفضل دورة NDR')) + '</span>' +
+              '<strong id="dashboard-best-ndr-summary">' + esc(shellPick('Scanning', 'جار الفحص')) + '</strong>' +
             '</span>' +
           '</button>' +
           '<div id="dashboard-best-ndr-panel" class="dashboard-best-ndr-panel" hidden></div>' +
@@ -1041,10 +1047,10 @@
     return (Math.round(n * 10) / 10).toLocaleString('en-US', { maximumFractionDigits: 1 }) + '%';
   }
 
-  function signedPts(value) {
+  function signedPoints(value) {
     var n = Number(value || 0);
     var rounded = Math.round(n * 10) / 10;
-    return (rounded > 0 ? '+' : '') + rounded.toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' pts';
+    return (rounded > 0 ? '+' : '') + rounded.toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' ' + shellPick('percentage points', 'نقطة مئوية');
   }
 
   function countText(value) {
@@ -1086,22 +1092,22 @@
     if (!item || !item.name) return '';
     return '<div class="dashboard-best-ndr-driver">' +
       '<span>' + esc(label) + '</span>' +
-      '<strong>' + esc(item.name) + '</strong>' +
-      '<em>' + esc(pctText(item.ndrPct)) + ' NDR - ' + esc(countText(item.netOrders)) + ' orders</em>' +
+      '<strong data-i18n-preserve>' + esc(item.name) + '</strong>' +
+      '<em>' + esc(pctText(item.ndrPct)) + ' NDR - ' + esc(countText(item.netOrders)) + ' ' + esc(shellPick('orders', 'طلبات')) + '</em>' +
     '</div>';
   }
 
   function renderBestNdrPanel(result) {
     if (!result || result.status === 'empty') {
       return '<div class="dashboard-best-ndr-empty">' +
-        '<strong>No Best NDR Cycle yet</strong>' +
-        '<span>Update the dashboard for a monthly period with order data to scan the strongest cycle.</span>' +
+        '<strong>' + esc(shellPick('No Best NDR Cycle yet', 'لا توجد دورة NDR أفضل بعد')) + '</strong>' +
+        '<span>' + esc(shellPick('Update the dashboard for a monthly period with order data to scan the strongest cycle.', 'حدّث لوحة التحكم لفترة شهرية تحتوي على طلبات حتى يتم فحص أقوى دورة.')) + '</span>' +
       '</div>';
     }
     if (result.status === 'low_sample') {
       return '<div class="dashboard-best-ndr-empty">' +
-        '<strong>No trustworthy cycle found</strong>' +
-        '<span>Every ' + esc(result.cycleDays || 7) + '-day cycle is below the ' + esc(result.minSample || 30) + ' net-order minimum sample.</span>' +
+        '<strong>' + esc(shellPick('No trustworthy cycle found', 'لم يتم العثور على دورة موثوقة')) + '</strong>' +
+        '<span>' + esc(shellPick('Every', 'كل')) + ' ' + esc(result.cycleDays || 7) + ' ' + esc(shellPick('day cycle is below the', 'أيام أقل من حد')) + ' ' + esc(result.minSample || 30) + ' ' + esc(shellPick('net-order minimum sample.', 'صافي طلب كحد أدنى للعينة.')) + '</span>' +
       '</div>';
     }
     var best = result.best || {};
@@ -1109,32 +1115,32 @@
     var topCity = best.topCities && best.topCities[0];
     var topProduct = best.topProducts && best.topProducts[0];
     var failedCopy = best.failedDeltaPts < 0
-      ? 'Failure rate was ' + signedPts(best.failedDeltaPts) + ' below the period average.'
-      : 'Failure rate was ' + signedPts(best.failedDeltaPts) + ' versus the period average.';
+      ? shellPick('Failure rate was', 'نسبة الفشل كانت') + ' ' + signedPoints(best.failedDeltaPts) + ' ' + shellPick('below the whole-period average.', 'أقل من متوسط الفترة كلها.')
+      : shellPick('Failure rate was', 'نسبة الفشل كانت') + ' ' + signedPoints(best.failedDeltaPts) + ' ' + shellPick('versus the whole-period average.', 'مقارنة بمتوسط الفترة كلها.');
     return '<div class="dashboard-best-ndr-head">' +
-        '<span>Best cycle found</span>' +
+        '<span>' + esc(shellPick('Best cycle found', 'أفضل دورة تم العثور عليها')) + '</span>' +
         '<strong>' + esc(rangeText(best)) + '</strong>' +
       '</div>' +
       '<div class="dashboard-best-ndr-hero">' +
         '<div><span>NDR</span><strong>' + esc(pctText(best.ndrPct)) + '</strong></div>' +
-        '<p>' + esc(countText(best.delivered)) + ' delivered / ' + esc(countText(best.netOrders)) + ' net orders</p>' +
+        '<p>' + esc(countText(best.delivered)) + ' ' + esc(shellPick('delivered', 'مسلم')) + ' / ' + esc(countText(best.netOrders)) + ' ' + esc(shellPick('net orders', 'صافي طلب')) + '</p>' +
       '</div>' +
       '<div class="dashboard-best-ndr-metrics">' +
-        metricBox('Vs period avg', signedPts(best.upliftPts), best.upliftPts >= 0 ? 'good' : 'warn') +
-        metricBox('Period avg', pctText(avg.ndrPct), 'neutral') +
-        metricBox('Sample rule', countText(result.minSample) + '+ orders', 'info') +
+        metricBox(shellPick('Compared with whole period', 'مقارنة بالفترة كلها'), signedPoints(best.upliftPts), best.upliftPts >= 0 ? 'good' : 'warn') +
+        metricBox(shellPick('Whole-period NDR', 'NDR للفترة كلها'), pctText(avg.ndrPct), 'neutral') +
+        metricBox(shellPick('Minimum sample to trust', 'أقل عينة موثوقة'), countText(result.minSample) + '+ ' + shellPick('net orders', 'صافي طلب'), 'info') +
       '</div>' +
       '<div class="dashboard-best-ndr-why">' +
-        '<span class="dashboard-best-ndr-section-label">Why it won</span>' +
-        '<p>Strongest trustworthy ' + esc(result.cycleDays) + '-day NDR cycle in the selected period.</p>' +
+        '<span class="dashboard-best-ndr-section-label">' + esc(shellPick('Why it won', 'لماذا هي الأفضل')) + '</span>' +
+        '<p>' + esc(shellPick('Strongest trustworthy', 'أقوى دورة موثوقة لمدة')) + ' ' + esc(result.cycleDays) + ' ' + esc(shellPick('day NDR cycle in the selected period.', 'أيام لـ NDR داخل الفترة المختارة.')) + '</p>' +
         '<p>' + esc(failedCopy) + '</p>' +
-        entityLine('Top city', topCity) +
-        entityLine('Top product', topProduct) +
+        entityLine(shellPick('Top city', 'أفضل مدينة'), topCity) +
+        entityLine(shellPick('Top product', 'أفضل منتج'), topProduct) +
       '</div>' +
       '<div class="dashboard-best-ndr-actions">' +
-        '<button type="button" data-best-ndr-action="calculator">Use in Simulator</button>' +
-        '<button type="button" data-best-ndr-action="expected">Expected NDR</button>' +
-        '<button type="button" data-best-ndr-action="orders">Orders</button>' +
+        '<button type="button" data-best-ndr-action="compare-products">' + esc(shellPick('Compare Products', 'مقارنة المنتجات')) + '</button>' +
+        '<button type="button" data-best-ndr-action="expected">' + esc(shellPick('Expected NDR', 'NDR المتوقع')) + '</button>' +
+        '<button type="button" data-best-ndr-action="calculator">' + esc(shellPick('Use in Simulator', 'استخدم في المحاكي')) + '</button>' +
       '</div>';
   }
 
@@ -1159,7 +1165,7 @@
       shellEl._topbarExpectedNdrRangeKey = null;
       if (typeof opts.onDeliveredDateModeChange === 'function') opts.onDeliveredDateModeChange('expected');
       closeBestNdrPanel(shellEl);
-      toast('Best NDR Cycle applied as the Expected NDR range.', 'success');
+      toast(shellPick('Best NDR Cycle applied as the Expected NDR range.', 'تم تطبيق أفضل دورة NDR كنطاق NDR المتوقع.'), 'success');
       return;
     }
     if (action === 'calculator') {
@@ -1169,22 +1175,26 @@
         dateTo: best.dateTo,
         ndrPct: best.ndrPct
       };
+      window.DashboardCalculatorFocusTarget = 'simulator';
       closeBestNdrPanel(shellEl);
       destroyDashboardPaneCache(shellEl);
       var ctx = shellEl._dashboardCurrentCtx;
       if (ctx && typeof ctx.onNavigate === 'function') ctx.onNavigate('calculator');
-      toast('Best NDR Cycle is ready in the simulator.', 'success');
+      toast(shellPick('Best NDR Cycle is ready in the simulator.', 'أفضل دورة NDR جاهزة في المحاكي.'), 'success');
       return;
     }
-    if (action === 'orders') {
-      window.DashboardBestNdrCycleOrderRange = {
-        dateFrom: best.dateFrom,
-        dateTo: best.dateTo
-      };
+    if (action === 'compare-products') {
+      if (window.DashboardExpectedNdrRangeState && typeof window.DashboardExpectedNdrRangeState.setRange === 'function') {
+        window.DashboardExpectedNdrRangeState.setRange(best.dateFrom, best.dateTo);
+      }
+      window.DashboardProductComparisonFocusTarget = 'expected_ndr';
       closeBestNdrPanel(shellEl);
       var navCtx = shellEl._dashboardCurrentCtx;
-      if (navCtx && typeof navCtx.onNavigate === 'function') navCtx.onNavigate('orders');
-      toast('Showing Orders. Best cycle range: ' + rangeText(best), 'info');
+      if (navCtx && typeof navCtx.onNavigate === 'function') navCtx.onNavigate('products');
+      setTimeout(function () {
+        if (typeof window.openProductExpectedNdrCompareModal === 'function') window.openProductExpectedNdrCompareModal('');
+      }, 80);
+      toast(shellPick('Best cycle is ready in product comparison.', 'أفضل دورة جاهزة في مقارنة المنتجات.'), 'success');
     }
   }
 
@@ -1229,7 +1239,7 @@
     btn.classList.remove('is-ready', 'is-empty', 'is-low-sample');
     if (!result) {
       btn.disabled = true;
-      summary.textContent = 'Scanning';
+      summary.textContent = shellPick('Scanning', 'جار الفحص');
       closeBestNdrPanel(shellEl);
       return;
     }
@@ -1237,16 +1247,16 @@
     if (result.status === 'ready') {
       btn.classList.add('is-ready');
       summary.textContent = pctText(result.best.ndrPct) + ' - ' + rangeText(result.best);
-      btn.title = 'Best NDR Cycle: ' + summary.textContent;
+      btn.title = shellPick('Best NDR Cycle', 'أفضل دورة NDR') + ': ' + summary.textContent;
     } else if (result.status === 'low_sample') {
       btn.classList.add('is-low-sample');
-      summary.textContent = 'Low sample';
-      btn.title = 'No trustworthy Best NDR Cycle found yet';
+      summary.textContent = shellPick('Low sample', 'عينة قليلة');
+      btn.title = shellPick('No trustworthy Best NDR Cycle found yet', 'لم يتم العثور على دورة NDR موثوقة بعد');
       btn.disabled = false;
     } else {
       btn.classList.add('is-empty');
-      summary.textContent = 'No data';
-      btn.title = 'No Best NDR Cycle data yet';
+      summary.textContent = shellPick('No data', 'لا توجد بيانات');
+      btn.title = shellPick('No Best NDR Cycle data yet', 'لا توجد بيانات لأفضل دورة NDR بعد');
     }
     btn.setAttribute('data-tooltip', btn.title || '');
     if (panel && !panel.hidden) panel.innerHTML = renderBestNdrPanel(result);
@@ -1635,7 +1645,7 @@
       el.style.setProperty('border-color', 'var(--dash-border-soft)', 'important');
     });
 
-    root.querySelectorAll('.sfe-wrapper, .sfe-panel, .sfe-metric-card, .s7-card, .s7-input-wrap').forEach(function (el) {
+    root.querySelectorAll('.sfe-wrapper, .sfe-panel, .s7-card, .s7-input-wrap').forEach(function (el) {
       el.style.setProperty('background', 'var(--dash-surface)', 'important');
       el.style.setProperty('border-color', 'var(--dash-border-soft)', 'important');
       el.style.setProperty('color', 'var(--dash-text)', 'important');

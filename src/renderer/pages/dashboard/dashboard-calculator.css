@@ -203,6 +203,14 @@
 
 #page-dashboard .sfe-wrapper {
   max-width: 100%;
+  scroll-margin-top: 18px;
+}
+
+#page-dashboard .sfe-wrapper-focus {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--dash-good) 55%, transparent),
+    var(--dash-shadow-card) !important;
+  transition: box-shadow .25s ease;
 }
 
 #page-dashboard .s7-kpi-grid {
@@ -231,6 +239,77 @@
   margin-inline-start: 0 !important;
   color: #fbbf24 !important;
   -webkit-text-fill-color: #fbbf24 !important;
+}
+
+#page-dashboard .sfe-metrics-strip {
+  grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)) !important;
+  gap: 12px !important;
+}
+
+#page-dashboard .sfe-metric-card {
+  --sfe-card-accent: #60a5fa;
+  min-height: 104px;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  border-radius: 8px !important;
+  padding: 14px 15px 13px !important;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--sfe-card-accent) 8%, var(--dash-surface)) 0%,
+      var(--dash-surface) 68%) !important;
+  border-color: color-mix(in srgb, var(--sfe-card-accent) 28%, var(--dash-border-soft)) !important;
+  box-shadow: var(--dash-shadow-card);
+}
+
+#page-dashboard .sfe-metric-card::before {
+  height: 3px !important;
+  background: var(--sfe-card-accent) !important;
+}
+
+#page-dashboard .sfe-metric-orders { --sfe-card-accent: #60a5fa; }
+#page-dashboard .sfe-metric-delivered { --sfe-card-accent: #22d3ee; }
+#page-dashboard .sfe-metric-sales { --sfe-card-accent: #14b8a6; }
+#page-dashboard .sfe-metric-revenue { --sfe-card-accent: #f59e0b; }
+#page-dashboard .sfe-metric-cpa { --sfe-card-accent: #a78bfa; }
+#page-dashboard .sfe-metric-profit.sfe-positive,
+#page-dashboard .sfe-metric-roi.sfe-positive { --sfe-card-accent: #22c55e; }
+#page-dashboard .sfe-metric-profit.sfe-negative,
+#page-dashboard .sfe-metric-roi.sfe-negative { --sfe-card-accent: #fb3b5c; }
+
+#page-dashboard .sfe-metric-label {
+  min-height: 30px;
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 6px !important;
+  color: var(--dash-text-muted) !important;
+  font-size: 10.5px !important;
+  font-weight: 900 !important;
+  letter-spacing: .06em !important;
+  line-height: 1.25 !important;
+}
+
+#page-dashboard .sfe-metric-label-text {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+#page-dashboard .sfe-metric-val {
+  color: var(--dash-text) !important;
+  font-size: 20px !important;
+  font-weight: 900 !important;
+  line-height: 1.08 !important;
+  letter-spacing: 0 !important;
+}
+
+#page-dashboard .sfe-metric-sub {
+  color: var(--dash-text-faint) !important;
+  font-size: 11px !important;
+  font-weight: 750 !important;
+  line-height: 1.35 !important;
 }
 
 #page-dashboard .dash-size-md .sfe-metrics-strip {

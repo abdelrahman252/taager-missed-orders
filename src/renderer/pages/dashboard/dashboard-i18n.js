@@ -579,17 +579,19 @@
     }).format(d);
   }
 
+  var preserveSelector = '.taager-help,.s7-tip-badge,[data-preserve-question-mark],[data-i18n-preserve],.s5-product-title,.s5-product-data-text,.s9-product-cell';
+
   function localizeTextNode(node) {
     if (!node || !node.nodeValue) return;
     var parent = node.parentElement;
-    if (parent && parent.closest && parent.closest('.taager-help,.s7-tip-badge,[data-preserve-question-mark],[data-i18n-preserve]')) return;
+    if (parent && parent.closest && parent.closest(preserveSelector)) return;
     if (!/[\u0600-\u06FF]|[\u00c3\u00c2\u00d8\u00d9\u00d0\u00d1\u00f0\u00e2]/.test(node.nodeValue) && !isQuestionMarkText(node.nodeValue)) return;
     var translated = cleanText(node.nodeValue);
     if (translated !== node.nodeValue) node.nodeValue = translated;
   }
 
   function localizeAttributes(el) {
-    if (el.closest && el.closest('[data-i18n-preserve]')) return;
+    if (el.closest && el.closest(preserveSelector)) return;
     ['title', 'aria-label', 'placeholder', 'value'].forEach(function (attr) {
       if (!el.hasAttribute || !el.hasAttribute(attr)) return;
       var value = el.getAttribute(attr);
@@ -612,7 +614,7 @@
         acceptNode: function (node) {
           var parent = node.parentElement;
           if (!parent || /^(SCRIPT|STYLE|TEXTAREA)$/i.test(parent.tagName)) return NodeFilter.FILTER_REJECT;
-          if (parent.closest && parent.closest('.taager-help,.s7-tip-badge,[data-preserve-question-mark],[data-i18n-preserve]')) return NodeFilter.FILTER_REJECT;
+          if (parent.closest && parent.closest(preserveSelector)) return NodeFilter.FILTER_REJECT;
           return (/[\u0600-\u06FF]|[\u00c3\u00c2\u00d8\u00d9\u00d0\u00d1\u00f0\u00e2]/.test(node.nodeValue || '') || isQuestionMarkText(node.nodeValue)) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
         }
       });

@@ -601,6 +601,7 @@
   display: flex;
   align-items: center;
   gap: 11px;
+  margin: 0 0 5px;
   padding: 11px 14px;
   border: 1px solid color-mix(in srgb, var(--dash-accent) 30%, var(--dash-border-soft));
   border-radius: var(--dash-radius-md);
@@ -613,8 +614,23 @@
 .marketing-loading .dash-preloader-spinner {
   width: 18px;
   height: 18px;
+  min-width: 18px;
   border-width: 2px;
-  flex-basis: 18px;
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--dash-accent) 24%, transparent);
+  border-top-color: var(--dash-accent);
+  border-radius: 50%;
+  flex: 0 0 18px;
+  animation: marketingSpin 0.75s linear infinite;
+}
+
+.marketing-loading span:last-child {
+  min-width: 0;
+  line-height: 1.35;
+}
+
+@keyframes marketingSpin {
+  to { transform: rotate(360deg); }
 }
 
 .marketing-mapping-board {

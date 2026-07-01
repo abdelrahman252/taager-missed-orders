@@ -13,6 +13,11 @@
     return window.TaagerUI ? window.TaagerUI.esc(value) : String(value == null ? '' : value);
   }
 
+  function fmtCount(value) {
+    var n = Number(value || 0);
+    return Number.isFinite(n) ? n.toLocaleString('en-US') : '0';
+  }
+
   function period() {
     return window.DashboardPeriodState && window.DashboardPeriodState.get ? window.DashboardPeriodState.get() : {};
   }
@@ -60,7 +65,11 @@
     if (!item.inspection) return tr('static.waiting', 'Upload a Taager sheet to inspect it.');
     var inspection = item.inspection;
     if (inspection.periodMismatch || inspection.canApply === false) return tr('static.periodMismatch', 'Sheet dates do not match the selected period.');
-    var text = (inspection.orders || 0) + ' ' + tr('static.orders', 'orders') + ' / ' + (inspection.rows || 0) + ' ' + tr('static.rows', 'item rows');
+    var raw = inspection.rawOrders != null ? inspection.rawOrders : inspection.orders;
+    var net = inspection.netOrders != null ? inspection.netOrders : raw;
+    var text = fmtCount(raw) + ' ' + tr('static.rawOrders', 'raw') + ' / ' +
+      fmtCount(net) + ' ' + tr('static.netOrders', 'net') + ' ' + tr('static.orders', 'orders') +
+      ' / ' + fmtCount(inspection.rows || 0) + ' ' + tr('static.rows', 'item rows');
     if (inspection.requiresConfirmation) text += ' - ' + tr('static.confirmationRequired', 'confirmation required');
     return text;
   }
@@ -167,8 +176,11 @@
     return prepared.map(function (entry) {
       var validation = entry.result.validation || {};
       return entry.account.label + ': ' +
-        (validation.existing && validation.existing.rawOrders || 0) + ' -> ' +
-        (validation.incoming && validation.incoming.rawOrders || 0) + ' ' + tr('static.orders', 'orders');
+        fmtCount(validation.existing && validation.existing.rawOrders || 0) + '/' +
+        fmtCount(validation.existing && validation.existing.netOrders || 0) + ' -> ' +
+        fmtCount(validation.incoming && validation.incoming.rawOrders || 0) + '/' +
+        fmtCount(validation.incoming && validation.incoming.netOrders || 0) + ' ' +
+        tr('static.rawNetOrders', 'raw/net orders');
     }).join('\n');
   }
 
@@ -211,7 +223,9 @@
       }
       var applied = await window.api.applyStaticDashboardUpdate(filePayload(entry.account, allowRisky));
       if (applied && applied.ok && applied.saved) {
-        state.results.push({ ok: true, label: entry.account.label || entry.account.id, message: (applied.orders || 0) + ' ' + tr('static.ordersUpdated', 'orders updated') });
+        var raw = applied.rawOrders != null ? applied.rawOrders : applied.orders;
+        var net = applied.netOrders != null ? applied.netOrders : raw;
+        state.results.push({ ok: true, label: entry.account.label || entry.account.id, message: fmtCount(raw) + '/' + fmtCount(net) + ' ' + tr('static.rawNetOrdersUpdated', 'raw/net orders updated') });
         accountState(entry.account.id).inspection = applied;
       } else {
         state.results.push({ ok: false, label: entry.account.label || entry.account.id, message: applied && applied.error || tr('static.applyFailed', 'Static update failed.') });

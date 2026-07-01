@@ -863,6 +863,35 @@
       });
     }
 
+    function revalidateAfterMappingSave(platform, accountId) {
+      var targetId = String(accountId || selectedAccountId || '');
+      if (!store || typeof store.load !== 'function') return;
+      setTimeout(function () {
+        var id = targetId === '__all__' ? selectedAccountId : targetId;
+        if (!id) id = selectedAccountId;
+        store.load(id, platform, { revalidate: true, background: true }).catch(function (error) {
+          log('mapping:background_revalidate_failed', { accountId: id, platform: platform, error: error && error.message || String(error) });
+          return null;
+        });
+      }, 0);
+    }
+
+    function scheduleSyncPreparationMessage(platform) {
+      var timer = setTimeout(function () {
+        if (!busyLabel) return;
+        busyLabel = tr('marketing.loadingSyncPreparingRange', 'Windsor is preparing the complete selected date range. First sync can take a little while.');
+        if (store && typeof store.setLoading === 'function') {
+          store.setLoading(true, selectedAccountId, platform);
+        } else {
+          render();
+        }
+      }, 4500);
+      return function () {
+        if (timer) clearTimeout(timer);
+        timer = null;
+      };
+    }
+
     function hasUsableConnection(result) {
       if (allMode && result && (
         (Array.isArray(result.linkedAccounts) && result.linkedAccounts.length) ||
@@ -1121,7 +1150,7 @@
           invalidateStatus('__all__', platform);
           store.set(result, targetId, platform);
           render();
-          return refreshAfterMutation(platform, targetId, result);
+          revalidateAfterMappingSave(platform, targetId);
         } else {
           store.set(Object.assign({}, state(platform), {
             loading: false,
@@ -1162,7 +1191,7 @@
         busyLabel = '';
         store.set(result, selectedAccountId, platform);
         render();
-        return refreshAfterMutation(platform, '__all__', result);
+        revalidateAfterMappingSave(platform, '__all__');
       }).catch(function (error) {
         busyLabel = '';
         log('mapping:save_all_finished', { platform: platform, accountCount: payloads.length, ok: false, error: error.message || String(error) });
@@ -1488,6 +1517,7 @@
             return;
           }
           setBusy(tr('marketing.loadingSync', 'Syncing marketing data...'), platform);
+          var clearSyncPreparationMessage = scheduleSyncPreparationMessage(platform);
           var period = fullData && fullData.meta && fullData.meta.period || {};
           var roi = window.DashboardRoiState ? window.DashboardRoiState.get(selectedAccountId, {}) : {};
           var syncPayload = {
@@ -1503,6 +1533,7 @@
             ? store.sync(selectedAccountId, syncPayload, platform)
             : window.api.syncMarketingData(selectedAccountId, platform, syncPayload);
           syncRequest.then(function (result) {
+            clearSyncPreparationMessage();
             busyLabel = '';
             log('sync:finished', result || {});
             if (!store || typeof store.sync !== 'function') store.set(result, selectedAccountId, platform);
@@ -1515,6 +1546,15 @@
             if (result && result.ok && window.DashboardRoiState && typeof window.DashboardRoiState.notify === 'function') {
               window.DashboardRoiState.notify();
             }
+          }).catch(function (error) {
+            clearSyncPreparationMessage();
+            busyLabel = '';
+            log('sync:failed', { platform: platform, error: error && error.message || String(error) });
+            store.set(Object.assign({}, state(platform), {
+              loading: false,
+              error: error && error.message || tr('marketing.syncFailed', 'Unable to sync marketing data.')
+            }), selectedAccountId, platform);
+            render();
           });
         });
       });
@@ -1550,6 +1590,7 @@
           }
           log('button:sync_all', { platform: platform, accountCount: accountSettings.length });
           setBusy(tr('marketing.loadingSyncAll', 'Syncing all accounts...'), platform);
+          var clearSyncAllPreparationMessage = scheduleSyncPreparationMessage(platform);
           window.api.syncAllMarketingData(platform, {
             dateFrom: period.from || period.dateFrom || period.start || '',
             dateTo: period.to || period.dateTo || period.end || '',
@@ -1557,6 +1598,7 @@
             mappings: mappings,
             mode: fullRefresh ? 'full' : 'incremental'
           }).then(function (result) {
+            clearSyncAllPreparationMessage();
             busyLabel = '';
             log('sync_all:finished', result || {});
             if (result && result.ok && result.accountStatuses) {
@@ -1567,6 +1609,15 @@
             store.set(result, selectedAccountId, platform);
             render();
             if (result && result.ok) return refreshAfterMutation(platform, '__all__', result);
+          }).catch(function (error) {
+            clearSyncAllPreparationMessage();
+            busyLabel = '';
+            log('sync_all:failed', { platform: platform, error: error && error.message || String(error) });
+            store.set(Object.assign({}, state(platform), {
+              loading: false,
+              error: error && error.message || tr('marketing.syncFailed', 'Unable to sync marketing data.')
+            }), selectedAccountId, platform);
+            render();
           });
         });
       });

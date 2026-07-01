@@ -74,6 +74,94 @@
   color-scheme: light !important;
 }
 
+[data-theme="light"] #page-dashboard #s9-combine-products,
+[data-theme="light"] #page-dashboard .s9-combine-products-btn {
+  background: rgba(124,58,237,0.08) !important;
+  border-color: rgba(124,58,237,0.28) !important;
+  color: #6d28d9 !important;
+  box-shadow: none !important;
+}
+
+[data-theme="light"] .dash-overlay-scope .s9-combo-dialog {
+  background: #ffffff !important;
+  border-color: var(--dash-border-soft) !important;
+  box-shadow: 0 24px 70px rgba(15,23,42,0.16) !important;
+  color: var(--dash-text) !important;
+}
+
+[data-theme="light"] .dash-overlay-scope .s9-combo-header,
+[data-theme="light"] .dash-overlay-scope .s9-combo-footer,
+[data-theme="light"] .dash-overlay-scope .s9-combo-panel > div:first-child {
+  border-color: var(--dash-border-soft) !important;
+}
+
+[data-theme="light"] .dash-overlay-scope .s9-combo-title,
+[data-theme="light"] .dash-overlay-scope .s9-combo-product-name,
+[data-theme="light"] .dash-overlay-scope .s9-combo-preview-value {
+  color: var(--dash-text) !important;
+}
+
+[data-theme="light"] .dash-overlay-scope .s9-combo-subtitle,
+[data-theme="light"] .dash-overlay-scope .s9-combo-note,
+[data-theme="light"] .dash-overlay-scope .s9-combo-placeholder,
+[data-theme="light"] .dash-overlay-scope .s9-combo-arrow,
+[data-theme="light"] .dash-overlay-scope .s9-combo-empty-preview,
+[data-theme="light"] .dash-overlay-scope .s9-combo-preview-label,
+[data-theme="light"] .dash-overlay-scope .s9-combo-option [style*="rgba(255,255,255,.42)"],
+[data-theme="light"] .dash-overlay-scope .s9-combo-trigger [style*="rgba(255,255,255,.42)"] {
+  color: var(--dash-text-faint) !important;
+}
+
+[data-theme="light"] .dash-overlay-scope .s9-combo-close,
+[data-theme="light"] .dash-overlay-scope .s9-combo-cancel {
+  background: #ffffff !important;
+  border-color: var(--dash-border-soft) !important;
+  color: var(--dash-text-muted) !important;
+}
+
+[data-theme="light"] .dash-overlay-scope .s9-combo-cancel {
+  background: transparent !important;
+}
+
+[data-theme="light"] .dash-overlay-scope .s9-combo-trigger,
+[data-theme="light"] .dash-overlay-scope .s9-combo-preview-card,
+[data-theme="light"] .dash-overlay-scope .s9-combo-empty-preview {
+  background: #f8fafc !important;
+  border-color: var(--dash-border-soft) !important;
+  color: var(--dash-text) !important;
+}
+
+[data-theme="light"] .dash-overlay-scope .s9-combo-panel {
+  background: #ffffff !important;
+  border-color: var(--dash-border-soft) !important;
+  box-shadow: 0 18px 42px rgba(15,23,42,0.14) !important;
+}
+
+[data-theme="light"] .dash-overlay-scope .s9-combo-search {
+  background: #ffffff !important;
+  border-color: var(--dash-border) !important;
+  color: var(--dash-text) !important;
+  color-scheme: light !important;
+}
+
+[data-theme="light"] .dash-overlay-scope .s9-combo-search::placeholder {
+  color: var(--dash-text-disabled) !important;
+}
+
+[data-theme="light"] .dash-overlay-scope .s9-combo-option {
+  color: var(--dash-text) !important;
+}
+
+[data-theme="light"] .dash-overlay-scope .s9-combo-option:hover {
+  background: rgba(59,130,246,0.08) !important;
+}
+
+[data-theme="light"] .dash-overlay-scope .s9-combo-confirm {
+  background: rgba(124,58,237,0.10) !important;
+  border-color: rgba(124,58,237,0.32) !important;
+  color: #6d28d9 !important;
+}
+
 /* Small laptop stabilization: 11-13 inch screens keep density readable without card collisions. */
 @media (max-width: 1399px) {
 

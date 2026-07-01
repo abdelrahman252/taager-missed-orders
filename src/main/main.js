@@ -4228,6 +4228,9 @@ function staticDashboardResult(prepared, extra = {}) {
     accountId: prepared.accountId,
     rows: prepared.processed.rows.length,
     orders: prepared.validation.incoming.rawOrders,
+    rawOrders: prepared.validation.incoming.rawOrders,
+    netOrders: prepared.validation.incoming.netOrders,
+    canceledByYou: prepared.validation.incoming.canceledByYou,
     dateFrom: prepared.processed.dateFrom,
     dateTo: prepared.processed.dateTo,
     snapshotMonth: prepared.processed.snapshotMonth,
@@ -4418,7 +4421,7 @@ ipcMain.handle("get-dashboard-query-flags", async () => ({
   campaigns: process.env.TAAGER_DASHBOARD_QUERY_CAMPAIGNS === "1",
   cities: process.env.TAAGER_DASHBOARD_QUERY_CITIES === "1" || process.env.TAAGER_DASHBOARD_QUERY_PRODUCTS === "1",
   lazyMarketing: process.env.TAAGER_DASHBOARD_LAZY_MARKETING !== "0",
-  incrementalMarketing: process.env.TAAGER_MARKETING_INCREMENTAL_SYNC === "1",
+  incrementalMarketing: marketingIncrementalSyncEnabled(),
 }));
 
 ipcMain.handle("query-dashboard-data", async (_, payload = {}) => {
@@ -4606,6 +4609,18 @@ function normalizeMarketingRates(rawRates, egpRate) {
   if (Number.isFinite(explicitEgp) && explicitEgp > 0) out.EGP = explicitEgp;
   out.USD = 1;
   return out;
+}
+
+function marketingIncrementalSyncEnabled() {
+  return process.env.TAAGER_MARKETING_INCREMENTAL_SYNC !== "0";
+}
+
+function stripMarketingRateSettings(settings = []) {
+  return (Array.isArray(settings) ? settings : []).map((setting) => {
+    if (!setting || typeof setting !== "object") return setting;
+    const { exchangeRates, egpRate, ...rest } = setting;
+    return rest;
+  });
 }
 
 function marketingRatesChanged(summary, range) {
@@ -5035,6 +5050,7 @@ function saveCachedAllMarketingMappingStatus(platform, result, options = {}) {
 }
 
 async function callMarketingBackend(action, accountId, platform, range) {
+  const requestStartedAt = Date.now();
   const dashboardAccountId = marketingAccountKey(accountId, action !== "sync");
   if (!dashboardAccountId) return { ok: false, error: "SELECT_SINGLE_ACCOUNT" };
   if (!["tiktok", "snapchat", "facebook"].includes(platform)) return { ok: false, error: "PLATFORM_NOT_AVAILABLE" };
@@ -5080,6 +5096,10 @@ async function callMarketingBackend(action, accountId, platform, range) {
       mappedIds: connectSnapshotIds.mappings,
     });
   }
+  const includeRatePayload = action === "sync" || action === "sync_all";
+  const accountSettingsPayload = range && Array.isArray(range.accountSettings)
+    ? (includeRatePayload ? range.accountSettings : stripMarketingRateSettings(range.accountSettings))
+    : (action === "status" && dashboardAccountId === "__all__" ? stripMarketingRateSettings(normalizeMarketingAccountSettings([])) : []);
   const result = await supabaseFunctionRequest("windsor-marketing", {
     clientRequestId,
     diagnosticsRequested: true,
@@ -5094,13 +5114,11 @@ async function callMarketingBackend(action, accountId, platform, range) {
     sourceAccounts: range && Array.isArray(range.sourceAccounts) ? range.sourceAccounts : [],
     mappings: range && Array.isArray(range.mappings) ? range.mappings : [],
     targetCurrency: range && range.targetCurrency ? range.targetCurrency : "",
-    egpRate: range && range.egpRate ? range.egpRate : null,
-    exchangeRates: range && range.exchangeRates && typeof range.exchangeRates === "object"
+    egpRate: includeRatePayload && range && range.egpRate ? range.egpRate : null,
+    exchangeRates: includeRatePayload && range && range.exchangeRates && typeof range.exchangeRates === "object"
       ? normalizeMarketingRates(range.exchangeRates, range.egpRate)
       : null,
-    accountSettings: range && Array.isArray(range.accountSettings)
-      ? range.accountSettings
-      : (action === "status" && dashboardAccountId === "__all__" ? normalizeMarketingAccountSettings([]) : []),
+    accountSettings: accountSettingsPayload,
     dateFrom: range && range.dateFrom ? range.dateFrom : "",
     dateTo: range && range.dateTo ? range.dateTo : "",
     identity: {
@@ -5124,6 +5142,10 @@ async function callMarketingBackend(action, accountId, platform, range) {
       connectSnapshotIdsBeforeAuth: connectSnapshotIds,
       responseAccountIds: responseSnapshotIds,
       mappedIds: responseSnapshotIds.mappings,
+      timings: {
+        ...(result.diagnostics && result.diagnostics.timings && typeof result.diagnostics.timings === "object" ? result.diagnostics.timings : {}),
+        desktopRequestMs: Date.now() - requestStartedAt,
+      },
     };
   }
   if (action === "connect" || action === "status") {
@@ -5268,7 +5290,7 @@ ipcMain.handle("sync-marketing-data", async (_, accountId, platform = "tiktok", 
   const dashboardAccountId = marketingAccountKey(accountId);
   if (!dashboardAccountId) return { ok: false, error: "SELECT_SINGLE_ACCOUNT" };
   try {
-    const incrementalEnabled = process.env.TAAGER_MARKETING_INCREMENTAL_SYNC === "1";
+    const incrementalEnabled = marketingIncrementalSyncEnabled();
     const requestedMode = range && range.mode === "full" ? "full" : "incremental";
     const cached = getCachedMarketingStatus(dashboardAccountId, platform);
     const cachedSummary = cached && cached.summary || {};
@@ -5309,7 +5331,7 @@ ipcMain.handle("sync-marketing-data", async (_, accountId, platform = "tiktok", 
 
 ipcMain.handle("sync-all-marketing-data", async (_, platform = "tiktok", range = {}) => {
   try {
-    const incrementalEnabled = process.env.TAAGER_MARKETING_INCREMENTAL_SYNC === "1";
+    const incrementalEnabled = marketingIncrementalSyncEnabled();
     const requestedMode = range && range.mode === "full" ? "full" : "incremental";
     const accountSettings = normalizeMarketingAccountSettings(range && range.accountSettings);
     const cacheComparisons = accountSettings.map((setting) => {

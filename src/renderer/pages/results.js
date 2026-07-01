@@ -138,6 +138,75 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         overflow-y: visible;
         overscroll-behavior-inline: contain;
       }
+      .failed-orders-table-wrap {
+        overflow-x: auto;
+        overflow-y: visible;
+        overscroll-behavior-inline: contain;
+      }
+      .orders-preview-table.failed-orders-table {
+        width: 100%;
+        min-width: 940px;
+      }
+      .failed-orders-table th,
+      .failed-orders-table td {
+        padding: 8px 12px;
+        vertical-align: middle;
+        line-height: 1.35;
+      }
+      .failed-orders-table .failed-row {
+        width: 58px;
+        text-align: center;
+        color: var(--text2);
+        font-size: 11px;
+        font-weight: 800;
+      }
+      .failed-orders-table .failed-sku,
+      .failed-orders-table .failed-phone,
+      .failed-orders-table .failed-error {
+        direction: ltr;
+        text-align: left;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-variant-numeric: tabular-nums;
+      }
+      .failed-orders-table .failed-sku {
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .failed-orders-table .failed-product {
+        direction: rtl;
+        text-align: right;
+        color: var(--text);
+        font-weight: 700;
+      }
+      .failed-orders-table .failed-phone {
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .failed-orders-table .failed-error {
+        color: var(--danger);
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .failed-orders-table .failed-product,
+      .failed-orders-table .failed-error {
+        max-width: 1px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      [dir="rtl"] .failed-orders-table th {
+        text-align: right;
+      }
+      [dir="rtl"] .failed-orders-table .failed-row {
+        text-align: center;
+      }
+      [dir="rtl"] .failed-orders-table .failed-sku,
+      [dir="rtl"] .failed-orders-table .failed-phone,
+      [dir="rtl"] .failed-orders-table .failed-error {
+        text-align: left;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -271,7 +340,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       </div>`;
   }
 
-  function buildFailedOrdersDetailHtml(failedOrders) {
+  function buildFailedOrdersDetailHtmlLegacy(failedOrders) {
     const rows = failedOrders?.errorRows || [];
     if (rows.length > 0) {
       const paged = buildPagedItems(rows, (row, i, attrs) => `<tr ${attrs}>
@@ -289,6 +358,58 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           </tr></thead>
           <tbody>${paged.itemsHtml}</tbody>
         </table>
+        ${paged.pagerHtml}
+      </div>`;
+    }
+
+    const summary = failedOrders?.summary || [];
+    if (summary.length > 0) {
+      const paged = buildPagedItems(summary, (f, i, attrs) => `
+        <div ${attrs} style="background:rgba(255,77,109,0.12);border:1px solid rgba(255,77,109,0.3);border-radius:6px;padding:7px 14px;font-size:12px;user-select:text;-webkit-user-select:text">
+          <span style="color:var(--text2)">${t("results.product_col")}:</span>
+          <span style="color:var(--text);font-weight:600;margin-left:4px">${f.productName || t("results.unknown")}</span>
+          <span style="color:var(--danger);font-weight:700;margin-left:10px">${f.count} ${t("results.product_count")(f.count)}</span>
+        </div>`, "failed-summary");
+      return `<div style="display:flex;flex-wrap:wrap;gap:8px;padding:16px 18px">${paged.itemsHtml}</div>${paged.pagerHtml}`;
+    }
+
+    return `<div style="padding:12px 18px;font-size:12px;color:var(--text2)">${t("results.no_error_info")}</div>`;
+  }
+
+  function buildFailedOrdersDetailHtml(failedOrders) {
+    const rows = failedOrders?.errorRows || [];
+    if (rows.length > 0) {
+      const esc = (value) => String(value == null || value === "" ? "—" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+      const paged = buildPagedItems(rows, (row, i, attrs) => {
+        const product = row.product || row.productName || "";
+        return `<tr ${attrs}>
+          <td class="failed-row">${esc(row.row || i + 1)}</td>
+          <td class="failed-sku" title="${esc(row.sku)}">${esc(row.sku)}</td>
+          <td class="failed-product" title="${esc(product)}">${esc(product)}</td>
+          <td class="failed-phone" title="${esc(row.phone)}">${esc(row.phone)}</td>
+          <td class="failed-error" title="${esc(row.error)}">${esc(row.error)}</td>
+        </tr>`;
+      }, "failed-orders");
+      return `<div class="failed-orders-table-wrap">
+        <table class="orders-preview-table failed-orders-table">
+          <colgroup>
+            <col style="width:58px">
+            <col style="width:190px">
+            <col style="width:320px">
+            <col style="width:160px">
+            <col style="width:212px">
+          </colgroup>
+          <thead><tr>
+            ${[t("results.row_col") || t("results.row"), t("results.sku"), t("results.product_col"), t("results.phone_col") || t("results.phone"), t("results.error_col") || t("results.error")]
+              .map(h => `<th>${h}</th>`).join("")}
+          </tr></thead>
+          <tbody>${paged.itemsHtml}</tbody>
+        </table>
+        <div style="padding:8px 12px;border-top:1px solid var(--border);font-size:11px;color:var(--text2)">${t("results.failed_table_hint")}</div>
         ${paged.pagerHtml}
       </div>`;
     }

@@ -1057,7 +1057,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">' +
           '<div style="font-size:16px;font-weight:800;color:#fff;">' + p9Txt('Products', 'المنتجات') + '</div>' +
           '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
-            '<button type="button" id="s9-combine-products" style="border:1px solid rgba(168,85,247,.42);background:rgba(168,85,247,.13);color:#c4b5fd;border-radius:9px;padding:7px 11px;font-size:11px;font-weight:900;font-family:inherit;cursor:pointer;">+ ' + p9Txt('Combine Products', 'دمج المنتجات') + '</button>' +
+            '<button type="button" id="s9-combine-products" class="s9-combine-products-btn" style="border:1px solid rgba(168,85,247,.42);background:rgba(168,85,247,.13);color:#c4b5fd;border-radius:9px;padding:7px 11px;font-size:11px;font-weight:900;font-family:inherit;cursor:pointer;">+ ' + p9Txt('Combine Products', 'دمج المنتجات') + '</button>' +
             '<button type="button" id="s9-clear-sort" class="s9-clear-sort"' + (tableSortBy ? '' : ' disabled') + '>' + p9Txt('Clear sort', 'مسح الترتيب') + '</button>' +
           '</div>' +
         '</div>' +
@@ -1629,7 +1629,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       var sku = String(product.sku || '').trim();
       var active = skuKey(sku) === skuKey(selectedSku);
       return '<div role="button" tabindex="0" class="s9-combo-option" data-side="' + side + '" data-sku="' + escapeHtml(sku) + '" data-search="' + escapeHtml(textKey((product.name || '') + ' ' + sku)) + '" style="width:100%;display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;border:1px solid ' + (active ? color + '55' : 'transparent') + ';background:' + (active ? color + '18' : 'transparent') + ';color:#fff;font-family:inherit;text-align:start;cursor:pointer;margin-bottom:3px;">' +
-        '<span style="min-width:0;flex:1;"><span style="display:block;font-size:12px;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(product.name || p9Txt('Unnamed product', 'منتج بدون اسم')) + '</span>' + skuCopyHtml(sku, { block: true, style: 'font-size:10px;color:rgba(255,255,255,.42);margin-top:2px;font-weight:700' }) + '</span>' +
+        '<span class="s9-combo-option-copy" style="min-width:0;flex:1;"><span class="s9-combo-product-name" style="display:block;font-size:12px;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(product.name || p9Txt('Unnamed product', 'منتج بدون اسم')) + '</span>' + skuCopyHtml(sku, { block: true, style: 'font-size:10px;color:rgba(255,255,255,.42);margin-top:2px;font-weight:700' }) + '</span>' +
         (active ? '<span style="color:' + color + ';font-weight:950;">✓</span>' : '') +
       '</div>';
     }).join('');
@@ -1637,7 +1637,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       '<div style="font-size:10px;font-weight:950;color:' + color + ';margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px;">' + (isPrimary ? p9Txt('Product A · Primary', 'المنتج A · الأساسي') : p9Txt('Product B · Add to A', 'المنتج B · دمجه مع A')) + '</div>' +
       '<div role="button" tabindex="0" class="s9-combo-trigger" style="width:100%;min-height:48px;border-radius:11px;border:1px solid ' + (selected ? color + '55' : 'rgba(255,255,255,.12)') + ';background:rgba(255,255,255,.04);color:#fff;padding:7px 11px;font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:9px;text-align:start;">' +
         '<span style="width:29px;height:29px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + color + '18;color:' + color + ';font-weight:950;">' + (isPrimary ? 'A' : 'B') + '</span>' +
-        (selected ? '<span style="min-width:0;flex:1;"><span style="display:block;font-size:12px;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(selected.name || selected.sku) + '</span>' + skuCopyHtml(selected.sku, { block: true, style: 'font-size:10px;color:rgba(255,255,255,.42);font-weight:700' }) + '</span>' : '<span style="font-size:12px;color:rgba(255,255,255,.4);font-weight:750;flex:1;">' + p9Txt('Search by product or SKU...', 'ابحث باسم المنتج أو SKU...') + '</span>') +
+        (selected ? '<span class="s9-combo-trigger-copy" style="min-width:0;flex:1;"><span class="s9-combo-product-name" style="display:block;font-size:12px;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(selected.name || selected.sku) + '</span>' + skuCopyHtml(selected.sku, { block: true, style: 'font-size:10px;color:rgba(255,255,255,.42);font-weight:700' }) + '</span>' : '<span class="s9-combo-placeholder" style="font-size:12px;color:rgba(255,255,255,.4);font-weight:750;flex:1;">' + p9Txt('Search by product or SKU...', 'ابحث باسم المنتج أو SKU...') + '</span>') +
         '<span class="s9-combo-arrow" style="color:rgba(255,255,255,.4);">⌄</span>' +
       '</div>' +
       '<div class="s9-combo-panel" style="display:none;position:absolute;top:calc(100% + 6px);inset-inline:0;z-index:20;background:#0d1526;border:1px solid rgba(255,255,255,.14);border-radius:13px;overflow:hidden;box-shadow:0 18px 45px rgba(0,0,0,.45);">' +
@@ -1650,7 +1650,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     var primary = combinationProduct(combinationModalState.primarySku);
     var secondary = combinationProduct(combinationModalState.secondarySku);
     if (!primary || !secondary) {
-      return '<div style="padding:14px;border-radius:12px;border:1px dashed rgba(255,255,255,.12);color:rgba(255,255,255,.45);font-size:11px;text-align:center;">' + p9Txt('Choose two products to preview the combined numbers.', 'اختر منتجين لمعاينة الأرقام بعد الدمج.') + '</div>';
+      return '<div class="s9-combo-empty-preview" style="padding:14px;border-radius:12px;border:1px dashed rgba(255,255,255,.12);color:rgba(255,255,255,.45);font-size:11px;text-align:center;">' + p9Txt('Choose two products to preview the combined numbers.', 'اختر منتجين لمعاينة الأرقام بعد الدمج.') + '</div>';
     }
     var preview = aggregateProductGroup({ id: 'preview', primarySku: primary.sku, skus: [primary.sku, secondary.sku] }, [primary, secondary]);
     var spend = simulations.reduce(function (sum, sim) {
@@ -1663,24 +1663,24 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       [p9Txt('Ad Spend', 'الإنفاق الإعلاني'), formatMoney(spend)],
       [p9Txt('Net Profit', 'صافي الربح'), formatMoney(profit)]
     ];
-    return '<div><div style="font-size:10px;font-weight:950;color:#c4b5fd;margin-bottom:8px;">' + p9Txt('COMBINED PREVIEW', 'معاينة الدمج') + '</div><div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;">' + cards.map(function (card) {
-      return '<div style="padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.035);"><div style="font-size:9px;color:rgba(255,255,255,.45);font-weight:800;margin-bottom:4px;">' + card[0] + '</div><div dir="ltr" style="font-size:13px;color:#fff;font-weight:950;">' + card[1] + '</div></div>';
+    return '<div class="s9-combo-preview"><div class="s9-combo-preview-title" style="font-size:10px;font-weight:950;color:#c4b5fd;margin-bottom:8px;">' + p9Txt('COMBINED PREVIEW', 'معاينة الدمج') + '</div><div class="s9-combo-preview-grid" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;">' + cards.map(function (card) {
+      return '<div class="s9-combo-preview-card" style="padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.035);"><div class="s9-combo-preview-label" style="font-size:9px;color:rgba(255,255,255,.45);font-weight:800;margin-bottom:4px;">' + card[0] + '</div><div class="s9-combo-preview-value" dir="ltr" style="font-size:13px;color:#fff;font-weight:950;">' + card[1] + '</div></div>';
     }).join('') + '</div></div>';
   }
   function renderCombinationModal() {
     if (!combinationModal) return;
     var canCombine = combinationProduct(combinationModalState.primarySku) && combinationProduct(combinationModalState.secondarySku) && skuKey(combinationModalState.primarySku) !== skuKey(combinationModalState.secondarySku);
     combinationModal.innerHTML = '<div class="s9-combo-dialog" style="width:min(720px,96vw);max-height:92vh;overflow:visible;border-radius:20px;background:#0b1120;border:1px solid rgba(255,255,255,.12);box-shadow:0 30px 90px rgba(0,0,0,.6);">' +
-      '<div style="padding:18px 20px;border-bottom:1px solid rgba(255,255,255,.075);display:flex;align-items:center;justify-content:space-between;gap:14px;">' +
-        '<div><div style="font-size:18px;font-weight:950;color:#fff;">' + p9Txt('Combine Products', 'دمج المنتجات') + '</div><div style="font-size:11px;color:rgba(255,255,255,.43);font-weight:700;margin-top:3px;">' + p9Txt('Create one forecasting row from two SKUs. Imported data stays unchanged.', 'أنشئ صف توقعات واحدًا من رمزين SKU بدون تغيير البيانات المستوردة.') + '</div></div>' +
+      '<div class="s9-combo-header" style="padding:18px 20px;border-bottom:1px solid rgba(255,255,255,.075);display:flex;align-items:center;justify-content:space-between;gap:14px;">' +
+        '<div><div class="s9-combo-title" style="font-size:18px;font-weight:950;color:#fff;">' + p9Txt('Combine Products', 'دمج المنتجات') + '</div><div class="s9-combo-subtitle" style="font-size:11px;color:rgba(255,255,255,.43);font-weight:700;margin-top:3px;">' + p9Txt('Create one forecasting row from two SKUs. Imported data stays unchanged.', 'أنشئ صف توقعات واحدًا من رمزين SKU بدون تغيير البيانات المستوردة.') + '</div></div>' +
         '<button type="button" class="s9-combo-close" style="width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);color:#fff;font-size:20px;cursor:pointer;">&times;</button>' +
       '</div>' +
       '<div style="padding:18px 20px;display:flex;flex-direction:column;gap:16px;">' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' + combinationSelectorHtml('primary', combinationModalState.primarySku) + combinationSelectorHtml('secondary', combinationModalState.secondarySku) + '</div>' +
         combinationPreviewHtml() +
-        '<div style="font-size:10px;line-height:1.7;color:rgba(255,255,255,.46);">' + p9Txt('Product A keeps its name and primary SKU. Product B becomes an alias. Both original rows are replaced by one reversible combined row in Section 9.', 'يحتفظ المنتج A باسمه ورمز SKU الأساسي، ويصبح المنتج B رمزًا بديلًا. يتم استبدال الصفين بصف واحد قابل لإلغاء الدمج داخل القسم 9.') + '</div>' +
+        '<div class="s9-combo-note" style="font-size:10px;line-height:1.7;color:rgba(255,255,255,.46);">' + p9Txt('Product A keeps its name and primary SKU. Product B becomes an alias. Both original rows are replaced by one reversible combined row in Section 9.', 'يحتفظ المنتج A باسمه ورمز SKU الأساسي، ويصبح المنتج B رمزًا بديلًا. يتم استبدال الصفين بصف واحد قابل لإلغاء الدمج داخل القسم 9.') + '</div>' +
       '</div>' +
-      '<div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.075);display:flex;justify-content:flex-end;gap:9px;">' +
+      '<div class="s9-combo-footer" style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.075);display:flex;justify-content:flex-end;gap:9px;">' +
         '<button type="button" class="s9-combo-cancel" style="border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.7);border-radius:9px;padding:8px 14px;font-family:inherit;font-size:11px;font-weight:850;cursor:pointer;">' + p9Txt('Cancel', 'إلغاء') + '</button>' +
         '<button type="button" class="s9-combo-confirm"' + (canCombine ? '' : ' disabled') + ' style="border:1px solid rgba(168,85,247,.48);background:rgba(168,85,247,.2);color:#ddd6fe;border-radius:9px;padding:8px 15px;font-family:inherit;font-size:11px;font-weight:950;cursor:' + (canCombine ? 'pointer' : 'default') + ';opacity:' + (canCombine ? '1' : '.4') + ';">' + p9Txt('Combine', 'دمج') + '</button>' +
       '</div>' +

@@ -370,10 +370,10 @@ window.renderSection7 = function (mountEl, data, ctx) {
     var uplift = Math.round(Number(best.upliftPts || 0) * 10) / 10;
     return '<div class="s7-best-ndr-cycle-card">' +
       '<div class="s7-best-ndr-cycle-copy">' +
-        '<span>' + s7Txt("Best monthly NDR cycle", "Best monthly NDR cycle") + '</span>' +
+        '<span>' + s7Txt("Best trustworthy NDR cycle", "Best trustworthy NDR cycle") + '</span>' +
         '<strong>' + s7Esc(bestCycleRangeLabel(best)) + ' - ' + s7PctValue(best.ndrPct) + '%</strong>' +
-        '<em>' + s7Num(best.delivered) + ' / ' + s7Num(best.netOrders) + ' ' + s7Txt("orders", "orders") +
-          ' - ' + (uplift > 0 ? '+' : '') + uplift + ' pts ' + s7Txt("vs period avg", "vs period avg") +
+        '<em>' + s7Num(best.delivered) + ' ' + s7Txt("delivered", "delivered") + ' / ' + s7Num(best.netOrders) + ' ' + s7Txt("net orders", "net orders") +
+          ' - ' + (uplift > 0 ? '+' : '') + uplift + ' ' + s7Txt("percentage points vs whole-period NDR", "percentage points vs whole-period NDR") +
           (avg.ndrPct != null ? ' (' + s7PctValue(avg.ndrPct) + '%)' : '') + '</em>' +
       '</div>' +
       '<div class="s7-best-ndr-cycle-actions">' +
@@ -1598,35 +1598,19 @@ window.renderSection7 = function (mountEl, data, ctx) {
       tipIcon,
     ) {
       var badge = _tip(tipIcon || "??", tipTitle, tipDesc, tipFormula);
-      var isLight =
-        document.documentElement.getAttribute("data-theme") === "light";
-      var cardBg = isLight ? "#ffffff" : "#111318";
-      var cardBorder = isLight ? "#cbd5e1" : "rgba(255,255,255,0.07)";
-      var valColor = isLight ? "#1e293b" : "#f0f1f3";
-      var subColor = isLight ? "#64748b" : "#4d5066";
       return (
         '<div class="sfe-metric-card ' +
         cls +
-        '" style="background:' +
-        cardBg +
-        ";border-color:" +
-        cardBorder +
         '">' +
-        '<div class="sfe-metric-label" style="display:flex;align-items:center;gap:4px;color:' +
-        subColor +
-        '">' +
-        label +
+        '<div class="sfe-metric-label">' +
+        '<span class="sfe-metric-label-text">' + label + "</span>" +
         " " +
         badge +
         "</div>" +
-        '<div class="sfe-metric-val" style="color:' +
-        valColor +
-        '">' +
+        '<div class="sfe-metric-val">' +
         s7ValueStack(val, label, "s7-expected-value-stack") +
         "</div>" +
-        '<div class="sfe-metric-sub" style="color:' +
-        subColor +
-        '">' +
+        '<div class="sfe-metric-sub">' +
         sub +
         "</div>" +
         "</div>"
@@ -1637,7 +1621,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     var greenColor = isLight ? "#10b981" : "#00e5a0";
     el.innerHTML =
       card(
-        "sfe-neutral",
+        "sfe-neutral sfe-metric-orders",
         s7Txt("Net Orders", "صافي الطلبات"),
         s7Num(Math.round(s.totalOrders)),
         s7Txt("simulation input", "مدخل المحاكاة"),
@@ -1650,7 +1634,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "??",
       ) +
       card(
-        "sfe-neutral",
+        "sfe-neutral sfe-metric-delivered",
         s7Txt("Delivered", "تم التسليم"),
         s7Num(Math.round(c.deliveredOrders)),
         s7RatioPctValue(s.ndr) + "% NDR",
@@ -1663,7 +1647,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "?",
       ) +
       card(
-        "sfe-neutral",
+        "sfe-neutral sfe-metric-sales",
         s7Txt("Net Total Delivered Sales", "صافي إجمالي مبيعات الطلبات المسلمة"),
         sfeFmt(c.netTotalDeliveredSales, 2),
         s7Txt("based on real delivered AOV", "بناءً على متوسط قيمة الطلب المسلم الفعلي"),
@@ -1676,7 +1660,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "↗",
       ) +
       card(
-        "sfe-neutral",
+        "sfe-neutral sfe-metric-revenue",
         s7Txt("Revenue", "الإيرادات"),
         sfeFmt(c.revenue),
         c.returnPerSar.toFixed(2) + s7Txt("x per ", "x لكل ") + sfeCurrLabel(),
@@ -1689,7 +1673,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "??",
       ) +
       card(
-        profCls,
+        profCls + " sfe-metric-profit",
         s7Txt("Net Profit", "صافي الربح"),
         '<span style="color:' +
           (c.netProfit >= 0 ? greenColor : "#ff3b5c") +
@@ -1706,7 +1690,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "??",
       ) +
       card(
-        roiCls,
+        roiCls + " sfe-metric-roi",
         "ROI",
         '<span style="color:' +
           (c.roi >= 0 ? greenColor : "#ff3b5c") +
@@ -1723,7 +1707,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "??",
       ) +
       card(
-        "sfe-neutral",
+        "sfe-neutral sfe-metric-cpa",
         "CPA",
         sfeFmt(c.cpa, 2),
         s7Txt("per acquired order", "لكل طلب مكتسب"),
@@ -1735,6 +1719,20 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "CPA = adSpend / netOrders",
         "??",
       );
+  }
+
+  function focusSimulatorSectionIfRequested() {
+    if (window.DashboardCalculatorFocusTarget !== "simulator") return;
+    window.DashboardCalculatorFocusTarget = null;
+    setTimeout(function () {
+      var target = document.getElementById("s7-simulator-section");
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      target.classList.add("sfe-wrapper-focus");
+      setTimeout(function () {
+        target.classList.remove("sfe-wrapper-focus");
+      }, 1800);
+    }, 120);
   }
 
   function renderSimScores(c) {
@@ -3543,7 +3541,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       "</div>" +
       // -- SMART FORECASTING ENGINE SECTION --------------------------------
       '<div style="padding:0 30px 30px">' +
-      '<div class="sfe-wrapper">' +
+      '<div id="s7-simulator-section" class="sfe-wrapper">' +
       // SFE Header — Budget Forecast Results bar + title
       '<div style="display:flex;align-items:center;justify-content:space-between;background:' +
       (document.documentElement.getAttribute("data-theme") === "light"
@@ -3689,6 +3687,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
 
     wireCalcEvents();
     wireSimEvents();
+    focusSimulatorSectionIfRequested();
 
     // Initialize premium caret-preserving MoneyInput on Ad Spend budget field
     var budgetInput = document.getElementById("s7-in-budget");

@@ -54,6 +54,7 @@ const EASY_ORDERS_LOOKBACK_DAYS = Number(config.easyOrdersLookbackDays || 60) > 
 const MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS = 3;
 const TAAGER_POPUP_RETRY_WAIT_MS = 0;
 const TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR = [
+  "#orders-v2-date-pill",
   "#orders-search-button",
   'button:has-text("Search")',
   'button:has-text("بحث")',
@@ -825,7 +826,71 @@ async function clickTaagerDateRangeButton(page, kind) {
   return false;
 }
 
+async function hasTaagerOrdersV2DateFilter(page) {
+  return page.locator("#orders-v2-date-pill").first()
+    .isVisible({ timeout: 1000 })
+    .catch(() => false);
+}
+
+async function clickTaagerOrdersV2DateField(page, kind) {
+  const panel = page.locator('[role="dialog"]:has(#orders-v2-date-apply)').last();
+  const index = kind === "from" ? 0 : 1;
+  const dateButton = panel.locator('button[aria-haspopup="dialog"]:not(#orders-v2-date-pill)').nth(index);
+  if (await dateButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await clearTaagerInterruptionBounded(page, `orders-v2-date-${kind}-button`);
+    await dateButton.click({ timeout: 3000 }).catch(async () => {
+      await dateButton.evaluate((el) => el.click()).catch(() => {});
+    });
+    return true;
+  }
+  return false;
+}
+
+async function pickTaagerDateRangeV2(page, dateFrom, dateTo) {
+  log("Taager orders date picker: using new UI");
+  await clearTaagerInterruptionBounded(page, "orders-v2-date-pill");
+  const pill = page.locator("#orders-v2-date-pill").first();
+  await pill.click({ timeout: 5000 }).catch(async () => {
+    await pill.evaluate((el) => el.click()).catch(() => {});
+  });
+  await page.locator("#orders-v2-date-apply").waitFor({ state: "visible", timeout: 5000 });
+
+  if (!await clickTaagerOrdersV2DateField(page, "from")) {
+    throw new Error("TAAGER_DATE_BUTTON_MISSING: could not find the new UI from-date button");
+  }
+  await pickDateInTaagerCalendar(page, dateFrom);
+  await page.waitForTimeout(300);
+
+  const now = new Date();
+  const isDateToToday = dateTo &&
+    dateTo.getFullYear() === now.getFullYear() &&
+    dateTo.getMonth() === now.getMonth() &&
+    dateTo.getDate() === now.getDate();
+
+  if (dateTo && !isDateToToday) {
+    if (!await clickTaagerOrdersV2DateField(page, "to")) {
+      throw new Error("TAAGER_DATE_BUTTON_MISSING: could not find the new UI to-date button");
+    }
+    await pickDateInTaagerCalendar(page, dateTo);
+    await page.waitForTimeout(300);
+  } else {
+    log(`Taager orders date picker: dateTo is today (${dateTo ? formatDataDay(dateTo) : "none"}) or empty in new UI, leaving to date empty.`);
+  }
+
+  await safeTaagerClick(page, "#orders-v2-date-apply:not([disabled])", "Taager orders new UI apply button", {
+    timeout: 10000,
+    log,
+  });
+  await page.waitForTimeout(500);
+  return { uiVersion: "new", skipSearch: true };
+}
+
 async function pickTaagerDateRange(page, dateFrom, dateTo) {
+  if (await hasTaagerOrdersV2DateFilter(page)) {
+    return pickTaagerDateRangeV2(page, dateFrom, dateTo);
+  }
+
+  log("Taager orders date picker: using old UI");
   if (!await clickTaagerDateRangeButton(page, "from")) {
     throw new Error("TAAGER_DATE_BUTTON_MISSING: could not find the from-date button");
   }
@@ -850,6 +915,7 @@ async function pickTaagerDateRange(page, dateFrom, dateTo) {
 
   await page.keyboard.press("Escape").catch(() => {});
   await page.waitForTimeout(300);
+  return { uiVersion: "old", skipSearch: false };
 }
 
 async function pickTaagerDateRangeLegacy(page, dateFrom, dateTo) {
@@ -883,8 +949,46 @@ async function pickTaagerDateRangeLegacy(page, dateFrom, dateTo) {
 async function readTaagerLanguageButtonText(page) {
   assertUsableTaagerPage(page, "read-language");
   const button = page.locator("#change-language-btn:visible").first();
-  if (!await button.isVisible({ timeout: 1200 }).catch(() => false)) return "";
-  return String(await button.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+  if (await button.isVisible({ timeout: 1200 }).catch(() => false)) {
+    return String(await button.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+  }
+  return page.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll('button[id^="change-language-to-"][id$="-btn"], button[role="radio"]'));
+    const visible = (el) => {
+      const style = window.getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+    };
+    const active = buttons.find((el) => visible(el) && el.getAttribute("aria-checked") === "true");
+    const text = String(active && (active.innerText || active.textContent) || "").replace(/\s+/g, " ").trim();
+    if (/^English$/i.test(text)) return "Arabic";
+    if (/عربي|Arabic/i.test(text)) return "English";
+    return "";
+  }).catch(() => "");
+}
+
+async function clickTaagerArabicLanguageButton(page) {
+  const oldButton = page.locator("#change-language-btn:visible").first();
+  if (await oldButton.isVisible({ timeout: 700 }).catch(() => false)) {
+    await oldButton.click({ timeout: 5000 });
+    return true;
+  }
+  return page.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll('button[id^="change-language-to-"][id$="-btn"], button[role="radio"]'));
+    const visible = (el) => {
+      const style = window.getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+    };
+    const target = buttons.find((el) => {
+      const text = String(el.innerText || el.textContent || "");
+      const id = String(el.id || "");
+      return visible(el) && (/عربي|Arabic/i.test(text) || (id.startsWith("change-language-to-") && !/English/i.test(id)));
+    });
+    if (!target) return false;
+    target.click();
+    return true;
+  });
 }
 
 async function hasTaagerAuthenticatedShell(page) {
@@ -1124,16 +1228,19 @@ async function ensureTaagerArabic(page, where = "taager", options = {}) {
 
     log(`Taager language is English at ${where} - switching to Arabic`);
     await clearTaagerInterruptionBounded(page, `${where}-before-language-click`);
-    const langBtn = page.locator("#change-language-btn:visible").first();
     await withTaagerStepTimeout(
       `click Taager language button at ${where}`,
       7000,
-      () => langBtn.click({ timeout: 5000 })
+      () => clickTaagerArabicLanguageButton(page)
     ).catch(async () => {
       await withTaagerStepTimeout(
         `fallback click Taager language button at ${where}`,
         3000,
-        () => langBtn.evaluate((el) => el.click())
+        () => page.evaluate(() => {
+          const target = Array.from(document.querySelectorAll('button[id^="change-language-to-"][id$="-btn"], button[role="radio"]'))
+            .find((el) => /عربي|Arabic/i.test(String(el.innerText || el.textContent || "")) || (String(el.id || "").startsWith("change-language-to-") && !/English/i.test(String(el.id || ""))));
+          if (target) target.click();
+        })
       ).catch(() => {});
     });
     await page.waitForTimeout(1500).catch(() => {});
@@ -1477,6 +1584,7 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
       "Taager"
     );
     emitStage("taager.orders.export", "ok", `Taager export downloaded ${buffer.length} bytes`, { bytes: buffer.length });
+
     let easyBuffer = null;
     let enrichmentError = "";
     if (DASHBOARD_ENRICHMENT_PROVIDER === "easyorders") {

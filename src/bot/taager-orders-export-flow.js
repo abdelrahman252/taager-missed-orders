@@ -49,14 +49,14 @@ function createTaagerOrdersExportFlow(options = {}) {
     log(`Taager orders export attempt ${attempt}/${maxAttempts}: /orders navigation verified`);
 
     await clearTaagerInterruption(page, { log }).catch(() => {});
-    stage("taager.orders.ready", "started", "Waiting for orders search button");
-    log(`Taager orders export attempt ${attempt}/${maxAttempts}: waiting for orders search button`);
+    stage("taager.orders.ready", "started", "Waiting for orders controls");
+    log(`Taager orders export attempt ${attempt}/${maxAttempts}: waiting for orders controls`);
     await waitForTaagerTarget(page, selectors.searchButton, "Taager orders page ready", {
       timeout: 15000,
       blockingOverlayTimeout: 5000,
       log,
     });
-    stage("taager.orders.ready", "ok", "Orders search button is visible");
+    stage("taager.orders.ready", "ok", "Orders controls are visible");
 
     if (attempt === 1 && typeof stabilizeBeforeDateRange === "function") {
       stage("taager.orders.stabilize", "started", "Reloading orders page before date selection");
@@ -70,27 +70,35 @@ function createTaagerOrdersExportFlow(options = {}) {
     const toText = formatDataDay(dateTo);
     stage("taager.orders.date-range", "started", `${fromText} -> ${toText}`);
     log(`Taager export from: ${fromText} to ${toText} (attempt ${attempt}/${maxAttempts})`);
-    await withTaagerFlowTimeout(
+    const dateRangeResult = await withTaagerFlowTimeout(
       "Taager orders date range selection",
       Number(options.dateRangeTimeout || 20000),
       () => pickDateRange(page, dateFrom, dateTo)
     );
-    stage("taager.orders.date-range", "ok", "Date range selected");
+    const uiVersion = dateRangeResult && dateRangeResult.uiVersion ? dateRangeResult.uiVersion : "old";
+    stage("taager.orders.date-range", "ok", `Date range selected using ${uiVersion} UI`);
+    log(`Taager orders export attempt ${attempt}/${maxAttempts}: using ${uiVersion} UI`);
 
-    stage("taager.orders.search", "started", "Clicking search");
-    log(`Taager orders export attempt ${attempt}/${maxAttempts}: clicking search`);
-    await safeTaagerClick(page, selectors.searchEnabled, "Taager orders search button", {
-      timeout: 15000,
-      log,
-    });
-    log(`Taager orders export attempt ${attempt}/${maxAttempts}: waiting for search results/filter completion`);
-    await waitForTaagerTarget(page, selectors.searchEnabled, "Taager orders search button after filter", {
-      timeout: 30000,
-      blockingOverlayTimeout: 5000,
-      log,
-    });
-    await page.waitForTimeout(500);
-    stage("taager.orders.search", "ok", "Search/filter finished");
+    if (dateRangeResult && dateRangeResult.skipSearch) {
+      stage("taager.orders.search", "ok", "Date filter applied by new UI");
+      log(`Taager orders export attempt ${attempt}/${maxAttempts}: new UI already applied date filter; skipping search button`);
+      await page.waitForTimeout(500);
+    } else {
+      stage("taager.orders.search", "started", "Clicking search");
+      log(`Taager orders export attempt ${attempt}/${maxAttempts}: clicking search`);
+      await safeTaagerClick(page, selectors.searchEnabled, "Taager orders search button", {
+        timeout: 15000,
+        log,
+      });
+      log(`Taager orders export attempt ${attempt}/${maxAttempts}: waiting for search results/filter completion`);
+      await waitForTaagerTarget(page, selectors.searchEnabled, "Taager orders search button after filter", {
+        timeout: 30000,
+        blockingOverlayTimeout: 5000,
+        log,
+      });
+      await page.waitForTimeout(500);
+      stage("taager.orders.search", "ok", "Search/filter finished");
+    }
 
     stage("taager.orders.export", "started", "Waiting for export button");
     log("Downloading Taager orders...");
