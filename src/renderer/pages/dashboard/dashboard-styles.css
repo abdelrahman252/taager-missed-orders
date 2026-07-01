@@ -4217,8 +4217,8 @@ button {
 
 #page-dashboard .dashboard-best-ndr-btn {
   height: 36px;
-  min-width: 190px;
-  max-width: 250px;
+  min-width: 174px;
+  max-width: 224px;
   border: 1px solid color-mix(in srgb, var(--dash-good) 34%, var(--dash-border));
   border-radius: 8px;
   background: color-mix(in srgb, var(--dash-good) 10%, var(--dash-surface-soft));
@@ -4277,7 +4277,7 @@ button {
 }
 
 #page-dashboard .dashboard-best-ndr-copy strong {
-  max-width: 190px;
+  max-width: 164px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4291,13 +4291,13 @@ button {
   z-index: 80;
   top: calc(100% + 9px);
   inset-inline-end: 0;
-  width: min(390px, calc(100vw - 32px));
+  width: min(350px, calc(100vw - 32px));
   border: 1px solid color-mix(in srgb, var(--dash-good) 30%, var(--dash-border));
   border-radius: 8px;
   background: var(--dash-surface);
   color: var(--dash-text);
   box-shadow: var(--dash-shadow-float);
-  padding: 14px;
+  padding: 12px;
 }
 
 #page-dashboard .dashboard-best-ndr-panel[hidden] {
@@ -4333,7 +4333,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 13px 0 12px;
+  padding: 11px 0 10px;
 }
 
 #page-dashboard .dashboard-best-ndr-hero div {
@@ -4350,7 +4350,7 @@ button {
 
 #page-dashboard .dashboard-best-ndr-hero strong {
   color: var(--dash-good);
-  font-size: 28px;
+  font-size: 25px;
   font-weight: 950;
   line-height: 1;
 }
@@ -4366,12 +4366,12 @@ button {
 #page-dashboard .dashboard-best-ndr-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 7px;
 }
 
 #page-dashboard .dashboard-best-ndr-metric {
   min-width: 0;
-  padding: 9px 8px;
+  padding: 8px 7px;
   border: 1px solid var(--dash-border-soft);
   border-radius: 8px;
   background: var(--dash-surface-soft);
@@ -4408,7 +4408,7 @@ button {
 #page-dashboard .dashboard-best-ndr-why {
   display: grid;
   gap: 8px;
-  margin-top: 13px;
+  margin-top: 11px;
 }
 
 #page-dashboard .dashboard-best-ndr-why p {
@@ -4453,19 +4453,19 @@ button {
 #page-dashboard .dashboard-best-ndr-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 14px;
+  gap: 7px;
+  margin-top: 12px;
 }
 
 #page-dashboard .dashboard-best-ndr-actions button {
   min-width: 0;
   min-height: 34px;
-  padding: 7px 9px;
+  padding: 7px 7px;
   border: 1px solid var(--dash-border);
   border-radius: 8px;
   background: var(--dash-input-bg);
   color: var(--dash-text);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 900;
   cursor: pointer;
 }

@@ -340,11 +340,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
     var choice = activeOrderNdrChoice();
     orderNdrSourceKey = choice.key;
     mountEl._s7OrderNdrSourceKey = choice.key;
-    realNdrPct = Number(choice.ndrPct || 0);
-    realExpectedDvlExact = (realNdrPct / 100) * realTotalOrders;
-    realExpectedDvl = Math.round(realExpectedDvlExact);
     if (syncSim || !simState._ndrModified) {
-      simState.ndr = realNdrPct / 100;
+      simState.ndr = Number(choice.ndrPct || 0) / 100;
     }
     return choice;
   }
@@ -353,7 +350,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     if (choices.length <= 1) return "";
     var active = activeOrderNdrChoice();
     return '<div class="s7-order-ndr-box">' +
-      '<label for="s7-order-ndr-source">' + s7Txt("NDR assumption", "\u0627\u0641\u062a\u0631\u0627\u0636 NDR") + '</label>' +
+      '<label for="s7-order-ndr-source">' + s7Txt("Simulator NDR assumption", "\u0627\u0641\u062a\u0631\u0627\u0636 NDR") + '</label>' +
       '<select id="s7-order-ndr-source">' +
       choices.map(function (choice) {
         var label = choice.label + " - " + s7PctValue(choice.ndrPct) + "%" +
@@ -379,7 +376,10 @@ window.renderSection7 = function (mountEl, data, ctx) {
           ' - ' + (uplift > 0 ? '+' : '') + uplift + ' pts ' + s7Txt("vs period avg", "vs period avg") +
           (avg.ndrPct != null ? ' (' + s7PctValue(avg.ndrPct) + '%)' : '') + '</em>' +
       '</div>' +
-      '<button type="button" id="s7-use-best-ndr-cycle">' + s7Txt("Use this cycle", "Use this cycle") + '</button>' +
+      '<div class="s7-best-ndr-cycle-actions">' +
+        '<button type="button" id="s7-use-best-ndr-cycle">' + s7Txt("Use in simulator", "Use in simulator") + '</button>' +
+        '<button type="button" id="s7-use-actual-ndr-cycle">' + s7Txt("Use actual NDR", "Use actual NDR") + '</button>' +
+      '</div>' +
     '</div>';
   }
   applyOrderNdrChoice(false);
@@ -3748,6 +3748,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     if (orderNdrSelect) {
       orderNdrSelect.addEventListener("change", function () {
         orderNdrSourceKey = orderNdrSelect.value || "overall";
+        if (orderNdrSourceKey !== "best_cycle") window.DashboardBestNdrCyclePreferred = null;
         applyOrderNdrChoice(true);
         simState._ndrModified = false;
         var ndrInput = document.getElementById("sfe-ndr");
@@ -3768,6 +3769,23 @@ window.renderSection7 = function (mountEl, data, ctx) {
         var ndrInput = document.getElementById("sfe-ndr");
         if (ndrInput) ndrInput.value = s7RatioPctValue(simState.ndr);
         if (orderNdrSelect) orderNdrSelect.value = "best_cycle";
+        updateSimModifiedFlag();
+        updateCalcUI();
+        updateSimUI();
+        scheduleCalcUI();
+      });
+    }
+    var useActualCycleBtn = document.getElementById("s7-use-actual-ndr-cycle");
+    if (useActualCycleBtn) {
+      useActualCycleBtn.addEventListener("click", function () {
+        window.DashboardBestNdrCyclePreferred = null;
+        orderNdrSourceKey = "overall";
+        mountEl._s7OrderNdrSourceKey = "overall";
+        applyOrderNdrChoice(true);
+        simState._ndrModified = false;
+        var ndrInput = document.getElementById("sfe-ndr");
+        if (ndrInput) ndrInput.value = s7RatioPctValue(simState.ndr);
+        if (orderNdrSelect) orderNdrSelect.value = "overall";
         updateSimModifiedFlag();
         updateCalcUI();
         updateSimUI();

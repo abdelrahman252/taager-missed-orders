@@ -80,6 +80,13 @@
   font-weight: 750;
 }
 
+#page-dashboard .s7-best-ndr-cycle-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
 #page-dashboard .s7-best-ndr-cycle-card button {
   flex: 0 0 auto;
   border: 1px solid color-mix(in srgb, var(--dash-good) 44%, var(--dash-border));
@@ -100,6 +107,11 @@
 #page-dashboard .dash-size-xs .s7-best-ndr-cycle-card {
   align-items: stretch;
   flex-direction: column;
+}
+
+#page-dashboard .dash-size-xs .s7-best-ndr-cycle-actions {
+  flex-direction: column;
+  align-items: stretch;
 }
 
 #page-dashboard .dash-size-xs .s7-best-ndr-cycle-card button {

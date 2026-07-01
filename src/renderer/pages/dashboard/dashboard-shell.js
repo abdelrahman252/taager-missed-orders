@@ -1053,7 +1053,15 @@
 
   function rangeText(range) {
     if (!range || !range.dateFrom || !range.dateTo) return '--';
-    return shortDate(range.dateFrom) + ' - ' + shortDate(range.dateTo);
+    var locale = window.dashboardI18n ? window.dashboardI18n.locale() : 'en-US';
+    function compact(value) {
+      return parseIso(value).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+    }
+    var from = parseIso(range.dateFrom);
+    var to = parseIso(range.dateTo);
+    var text = compact(range.dateFrom) + ' - ' + compact(range.dateTo);
+    if (from.getFullYear() !== to.getFullYear()) text += ', ' + to.getFullYear();
+    return text;
   }
 
   function closeBestNdrPanel(shellEl) {
@@ -1104,7 +1112,7 @@
       ? 'Failure rate was ' + signedPts(best.failedDeltaPts) + ' below the period average.'
       : 'Failure rate was ' + signedPts(best.failedDeltaPts) + ' versus the period average.';
     return '<div class="dashboard-best-ndr-head">' +
-        '<span>Best cycle found in selected period</span>' +
+        '<span>Best cycle found</span>' +
         '<strong>' + esc(rangeText(best)) + '</strong>' +
       '</div>' +
       '<div class="dashboard-best-ndr-hero">' +
@@ -1117,16 +1125,16 @@
         metricBox('Sample rule', countText(result.minSample) + '+ orders', 'info') +
       '</div>' +
       '<div class="dashboard-best-ndr-why">' +
-        '<span class="dashboard-best-ndr-section-label">Why this cycle won</span>' +
-        '<p>It had the strongest trustworthy NDR after scanning every ' + esc(result.cycleDays) + '-day cycle in the selected period.</p>' +
+        '<span class="dashboard-best-ndr-section-label">Why it won</span>' +
+        '<p>Strongest trustworthy ' + esc(result.cycleDays) + '-day NDR cycle in the selected period.</p>' +
         '<p>' + esc(failedCopy) + '</p>' +
         entityLine('Top city', topCity) +
         entityLine('Top product', topProduct) +
       '</div>' +
       '<div class="dashboard-best-ndr-actions">' +
-        '<button type="button" data-best-ndr-action="calculator">Use in Account Calc</button>' +
-        '<button type="button" data-best-ndr-action="expected">Apply as Expected NDR</button>' +
-        '<button type="button" data-best-ndr-action="orders">View Orders</button>' +
+        '<button type="button" data-best-ndr-action="calculator">Use in Simulator</button>' +
+        '<button type="button" data-best-ndr-action="expected">Expected NDR</button>' +
+        '<button type="button" data-best-ndr-action="orders">Orders</button>' +
       '</div>';
   }
 
@@ -1165,7 +1173,7 @@
       destroyDashboardPaneCache(shellEl);
       var ctx = shellEl._dashboardCurrentCtx;
       if (ctx && typeof ctx.onNavigate === 'function') ctx.onNavigate('calculator');
-      toast('Best NDR Cycle is ready in Account Calc.', 'success');
+      toast('Best NDR Cycle is ready in the simulator.', 'success');
       return;
     }
     if (action === 'orders') {
