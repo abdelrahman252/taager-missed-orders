@@ -6,7 +6,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
-  var VERSION = 2;
+  var VERSION = 3;
   var MAX_CANDIDATES = 5;
   var ARABIC_DIGITS = "\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669";
   var NAME_STOP_WORDS = {
@@ -153,6 +153,16 @@
     return text(value);
   }
 
+  function hasUnknownSkuToken(value) {
+    var raw = campaignName(value);
+    if (/\bsku[-_][a-z0-9_-]{2,}\b/i.test(raw)) return true;
+    return (raw.match(/[a-z0-9]+/gi) || []).some(function (token) {
+      var letters = (token.match(/[a-z]/gi) || []).length;
+      var digits = (token.match(/\d/g) || []).length;
+      return token.length >= 8 && letters >= 2 && digits >= 3;
+    });
+  }
+
   function scopeFor(value, options) {
     options = options || {};
     var row = value && typeof value === "object" ? value : {};
@@ -283,36 +293,18 @@
     );
   }
 
-  function nameScore(normalizedCampaign, entry, index) {
-    if (!entry.normalizedName || !entry.tokens.length) return null;
-    var hits = entry.tokens.filter(function (token) { return hasTerm(normalizedCampaign, token); });
+  function nameScore(normalizedCampaign, entry) {
+    if (!entry.normalizedName) return null;
     var fullPhrase = hasTerm(normalizedCampaign, entry.normalizedName);
-    var uniqueHit = hits.some(function (token) {
-      return token.length >= 4 && index.tokenOwners[token] === 1;
-    });
     if (fullPhrase) {
       return { score: 1000 + entry.normalizedName.length, detail: "name_phrase", confidence: "high" };
-    }
-    if (hits.length >= 2) {
-      return {
-        score: 500 + hits.reduce(function (sum, token) { return sum + token.length; }, 0),
-        detail: "name_tokens",
-        confidence: "medium"
-      };
-    }
-    if (uniqueHit) {
-      return {
-        score: 250 + hits[0].length,
-        detail: "name_unique_token",
-        confidence: "medium"
-      };
     }
     return null;
   }
 
   function nameMatch(normalizedCampaign, entries, index) {
     var scored = entries.map(function (entry) {
-      var score = nameScore(normalizedCampaign, entry, index);
+      var score = nameScore(normalizedCampaign, entry);
       return score ? { entry: entry, score: score } : null;
     }).filter(Boolean).sort(function (a, b) {
       return b.score.score - a.score.score;
@@ -335,6 +327,7 @@
     var entries = index.entries.filter(function (entry) { return inScope(entry, scope); });
     var skuResult = skuMatch(normalizedCampaign, compactCampaign, entries);
     if (skuResult) return skuResult;
+    if (hasUnknownSkuToken(value)) return unmatched("unknown_sku");
     return nameMatch(normalizedCampaign, entries, index);
   }
 

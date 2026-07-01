@@ -4,7 +4,7 @@ const os = require("os");
 const path = require("path");
 
 function parseEasyOrdersIdentityFromDocument() {
-  // IMPORTANT FOR FUTURE AI/CODEX PASSES:
+  // IMPORTANT FOR FUTURE MAINTENANCE:
   // The active EasyOrders store must be read from the account identity header
   // paired with the active email. Do not "simplify" this by reading the first
   // item under the "Stores:" list; that list contains available stores and can
@@ -31,7 +31,7 @@ function parseEasyOrdersIdentityFromDocument() {
   const normalize = (value) => String(value || "")
     .replace(/[\u200E\u200F\u061C]/g, "")
     .replace(/[\u{1F300}-\u{1FAFF}\u2600-\u27BF\uFE0F\u200D]/gu, "")
-    .replace(/\s+(?:ð|â)[^\s]{1,8}\s*$/giu, "")
+    .replace(/\s+(?:\u00f0|\u00e2)[^\s]{1,8}\s*$/giu, "")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
@@ -134,6 +134,10 @@ function createEasyOrdersExportFlow(options = {}) {
   const exportNotificationPolls = Number(options.exportNotificationPolls || 4);
   const exportNotificationPollMs = Number(options.exportNotificationPollMs || 2500);
   const exportCooldownMs = Number(options.exportCooldownMs || 6 * 60 * 1000);
+  const storeSelectionNavigationTimeoutMs = Math.max(
+    1000,
+    Number(options.storeSelectionNavigationTimeoutMs) || 45000
+  );
   let identityCache = {
     verified: false,
     email: "",
@@ -283,7 +287,9 @@ function createEasyOrdersExportFlow(options = {}) {
   async function revealIdentityMenu(page) {
     const selectors = [
       'button[aria-label="app_bar.user_settings"]',
+      '.MuiAppBar-root button[aria-label*="settings" i]',
       '[data-testid="user-avatar"]',
+      '.MuiAppBar-root button:has(svg[data-testid*="Account" i])',
       'button:has(.MuiAvatar-root)',
       '.MuiAvatar-root',
       '.MuiAppBar-root button[aria-label*="account" i]',
@@ -293,8 +299,11 @@ function createEasyOrdersExportFlow(options = {}) {
       const target = page.locator(selector).first();
       if (await target.count().catch(() => 0)) {
         try {
-          await target.click({ timeout: 1200 });
-          await page.waitForTimeout(800);
+          await target.click({ timeout: 5000 });
+          const identitySurface = page.locator(
+            '[role="menu"]:visible, [role="dialog"]:visible, [class~="MuiPopover-paper"]:visible'
+          ).first();
+          await identitySurface.waitFor({ state: "visible", timeout: 5000 });
           return true;
         } catch (_) {}
       }
@@ -329,29 +338,81 @@ function createEasyOrdersExportFlow(options = {}) {
       returnUrl.startsWith("https://app.easy-orders.net/") &&
       !returnUrl.includes("store-selection") &&
       !returnUrl.includes("login");
-    await gotoWithNetworkRetries(page, "https://app.easy-orders.net/#/store-selection", "EasyOrders store selection");
-    await page.waitForTimeout(1500);
-    if (page.url().includes("login")) return false;
-
     const cards = page.locator(
       ":is(.MuiCard-root, button, [role='button']):has(h1, h2, h3, h4, h5, h6, [role='heading'])"
     );
-    await cards.first().waitFor({ state: "visible", timeout: 12000 }).catch(() => {});
-    for (let i = 0; i < await cards.count(); i++) {
-      const card = cards.nth(i);
-      const nameEl = card.locator("h1, h2, h3, h4, h5, h6, [role='heading']").first();
-      const rawName = await nameEl.innerText().catch(() => "");
-      if (normalizeIdentityText(rawName) !== expectedStore) continue;
-      await card.click();
-      await page.waitForFunction(() => !window.location.href.includes("store-selection"), { timeout: 15000 });
-      if (shouldReturn && returnUrl !== page.url()) {
-        await gotoWithNetworkRetries(page, returnUrl, "EasyOrders return after store verification");
-        await page.waitForTimeout(1200);
+
+    let lastError = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        log(`EasyOrders store recovery ${attempt}/3: opening store selection for "${config.easyStore}".`);
+        await gotoWithNetworkRetries(page, "https://app.easy-orders.net/#/store-selection", "EasyOrders store selection");
+        if (page.url().includes("login")) return false;
+
+        await cards.first().waitFor({ state: "visible", timeout: 30000 });
+        const availableStores = [];
+        let expectedCard = null;
+        const cardCount = await cards.count();
+        for (let i = 0; i < cardCount; i++) {
+          const card = cards.nth(i);
+          const nameEl = card.locator("h1, h2, h3, h4, h5, h6, [role='heading']").first();
+          const rawName = await nameEl.innerText().catch(() => "");
+          const normalizedName = normalizeIdentityText(rawName);
+          if (normalizedName) availableStores.push(normalizedName);
+          if (normalizedName === expectedStore) expectedCard = card;
+        }
+
+        if (!expectedCard) {
+          throw new Error(
+            `configured store was not present; available stores: ${availableStores.join(", ") || "none"}`
+          );
+        }
+
+        await expectedCard.click({ timeout: 10000 });
+        await page.waitForFunction(
+          () => !window.location.href.includes("store-selection"),
+          { timeout: storeSelectionNavigationTimeoutMs }
+        );
+        await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
+        if (shouldReturn && returnUrl !== page.url()) {
+          await gotoWithNetworkRetries(page, returnUrl, "EasyOrders return after store verification");
+        }
+        await page.waitForTimeout(2500);
+        return true;
+      } catch (error) {
+        lastError = error;
+        log(`EasyOrders store recovery ${attempt}/3 failed: ${error.message || error}`);
+        if (attempt < 3) {
+          await page.waitForTimeout(2000);
+          await reloadWithNetworkRetries(page, "EasyOrders store recovery").catch(() => {});
+          await page.waitForTimeout(2500);
+        }
       }
-      await ensureEnglish(page, { force: true });
-      return true;
     }
-    return false;
+
+    throw new Error(
+      `EASY_ORDERS_STORE_SELECTION_FAILED: could not select "${expectedStore}" after 3 attempts` +
+      (lastError ? ` (${lastError.message || lastError})` : "")
+    );
+  }
+
+  async function rereadIdentityAfterRecovery(page, where) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      if (page.url().includes("store-selection")) {
+        await gotoWithNetworkRetries(page, "https://app.easy-orders.net/", "EasyOrders recovery dashboard").catch(() => {});
+      }
+      await page.waitForTimeout(attempt === 1 ? 2500 : 4000);
+      await ensureEnglish(page).catch((error) => {
+        log(`EasyOrders language check during ${where} recovery ${attempt}/3 failed: ${error.message || error}`);
+      });
+      const identity = await readActiveIdentity(page).catch(() => null);
+      if (identity && identity.email && identity.store) return identity;
+      if (attempt < 3) {
+        log(`EasyOrders identity still unreadable at ${where}; reloading before retry ${attempt + 1}/3.`);
+        await reloadWithNetworkRetries(page, `EasyOrders identity recovery at ${where}`).catch(() => {});
+      }
+    }
+    return null;
   }
 
   async function verifyIdentity(page, where) {
@@ -372,10 +433,18 @@ function createEasyOrdersExportFlow(options = {}) {
         ? `active store "${currentStore}" did not match`
         : "active store header was not readable";
       log(`EasyOrders ${reason} at ${where}; selecting configured store "${config.easyStore}" explicitly.`);
-      const selected = await selectExpectedStore(page).catch(() => false);
-      if (selected) {
-        activeIdentity = await readActiveIdentity(page).catch(() => null);
-        currentStore = await readCurrentStore(page, activeIdentity).catch(() => "");
+      let selected = false;
+      try {
+        selected = await selectExpectedStore(page);
+      } catch (error) {
+        log(`EasyOrders explicit store selection did not complete at ${where}: ${error.message || error}`);
+      }
+      // Re-read even when the navigation wait timed out. EasyOrders may finish the
+      // selection API call and reload just after our wait expires.
+      activeIdentity = await rereadIdentityAfterRecovery(page, where);
+      currentStore = await readCurrentStore(page, activeIdentity).catch(() => "");
+      if (!selected && currentStore === expectedStore) {
+        log(`EasyOrders store selection completed after the navigation timeout at ${where}; recovery verified it.`);
       }
     }
     if (activeIdentity && normalizeEmail(activeIdentity.email) !== expectedEmail) {
@@ -713,3 +782,4 @@ module.exports = {
   createEasyOrdersExportFlow,
   parseEasyOrdersIdentityFromDocument,
 };
+

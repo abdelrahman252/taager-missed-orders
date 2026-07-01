@@ -11,6 +11,7 @@
     { id: 'overview',   key: 'nav.overview',   iconName: 'trendingUp' },
     { id: 'pipeline',   key: 'nav.pipeline',   iconName: 'truck'      },
     { id: 'orders',     key: 'nav.orders',     iconName: 'list'       },
+    { id: 'orderSources', key: 'nav.orderSources', iconName: 'gitBranch' },
     { id: 'cod',        key: 'nav.cod',        iconName: 'creditCard' },
     { id: 'products',   key: 'nav.products',   iconName: 'package'    },
     { id: 'cities',     key: 'nav.cities',     iconName: 'mapPin'     },
@@ -18,6 +19,7 @@
     { id: 'marketing',  key: 'nav.marketing',  iconName: 'activity'   },
     { id: 'campaigns',  key: 'nav.campaigns',  iconName: 'megaphone'  },
     { id: 'calculator', key: 'nav.calculator', iconName: 'calculator' },
+    { id: 'gmvTarget',  key: 'nav.gmvTarget',  iconName: 'target'     },
     { id: 'productForecast', key: 'nav.productForecast', iconName: 'activity' },
     { id: 'prepaid',    key: 'nav.prepaid',    iconName: 'wallet'     },
     { id: 'staticUpdate', key: 'nav.staticUpdate', iconName: 'upload' },
@@ -29,6 +31,7 @@
     overview: 'renderSection1',
     pipeline: 'renderSection2',
     orders: 'renderSection3',
+    orderSources: 'renderSectionOrderSources',
     cod: 'renderSection4',
     products: 'renderSection5',
     cities: 'renderSectionCities',
@@ -36,6 +39,7 @@
     marketing: 'renderSectionMarketingConnections',
     campaigns: 'renderSectionCampaigns',
     calculator: 'renderSection7',
+    gmvTarget: 'renderSectionGmvTarget',
     productForecast: 'renderSectionProductForecast',
     prepaid:    'renderSectionPrepaid',
     staticUpdate: 'renderSectionStaticUpdate',
@@ -53,11 +57,13 @@
   var CACHEABLE_SECTIONS = {
     master: true,
     overview: true,
+    orderSources: true,
     cod: true,
     products: true,
     cities: true,
     campaigns: true,
     calculator: true,
+    gmvTarget: true,
     prepaid: true,
     staticUpdate: true
   };
@@ -79,6 +85,11 @@
   function trText(key, fallback, params) {
     var value = tr(key, params);
     return value && value !== key ? value : fallback;
+  }
+
+  function appText(key, fallback) {
+    var value = window._t ? window._t(key) : key;
+    return typeof value === 'string' && value !== key ? value : (fallback || value || key);
   }
 
   function esc(value) {
@@ -119,6 +130,10 @@
     return tr(item.key);
   }
 
+  function isolateDashboardTokens(text) {
+    return esc(text).replace(/\b(GMV|NDR|AOV|COD|CPA|ROI|ROAS|SAR|EGP|IQD|AED|KWD|QAR|BHD|OMR|USD)\b/g, '<bdi dir="ltr" class="dash-ltr-token">$1</bdi>');
+  }
+
   function navItemById(id) {
     return NAV_ITEMS.find(function (item) { return item.id === id; }) || NAV_ITEMS[0];
   }
@@ -142,9 +157,10 @@
     }).map(function (item) {
       var active = item.id === activeId;
       var labelText = navLabel(item);
-      return '<button type="button" class="dash-nav-btn ' + (active ? 'is-active' : '') + '" data-section="' + item.id + '" aria-label="' + labelText + '" aria-current="' + (active ? 'page' : 'false') + '">' +
+      var labelHtml = isolateDashboardTokens(labelText);
+      return '<button type="button" class="dash-nav-btn ' + (active ? 'is-active' : '') + '" data-section="' + item.id + '" aria-label="' + esc(labelText) + '" aria-current="' + (active ? 'page' : 'false') + '">' +
         '<span class="dash-nav-icon">' + icon(item.iconName, 'currentColor') + '</span>' +
-        '<span class="dash-nav-lbl">' + labelText + '</span>' +
+        '<span class="dash-nav-lbl">' + labelHtml + '</span>' +
       '</button>';
     }).join('');
 
@@ -164,13 +180,14 @@
   function buildTopbar(activeSection) {
     activeSection = normalizeSection(activeSection);
     var title = navLabel(navItemById(activeSection));
+    var titleHtml = isolateDashboardTokens(title);
     var manageAccountsLabel = window._t ? window._t('setup.nav_accounts') : 'Manage Accounts';
     return '<div id="dash-global-topbar" class="dash-global-topbar" dir="' + (isRtl() ? 'rtl' : 'ltr') + '">' +
       '<div class="dash-topbar-primary">' +
         '<div class="dash-topbar-identity">' +
           '<div class="dashboard-account-select-wrap" id="dashboard-account-select-wrap" aria-label="' + tr('shell.account') + '"></div>' +
           '<div class="dash-topbar-title">' +
-            '<span id="dashboard-section-title">' + title + '</span>' +
+            '<span id="dashboard-section-title">' + titleHtml + '</span>' +
           '</div>' +
         '</div>' +
         '<div class="dash-topbar-status">' +
@@ -579,7 +596,7 @@
     var prevId = shellEl._dashboardActiveSection;
     shellEl._dashboardActiveSection = sectionId;
     var title = shellEl.querySelector('#dashboard-section-title');
-    if (title) title.textContent = navLabel(navItemById(sectionId));
+    if (title) title.innerHTML = isolateDashboardTokens(navLabel(navItemById(sectionId)));
 
     if (prevId && prevId !== sectionId) {
       var prevBtn = shellEl.querySelector('.dash-nav-btn[data-section="' + prevId + '"]');
@@ -594,26 +611,28 @@
   function loaderHTML(sectionId) {
     var label = navLabel(navItemById(sectionId || 'master'));
     var loadingLabel = esc(tr('shell.loading')) + ' ' + esc(label);
-    return '<div class="dash-section-preloader" data-dashboard-preloader="true" data-dashboard-section="' + esc(sectionId || 'master') + '" role="status" aria-live="polite" aria-label="' + loadingLabel + '">' +
-      '<div class="dash-preloader-head">' +
-        '<span class="dash-preloader-spinner" aria-hidden="true"></span>' +
-        '<div class="dash-preloader-copy">' +
+    return '<div id="dashboard-live-preloader" class="dash-section-preloader dashboard-live-preloader" data-dashboard-preloader="true" data-dashboard-section="' + esc(sectionId || 'master') + '" role="status" aria-live="polite" aria-label="' + loadingLabel + '">' +
+      '<div class="dashboard-live-loader-main">' +
+        '<div class="dashboard-live-meter" aria-hidden="true">' +
+          '<div class="dashboard-live-ring" data-dashboard-loader-ring>' +
+            '<div class="dashboard-live-percent"><span data-dashboard-loader-percent>6</span><span>%</span></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="dashboard-live-copy">' +
           '<div class="dash-preloader-title">' + esc(tr('shell.loading')) + '</div>' +
           '<div class="dash-preloader-section">' + esc(label) + '</div>' +
+          '<div class="dashboard-live-stage" data-dashboard-loader-title>' + esc(appText('preloader.dashboard.stage.engine.label', 'Dashboard engine')) + '</div>' +
+          '<div class="dashboard-live-body" data-dashboard-loader-body>' + esc(appText('preloader.dashboard.stage.engine.body', 'Loading dashboard code, styles, and controls.')) + '</div>' +
+          '<div class="dashboard-live-progress" aria-hidden="true"><span data-dashboard-loader-fill></span></div>' +
+          '<div class="dashboard-live-activity" data-dashboard-loader-activity>' + esc(appText('preloader.dashboard.activity.starting', 'Starting dashboard...')) + '</div>' +
         '</div>' +
       '</div>' +
-      '<div class="dash-preloader-grid" aria-hidden="true">' +
-        '<span></span><span></span><span></span><span></span>' +
-      '</div>' +
-      '<div class="dash-preloader-body" aria-hidden="true">' +
-        '<div class="dash-preloader-chart"></div>' +
-        '<div class="dash-preloader-table">' +
-          '<span></span><span></span><span></span><span></span><span></span>' +
-        '</div>' +
+      '<div class="dashboard-loader-steps" data-dashboard-loader-stages aria-hidden="true"></div>' +
+      '<div class="dashboard-live-preview" aria-hidden="true">' +
+        '<span></span><span></span><span></span><span></span><span></span><span></span>' +
       '</div>' +
     '</div>';
   }
-
   function getDataVersion(data) {
     return data && data._version != null ? data._version : (data && data._loaded ? 'loaded' : 'pending');
   }
@@ -647,6 +666,22 @@
       if (shellEl._dashboardRenderToken !== token) return;
       render();
     });
+  }
+
+  function runSectionPhase(sectionId, phase, callback) {
+    var name = 'dashboard:section:phase:' + phase;
+    var timer = window.TaagerPerf && typeof window.TaagerPerf.start === 'function'
+      ? window.TaagerPerf.start(name, { sectionId: sectionId, phase: phase })
+      : null;
+    window.__taagerPerfLastPhase = { name: name, sectionId: sectionId, phase: phase, state: 'running', at: Date.now() };
+    try {
+      return callback();
+    } finally {
+      window.__taagerPerfLastPhase = { name: name, sectionId: sectionId, phase: phase, state: 'complete', at: Date.now() };
+      if (timer && window.TaagerPerf && typeof window.TaagerPerf.end === 'function') {
+        window.TaagerPerf.end(timer, { ok: true, sectionId: sectionId, phase: phase });
+      }
+    }
   }
 
   function normalizeSectionLifecycle(handle) {
@@ -725,6 +760,10 @@
   function deactivateSectionPane(pane) {
     if (!pane || pane.hidden) return;
     runLifecycleHook(pane._dashboardSectionLifecycle, 'deactivate', pane);
+    if (pane._inlineThemeObserver) {
+      pane._inlineThemeObserver.disconnect();
+      pane._inlineThemeObserver = null;
+    }
     setSectionPaneHidden(pane, true);
   }
 
@@ -799,6 +838,14 @@
 
   function prepareFreshSectionPane(shellEl, container, sectionId, renderKey, cacheable) {
     deactivateOrDestroyActivePane(shellEl, null);
+    // A stale concurrent lazy callback can reach this path after another render
+    // has already created a pane. Enforce one DOM pane per section for cached
+    // and non-cached sections so untracked hidden panes cannot duplicate controls.
+    Array.prototype.slice.call(container.children).forEach(function (existingPane) {
+      if (existingPane && existingPane.dataset.sectionId === sectionId) {
+        destroySectionPane(shellEl, existingPane);
+      }
+    });
     var pane = createSectionPane(sectionId, renderKey, cacheable);
     container.appendChild(pane);
     shellEl._dashboardActivePane = pane;
@@ -854,6 +901,9 @@
       return;
     }
     pane.innerHTML = loaderHTML(sectionId);
+    if (window.TaagerPreloader && typeof window.TaagerPreloader.dashboardRefresh === 'function') {
+      window.TaagerPreloader.dashboardRefresh();
+    }
     if (window.TaagerPerf && typeof window.TaagerPerf.start === 'function') {
       pane._dashboardLoaderTimer = window.TaagerPerf.start('dashboard:loader:visible', { sectionId: sectionId || 'master' });
     }
@@ -918,15 +968,29 @@
       (draft.dateFrom !== period.dateFrom || draft.dateTo !== period.dateTo);
   }
 
+  function activeDashboardAccountIsStatic() {
+    var activeId = window.getActiveAccountId ? String(window.getActiveAccountId() || '') : '';
+    var accounts = Array.isArray(window._kbotAccounts) ? window._kbotAccounts : [];
+    if (activeId === '__all__') {
+      return accounts.length > 0 && accounts.every(function (account) { return account && account.accountType === 'static'; });
+    }
+    var active = accounts.find(function (account) { return account && String(account.id) === activeId; });
+    return !!active && active.accountType === 'static';
+  }
+
   function syncDashboardUpdateButton(shellEl, draftDirty) {
     var updateBtn = shellEl && shellEl.querySelector('#dashboard-update-btn');
     if (!updateBtn) return;
     var fetchBusy = !!(window._dashboardFetchState && window._dashboardFetchState.active) ||
       updateBtn.getAttribute('aria-busy') === 'true';
+    var staticBlocked = activeDashboardAccountIsStatic();
     updateBtn.dataset.rangeBlocked = draftDirty ? 'true' : 'false';
-    updateBtn.disabled = fetchBusy || draftDirty;
-    if (draftDirty) {
-      var hint = tr('period.viewBeforeUpdate');
+    updateBtn.dataset.staticBlocked = staticBlocked ? 'true' : 'false';
+    updateBtn.disabled = fetchBusy || draftDirty || staticBlocked;
+    if (draftDirty || staticBlocked) {
+      var hint = staticBlocked
+        ? trText('static.liveUpdateDisabled', 'Static accounts are updated from the Static Update section.')
+        : tr('period.viewBeforeUpdate');
       updateBtn.title = hint;
       updateBtn.setAttribute('data-tooltip', hint);
     } else {
@@ -938,6 +1002,10 @@
   function triggerDashboardUpdate(shellEl, opts) {
     if (!shellEl) return false;
     opts = opts || {};
+    if (activeDashboardAccountIsStatic()) {
+      syncDashboardUpdateButton(shellEl, false);
+      return true;
+    }
     var current = window.DashboardPeriodState ? window.DashboardPeriodState.get() : null;
     var draft = current && current.preset === 'custom' ? getCustomRangeDraft(shellEl, current) : null;
     if (customRangeDraftIsDirty(draft, current)) {
@@ -1479,14 +1547,14 @@
       cachedCtx.onNavigate = ctx.onNavigate;
       cachedPane._dashboardSectionContext = cachedCtx;
       if (window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.observe === 'function') {
-        window.DashboardQueryRuntime.observe(sectionId, data);
+        runSectionPhase(sectionId, 'query-observe', function () { window.DashboardQueryRuntime.observe(sectionId, data); });
       }
       if (cachedCtx.options && typeof cachedCtx.options.onSectionChange === 'function') {
-        cachedCtx.options.onSectionChange(sectionId, data);
+        runSectionPhase(sectionId, 'section-change', function () { cachedCtx.options.onSectionChange(sectionId, data); });
       }
-      if (window.dashboardI18n) window.dashboardI18n.apply(cachedPane);
-      if (window.TaagerUI) window.TaagerUI.enhance(cachedPane);
-      scheduleInlineThemeFix(cachedPane);
+      if (window.dashboardI18n) runSectionPhase(sectionId, 'i18n', function () { window.dashboardI18n.apply(cachedPane); });
+      if (window.TaagerUI) runSectionPhase(sectionId, 'ui-enhance', function () { window.TaagerUI.enhance(cachedPane); });
+      runSectionPhase(sectionId, 'theme-fix', function () { scheduleInlineThemeFix(cachedPane); });
       if (window.TaagerPerf && typeof window.TaagerPerf.end === 'function' && restoreTimer) {
         window.TaagerPerf.end(restoreTimer, { ok: true, sectionId: sectionId });
       }
@@ -1565,7 +1633,7 @@
         sectionId: sectionId
       });
       pane._dashboardSectionContext = sectionCtx;
-      var lifecycle = normalizeSectionLifecycle(fn(pane, slice, sectionCtx));
+      var lifecycle = normalizeSectionLifecycle(runSectionPhase(sectionId, 'render-body', function () { return fn(pane, slice, sectionCtx); }));
       if (lifecycle) {
         pane._dashboardSectionLifecycle = lifecycle;
         if (typeof lifecycle.destroy === 'function') {
@@ -1578,14 +1646,14 @@
       }
       pane._dashboardRenderKey = renderKey;
       if (window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.observe === 'function') {
-        window.DashboardQueryRuntime.observe(sectionId, data);
+        runSectionPhase(sectionId, 'query-observe', function () { window.DashboardQueryRuntime.observe(sectionId, data); });
       }
       if (ctx.options && typeof ctx.options.onSectionChange === 'function') {
-        ctx.options.onSectionChange(sectionId, data);
+        runSectionPhase(sectionId, 'section-change', function () { ctx.options.onSectionChange(sectionId, data); });
       }
-      if (window.dashboardI18n) window.dashboardI18n.apply(pane);
-      if (window.TaagerUI) window.TaagerUI.enhance(pane);
-      scheduleInlineThemeFix(pane);
+      if (window.dashboardI18n) runSectionPhase(sectionId, 'i18n', function () { window.dashboardI18n.apply(pane); });
+      if (window.TaagerUI) runSectionPhase(sectionId, 'ui-enhance', function () { window.TaagerUI.enhance(pane); });
+      runSectionPhase(sectionId, 'theme-fix', function () { scheduleInlineThemeFix(pane); });
       if (window.performance && typeof window.performance.mark === 'function') {
         try { window.performance.mark('dashboard:section:' + sectionId + ':rendered'); } catch (_) {}
       }

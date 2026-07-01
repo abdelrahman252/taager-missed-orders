@@ -180,6 +180,8 @@ contextBridge.exposeInMainWorld("api", {
   applyStaticDashboardUpdate:   (params)   => monitoredInvoke("apply-static-dashboard-update", params),
   saveDashboardSnapshot: (accountId, data) => monitoredInvoke("save-dashboard-snapshot", accountId, data),
   getDashboardSnapshot:  (accountId, knownRevision) => monitoredInvoke("get-dashboard-snapshot", accountId, knownRevision),
+  getDashboardSnapshotJson: (accountId, knownRevision) => monitoredInvoke("get-dashboard-snapshot-json", accountId, knownRevision),
+  getDashboardSnapshotGzip: (accountId, knownRevision) => monitoredInvoke("get-dashboard-snapshot-gzip", accountId, knownRevision),
   getDashboardQueryFlags:( )                => monitoredInvoke("get-dashboard-query-flags"),
   queryDashboardData:    (payload)          => monitoredInvoke("query-dashboard-data", payload),
   exportDashboardOrdersQuery: (payload)     => monitoredInvoke("export-dashboard-orders-query", payload),

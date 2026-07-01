@@ -1,4 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
+﻿// ─────────────────────────────────────────────────────────────────────────────
 // section4-cod.js  —  Task 4: تحصيل COD
 // Vanilla-JS port of Section4.jsx + sub-components.
 // Depends on: dashboard-shared.js (animateNumber, icon, formatSAR, sparklineSvg)
@@ -32,6 +32,20 @@ window.renderSection4 = function (mountEl, data, ctx) {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
+  }
+
+  function codSkuCopyHtml(value) {
+    var color = ((document.documentElement.getAttribute("data-theme") ||
+      window._kbotTheme) === "light"
+      ? "rgba(54,4,83,0.75)"
+      : "#cbd5e1");
+    if (window.dashboardSkuCopyHtml) {
+      return window.dashboardSkuCopyHtml(value || "", {
+        emptyText: "-",
+        style: "font-family:Consolas,monospace;color:" + color + ";font-weight:700"
+      });
+    }
+    return '<span style="font-family:Consolas,monospace;color:' + color + '">' + esc(value || "-") + "</span>";
   }
 
   const fmtSAR =
@@ -1153,14 +1167,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
                 "</div>",
             ) +
             cell(
-              '<span style="font-family:Consolas,monospace;color:' +
-                ((document.documentElement.getAttribute("data-theme") ||
-                  window._kbotTheme) === "light"
-                  ? "rgba(54,4,83,0.75)"
-                  : "#cbd5e1") +
-                '">' +
-                esc(r.sku || "-") +
-                "</span>",
+              codSkuCopyHtml(r.sku),
               "white-space:nowrap",
             ) +
             cell(
@@ -1240,14 +1247,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
                 "</div>",
             ) +
             cell(
-              '<span style="font-family:Consolas,monospace;color:' +
-                ((document.documentElement.getAttribute("data-theme") ||
-                  window._kbotTheme) === "light"
-                  ? "rgba(54,4,83,0.75)"
-                  : "#cbd5e1") +
-                '">' +
-                esc(r.sku || "-") +
-                "</span>",
+              codSkuCopyHtml(r.sku),
               "white-space:nowrap",
             ) +
             cell(
@@ -1412,14 +1412,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
                 "</div>",
             ) +
             cell(
-              '<span style="font-family:Consolas,monospace;color:' +
-                ((document.documentElement.getAttribute("data-theme") ||
-                  window._kbotTheme) === "light"
-                  ? "rgba(54,4,83,0.75)"
-                  : "#cbd5e1") +
-                '">' +
-                esc(r.sku || "-") +
-                "</span>",
+              codSkuCopyHtml(r.sku),
               "white-space:nowrap",
             ) +
             cell(
@@ -1499,14 +1492,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
                 "</div>",
             ) +
             cell(
-              '<span style="font-family:Consolas,monospace;color:' +
-                ((document.documentElement.getAttribute("data-theme") ||
-                  window._kbotTheme) === "light"
-                  ? "rgba(54,4,83,0.75)"
-                  : "#cbd5e1") +
-                '">' +
-                esc(r.sku || "-") +
-                "</span>",
+              codSkuCopyHtml(r.sku),
               "white-space:nowrap",
             ) +
             cell(
@@ -1833,14 +1819,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
             "</div>",
         ) +
         cell(
-          '<span style="font-family:Consolas,monospace;color:' +
-            ((document.documentElement.getAttribute("data-theme") ||
-              window._kbotTheme) === "light"
-              ? "rgba(54,4,83,0.75)"
-              : "#cbd5e1") +
-            '">' +
-            esc(r.sku || "-") +
-            "</span>",
+          codSkuCopyHtml(r.sku),
           "white-space:nowrap",
         ) +
         cell(
@@ -1919,14 +1898,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
             "</div>",
         ) +
         cell(
-          '<span style="font-family:Consolas,monospace;color:' +
-            ((document.documentElement.getAttribute("data-theme") ||
-              window._kbotTheme) === "light"
-              ? "rgba(54,4,83,0.75)"
-              : "#cbd5e1") +
-            '">' +
-            esc(r.sku || "-") +
-            "</span>",
+          codSkuCopyHtml(r.sku),
           "white-space:nowrap",
         ) +
         cell(
@@ -2204,14 +2176,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
             "</div>",
         ) +
         cell(
-          '<span style="font-family:Consolas,monospace;color:' +
-            ((document.documentElement.getAttribute("data-theme") ||
-              window._kbotTheme) === "light"
-              ? "rgba(54,4,83,0.75)"
-              : "#cbd5e1") +
-            '">' +
-            esc(r.sku || "-") +
-            "</span>",
+          codSkuCopyHtml(r.sku),
           "white-space:nowrap",
         ) +
         cell(
@@ -2290,14 +2255,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
             "</div>",
         ) +
         cell(
-          '<span style="font-family:Consolas,monospace;color:' +
-            ((document.documentElement.getAttribute("data-theme") ||
-              window._kbotTheme) === "light"
-              ? "rgba(54,4,83,0.75)"
-              : "#cbd5e1") +
-            '">' +
-            esc(r.sku || "-") +
-            "</span>",
+          codSkuCopyHtml(r.sku),
           "white-space:nowrap",
         ) +
         cell(
@@ -2726,3 +2684,4 @@ window.renderSection4 = function (mountEl, data, ctx) {
     });
   }
 };
+

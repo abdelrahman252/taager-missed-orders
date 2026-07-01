@@ -249,10 +249,13 @@
       var nameLine = '<div style="font-size:11px;font-weight:700;color:'+(_il()?'rgba(15,5,30,0.9)':'rgba(255,255,255,0.9)')+';' +
         'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;' +
         'text-align:' + align + ';" title="' + esc(fullName) + '">' + esc(shortName) + '</div>';
+      var skuStyle = 'font-size:9px;font-weight:600;color:'+(_il()?'rgba(15,5,30,0.35)':'rgba(255,255,255,0.35)')+';' +
+        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;' +
+        'margin-top:1px;direction:ltr;text-align:' + align + ';';
       var skuLine = (e.name && e.sku && e.name !== e.sku)
-        ? '<div style="font-size:9px;font-weight:600;color:'+(_il()?'rgba(15,5,30,0.35)':'rgba(255,255,255,0.35)')+';' +
-          'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;' +
-          'margin-top:1px;direction:ltr;text-align:' + align + ';" title="' + esc(e.sku) + '">' + esc(shortSku) + '</div>'
+        ? (window.dashboardSkuCopyHtml
+          ? window.dashboardSkuCopyHtml(e.sku, { text: shortSku, prefix: false, block: true, style: skuStyle })
+          : '<div style="' + skuStyle + '" title="' + esc(e.sku) + '">' + esc(shortSku) + '</div>')
         : '';
 
       /* Profit: show the formatted number plus the active dashboard currency label. */

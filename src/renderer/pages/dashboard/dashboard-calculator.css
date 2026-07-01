@@ -240,3 +240,47 @@
 [data-theme="light"] #page-dashboard .s7-rate-note span {
   color: #475569 !important;
 }
+#page-dashboard .s7-order-ndr-box {
+  background: var(--dash-surface-soft);
+  border: 1px solid var(--dash-border-soft);
+  border-radius: var(--dash-radius-sm);
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+}
+
+#page-dashboard .s7-order-ndr-box label {
+  color: var(--dash-text-faint);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+#page-dashboard .s7-order-ndr-box select {
+  appearance: none;
+  background: var(--dash-input-bg);
+  border: 1px solid var(--dash-border);
+  border-radius: var(--dash-radius-sm);
+  color: var(--dash-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  min-height: 38px;
+  outline: none;
+  padding: 0 12px;
+  width: 100%;
+}
+
+#page-dashboard .s7-order-ndr-box select:focus {
+  border-color: var(--dash-accent);
+  box-shadow: 0 0 0 3px var(--dash-accent-soft);
+}
+
+#page-dashboard .s7-order-ndr-box p {
+  color: var(--dash-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+  margin: 0;
+}

@@ -5,6 +5,8 @@ const fs = require("fs");
 const path = require("path");
 const {
   addChromeFingerprintSpoofing,
+  getOrCreateAutomationPage,
+  installUnexpectedBlankPageGuard,
   launchPersistentChromeContext,
 } = require("./chrome-launch");
 const { addLocalDays, resolveSafeTaagerExportRange } = require("./taager-date-range");
@@ -211,7 +213,8 @@ async function launchDashboardContext(profilePath, chromePath) {
       });
       await addChromeFingerprintSpoofing(context);
       await installTaagerInterruptionAutoDismiss(context, { log });
-      const page = context.pages()[0] || (await context.newPage());
+      installUnexpectedBlankPageGuard(context, { getActivePage: () => activePage, log, delayMs: 5000 });
+      const page = await getOrCreateAutomationPage(context, { log });
       await installTaagerInterruptionAutoDismiss(page, { log });
       page.setViewportSize({ width: 1400, height: 900 }).catch(() => {});
       activeContext = context;
@@ -506,6 +509,7 @@ async function readTaagerHeaderIdentity(page) {
 async function readTaagerProfileIdentity(page, fallbackIdentity = {}) {
   const originalUrl = page.url();
   const profileUrl = taagerCountryUrl("/profile");
+  const expectedProfileCode = normalizeTaagerCode(config.taagerAffiliateCode);
   let lastError = null;
   try {
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -516,15 +520,56 @@ async function readTaagerProfileIdentity(page, fallbackIdentity = {}) {
         await ensureTaagerArabic(page, `profile-identity-after-${attempt}`, { requireButton: false }).catch((languageError) => {
           log(`Dashboard Taager identity: profile language prep skipped: ${languageError.message}`);
         });
-        await page.waitForSelector("#taager-id-input", { timeout: 15000 });
-        const profileIdentity = await page.evaluate(() => {
+        await page.waitForFunction((expectedCode) => {
+          const normalize = (value) => String(value || "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+          const valueOf = (el) => String((el && (el.value || el.textContent || el.getAttribute("value"))) || "").trim();
+          const exact = document.querySelector("#taager-id-input");
+          if (valueOf(exact)) return true;
+          const candidates = Array.from(document.querySelectorAll("input, textarea, [contenteditable='true'], [data-affiliate-id], [data-merchant-id], [data-taager-id]"));
+          return candidates.some((el) => {
+            const attrs = [
+              el.id,
+              el.name,
+              el.getAttribute("aria-label"),
+              el.getAttribute("placeholder"),
+              el.getAttribute("data-affiliate-id"),
+              el.getAttribute("data-merchant-id"),
+              el.getAttribute("data-taager-id"),
+            ].join(" ");
+            const value = valueOf(el) || el.getAttribute("data-affiliate-id") || el.getAttribute("data-merchant-id") || el.getAttribute("data-taager-id") || "";
+            if (expectedCode && normalize(value) === expectedCode) return true;
+            return value && /\b(taager|merchant|affiliate|seller|account)\b/i.test(attrs);
+          });
+        }, expectedProfileCode, { timeout: 15000 });
+        const profileIdentity = await page.evaluate((expectedCode) => {
           const valueOf = (selector) => {
             const el = document.querySelector(selector);
             return String((el && (el.value || el.textContent)) || "").trim();
           };
+          const normalize = (value) => String(value || "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+          const elementValue = (el) => String((el && (el.value || el.textContent || el.getAttribute("value"))) || "").trim();
+          const fallbackValue = () => {
+            const candidates = Array.from(document.querySelectorAll("input, textarea, [contenteditable='true'], [data-affiliate-id], [data-merchant-id], [data-taager-id]"));
+            let likely = "";
+            for (const el of candidates) {
+              const attrs = [
+                el.id,
+                el.name,
+                el.getAttribute("aria-label"),
+                el.getAttribute("placeholder"),
+                el.getAttribute("data-affiliate-id"),
+                el.getAttribute("data-merchant-id"),
+                el.getAttribute("data-taager-id"),
+              ].join(" ");
+              const value = elementValue(el) || el.getAttribute("data-affiliate-id") || el.getAttribute("data-merchant-id") || el.getAttribute("data-taager-id") || "";
+              if (expectedCode && normalize(value) === expectedCode) return value;
+              if (!likely && value && /\b(taager|merchant|affiliate|seller|account)\b/i.test(attrs)) likely = value;
+            }
+            return likely;
+          };
           const country = (location.pathname.match(/^\/([a-z]{2})(?:\/|$)/i) || [])[1] || "";
           return {
-            affiliateCode: valueOf("#taager-id-input"),
+            affiliateCode: valueOf("#taager-id-input") || fallbackValue(),
             email: valueOf("#email-input").toLowerCase(),
             name: valueOf("#full-name-input"),
             phone: valueOf("#phone-number-input"),
@@ -533,7 +578,7 @@ async function readTaagerProfileIdentity(page, fallbackIdentity = {}) {
           };
         });
         if (!profileIdentity.affiliateCode) {
-          throw new Error("TAAGER_PROFILE_IDENTITY_EMPTY: #taager-id-input was visible but empty");
+          throw new Error("TAAGER_PROFILE_IDENTITY_EMPTY: profile merchant ID field was visible but empty");
         }
         return {
           ...fallbackIdentity,
@@ -935,7 +980,6 @@ async function taagerLogin(page) {
       await gotoWithNetworkRetries(page, taagerCountryUrl("/auth/login"), "Taager login after reused-session fallback failed", { attempts: 2, timeout: 45000, waitMs: 3000 });
     }
     if (!page.url().includes("/login") && !page.url().includes("/auth")) {
-      await ensureTaagerArabic(page, "login-reused", { requireButton: true });
       await assertTaagerSession(page);
       await verifyTaagerIdentity(page, "login-reused");
       return page;
@@ -953,7 +997,6 @@ async function taagerLogin(page) {
     if (await tryAutomatedGooglePopupLogin(page, email, log)) {
       process.send && process.send({ type: "google-login-complete" });
       page = await ensureTaagerAuthenticatedHomeRoute(page, "google-auto-login-confirmed");
-      await ensureTaagerArabic(page, "login-confirmed", { requireButton: true });
       await assertTaagerSession(page);
       await verifyTaagerIdentity(page, "login-confirmed");
       return page;
@@ -976,7 +1019,6 @@ async function taagerLogin(page) {
       throw new Error("Google login not detected. Log in with Google in the opened Chrome window, close it, then click 'I finished Google login'.");
     }
     process.send && process.send({ type: "google-login-complete" });
-    await ensureTaagerArabic(page, "login-confirmed", { requireButton: true });
     await assertTaagerSession(page);
     await verifyTaagerIdentity(page, "login-confirmed");
     return page;
@@ -1015,7 +1057,6 @@ async function taagerLogin(page) {
         log("Taager login confirmation fallback landed on login; continuing to wait");
         continue;
       }
-      await ensureTaagerArabic(page, "login-confirmed", { requireButton: true });
       await assertTaagerSession(page);
       await verifyTaagerIdentity(page, "login-confirmed");
       return page;
@@ -1108,6 +1149,10 @@ async function ensureTaagerArabic(page, where = "taager", options = {}) {
     }
   }
   await debugScreenshot(page, `taager-language-not-arabic-${where}`).catch(() => {});
+  if (!options.requireButton) {
+    log(`Taager language switch still did not settle at ${where}; continuing because language is non-critical`);
+    return page;
+  }
   throw new Error(`TAAGER_LANGUAGE_NOT_ARABIC: change-language button still offers Arabic at ${where}`);
 }
 
@@ -1286,7 +1331,7 @@ async function gotoDashboardTaagerOrders(page) {
     }
     log("Dashboard Taager export: orders controls not visible yet; falling back to full verification");
   }
-  await ensureTaagerArabic(page, "orders-export", { requireButton: true });
+  await ensureTaagerArabic(page, "orders-export", { requireButton: false });
   log("Dashboard Taager export: verifying session, identity, and country");
   await assertTaagerSession(page);
   if (taagerIdentityVerified) {
@@ -1403,8 +1448,9 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
 
   await addChromeFingerprintSpoofing(context);
   await installTaagerInterruptionAutoDismiss(context, { log });
+  installUnexpectedBlankPageGuard(context, { getActivePage: () => activePage, log, delayMs: 5000 });
 
-  let page = context.pages()[0] || (await context.newPage());
+  let page = await getOrCreateAutomationPage(context, { log });
   await installTaagerInterruptionAutoDismiss(page, { log });
   page.setViewportSize({ width: 1400, height: 900 }).catch(() => {});
   activeContext = context;

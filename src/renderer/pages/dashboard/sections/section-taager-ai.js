@@ -229,7 +229,7 @@
   }
 
   function genericBusinessAnswer(value) {
-    return /\bI am Taager AI\b|How can I assist|I can help you with|As an AI|أنا Taager AI|أستطيع مساعدتك|يمكنني مساعدتك/i.test(String(value || ""));
+    return /\b(?:Taager Assistant|generic dashboard help|general capabilities)\b|مساعد Taager|مساعدة عامة|قدرات لوحة التحكم/i.test(String(value || ""));
   }
 
   function validBusinessDiagnosisAnswer(value) {
@@ -304,13 +304,13 @@
     return [{
       sender: "assistant",
       state: "complete",
-      text: tr("aii.chatWelcome", null, "I am Taager AI. How can I assist you with your operations, forecasting, or strategic planning today?"),
+      text: tr("aii.chatWelcome", null, "Ask me about operations, forecasting, or strategy."),
     }];
   }
 
   function chatMessageHtml(msg, msgIdx) {
     var avatar = msg.sender === "user" ? '<div class="aii-avatar user-avatar">' + icon('user') + '</div>' : '<div class="aii-avatar ai-avatar">' + icon('diamond') + '</div>';
-    var name = msg.sender === "user" ? tr("aii.you", null, "You") : tr("aii.assistant", null, "Taager AI");
+    var name = msg.sender === "user" ? tr("aii.you", null, "You") : tr("aii.assistant", null, "Taager Assistant");
     return '<div class="aii-chat-msg ' + esc(msg.sender) + ' ' + esc(msg.state || "complete") + '" data-aii-chat-msg="' + msgIdx + '">' +
       avatar +
       '<div class="aii-chat-msg-body">' +
@@ -412,7 +412,7 @@
     }
     if (key === lastDiagnosticsLogKey) return;
     lastDiagnosticsLogKey = key;
-    console.log("[Taager AI] Developer diagnostics", snapshot);
+    console.log("[Taager Assistant] Developer diagnostics", snapshot);
   }
 
   function refreshAiDiagnostics(renderAfter) {
@@ -493,8 +493,8 @@
         '<button type="submit"' + (chatBusy ? ' disabled aria-busy="true"' : '') + '><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button>' +
       '</form>' +
       '<div class="aii-ai-disclaimer" style="font-size:11px;color:var(--text-muted,#888);margin-top:12px;text-align:center;line-height:1.4;">' +
-        esc(tr("aii.disclaimer.metrics", null, "Controlled business copilot: local-first metrics with guarded AI reasoning.")) + '<br>' +
-        esc(tr("aii.disclaimer.scope", null, "AI is used only for strategy, explanations, recommendations, and forecasting.")) +
+        esc(tr("aii.disclaimer.metrics", null, "Business assistant: local dashboard metrics first, practical guidance second.")) + '<br>' +
+        esc(tr("aii.disclaimer.scope", null, "Used only for strategy, explanations, recommendations, and forecasting.")) +
       '</div>' +
     '</section>';
   }
@@ -703,7 +703,7 @@
           '<div class="aii-hero-title">' +
             '<div class="aii-hero-icon">' + icon('diamond') + '</div>' +
             '<div>' +
-              '<h1>' + esc(tr("nav.taagerAi", null, "Taager AI Copilot")) + '</h1>' +
+              '<h1>' + esc(tr("nav.taagerAi", null, "Taager Assistant Copilot")) + '</h1>' +
               '<p>' + esc(tr("aii.systemStatus", null, "System connected. Ready to analyze.")) + '</p>' +
             '</div>' +
           '</div>' +
@@ -812,7 +812,7 @@
   function updatePendingHeartbeat(index) {
     var msg = chatMessages[index];
     if (!msg || msg.sender !== "assistant" || msg.state !== "pending") return;
-    msg.text = tr("ai.thinkingStream", null, "Gemini is thinking...");
+    msg.text = tr("ai.thinkingStream", null, "Analyzing dashboard context...");
     if (!replaceChatMessageNode(index)) updateChatOnly(true);
   }
 
@@ -933,7 +933,7 @@
           if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(payload).catch(function () {});
           }
-          console.log("[Taager AI] Diagnostics copied", snapshot);
+          console.log("[Taager Assistant] Diagnostics copied", snapshot);
           return;
         }
       });
@@ -1023,7 +1023,22 @@
       return;
     }
 
-    // [Taager AI DEBUG] ──────────────────────────────────────────────
+    if (typeof window.ensureFeatureScripts === "function") {
+      chatBusy = true;
+      syncChatControls();
+      try {
+        await window.ensureFeatureScripts("dashboardAiChat");
+      } catch (featureError) {
+        chatBusy = false;
+        syncChatControls();
+        finishAiTiming("chat-bundle-error", { routingMode: "LOCAL_FALLBACK" });
+        return;
+      }
+      chatBusy = false;
+      syncChatControls();
+    }
+
+    // [Taager Assistant DEBUG] ──────────────────────────────────────────────
     // ─────────────────────────────────────────────────────────────
 
     var pendingStartIndex = chatMessages.length;
@@ -1149,7 +1164,7 @@
 
     if (!window.api || typeof window.api.dashboardAiQuery !== "function") {
       chatMessages.pop();
-      chatMessages.push({ sender: "assistant", state: "error", text: tr("ai.unavailableMessage", null, "AI systems offline. Using cached intelligence models.") });
+      chatMessages.push({ sender: "assistant", state: "error", text: tr("ai.unavailableMessage", null, "Assistant service offline. Using local dashboard guidance.") });
       chatBusy = false;
       updateChatOnly();
       finishAiTiming("local-unavailable", { routingMode: "LOCAL_FALLBACK" });
@@ -1242,7 +1257,7 @@
           cache: response && response.meta && response.meta.cache || ""
         });
       }
-      // [Taager AI DEBUG]
+      // [Taager Assistant DEBUG]
       var normalized = window.KhodAiIntelligenceData ? window.KhodAiIntelligenceData.normalizeAiResponse(response) : { message: "" };
       if (chatMessages[chatMessages.length - 1] && chatMessages[chatMessages.length - 1].mirrorDraft) chatMessages.pop();
       else if (chatMessages[chatMessages.length - 1] && chatMessages[chatMessages.length - 1].state === "pending") chatMessages.pop();
@@ -1305,7 +1320,7 @@
         if (localStrategic && localStrategic.recommendations && localStrategic.recommendations.length) injectedAi.recommendations = localStrategic.recommendations.concat(injectedAi.recommendations).slice(0, 8);
         if (localStrategic && localStrategic.alerts && localStrategic.alerts.length) injectedAi.alerts = localStrategic.alerts.concat(injectedAi.alerts).slice(0, 6);
       } else {
-        chatMessages.push({ sender: "assistant", state: "error", text: tr("ai.requestFailed", null, "AI request failed.") + " " + (err && err.message ? err.message : "") });
+        chatMessages.push({ sender: "assistant", state: "error", text: tr("ai.requestFailed", null, "Request failed.") + " " + (err && err.message ? err.message : "") });
       }
     }
     chatBusy = false;

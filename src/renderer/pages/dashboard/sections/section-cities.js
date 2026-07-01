@@ -1,7 +1,7 @@
 // section-cities.js — المدن والمناطق
 // Vanilla-JS section. Depends on: dashboard-shared.js (icon, formatSAR, animateNumber)
 
-window.renderSectionCities = function (mountEl, data, ctx) {
+function renderSectionCitiesHydrated(mountEl, data, ctx) {
   "use strict";
   var activeCurrency = data && data.meta && data.meta.activeCurrency || window.dashboardActiveCurrency || "SAR";
 
@@ -32,10 +32,17 @@ window.renderSectionCities = function (mountEl, data, ctx) {
   mountEl._citiesDocumentClickHandlers = [];
 
   function whenCitiesIdle(callback, timeout) {
+    var guarded = function (deadline) {
+      if (!mountEl.isConnected || mountEl.hidden) {
+        mountEl._dashboardNeedsRefresh = true;
+        return;
+      }
+      callback(deadline);
+    };
     if (window.requestIdleCallback) {
-      return window.requestIdleCallback(callback, { timeout: timeout || 800 });
+      return window.requestIdleCallback(guarded, { timeout: timeout || 800 });
     }
-    return window.setTimeout(callback, 80);
+    return window.setTimeout(guarded, 80);
   }
 
   function cancelCitiesIdle(handle) {
@@ -44,6 +51,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     else window.clearTimeout(handle);
   }
   var citiesSearchTimer = null;
+  var deferCitiesProductOptions = !!(data && data.meta && data.meta.lazyHeavyModels);
 
   function citiesScopeSignature() {
     var meta = data && data.meta ? data.meta : {};
@@ -119,7 +127,12 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
   // Wait for the query-backed snapshot before the first real paint. Rendering
   // the legacy snapshot first caused a visible second full-section refresh.
-  if (!mountEl._citiesQueryDone &&
+  var citiesQueryFlags = window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.currentFlags === "function"
+    ? window.DashboardQueryRuntime.currentFlags()
+    : null;
+  var citiesQueryKnownDisabled = !!(citiesQueryFlags && citiesQueryFlags.cities === false);
+  if (!(ctx && ctx._citiesHydrated) && !mountEl._citiesQueryDone &&
+      !citiesQueryKnownDisabled &&
       window.DashboardQueryRuntime &&
       typeof window.DashboardQueryRuntime.flags === "function") {
     showCitiesQueryLoader();
@@ -137,8 +150,9 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         mountEl._citiesQueryDone = true;
         mountEl._citiesQueryPending = null;
         if (!mountEl.isConnected || !ctx || ctx.sectionId !== "cities") return;
-        var cleanup = window.renderSectionCities(mountEl, data, ctx);
-        if (typeof cleanup === "function") mountEl._dashboardSectionCleanup = cleanup;
+        if (typeof mountEl._citiesHydrateCallback === "function") {
+          mountEl._citiesHydrateCallback();
+        }
       });
     }
 
@@ -745,7 +759,7 @@ window.renderSectionCities = function (mountEl, data, ctx) {
     var productOpts =
       '<option value="">' + s6Txt("Product: All", "المنتج: الكل") + "</option>";
     var hasSelectedProductOption = !selProduct;
-    if (geoD && geoD.products && geoD.products.rankedList) {
+    if (!deferCitiesProductOptions && geoD && geoD.products && geoD.products.rankedList) {
       geoD.products.rankedList.forEach(function (p) {
         var k = p.key || p.sku || p.name || "";
         var lbl = p.name || p.key || "";
@@ -858,6 +872,32 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       "</button>" +
       "</div>"
     );
+  }
+
+  function populateCitiesProductOptions(selectEl) {
+    if (!selectEl || selectEl._citiesProductOptionsLoaded) return;
+    var geoD = window.dashboardGeoData;
+    var ranked = geoD && geoD.products && geoD.products.rankedList;
+    if (!ranked || !ranked.length) return;
+    var selected = selectEl.value || mountEl._citiesSelectedProduct || (window.DashboardFilterBus && window.DashboardFilterBus.getState().selectedProduct) || "";
+    var seen = {};
+    Array.from(selectEl.options).forEach(function (opt) {
+      seen[String(opt.value || "")] = true;
+    });
+    ranked.forEach(function (p) {
+      var k = p.key || p.sku || p.name || "";
+      if (!k || seen[String(k)]) return;
+      var lbl = p.name || p.key || "";
+      if (p.sku && p.sku !== p.name) lbl = p.name + " (" + p.sku + ")";
+      var opt = document.createElement("option");
+      opt.value = k;
+      opt.textContent = lbl;
+      selectEl.appendChild(opt);
+      seen[String(k)] = true;
+    });
+    if (selected) selectEl.value = selected;
+    selectEl._citiesProductOptionsLoaded = true;
+    if (typeof selectEl._syncCustomOptions === "function") selectEl._syncCustomOptions();
   }
 
   // ── KPI cards HTML ──────────────────────────────────────────────────────────
@@ -2927,50 +2967,58 @@ window.renderSectionCities = function (mountEl, data, ctx) {
         }
       }
 
-      Array.from(selectEl.options).forEach(function (opt, idx) {
-        var item = document.createElement("div");
-        item.textContent = opt.textContent;
-        item.style.padding = "10px 14px";
-        item.style.cursor = "pointer";
-        item.style.transition = "all 0.15s";
-        item.style.color = "rgba(255,255,255,0.7)";
-        item.style.fontSize = "12px";
-        item.style.fontWeight = "600";
-        item.style.fontFamily = "Cairo, sans-serif";
-        if (idx !== selectEl.options.length - 1) {
-          item.style.borderBottom = "1px solid rgba(255,255,255,0.04)";
-        }
-        item.onmouseover = function () {
-          item.style.background = activeColor + "1a";
-          item.style.color = "#fff";
-          item.style.paddingRight = "18px";
-        };
-        item.onmouseout = function () {
-          item.style.background = "transparent";
+      function rebuildItems() {
+        itemsContainer.innerHTML = "";
+        Array.from(selectEl.options).forEach(function (opt, idx) {
+          var item = document.createElement("div");
+          item.textContent = opt.textContent;
+          item.style.padding = "10px 14px";
+          item.style.cursor = "pointer";
+          item.style.transition = "all 0.15s";
           item.style.color = "rgba(255,255,255,0.7)";
-          item.style.paddingRight = "14px";
-        };
-        item.onclick = function () {
-          selectEl.selectedIndex = idx;
-          syncLabel();
-          menu.style.display = "none";
-          chevron.style.transform = "rotate(0deg)";
-          container.style.zIndex = "100";
-          if (searchInput) searchInput.value = "";
-          Array.from(itemsContainer.children).forEach(function (c) {
-            c.style.display = "block";
-          });
-          var ev = new Event("change");
-          selectEl.dispatchEvent(ev);
-        };
-        itemsContainer.appendChild(item);
-      });
+          item.style.fontSize = "12px";
+          item.style.fontWeight = "600";
+          item.style.fontFamily = "Cairo, sans-serif";
+          if (idx !== selectEl.options.length - 1) {
+            item.style.borderBottom = "1px solid rgba(255,255,255,0.04)";
+          }
+          item.onmouseover = function () {
+            item.style.background = activeColor + "1a";
+            item.style.color = "#fff";
+            item.style.paddingRight = "18px";
+          };
+          item.onmouseout = function () {
+            item.style.background = "transparent";
+            item.style.color = "rgba(255,255,255,0.7)";
+            item.style.paddingRight = "14px";
+          };
+          item.onclick = function () {
+            selectEl.selectedIndex = idx;
+            syncLabel();
+            menu.style.display = "none";
+            chevron.style.transform = "rotate(0deg)";
+            container.style.zIndex = "100";
+            if (searchInput) searchInput.value = "";
+            Array.from(itemsContainer.children).forEach(function (c) {
+              c.style.display = "block";
+            });
+            var ev = new Event("change");
+            selectEl.dispatchEvent(ev);
+          };
+          itemsContainer.appendChild(item);
+        });
+      }
+
+      rebuildItems();
 
       menu.appendChild(itemsContainer);
       syncLabel();
 
       btn.onclick = function (e) {
         e.stopPropagation();
+        if (selectEl.id === "sc-fb-product") {
+          populateCitiesProductOptions(selectEl);
+        }
         var isVisible = menu.style.display === "block";
         document.querySelectorAll(".sc-custom-menu").forEach(function (m) {
           m.style.display = "none";
@@ -3026,6 +3074,10 @@ window.renderSectionCities = function (mountEl, data, ctx) {
 
       /* Expose the visual button so external code (reset) can update its style */
       selectEl._customBtn = btn;
+      selectEl._syncCustomOptions = function () {
+        rebuildItems();
+        syncLabel();
+      };
     }
 
     enhanceSelect(fbProvince, "#7c3aed", false);
@@ -4063,5 +4115,149 @@ window.renderSectionCities = function (mountEl, data, ctx) {
       });
       mountEl._citiesDocumentClickHandlers = [];
     }
+  };
+}
+
+function isActiveCitiesPane(mountEl) {
+  var shell = document.getElementById("db-shell-mount");
+  return !!(mountEl && mountEl.isConnected && shell &&
+    shell._dashboardActiveSection === "cities" &&
+    shell._dashboardActivePane === mountEl && !mountEl.hidden);
+}
+
+function citiesHydrationSkeleton() {
+  return '<div class="dash-scroll" data-dashboard-hydrating="cities" role="status" aria-live="polite" aria-label="Loading" ' +
+    'style="flex:1;display:flex;align-items:center;justify-content:center;background:#080b12;">' +
+      '<div aria-hidden="true" style="width:min(760px,78%);display:grid;gap:14px;">' +
+        '<div style="height:28px;width:42%;border-radius:10px;background:rgba(255,255,255,0.07);"></div>' +
+        '<div style="height:86px;border-radius:16px;background:rgba(255,255,255,0.045);"></div>' +
+        '<div style="height:180px;border-radius:16px;background:rgba(255,255,255,0.035);"></div>' +
+      '</div>' +
+    '</div>';
+}
+
+function citiesScopeSignatureForHydration(data) {
+  var meta = data && data.meta ? data.meta : {};
+  var period = window.DashboardPeriodState && typeof window.DashboardPeriodState.get === "function"
+    ? window.DashboardPeriodState.get()
+    : (meta.period || {});
+  var mode = window.DashboardDeliveredDateState && typeof window.DashboardDeliveredDateState.get === "function"
+    ? (window.DashboardDeliveredDateState.get() === "expected" ? "expected" : "actual")
+    : (meta.deliveredDateMode === "expected" ? "expected" : "actual");
+  var ndrPeriod = mode === "expected" && window.DashboardExpectedNdrRangeState && typeof window.DashboardExpectedNdrRangeState.get === "function"
+    ? window.DashboardExpectedNdrRangeState.get()
+    : (meta.ndrPeriod || period || {});
+  return JSON.stringify({
+    dataVersion: data && data._version != null ? data._version : "",
+    accountId: meta.activeAccountId || "__all__",
+    dateFrom: period.dateFrom || period.from || "",
+    dateTo: period.dateTo || period.to || "",
+    deliveredDateMode: mode,
+    ndrDateFrom: ndrPeriod.dateFrom || ndrPeriod.from || "",
+    ndrDateTo: ndrPeriod.dateTo || ndrPeriod.to || "",
+    reportingCurrency: meta.reportingCurrency || meta.activeCurrency || window.dashboardActiveCurrency || "SAR"
+  });
+}
+
+function applyCitiesHydrationQueryResult(data, result) {
+  if (!result || !result.ok || !Array.isArray(result.cities) || !data) return;
+  var existingCityStats = data.geo && data.geo.cityStats;
+  if (result.cities.length === 0 && existingCityStats && Object.keys(existingCityStats).length > 0) return;
+  data.cod = data.cod || {};
+  data.cod.cities = result.cities;
+  var cityStats = {};
+  result.cities.forEach(function (city) { cityStats[city.name] = city; });
+  data.geo = data.geo || {};
+  var rebuiltGeo = window.buildGeoProductMap ? window.buildGeoProductMap(
+    cityStats,
+    data.geo.productStats || {},
+    data.geo.kpis || {},
+    data.meta || {}
+  ) : null;
+  data.geo.cityStats = cityStats;
+  if (rebuiltGeo) {
+    data.geo.geoProductMap = rebuiltGeo.geoProductMap;
+    data.geo.provinceMap = rebuiltGeo.provinceMap;
+    data.geo.prepaidIntelligence = rebuiltGeo.prepaidIntelligence;
+  }
+}
+
+window.renderSectionCities = function (mountEl, data, ctx) {
+  if (!mountEl) return;
+  var scopeKey = citiesScopeSignatureForHydration(data);
+  if (mountEl._citiesQueryKey !== scopeKey) {
+    mountEl._citiesQueryKey = scopeKey;
+    mountEl._citiesQueryDone = false;
+    mountEl._citiesQueryPending = null;
+  }
+
+  var flags = window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.currentFlags === "function"
+    ? window.DashboardQueryRuntime.currentFlags()
+    : null;
+  var queryMayRun = !mountEl._citiesQueryDone && !(flags && flags.cities === false) &&
+    window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.flags === "function";
+  var shouldDefer = !!(data && data.meta && data.meta.lazyHeavyModels) || !!queryMayRun;
+  var hydratedCtx = Object.assign({}, ctx || {}, { _citiesHydrated: true });
+
+  if (!shouldDefer) {
+    var immediateCleanup = renderSectionCitiesHydrated(mountEl, data, hydratedCtx);
+    mountEl.dataset.dashboardReady = "cities";
+    return immediateCleanup;
+  }
+
+  var state = { cancelled: false, started: false, frame: null, cleanup: null };
+  mountEl._citiesHydrationState = state;
+  mountEl.innerHTML = citiesHydrationSkeleton();
+  delete mountEl.dataset.dashboardReady;
+
+  function hydrateCitiesPane() {
+    if (state.cancelled || state.started || mountEl._citiesHydrationState !== state) return;
+    if (!isActiveCitiesPane(mountEl)) {
+      if (mountEl.isConnected) mountEl._dashboardNeedsRefresh = true;
+      return;
+    }
+    state.started = true;
+    state.cleanup = renderSectionCitiesHydrated(mountEl, data, hydratedCtx);
+    if (!state.cancelled && isActiveCitiesPane(mountEl)) {
+      mountEl.dataset.dashboardReady = "cities";
+    }
+  }
+  mountEl._citiesHydrateCallback = hydrateCitiesPane;
+
+  function scheduleHydration() {
+    if (state.cancelled || state.started) return;
+    state.frame = window.requestAnimationFrame
+      ? window.requestAnimationFrame(hydrateCitiesPane)
+      : window.setTimeout(hydrateCitiesPane, 0);
+  }
+
+  if (queryMayRun) {
+    mountEl._citiesQueryPending = window.DashboardQueryRuntime.flags().then(function (runtimeFlags) {
+      if (!runtimeFlags || !runtimeFlags.cities) return null;
+      return window.DashboardQueryRuntime.query("cities", {}, data);
+    }).then(function (result) {
+      if (mountEl._citiesQueryKey !== scopeKey || state.cancelled) return;
+      applyCitiesHydrationQueryResult(data, result);
+    }).catch(function (err) {
+      console.error("[Cities] Async query failed:", err);
+    }).then(function () {
+      if (mountEl._citiesQueryKey !== scopeKey || state.cancelled) return;
+      mountEl._citiesQueryDone = true;
+      mountEl._citiesQueryPending = null;
+      scheduleHydration();
+    });
+  } else {
+    scheduleHydration();
+  }
+
+  return function () {
+    state.cancelled = true;
+    if (!state.started && state.frame != null) {
+      if (window.cancelAnimationFrame && window.requestAnimationFrame) window.cancelAnimationFrame(state.frame);
+      else window.clearTimeout(state.frame);
+    }
+    if (typeof state.cleanup === "function") state.cleanup();
+    if (mountEl._citiesHydrationState === state) mountEl._citiesHydrationState = null;
+    if (mountEl._citiesHydrateCallback === hydrateCitiesPane) mountEl._citiesHydrateCallback = null;
   };
 };

@@ -116,6 +116,17 @@
     return Number(fallback || 0) || 0;
   }
 
+  function currentGlobalRates() {
+    if (window.TaagerCurrency && typeof window.TaagerCurrency.snapshot === 'function') {
+      var snapshot = window.TaagerCurrency.snapshot() || {};
+      if (snapshot.rates && typeof snapshot.rates === 'object') return Object.assign({}, snapshot.rates);
+    }
+    if (window.TaagerCurrency && typeof window.TaagerCurrency.rates === 'function') {
+      return Object.assign({}, window.TaagerCurrency.rates() || {});
+    }
+    return {};
+  }
+
   function spendDisplay(summary) {
     if (!summary) {
       return {
@@ -181,6 +192,9 @@
 
   function accountMappingKey(account) {
     // Preserve legacy taager* lookup aliases; existing account mappings may be keyed by them.
+    if (account && (account.accountType === 'static' || account.source && account.source.accountType === 'static')) {
+      return 'static:' + accountIdOf(account).trim().toLowerCase();
+    }
     var merchantId = String(account && (account.taagerAffiliateCode || account.taager_affiliate_code) || '').trim().toLowerCase();
     var country = String(account && (account.taagerCountry || account.taager_country) || 'sa').trim().toLowerCase();
     if (merchantId) return 'taager:' + country + ':' + merchantId;
@@ -211,6 +225,8 @@
     }
     if (Array.isArray(account && account.keys)) account.keys.forEach(push);
     var source = account && account.source;
+    if (account && account.accountType === 'static') push('static:' + accountIdOf(account));
+    if (source && source.accountType === 'static') push('static:' + accountIdOf(source));
     var merchantId = String(account && (account.taagerAffiliateCode || account.taager_affiliate_code) || '').trim().toLowerCase();
     var country = String(account && (account.taagerCountry || account.taager_country) || 'sa').trim().toLowerCase();
     var sourceMerchantId = String(source && (source.taagerAffiliateCode || source.taager_affiliate_code) || '').trim().toLowerCase();
@@ -1479,6 +1495,7 @@
             dateTo: period.to || period.dateTo || period.end || '',
             targetCurrency: roi.currency || window.dashboardActiveCurrency || 'SAR',
             egpRate: currentGlobalEgpRate(roi.egpRate),
+            exchangeRates: currentGlobalRates(),
             sourceAccounts: sourceAccounts,
             mode: fullRefresh ? 'full' : 'incremental'
           };
@@ -1514,7 +1531,7 @@
             var nativeCurrency = account.taagerCountry && window.TaagerCountry && window.TaagerCountry.currency
               ? window.TaagerCountry.currency(account.taagerCountry)
               : (roi.currency || window.dashboardActiveCurrency || 'SAR');
-            return { dashboardAccountId: account.id, dashboardAccountKey: account.key, dashboardAccountKeys: account.keys || [account.key], currency: roi.currency || nativeCurrency, egpRate: currentGlobalEgpRate(roi.egpRate) };
+            return { dashboardAccountId: account.id, dashboardAccountKey: account.key, dashboardAccountKeys: account.keys || [account.key], currency: roi.currency || nativeCurrency, egpRate: currentGlobalEgpRate(roi.egpRate), exchangeRates: currentGlobalRates() };
           });
           var mappings = taagerAccounts.map(function (account) {
             return {

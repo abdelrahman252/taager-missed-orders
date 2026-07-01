@@ -308,7 +308,8 @@ window.renderSection8 = function (mountEl, data, ctx) {
     'Gap = incoming COD still in active pipeline statuses. Due = Collected + Gap, and failed/lost COD is excluded from this live gap.'
   );
 
-  // Top collected cities use completed COD collections, not pending cash gaps.
+  // These lists are backed by lazy getters in the aggregator. Read them when
+  // Section 8 renders so the master dashboard never paints empty detail cards.
   var citiesList = cod.cities || [];
   var maxCollected = citiesList.reduce(function (max, c) {
     return Math.max(max, num(c.collected, 0));
@@ -326,7 +327,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
   });
 
   // Top Products
-  var PRODUCTS = (d.products && d.products.rankedList) || [];
+  var PRODUCTS = d.products ? (d.products.rankedList || []) : [];
   var RANK_META = {
     1: { bg: 'linear-gradient(135deg,#fbbf24,#d97706)', glow: 'rgba(251,191,36,0.55)', accent: '#fbbf24' },
     2: { bg: 'linear-gradient(135deg,#d1d5db,#9ca3af)', glow: 'rgba(209,213,219,0.3)', accent: '#9ca3af' },
@@ -408,10 +409,14 @@ window.renderSection8 = function (mountEl, data, ctx) {
   var accountNetProfit = accountRevenue - accountSpend;
   var averageDeliveredOrderValue = overview.deliveredAov ? num(overview.deliveredAov.value, 0) : 0;
   var deliveredSalesValue = overview.totalDeliveredSales ? num(overview.totalDeliveredSales.value, 0) : 0;
-  var activeCitiesCount = citiesList.length;
-  var uniqueProductsCount = d.products && d.products.summary ? d.products.summary.uniqueProducts : 5;
+  var activeCitiesCount = cod.totalCitiesCount != null
+    ? num(cod.totalCitiesCount, 0)
+    : (cod.summary && cod.summary.totalCitiesCount != null ? num(cod.summary.totalCitiesCount, 0) : citiesList.length);
+  var uniqueProductsCount = d.products && d.products.summary
+    ? d.products.summary.uniqueProducts
+    : 0;
   var top80PctProducts = (function () {
-    var ranked = (d.products && d.products.rankedList) || [];
+    var ranked = PRODUCTS;
     var totalCommission = ranked.reduce(function (sum, p) { return sum + num(p.commission, 0); }, 0);
     if (!ranked.length || totalCommission <= 0) return 0;
     var threshold = totalCommission * 0.8;
@@ -424,9 +429,9 @@ window.renderSection8 = function (mountEl, data, ctx) {
   })();
   var avgShippingValue = cod.avgDays == null ? null : num(cod.avgDays, 0).toFixed(1);
   var ndrVal = s8PctValue(ndrPct) + '%';
-  var ndrSub = s8Txt(deliveredCount + ' of ' + totalOrders, deliveredCount + ' ?? ' + totalOrders);
+  var ndrSub = s8Txt(deliveredCount + ' of ' + totalOrders, deliveredCount + ' من ' + totalOrders);
   var drVal = s8PctValue(drPct) + '%';
-  var drSub = s8Txt(drDeliveredOrders + ' of ' + drBaseOrders, drDeliveredOrders + ' ?? ' + drBaseOrders);
+  var drSub = s8Txt(drDeliveredOrders + ' of ' + drBaseOrders, drDeliveredOrders + ' من ' + drBaseOrders);
   var ndrMetricColor = window.dashboardRateColor ? window.dashboardRateColor(ndrPct) : (ndrPct >= 40 ? '#22d3ee' : ndrPct >= 30 ? '#00e676' : ndrPct >= 20 ? '#f59e0b' : '#ef4444');
   var drMetricColor = window.dashboardRateColor ? window.dashboardRateColor(drPct) : (drPct >= 40 ? '#22d3ee' : drPct >= 30 ? '#00e676' : drPct >= 20 ? '#f59e0b' : '#ef4444');
   var earnedDelta = overview.earnedCommission ? overview.earnedCommission.delta : 0;
@@ -818,9 +823,30 @@ window.renderSection8 = function (mountEl, data, ctx) {
         sar: sar ? sar.toLocaleString('en-US', { maximumFractionDigits: 2 }) : undefined
       };
     }
+    function confirmationStage() {
+      var row = pick('confirmed', { id: 'confirmed', label: s8Txt('Confirmation', '\u0627\u0644\u062a\u0623\u0643\u064a\u062f'), count: 0, pct: '0%', color: '#3b82f6' });
+      var metrics = (pipeline && pipeline.metrics) || {};
+      var aggregateCount = metrics.confirmationStatusCount != null
+        ? Number(metrics.confirmationStatusCount)
+        : (metrics.confirmedCount != null ? Number(metrics.confirmedCount) : NaN);
+      if (!Number.isFinite(aggregateCount)) return row;
+      var total = Number(metrics.statusTotalCount || metrics.netOrderCount || metrics.totalOrders || 0) || STAGES.filter(function (stage) {
+        return stage && stage.id !== 'canceled_by_you' && stage.exactBucket !== 'canceled_by_you';
+      }).reduce(function (sum, stage) { return sum + Number(stage.count || 0); }, 0) || 1;
+      var share = parseFloat(((aggregateCount / total) * 100).toFixed(1));
+      row.id = 'confirmation';
+      row.exactBucket = 'confirmed';
+      row.label = s8Txt('Confirmation', '\u0627\u0644\u062a\u0623\u0643\u064a\u062f');
+      row.shortLabel = row.label;
+      row.count = aggregateCount;
+      row.pct = share + '%';
+      row.share = share;
+      row.businessGroup = 'confirmation';
+      return row;
+    }
     return [
       pick('received',        { id: 'received',        label: s8Txt('Order received',        'تم استلام الطلب'),   count: 0, pct: '0%', color: '#3b82f6' }),
-      pick('confirmed',       { id: 'confirmed',       label: s8Txt('Confirmed',              'مؤكد'),              count: 0, pct: '0%', color: '#3b82f6' }),
+      confirmationStage(),
       pick('waiting',         { id: 'waiting',         label: s8Txt('Awaiting shipment',      'في انتظار الشحن'),   count: 0, pct: '0%', color: '#64748b' }),
       pick('on_hold',         { id: 'on_hold',         label: s8Txt('Temporarily Suspended',  'معلق مؤقتًا'),       count: 0, pct: '0%', color: '#64748b' }),
       combine('shipping', s8Txt('Out for delivery', 'قيد التوصيل'), ['shipping', 'delivery_suspended', 'after_sales_progress'], '#f59e0b', 'incoming'),
@@ -1124,6 +1150,90 @@ window.renderSection8 = function (mountEl, data, ctx) {
     '</div>' +
   '</div>';
 
+  var gmvSnapshot = window.DashboardGmvTargetState && typeof window.DashboardGmvTargetState.snapshot === 'function'
+    ? window.DashboardGmvTargetState.snapshot(d)
+    : null;
+  var gmvStatusMeta = (function () {
+    if (!gmvSnapshot || !gmvSnapshot.hasTarget) return { label: s8Txt('No target set', 'لا يوجد هدف محدد'), color: '#a855f7' };
+    if (gmvSnapshot.status === 'overachieved') return { label: s8Txt('Overachieved', 'تم تجاوز الهدف'), color: '#10b981' };
+    if (gmvSnapshot.status === 'achieved') return { label: s8Txt('Achieved', 'تم تحقيق الهدف'), color: '#22d3ee' };
+    if (gmvSnapshot.status === 'on_track') return { label: s8Txt('On track', 'على المسار الصحيح'), color: '#3b82f6' };
+    if (gmvSnapshot.status === 'watch') return { label: s8Txt('Needs small push', 'يحتاج دفعة بسيطة'), color: '#f59e0b' };
+    if (gmvSnapshot.status === 'ended') return { label: s8Txt('Period ended', 'انتهت الفترة'), color: '#94a3b8' };
+    return { label: s8Txt('Behind pace', 'أقل من الوتيرة المطلوبة'), color: '#ef4444' };
+  })();
+  function gmvMoney(value, decimals, compact) {
+    if (window.formatDashboardMoney) return window.formatDashboardMoney(value, gmvSnapshot ? gmvSnapshot.currency : nativeCurrency, decimals == null ? 0 : decimals, { compact: compact === true });
+    return Number(value || 0).toLocaleString('en-US') + ' ' + nativeCurrency;
+  }
+  function gmvRate(value) {
+    var n = Number(value || 0);
+    return n.toFixed(1).replace(/\.0$/, '');
+  }
+  var gmvPreviewIsLight = document.documentElement.getAttribute('data-theme') === 'light';
+  var gmvPreviewBg = gmvPreviewIsLight ? 'var(--dash-surface,#ffffff)' : '#0a0f18';
+  var gmvPreviewBorder = gmvPreviewIsLight ? 'rgba(124,58,237,0.18)' : 'rgba(255,255,255,0.06)';
+  var gmvPreviewDashBorder = gmvPreviewIsLight ? 'rgba(168,85,247,0.38)' : 'rgba(168,85,247,0.42)';
+  var gmvPreviewText = gmvPreviewIsLight ? 'var(--dash-text,#0f172a)' : '#fff';
+  var gmvPreviewMuted = gmvPreviewIsLight ? 'var(--dash-text-muted,#334155)' : 'rgba(255,255,255,0.56)';
+  var gmvPreviewFaint = gmvPreviewIsLight ? 'var(--dash-text-faint,#64748b)' : 'rgba(255,255,255,0.42)';
+  var gmvPreviewFaint2 = gmvPreviewIsLight ? 'var(--dash-text-faint,#64748b)' : 'rgba(255,255,255,0.48)';
+  var gmvPreviewTrack = gmvPreviewIsLight ? 'rgba(15,23,42,0.1)' : 'rgba(255,255,255,0.07)';
+  var gmvPreviewTrackBg = 'linear-gradient(90deg,rgba(239,68,68,' + (gmvPreviewIsLight ? '0.14' : '0.2') + ') 0%,rgba(245,158,11,' + (gmvPreviewIsLight ? '0.14' : '0.2') + ') 50%,rgba(59,130,246,' + (gmvPreviewIsLight ? '0.14' : '0.2') + ') 75%,rgba(168,85,247,' + (gmvPreviewIsLight ? '0.14' : '0.2') + ') 100%),' + gmvPreviewTrack;
+  var gmvPreviewFillBg = 'linear-gradient(90deg,#ef4444 0%,#f59e0b 50%,#3b82f6 75%,#a855f7 100%)';
+  var gmvPreviewTick = gmvPreviewIsLight ? 'rgba(15,23,42,0.26)' : 'rgba(255,255,255,0.38)';
+  var gmvPreviewShadow = gmvPreviewIsLight ? '0 12px 28px rgba(15,23,42,0.08)' : 'inset 0 0 32px rgba(0,0,0,0.45)';
+  var gmvOpenPlannerColor = gmvPreviewIsLight ? '#7c3aed' : '#e9d5ff';
+  var gmvPreviewHtml = '';
+  if (gmvSnapshot && gmvSnapshot.hasTarget) {
+    gmvPreviewHtml =
+      '<div id="s8-gmv-preview" style="background:' + gmvPreviewBg + ';border:1px solid ' + gmvPreviewBorder + ';border-radius:16px;padding:18px 20px;margin-bottom:22px;box-shadow:' + gmvPreviewShadow + ';">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;flex-wrap:wrap;">' +
+          '<div style="display:flex;align-items:center;gap:10px;">' +
+            '<div style="width:28px;height:28px;border-radius:8px;background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.35);color:#a855f7;display:flex;align-items:center;justify-content:center;">' + (window.icon ? window.icon('target', { size: 16, color: 'currentColor' }) : '') + '</div>' +
+            '<div>' +
+              '<div style="font-size:15px;font-weight:900;color:' + gmvPreviewText + ';">' + s8Txt('GMV Target Progress', 'تقدم هدف GMV') + '</div>' +
+              '<div style="font-size:10.5px;color:' + gmvPreviewFaint + ';font-weight:700;margin-top:2px;">' + s8Txt('Net Total Delivered Sales goal', 'هدف صافي مبيعات الطلبات المسلمة') + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<span style="font-size:10px;font-weight:900;color:' + gmvStatusMeta.color + ';background:' + gmvStatusMeta.color + '18;border:1px solid ' + gmvStatusMeta.color + '45;border-radius:999px;padding:6px 10px;white-space:nowrap;">' + gmvStatusMeta.label + '</span>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;">' +
+          '<div style="min-width:0;">' +
+            '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:8px;">' +
+              '<strong style="font-size:22px;line-height:1;color:' + gmvPreviewText + ';direction:ltr;text-align:left;">' + gmvMoney(gmvSnapshot.currentGmv, 0, true) + ' / ' + gmvMoney(gmvSnapshot.targetGmv, 0, true) + '</strong>' +
+              '<span style="font-size:12px;font-weight:900;color:' + gmvStatusMeta.color + ';">' + gmvRate(gmvSnapshot.progressPct) + '%</span>' +
+            '</div>' +
+            '<div style="position:relative;height:10px;border-radius:999px;background:' + gmvPreviewTrackBg + ';overflow:hidden;margin-bottom:9px;">' +
+              '<div style="position:absolute;inset:0;width:100%;height:100%;border-radius:999px;background:' + gmvPreviewFillBg + ';box-shadow:0 0 16px rgba(59,130,246,0.2);clip-path:inset(0 ' + (100 - Math.min(100, gmvSnapshot.progressPct)).toFixed(2) + '% 0 0);"></div>' +
+              '<span style="position:absolute;top:0;bottom:0;left:25%;width:1px;background:' + gmvPreviewTick + ';"></span>' +
+              '<span style="position:absolute;top:0;bottom:0;left:50%;width:1px;background:' + gmvPreviewTick + ';"></span>' +
+              '<span style="position:absolute;top:0;bottom:0;left:75%;width:1px;background:' + gmvPreviewTick + ';"></span>' +
+              '<span style="position:absolute;top:0;bottom:0;left:calc(100% - 1px);width:2px;background:rgba(168,85,247,0.7);"></span>' +
+            '</div>' +
+            '<div style="display:flex;gap:12px;flex-wrap:wrap;color:' + gmvPreviewMuted + ';font-size:11px;font-weight:800;">' +
+              '<span>' + s8Txt('Missing', 'المتبقي') + ': <b style="color:' + gmvPreviewText + ';">' + gmvMoney(gmvSnapshot.remainingGmv, 0, true) + '</b></span>' +
+              '<span>' + s8Txt('Need', 'المطلوب') + ': <b style="color:' + gmvPreviewText + ';">' + gmvRate(gmvSnapshot.dailyOrdersNeeded) + s8Txt('/day', '/يوم') + '</b></span>' +
+              '<span>' + s8Txt('Current pace', 'الوتيرة الحالية') + ': <b style="color:' + gmvPreviewText + ';">' + gmvRate(gmvSnapshot.runRate) + s8Txt('/day', '/يوم') + '</b></span>' +
+            '</div>' +
+          '</div>' +
+          '<button id="s8-btn-gmv-target" type="button" style="min-width:128px;height:40px;border-radius:9px;border:1px solid rgba(168,85,247,0.45);background:rgba(168,85,247,0.14);color:' + gmvOpenPlannerColor + ';font-size:11px;font-weight:900;cursor:pointer;font-family:inherit;">' + s8Txt('Open Planner', 'فتح المخطط') + '</button>' +
+        '</div>' +
+      '</div>';
+  } else {
+    gmvPreviewHtml =
+      '<div id="s8-gmv-preview" style="background:' + gmvPreviewBg + ';border:1px dashed ' + gmvPreviewDashBorder + ';border-radius:16px;padding:18px 20px;margin-bottom:22px;display:flex;align-items:center;justify-content:space-between;gap:16px;box-shadow:' + gmvPreviewShadow + ';">' +
+        '<div style="display:flex;align-items:center;gap:11px;min-width:0;">' +
+          '<div style="width:34px;height:34px;border-radius:9px;background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.35);color:#a855f7;display:flex;align-items:center;justify-content:center;flex-shrink:0;">' + (window.icon ? window.icon('target', { size: 18, color: 'currentColor' }) : '') + '</div>' +
+          '<div style="min-width:0;">' +
+            '<div style="font-size:15px;font-weight:900;color:' + gmvPreviewText + ';">' + s8Txt('GMV Target Progress', 'تقدم هدف GMV') + '</div>' +
+            '<div style="font-size:11px;color:' + gmvPreviewFaint2 + ';font-weight:750;margin-top:3px;">' + s8Txt('No GMV target set yet', 'لم يتم تحديد هدف GMV بعد') + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<button id="s8-btn-gmv-target" type="button" style="height:40px;border-radius:9px;border:1px solid rgba(168,85,247,0.58);background:linear-gradient(135deg,rgba(168,85,247,0.96),rgba(59,130,246,0.9));color:#f8fafc;padding:0 15px;font-size:11px;font-weight:950;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 10px 22px rgba(59,130,246,0.16);">' + s8Txt('Set Goal', 'تحديد الهدف') + '</button>' +
+      '</div>';
+  }
+
   /* --------------------------------------------------------------------------
      ASSEMBLE FULL PAGE
   -------------------------------------------------------------------------- */
@@ -1150,10 +1260,11 @@ window.renderSection8 = function (mountEl, data, ctx) {
       '<div class="s8-kpi-row" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;">' + kpiRowHtml + '</div>' +
       '<div class="s8-kpi-row" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;">' + newKpiRowHtml + '</div>' +
       '<div class="s8-kpi-row" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:22px;">' + financialKpiRowHtml + '</div>' +
+      gmvPreviewHtml +
 
       /* Row 2 & 3 badge */
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;justify-content:flex-end;">' +
-        '<span style="font-size:14px;font-weight:700;color:#fff;">' + s8Txt('Order Pipeline · COD Collection', 'خط سير الطلبات · تحصيل COD') + '</span>' +
+        '<span style="font-size:14px;font-weight:700;color:#fff;">' + s8Txt('Status Pipeline · COD Collection', 'مسار الحالات · تحصيل COD') + '</span>' +
         '<div style="display:flex;align-items:center;gap:4px;padding:2px 10px;border-radius:20px;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.35);">' +
           '<div style="width:7px;height:7px;border-radius:50%;background:#3b82f6;"></div>' +
           '<div style="width:7px;height:7px;border-radius:50%;background:#00e676;"></div>' +
@@ -1168,7 +1279,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
         '<div class="s8-pipeline-panel" style="flex:1;min-width:320px;background:#0a0f18;border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:18px 16px;display:flex;flex-direction:column;box-shadow:inset 0 0 40px rgba(0,0,0,0.5);box-sizing:border-box;">' +
           '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">' +
             '<div style="width:20px;height:20px;border-radius:50%;border:1px solid #3b82f6;background:rgba(59,130,246,0.1);display:flex;align-items:center;justify-content:center;color:#3b82f6;font-size:10px;font-weight:800;box-shadow:0 0 10px rgba(59,130,246,0.3);">2</div>' +
-            '<span style="font-size:14px;font-weight:700;color:#fff;font-family:\'Inter\', \'Cairo\', sans-serif;">' + s8Txt('Order Pipeline (Fulfillment Funnel)', 'خط سير الطلبات (قمع التنفيذ)') + '</span>' +
+            '<span style="font-size:14px;font-weight:700;color:#fff;font-family:\'Inter\', \'Cairo\', sans-serif;">' + s8Txt('Status Pipeline (Fulfillment Funnel)', 'مسار الحالات (قمع التنفيذ)') + '</span>' +
           '</div>' +
           '<div class="s8-pipeline-stages" style="display:flex;flex:1;gap:0;overflow-x:auto;">' + pipelineStagesHtml + '</div>' +
           '<div class="s8-pipeline-summary-box">' +
@@ -1617,8 +1728,25 @@ window.renderSection8 = function (mountEl, data, ctx) {
 
   var calculatorBtn = mountEl.querySelector('#s8-btn-calculator');
   if (calculatorBtn) calculatorBtn.addEventListener('click', function () { onNavigate('calculator'); });
+  var gmvTargetBtn = mountEl.querySelector('#s8-btn-gmv-target');
+  if (gmvTargetBtn) gmvTargetBtn.addEventListener('click', function () { onNavigate('gmvTarget'); });
 
   // -- Pub/Sub Listeners & Cleanup ---------------------------------------------
+  if (window.DashboardGmvTargetState) {
+    if (mountEl._s8GmvTargetListener) {
+      window.DashboardGmvTargetState.unsubscribe(mountEl._s8GmvTargetListener);
+    }
+    mountEl._s8GmvTargetListener = function (next) {
+      if (!next || String(next.accountId) !== String(_roiAccountId)) return;
+      if (mountEl.hidden) {
+        mountEl._dashboardNeedsRefresh = true;
+        return;
+      }
+      window.renderSection8(mountEl, data, ctx);
+    };
+    window.DashboardGmvTargetState.subscribe(mountEl._s8GmvTargetListener);
+  }
+
   if (window.DashboardRoiState) {
     if (mountEl._s8RoiListener) {
       window.DashboardRoiState.unsubscribe(mountEl._s8RoiListener);
@@ -1665,9 +1793,14 @@ window.renderSection8 = function (mountEl, data, ctx) {
       window.DashboardRoiState.unsubscribe(mountEl._s8RoiListener);
       mountEl._s8RoiListener = null;
     }
+    if (window.DashboardGmvTargetState && mountEl._s8GmvTargetListener) {
+      window.DashboardGmvTargetState.unsubscribe(mountEl._s8GmvTargetListener);
+      mountEl._s8GmvTargetListener = null;
+    }
     if (window.DashboardMarketingState && mountEl._s8MarketingListener) {
       window.DashboardMarketingState.unsubscribe(mountEl._s8MarketingListener);
       mountEl._s8MarketingListener = null;
     }
   };
+
 };

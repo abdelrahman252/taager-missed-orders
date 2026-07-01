@@ -43,6 +43,9 @@
   --gap-sm:    12px;
   --gap-md:    16px;
   --gap-lg:    24px;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-arabic: "Cairo", "Tajawal", "Segoe UI", Tahoma, sans-serif;
+  --font-numeric-arabic: "Cairo", "Tajawal", "Segoe UI", Tahoma, sans-serif;
 }
 
 /* ── Light Theme ── */
@@ -86,7 +89,45 @@
 [data-theme="light"] #app { background: #f0f2f7; }
 
 /* ── Arabic RTL ── */
-[dir="rtl"] { font-family: "Segoe UI", "Tahoma", sans-serif; }
+[dir="rtl"],
+[dir="rtl"] body {
+  font-family: var(--font-arabic);
+  font-variant-numeric: tabular-nums;
+}
+[dir="rtl"] :is(button, input, select, textarea) { font-family: inherit; }
+[dir="rtl"] :is(
+  .tb-zoom-value,
+  .ops-counter-val,
+  .ops-current-order-num,
+  .ops-monitor-stat-value,
+  .analytics-kpi-value,
+  .analytics-total-value,
+  .status-breakdown-count,
+  .health-legend-value,
+  .health-legend-pct,
+  .s9-number-cell,
+  .s9-metric-val,
+  .s9-forecast-kpi-value,
+  .s9-profit-value,
+  .s9-kpi-netprofit,
+  .s9-kpi-breakeven,
+  .s9-kpi-confirmed,
+  [class*="kpi-value"],
+  [class*="metric-val"],
+  [class*="stat-value"],
+  [class*="counter-val"],
+  [class*="number-cell"],
+  [class*="profit-value"],
+  [class*="total-value"],
+  [class*="breakdown-count"],
+  [class*="order-num"]
+) {
+  font-family: var(--font-numeric-arabic);
+  font-size: 1.04em;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
 [dir="rtl"] .notice-box { border-left: none; border-right: 3px solid; }
 [dir="rtl"] .notice-box.info   { border-right-color: var(--accent); }
 [dir="rtl"] .notice-box.warn   { border-right-color: var(--warning); }
@@ -99,7 +140,7 @@
 html, body {
   height: 100%;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-ui);
   background: var(--bg);
   color: var(--text);
   font-size: 14px;
@@ -220,7 +261,19 @@ textarea:focus-visible,
 .taager-toast-success .taager-toast-dot { background: var(--success); }
 .taager-toast-error .taager-toast-dot { background: var(--danger); }
 .taager-toast-warn .taager-toast-dot { background: var(--warning); }
+.taager-toast-content { min-width: 0; }
+.taager-toast-title { margin-bottom: 3px; font-size: 13px; font-weight: 800; line-height: 1.35; }
 .taager-toast-body { min-width: 0; font-size: 13px; font-weight: 700; line-height: 1.45; }
+.taager-toast-admin {
+  width: 100%;
+  align-items: start;
+  padding: 14px;
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  direction: inherit;
+}
+.taager-toast-admin .taager-toast-body { color: var(--text2); font-weight: 500; overflow-wrap: anywhere; white-space: pre-wrap; }
+.taager-toast-admin.taager-toast-warn { border-color: color-mix(in srgb, var(--warning) 40%, var(--border)); }
+.taager-toast-admin.taager-toast-success { border-color: color-mix(in srgb, var(--success) 40%, var(--border)); }
 .taager-toast-close {
   width: 26px;
   height: 26px;
@@ -828,16 +881,16 @@ textarea:focus-visible,
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.35);
-  border-radius: 10px;
-  border: 3px solid transparent;
+  border-radius: 12px;
+  border: 2px solid transparent;
   background-clip: padding-box;
   transition: background-color 0.18s ease;
 }
@@ -852,7 +905,7 @@ textarea:focus-visible,
 
 [data-theme="light"] ::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.35);
-  border: 3px solid transparent;
+  border: 2px solid transparent;
   background-clip: padding-box;
 }
 [data-theme="light"] ::-webkit-scrollbar-thumb:hover {

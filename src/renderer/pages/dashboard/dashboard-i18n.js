@@ -5,6 +5,8 @@
   var localeCache = window.TAAGER_DASHBOARD_LOCALES || {};
   var observer = null;
   var applying = false;
+  var pendingRoots = new Set();
+  var pendingFrame = 0;
 
   function lang() {
     return window._kbotLang || localStorage.getItem('kbot-lang') || DEFAULT_LANG;
@@ -153,9 +155,12 @@
     'Losing': 'خاسر',
     'Profitable ROI': 'عائد مربح',
     'Losing ROI': 'عائد خاسر',
-    'Order Pipeline': 'خط سير الطلبات',
-    'Order Pipeline · COD Collection': 'خط سير الطلبات · تحصيل COD',
-    'Order Pipeline (Fulfillment Funnel)': 'خط سير الطلبات (قمع التنفيذ)',
+    'Order Pipeline': 'مسار الحالات',
+    'Status Pipeline': 'مسار الحالات',
+    'Order Pipeline · COD Collection': 'مسار الحالات · تحصيل COD',
+    'Status Pipeline · COD Collection': 'مسار الحالات · تحصيل COD',
+    'Order Pipeline (Fulfillment Funnel)': 'مسار الحالات (قمع التنفيذ)',
+    'Status Pipeline (Fulfillment Funnel)': 'مسار الحالات (قمع التنفيذ)',
     'Taager Profit Health': 'صحة الربح',
     'Profit Health': 'صحة الربح',
     'Total Taager Profit After Tax': 'إجمالي الربح بعد الضريبة',
@@ -598,10 +603,10 @@
     if (!root || applying) return;
     applying = true;
     try {
-      root.setAttribute('dir', dir());
-      root.setAttribute('lang', lang());
-      root.classList.toggle('dash-dir-rtl', isRtl());
-      root.classList.toggle('dash-dir-ltr', !isRtl());
+      if (root.getAttribute('dir') !== dir()) root.setAttribute('dir', dir());
+      if (root.getAttribute('lang') !== lang()) root.setAttribute('lang', lang());
+      if (root.classList.contains('dash-dir-rtl') !== isRtl()) root.classList.toggle('dash-dir-rtl', isRtl());
+      if (root.classList.contains('dash-dir-ltr') === isRtl()) root.classList.toggle('dash-dir-ltr', !isRtl());
 
       var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
         acceptNode: function (node) {
@@ -629,12 +634,34 @@
     if (observer || !window.MutationObserver) return;
     var page = document.getElementById('page-dashboard');
     if (!page) return;
+    function queueRoot(node) {
+      var root = node && node.nodeType === Node.ELEMENT_NODE ? node : (node && node.parentElement);
+      if (!root || !page.contains(root)) return;
+      var pane = root.closest && root.closest('.dash-section-cache-pane');
+      if (pane && pane.hidden) return;
+      pendingRoots.forEach(function (queued) {
+        if (root && queued !== root && queued.contains(root)) root = null;
+        else if (root && root.contains(queued)) pendingRoots.delete(queued);
+      });
+      if (root) pendingRoots.add(root);
+    }
+    function flushRoots() {
+      pendingFrame = 0;
+      if (applying) return;
+      var roots = Array.from(pendingRoots);
+      pendingRoots.clear();
+      roots.forEach(function (root) { if (root && root.isConnected) apply(root); });
+    }
     observer = new MutationObserver(function (mutations) {
       if (applying) return;
-      var shouldApply = mutations.some(function (m) {
-        return (m.addedNodes && m.addedNodes.length) || m.type === 'characterData' || m.type === 'attributes';
+      mutations.forEach(function (mutation) {
+        if (mutation.type === 'childList') {
+          Array.prototype.forEach.call(mutation.addedNodes || [], queueRoot);
+        } else {
+          queueRoot(mutation.target);
+        }
       });
-      if (shouldApply) requestAnimationFrame(function () { apply(page); });
+      if (pendingRoots.size && !pendingFrame) pendingFrame = requestAnimationFrame(flushRoots);
     });
     observer.observe(page, {
       childList: true,

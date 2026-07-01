@@ -1,4 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
+﻿// ─────────────────────────────────────────────────────────────────────────────
 // section9-product-forecast.js — Product-Level Smart Forecasting Engine
 // Parity with Account Calculator (Section 7) — same inputs, tooltips, metrics
 // ─────────────────────────────────────────────────────────────────────────────
@@ -6,10 +6,38 @@
 window.renderSectionProductForecast = function (mountEl, data, ctx) {
   'use strict';
 
+  function pruneStaleProductForecastDom() {
+    if (!mountEl || !document.querySelectorAll) return;
+    Array.prototype.slice.call(document.querySelectorAll('.s9-root')).forEach(function (root) {
+      if (mountEl.contains(root)) return;
+      var pane = root.closest && root.closest('.dash-section-cache-pane');
+      if (pane && pane.dataset && pane.dataset.sectionId === 'productForecast') {
+        if (pane._s9ThemeObserver && typeof pane._s9ThemeObserver.disconnect === 'function') {
+          pane._s9ThemeObserver.disconnect();
+          pane._s9ThemeObserver = null;
+        }
+        if (pane._s9CombinationModal && pane._s9CombinationModal.parentNode) {
+          pane._s9CombinationModal.parentNode.removeChild(pane._s9CombinationModal);
+          pane._s9CombinationModal = null;
+        }
+        if (pane.parentNode) pane.parentNode.removeChild(pane);
+        return;
+      }
+      if (root.parentNode) root.parentNode.removeChild(root);
+    });
+  }
+
+  pruneStaleProductForecastDom();
+
   // ── Theme Observer ─────────────────────────────────────────────────────────
   if (mountEl._s9ThemeObserver) {
     mountEl._s9ThemeObserver.disconnect();
     mountEl._s9ThemeObserver = null;
+  }
+  if (mountEl._s9CombinationModal && mountEl._s9CombinationModal.parentNode) {
+    mountEl._s9CombinationModal.parentNode.removeChild(mountEl._s9CombinationModal);
+    mountEl._s9CombinationModal = null;
+    document.body.style.overflow = '';
   }
   var observer = new MutationObserver(function (mutations) {
     mutations.forEach(function (mutation) {
@@ -22,9 +50,9 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   mountEl._s9ThemeObserver = observer;
 
   // ── 1. Initialization ───────────────────────────────────────────────────────
-  var pd = (data && data.products && data.products.rankedList) ? data.products.rankedList : [];
+  var rawPd = (data && data.products && data.products.rankedList) ? data.products.rankedList : [];
 
-  if (!pd.length) {
+  if (!rawPd.length) {
     mountEl.innerHTML = '<div style="padding:40px;text-align:center;color:rgba(255,255,255,0.4)">' + p9Txt('No product data available for simulation', 'لا توجد بيانات منتجات متاحة للمحاكاة') + '</div>';
     return;
   }
@@ -52,6 +80,103 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   function p9RatioPctValue(value, decimals) {
     return p9PctValue((Number(value) || 0) * 100, decimals);
   }
+  var forecastAccountId = (data && data.meta && data.meta.activeAccountId) ||
+    (ctx && ctx.data && ctx.data.meta && ctx.data.meta.activeAccountId) ||
+    (window.getActiveAccountId ? window.getActiveAccountId() : '__all__');
+  var forecastCountry = String((data && data.meta && data.meta.activeCountry) ||
+    (ctx && ctx.data && ctx.data.meta && ctx.data.meta.activeCountry) || '__all__').toLowerCase();
+  var combinationStorageKey = 'taager_s9_product_combinations_v1:' + encodeURIComponent(String(forecastAccountId || '__all__')) + ':' + encodeURIComponent(forecastCountry);
+
+  function skuKey(value) {
+    return String(value || '').trim().toLowerCase();
+  }
+  function readProductCombinations() {
+    try {
+      var parsed = JSON.parse(localStorage.getItem(combinationStorageKey) || '[]');
+      return Array.isArray(parsed) ? parsed.filter(function (group) {
+        return group && group.id && Array.isArray(group.skus) && group.skus.length > 1;
+      }) : [];
+    } catch (_) {
+      return [];
+    }
+  }
+  function writeProductCombinations(groups) {
+    try { localStorage.setItem(combinationStorageKey, JSON.stringify(groups || [])); } catch (_) {}
+  }
+  function sumFields(target, source, fields) {
+    fields.forEach(function (field) {
+      target[field] = (Number(target[field]) || 0) + (Number(source && source[field]) || 0);
+    });
+  }
+  function aggregateProductGroup(group, members) {
+    var primaryKey = skuKey(group.primarySku);
+    var primary = members.find(function (product) { return skuKey(product && product.sku) === primaryKey; }) || members[0] || {};
+    var combined = Object.assign({}, primary);
+    var hasActualDelivered = members.some(function (member) { return member && member.actualDeliveredCount !== undefined; });
+    var hasActualCommission = members.some(function (member) { return member && member.actualCommission !== undefined; });
+    var additiveFields = [
+      'units', 'pieces', 'placedCount', 'netOrderCount', 'totalOrderCount', 'statusTotalCount',
+      'qty', 'revenue', 'commission', 'deliveredSales', 'deliveredCount', 'actualDeliveredCount',
+      'actualCommission', 'actualDeliveredQty', 'actualDeliveredSales', 'expectedDeliveriesExact',
+      'expectedTotalProfitBeforeAdSpend', 'expectedDeliveredSales', 'ndrBaseOrders', 'ndrDeliveredOrders',
+      'drBaseOrders', 'drDeliveredOrders', 'totalPieces', 'canceledCount', 'canceledByYouCount',
+      'failedCount', 'confirmedCount', 'shippingCount', 'processingCount', 'waitingCount',
+      'outForDeliveryCount', 'deliverySuspendedCount', 'awaitingShipmentCount', 'pendingCount',
+      'confirmationStatusCount', 'cancelStatusCount', 'pendingStatusCount'
+    ];
+    additiveFields.forEach(function (field) { combined[field] = 0; });
+    members.forEach(function (member) { sumFields(combined, member, additiveFields); });
+
+    var aliases = (group.skus || []).map(function (sku) { return String(sku || '').trim(); }).filter(Boolean);
+    var netOrders = Number(combined.netOrderCount || combined.placedCount || 0);
+    var delivered = Number(combined.deliveredCount || 0);
+    var actualDelivered = hasActualDelivered ? Number(combined.actualDeliveredCount || 0) : delivered;
+    var statusTotal = Number(combined.statusTotalCount || netOrders);
+    var ndrBase = Number(combined.ndrBaseOrders || netOrders);
+    var ndrDelivered = Number(combined.ndrDeliveredOrders || delivered);
+    var drBase = Number(combined.drBaseOrders || combined.confirmedCount || 0);
+    var drDelivered = Number(combined.drDeliveredOrders || delivered);
+    combined.key = 's9-combination:' + group.id;
+    combined.id = combined.key;
+    combined.sku = String(group.primarySku || primary.sku || aliases[0] || '').trim();
+    combined.skus = aliases;
+    combined.name = primary.name || combined.sku || p9Txt('Combined product', 'منتج مدمج');
+    combined.confirmationPct = statusTotal > 0 ? (Number(combined.confirmationStatusCount || combined.confirmedCount || 0) / statusTotal) * 100 : 0;
+    combined.ndrPct = ndrBase > 0 ? (ndrDelivered / ndrBase) * 100 : 0;
+    combined.expectedNdrRate = ndrBase > 0 ? ndrDelivered / ndrBase : (netOrders > 0 ? delivered / netOrders : 0);
+    combined.drRate = drBase > 0 ? (drDelivered / drBase) * 100 : 0;
+    combined.deliveryPct = netOrders > 0 ? (delivered / netOrders) * 100 : 0;
+    combined.deliveredAov = delivered > 0 ? Number(combined.deliveredSales || 0) / delivered : 0;
+    combined.actualDeliveredCount = actualDelivered;
+    combined.actualCommission = hasActualCommission ? Number(combined.actualCommission || 0) : Number(combined.commission || 0);
+    combined._s9Combination = {
+      id: group.id,
+      primarySku: combined.sku,
+      skus: aliases,
+      memberKeys: members.map(function (member) { return member.key || member.sku || member.name || ''; })
+    };
+    return combined;
+  }
+  function applyProductCombinations(products, groups) {
+    var productList = Array.isArray(products) ? products : [];
+    var claimed = {};
+    var output = [];
+    (groups || []).forEach(function (group) {
+      var wanted = {};
+      (group.skus || []).forEach(function (sku) { if (skuKey(sku)) wanted[skuKey(sku)] = true; });
+      var members = productList.filter(function (product) { return !!wanted[skuKey(product && product.sku)]; });
+      if (!members.length) return;
+      members.forEach(function (member) { claimed[skuKey(member.sku)] = true; });
+      output.push(aggregateProductGroup(group, members));
+    });
+    productList.forEach(function (product) {
+      if (!claimed[skuKey(product && product.sku)]) output.push(product);
+    });
+    return output;
+  }
+
+  var productCombinations = readProductCombinations();
+  var pd = applyProductCombinations(rawPd, productCombinations);
   function productStatusCount(product, bucket, fallbackFields) {
     var counts = product && (product.statusCounts || product.statusBucketCounts || product.bucketCounts);
     if (counts && counts[bucket] != null) return Math.max(0, Math.round(Number(counts[bucket]) || 0));
@@ -119,9 +244,17 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     var pId = p.key || p.sku || p.name;
     var savedPSpend = localStorage.getItem('kbot_s9_spend_' + pId);
     var realAdSpend = savedPSpend != null ? parseFloat(savedPSpend) : 0;
+    if (savedPSpend == null && p._s9Combination && Array.isArray(p._s9Combination.memberKeys)) {
+      realAdSpend = p._s9Combination.memberKeys.reduce(function (sum, memberKey) {
+        var saved = localStorage.getItem('kbot_s9_spend_' + memberKey);
+        return sum + (saved != null ? (parseFloat(saved) || 0) : 0);
+      }, 0);
+    }
     return {
       id:            pId,
       sku:           p.sku || '',
+      skus:          p.skus || (p.sku ? [p.sku] : []),
+      combination:   p._s9Combination || null,
       name:          p.name || p9Txt('Unknown Product', 'منتج غير معروف'),
       realOrders:    orders,
       realDelivered: delivered,
@@ -166,9 +299,6 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   var simulationRowsRevision = Number(mountEl._s9SimulationRowsRevision || 0);
   var simulationRowsCacheKey = '';
   var simulationRowsCacheValue = null;
-  var forecastAccountId = (data && data.meta && data.meta.activeAccountId) ||
-    (ctx && ctx.data && ctx.data.meta && ctx.data.meta.activeAccountId) ||
-    (window.getActiveAccountId ? window.getActiveAccountId() : '__all__');
   var forecastRoiSettings = window.DashboardRoiState
     ? window.DashboardRoiState.get(forecastAccountId, data && data.roi)
     : { currency: window.dashboardActiveCurrency || 'SAR', egpRate: 52.0 };
@@ -244,8 +374,8 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     if (sim && sim.syncMatchDetail === 'separated_sku') return p9Txt('Marketing spend matched by separated SKU', 'Marketing spend matched by separated SKU');
     if (sim && sim.syncMatchDetail === 'glued_sku') return p9Txt('Marketing spend matched by glued SKU', 'Marketing spend matched by glued SKU');
     if (sim && sim.syncMatchMethod === 'sku') return p9Txt('Marketing spend matched by SKU', 'تمت مطابقة إنفاق التسويق بواسطة SKU');
-    if (sim && sim.syncMatchMethod === 'sku+name') return p9Txt('Marketing spend matched by SKU and normalized name', 'تمت مطابقة إنفاق التسويق بواسطة SKU والاسم الموحد');
-    if (sim && sim.syncMatchMethod === 'name') return p9Txt('Marketing spend matched by normalized name fallback', 'تمت مطابقة إنفاق التسويق بالاسم الموحد كخيار احتياطي');
+    if (sim && sim.syncMatchMethod === 'sku+name') return p9Txt('Marketing spend matched by SKU and exact normalized name', 'تمت مطابقة إنفاق التسويق بواسطة SKU والاسم الموحد');
+    if (sim && sim.syncMatchMethod === 'name') return p9Txt('Marketing spend matched by exact normalized name fallback', 'تمت مطابقة إنفاق التسويق بالاسم الموحد كخيار احتياطي');
     return p9Txt('No marketing campaign matched; include this SKU or product name in the campaign.', 'لا توجد حملة تسويق مطابقة؛ أضف SKU أو اسم المنتج إلى الحملة.');
   }
 
@@ -284,7 +414,26 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
   }
-
+  function skuCopyHtml(sku, opts) {
+    opts = opts || {};
+    if (window.dashboardSkuCopyHtml) return window.dashboardSkuCopyHtml(sku, opts);
+    var value = String(sku || '').trim();
+    if (!value && opts.hideEmpty) return '';
+    var display = opts.text != null ? String(opts.text) : (value || opts.emptyText || 'N/A');
+    var label = opts.label == null ? 'SKU' : String(opts.label || '');
+    var prefix = opts.prefix === false || !label ? '' : label + (opts.separator == null ? ': ' : opts.separator);
+    var tag = opts.block ? 'div' : 'span';
+    var style = opts.style ? ' style="' + escapeHtml(opts.style) + '"' : '';
+    return '<' + tag + ' dir="ltr"' + style + '>' + escapeHtml(prefix + display) + '</' + tag + '>';
+  }
+  function skuCopyRowHtml(sim) {
+    var sku = String(sim && sim.sku || '').trim();
+    var skuHtml = skuCopyHtml(sku, { style: 'color:#2dd4bf;font-size:10px;font-weight:800' });
+    return '<div data-i18n-preserve style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:10px;font-weight:800;color:rgba(255,255,255,.54)">' +
+      skuHtml +
+      '<span style="color:#f59e0b;min-width:0">&middot; ' + escapeHtml(matchMethodLabel(sim)) + '</span>' +
+    '</div>';
+  }
   function validSku(product) {
     var sku = textKey(product && product.sku || '');
     return sku && sku !== 'n a' && sku !== 'na' ? sku : '';
@@ -852,7 +1001,8 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
 
       return '<tr style="' + trStyle + '" data-idx="' + absoluteIdx + '" class="s9-row">' +
         '<td data-i18n-preserve class="s9-product-cell">' + s.name +
-          '<div style="font-size:10px;font-weight:700;color:rgba(255,255,255,.42);margin-top:3px;" dir="ltr">SKU: ' + (s.sku || 'N/A') + '</div>' +
+          (s.combination ? '<span style="display:inline-flex;margin-inline-start:6px;padding:2px 6px;border-radius:999px;background:rgba(168,85,247,.14);border:1px solid rgba(168,85,247,.32);color:#c4b5fd;font-size:9px;font-weight:900;vertical-align:middle;">' + p9Txt('COMBINED', 'مدمج') + '</span>' : '') +
+          skuCopyHtml(s.combination ? s.combination.skus.join(' + ') : (s.sku || ''), { emptyText: 'N/A', block: true, style: 'font-size:10px;font-weight:700;color:rgba(255,255,255,.42);margin-top:3px' }) +
           '<div style="font-size:10px;font-weight:700;color:' + (s.syncedAdSpend ? '#2dd4bf' : '#f59e0b') + ';margin-top:3px;">' + matchMethodLabel(s) + '</div>' +
         '</td>' +
         '<td class="s9-number-cell">' + p9Num(s.realOrders) + '</td>' +
@@ -906,16 +1056,18 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       '<div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.01);">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">' +
           '<div style="font-size:16px;font-weight:800;color:#fff;">' + p9Txt('Products', 'المنتجات') + '</div>' +
-          '<button type="button" id="s9-clear-sort" class="s9-clear-sort"' + (tableSortBy ? '' : ' disabled') + '>' + p9Txt('Clear sort', 'مسح الترتيب') + '</button>' +
+          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+            '<button type="button" id="s9-combine-products" style="border:1px solid rgba(168,85,247,.42);background:rgba(168,85,247,.13);color:#c4b5fd;border-radius:9px;padding:7px 11px;font-size:11px;font-weight:900;font-family:inherit;cursor:pointer;">+ ' + p9Txt('Combine Products', 'دمج المنتجات') + '</button>' +
+            '<button type="button" id="s9-clear-sort" class="s9-clear-sort"' + (tableSortBy ? '' : ' disabled') + '>' + p9Txt('Clear sort', 'مسح الترتيب') + '</button>' +
+          '</div>' +
         '</div>' +
         '<div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:2px;">' + p9Txt('Enter budget per product to see forecasts.', 'أدخل الميزانية لكل منتج لرؤية التوقعات.') + '</div>' +
         '<div style="display:block;margin-top:10px;padding:8px 10px;border:1px solid rgba(45,212,191,.18);border-radius:10px;background:rgba(45,212,191,.06);">' +
           '<div style="display:flex;flex-direction:column;gap:2px;min-width:0;">' +
             '<span style="font-size:11px;color:#2dd4bf;font-weight:900;">' + p9Txt('Marketing sync period', 'Marketing sync period') + ': ' + productSyncPeriodLabel() + ' · ' + p9Txt('Spend platform', 'منصة الإنفاق') + ': ' + FORECAST_PLATFORMS.filter(function (platform) { return platform.id === selectedMarketingPlatform; })[0].label + '</span>' +
             '<span style="font-size:10px;color:rgba(255,255,255,.48);font-weight:700;">' + p9Txt('Matched products', 'المنتجات المطابقة') + ': ' + syncedProductCount + ' / ' + simulations.length + ' · ' + p9Txt('Separated SKU', 'SKU منفصل') + ': ' + matchSummary.separatedSkuRows + ' · ' + p9Txt('Glued SKU', 'SKU ملتصق') + ': ' + matchSummary.gluedSkuRows + ' · ' + p9Txt('Name fallback', 'مطابقة الاسم') + ': ' + matchSummary.nameRows + ' · ' + p9Txt('Ambiguous', 'ملتبس') + ': ' + matchSummary.ambiguousRows + ' · ' + p9Txt('Unmatched', 'غير مطابق') + ': ' + matchSummary.unmatchedRows + '</span>' +
-            '<span style="font-size:10px;color:#f59e0b;font-weight:700;">' + p9Txt('Best accuracy: include the product SKU in each TikTok, Snapchat, or Facebook campaign name. Name fallback accepts a distinctive single word or matching phrase and normalizes common Arabic spelling variants. Renamed historical campaigns may require a campaign-data refresh before they appear here.', 'لأدق نتيجة: ضع SKU المنتج داخل اسم كل حملة تيك توك أو سناب شات أو فيسبوك. تقبل مطابقة الاسم كلمة مميزة واحدة أو عبارة مطابقة مع توحيد اختلافات الكتابة العربية الشائعة. قد تحتاج أسماء الحملات التاريخية المعدلة إلى تحديث بيانات الحملات قبل أن تظهر هنا.') + '</span>' +
+            '<span style="font-size:10px;color:#f59e0b;font-weight:700;">' + p9Txt('Best accuracy: include the product SKU in each TikTok, Snapchat, or Facebook campaign name. If no SKU is present, fallback requires the complete normalized product name. Campaigns containing an unknown SKU stay unmatched to prevent incorrect spend allocation.', 'لأدق نتيجة: ضع SKU المنتج داخل اسم كل حملة تيك توك أو سناب شات أو فيسبوك. تقبل مطابقة الاسم كلمة مميزة واحدة أو عبارة مطابقة مع توحيد اختلافات الكتابة العربية الشائعة. قد تحتاج أسماء الحملات التاريخية المعدلة إلى تحديث بيانات الحملات قبل أن تظهر هنا.') + '</span>' +
           '</div>' +
-          '<button type="button" id="s9-sync-now" style="align-self:flex-start;border:1px solid rgba(45,212,191,.35);background:rgba(45,212,191,.10);color:#2dd4bf;border-radius:8px;padding:6px 10px;font-size:10px;font-weight:900;font-family:inherit;cursor:pointer;">' + p9Txt('Sync Now', 'زامن الآن') + '</button>' +
         '</div>' +
         '<div class="s9-platform-tabs" aria-label="' + p9Txt('Advertising spend platform', 'منصة الإنفاق الإعلاني') + '">' + platformTabs + '</div>' +
         '<div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">' +
@@ -1106,10 +1258,10 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
           '<span style="font-size:11px;color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + formatMoney(s.realAdSpend, true) + '</span>' +
         '</div>' +
         '<div class="sfe-input-wrap2">' +
-          '<input type="number" class="s9-sim-spend-input sfe-input2" min="0" step="1" value="' + Math.round(toDisplay(s.adSpend)) + '" placeholder="0" style="direction:ltr;"' + (isSpendLocked(s) ? ' disabled title="' + p9Txt('Synced from marketing platforms', 'متزامن من منصات التسويق') + '"' : '') + '>' +
+          '<input type="number" class="s9-sim-spend-input sfe-input2" min="0" step="1" value="' + Math.round(toDisplay(s.adSpend)) + '" placeholder="0" style="direction:ltr;">' +
           '<span class="sfe-input-unit2">' + viewCurrency + '</span>' +
         '</div>' +
-        (isSpendLocked(s) ? '<div style="font-size:10px;color:#2dd4bf;font-weight:800;margin-top:8px">' + p9Txt('Actual spend is synced from marketing platforms for ', 'تمت مزامنة الإنفاق الفعلي من منصات التسويق للفترة ') + productSyncPeriodLabel() + '. ' + p9Txt('This spend is locked because it came from a connected marketing platform.', 'هذا الإنفاق مقفل لأنه جاء من منصة تسويق متصلة.') + '</div>' : '') +
+        (isSpendLocked(s) ? '<div style="font-size:10px;color:#2dd4bf;font-weight:800;margin-top:8px">' + p9Txt('Actual spend is synced from marketing platforms for ', 'تمت مزامنة الإنفاق الفعلي من منصات التسويق للفترة ') + productSyncPeriodLabel() + '. ' + p9Txt('Edit the scenario budget above without changing the synced actual spend.', 'هذا الإنفاق مقفل لأنه جاء من منصة تسويق متصلة.') + '</div>' : '') +
       '</div>';
 
     var ordersInputHtml =
@@ -1217,7 +1369,11 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
           '<button type="button" class="s9-reset-real-btn" style="border:1px solid ' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(34,197,94,0.35)' : 'rgba(34,197,94,0.45)') + ';background:' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.10)') + ';color:' + (document.documentElement.getAttribute('data-theme') === 'light' ? '#15803d' : '#86efac') + ';border-radius:9px;padding:6px 12px;font-size:11px;font-weight:900;font-family:inherit;cursor:pointer;flex-shrink:0;">' + p9Txt('Reset to Actual Data', 'الرجوع للبيانات الفعلية') + '</button>' +
         '</div>' +
         '<div data-i18n-preserve style="font-size:18px;font-weight:900;color:#fff;line-height:1.35;word-break:break-word;" title="' + s.name.replace(/"/g, '&quot;') + '">' + s.name + '</div>' +
-        '<div style="font-size:10px;font-weight:700;color:' + (s.syncedAdSpend ? '#2dd4bf' : '#f59e0b') + ';">SKU: ' + (s.sku || 'N/A') + ' · ' + matchMethodLabel(s) + '</div>' +
+        skuCopyRowHtml(s) +
+        (s.combination ? '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:11px;border:1px solid rgba(168,85,247,.28);background:rgba(168,85,247,.08);">' +
+          '<div><div style="font-size:10px;color:#c4b5fd;font-weight:900;margin-bottom:4px;">' + p9Txt('COMBINED SKUS', 'أكواد المنتجات المدمجة') + '</div><div dir="ltr" style="display:flex;gap:5px;flex-wrap:wrap;">' + s.combination.skus.map(function (sku) { return skuCopyHtml(sku, { prefix: false, style: 'padding:3px 7px;border-radius:999px;background:rgba(255,255,255,.06);color:#fff;font-size:10px;font-weight:800' }); }).join('') + '</div></div>' +
+          '<button type="button" class="s9-uncombine-products" data-combination-id="' + escapeHtml(s.combination.id) + '" style="border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.09);color:#fca5a5;border-radius:8px;padding:6px 9px;font-size:10px;font-weight:900;font-family:inherit;cursor:pointer;">' + p9Txt('Uncombine', 'إلغاء الدمج') + '</button>' +
+        '</div>' : '') +
         '<div style="margin-top:4px;">' + currToggleHtml + '</div>' +
       '</div>' +
 
@@ -1311,6 +1467,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     '.s9-platform-tab{border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.55);border-radius:999px;padding:6px 12px;font:inherit;font-size:11px;font-weight:900;cursor:pointer}' +
     '.s9-platform-tab:hover{border-color:rgba(96,165,250,.45);color:#93c5fd}' +
     '.s9-platform-tab.is-active{border-color:rgba(59,130,246,.55);background:rgba(59,130,246,.16);color:#60a5fa}' +
+    '@media (max-width:620px){.s9-combo-dialog>div:nth-child(2)>div:first-child{grid-template-columns:1fr!important}.s9-combo-dialog>div:nth-child(2)>div:nth-child(2)>div:last-child{grid-template-columns:repeat(2,minmax(0,1fr))!important}}' +
 
     // ── Dark background for all input wrapper containers ──
     '[data-sim-panel] > div > div[style*="border-radius:12px"],' +
@@ -1436,6 +1593,178 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       child.style.setProperty('color', color, 'important');
       child.style.setProperty('-webkit-text-fill-color', color, 'important');
     });
+  }
+
+  // ── Product combination modal ────────────────────────────────────────────────
+  var combinationModal = null;
+  var combinationModalState = { primarySku: '', secondarySku: '' };
+
+  function availableCombinationProducts() {
+    var claimed = {};
+    productCombinations.forEach(function (group) {
+      (group.skus || []).forEach(function (sku) { claimed[skuKey(sku)] = true; });
+    });
+    return rawPd.filter(function (product) {
+      var key = skuKey(product && product.sku);
+      return key && !claimed[key];
+    });
+  }
+  function combinationProduct(sku) {
+    var key = skuKey(sku);
+    return rawPd.find(function (product) { return skuKey(product && product.sku) === key; }) || null;
+  }
+  function closeCombinationModal() {
+    if (combinationModal && combinationModal.parentNode) combinationModal.parentNode.removeChild(combinationModal);
+    combinationModal = null;
+    mountEl._s9CombinationModal = null;
+    document.body.style.overflow = '';
+  }
+  function combinationSelectorHtml(side, selectedSku) {
+    var isPrimary = side === 'primary';
+    var color = isPrimary ? '#f59e0b' : '#14b8a6';
+    var selected = combinationProduct(selectedSku);
+    var otherSku = isPrimary ? combinationModalState.secondarySku : combinationModalState.primarySku;
+    var products = availableCombinationProducts().filter(function (product) { return skuKey(product.sku) !== skuKey(otherSku); });
+    var options = products.map(function (product) {
+      var sku = String(product.sku || '').trim();
+      var active = skuKey(sku) === skuKey(selectedSku);
+      return '<div role="button" tabindex="0" class="s9-combo-option" data-side="' + side + '" data-sku="' + escapeHtml(sku) + '" data-search="' + escapeHtml(textKey((product.name || '') + ' ' + sku)) + '" style="width:100%;display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;border:1px solid ' + (active ? color + '55' : 'transparent') + ';background:' + (active ? color + '18' : 'transparent') + ';color:#fff;font-family:inherit;text-align:start;cursor:pointer;margin-bottom:3px;">' +
+        '<span style="min-width:0;flex:1;"><span style="display:block;font-size:12px;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(product.name || p9Txt('Unnamed product', 'منتج بدون اسم')) + '</span>' + skuCopyHtml(sku, { block: true, style: 'font-size:10px;color:rgba(255,255,255,.42);margin-top:2px;font-weight:700' }) + '</span>' +
+        (active ? '<span style="color:' + color + ';font-weight:950;">✓</span>' : '') +
+      '</div>';
+    }).join('');
+    return '<div class="s9-combo-selector" data-side="' + side + '" style="position:relative;">' +
+      '<div style="font-size:10px;font-weight:950;color:' + color + ';margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px;">' + (isPrimary ? p9Txt('Product A · Primary', 'المنتج A · الأساسي') : p9Txt('Product B · Add to A', 'المنتج B · دمجه مع A')) + '</div>' +
+      '<div role="button" tabindex="0" class="s9-combo-trigger" style="width:100%;min-height:48px;border-radius:11px;border:1px solid ' + (selected ? color + '55' : 'rgba(255,255,255,.12)') + ';background:rgba(255,255,255,.04);color:#fff;padding:7px 11px;font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:9px;text-align:start;">' +
+        '<span style="width:29px;height:29px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + color + '18;color:' + color + ';font-weight:950;">' + (isPrimary ? 'A' : 'B') + '</span>' +
+        (selected ? '<span style="min-width:0;flex:1;"><span style="display:block;font-size:12px;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(selected.name || selected.sku) + '</span>' + skuCopyHtml(selected.sku, { block: true, style: 'font-size:10px;color:rgba(255,255,255,.42);font-weight:700' }) + '</span>' : '<span style="font-size:12px;color:rgba(255,255,255,.4);font-weight:750;flex:1;">' + p9Txt('Search by product or SKU...', 'ابحث باسم المنتج أو SKU...') + '</span>') +
+        '<span class="s9-combo-arrow" style="color:rgba(255,255,255,.4);">⌄</span>' +
+      '</div>' +
+      '<div class="s9-combo-panel" style="display:none;position:absolute;top:calc(100% + 6px);inset-inline:0;z-index:20;background:#0d1526;border:1px solid rgba(255,255,255,.14);border-radius:13px;overflow:hidden;box-shadow:0 18px 45px rgba(0,0,0,.45);">' +
+        '<div style="padding:9px;border-bottom:1px solid rgba(255,255,255,.07);"><input class="s9-combo-search" type="search" placeholder="' + p9Txt('Search name or SKU...', 'ابحث بالاسم أو SKU...') + '" style="width:100%;box-sizing:border-box;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);color:#fff;padding:0 10px;font-family:inherit;font-size:12px;outline:none;"></div>' +
+        '<div class="s9-combo-options" style="max-height:230px;overflow:auto;padding:6px;">' + (options || '<div style="padding:18px;text-align:center;color:rgba(255,255,255,.42);font-size:11px;">' + p9Txt('No available products', 'لا توجد منتجات متاحة') + '</div>') + '</div>' +
+      '</div>' +
+    '</div>';
+  }
+  function combinationPreviewHtml() {
+    var primary = combinationProduct(combinationModalState.primarySku);
+    var secondary = combinationProduct(combinationModalState.secondarySku);
+    if (!primary || !secondary) {
+      return '<div style="padding:14px;border-radius:12px;border:1px dashed rgba(255,255,255,.12);color:rgba(255,255,255,.45);font-size:11px;text-align:center;">' + p9Txt('Choose two products to preview the combined numbers.', 'اختر منتجين لمعاينة الأرقام بعد الدمج.') + '</div>';
+    }
+    var preview = aggregateProductGroup({ id: 'preview', primarySku: primary.sku, skus: [primary.sku, secondary.sku] }, [primary, secondary]);
+    var spend = simulations.reduce(function (sum, sim) {
+      return sum + ([skuKey(primary.sku), skuKey(secondary.sku)].indexOf(skuKey(sim.sku)) !== -1 ? Number(sim.realAdSpend || 0) : 0);
+    }, 0);
+    var profit = Number(preview.actualCommission || preview.commission || 0) - spend;
+    var cards = [
+      [p9Txt('Net Orders', 'صافي الطلبات'), p9Num(preview.netOrderCount || preview.placedCount)],
+      [p9Txt('Delivered', 'تم التسليم'), p9Num(preview.actualDeliveredCount || preview.deliveredCount)],
+      [p9Txt('Ad Spend', 'الإنفاق الإعلاني'), formatMoney(spend)],
+      [p9Txt('Net Profit', 'صافي الربح'), formatMoney(profit)]
+    ];
+    return '<div><div style="font-size:10px;font-weight:950;color:#c4b5fd;margin-bottom:8px;">' + p9Txt('COMBINED PREVIEW', 'معاينة الدمج') + '</div><div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;">' + cards.map(function (card) {
+      return '<div style="padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.035);"><div style="font-size:9px;color:rgba(255,255,255,.45);font-weight:800;margin-bottom:4px;">' + card[0] + '</div><div dir="ltr" style="font-size:13px;color:#fff;font-weight:950;">' + card[1] + '</div></div>';
+    }).join('') + '</div></div>';
+  }
+  function renderCombinationModal() {
+    if (!combinationModal) return;
+    var canCombine = combinationProduct(combinationModalState.primarySku) && combinationProduct(combinationModalState.secondarySku) && skuKey(combinationModalState.primarySku) !== skuKey(combinationModalState.secondarySku);
+    combinationModal.innerHTML = '<div class="s9-combo-dialog" style="width:min(720px,96vw);max-height:92vh;overflow:visible;border-radius:20px;background:#0b1120;border:1px solid rgba(255,255,255,.12);box-shadow:0 30px 90px rgba(0,0,0,.6);">' +
+      '<div style="padding:18px 20px;border-bottom:1px solid rgba(255,255,255,.075);display:flex;align-items:center;justify-content:space-between;gap:14px;">' +
+        '<div><div style="font-size:18px;font-weight:950;color:#fff;">' + p9Txt('Combine Products', 'دمج المنتجات') + '</div><div style="font-size:11px;color:rgba(255,255,255,.43);font-weight:700;margin-top:3px;">' + p9Txt('Create one forecasting row from two SKUs. Imported data stays unchanged.', 'أنشئ صف توقعات واحدًا من رمزين SKU بدون تغيير البيانات المستوردة.') + '</div></div>' +
+        '<button type="button" class="s9-combo-close" style="width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);color:#fff;font-size:20px;cursor:pointer;">&times;</button>' +
+      '</div>' +
+      '<div style="padding:18px 20px;display:flex;flex-direction:column;gap:16px;">' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' + combinationSelectorHtml('primary', combinationModalState.primarySku) + combinationSelectorHtml('secondary', combinationModalState.secondarySku) + '</div>' +
+        combinationPreviewHtml() +
+        '<div style="font-size:10px;line-height:1.7;color:rgba(255,255,255,.46);">' + p9Txt('Product A keeps its name and primary SKU. Product B becomes an alias. Both original rows are replaced by one reversible combined row in Section 9.', 'يحتفظ المنتج A باسمه ورمز SKU الأساسي، ويصبح المنتج B رمزًا بديلًا. يتم استبدال الصفين بصف واحد قابل لإلغاء الدمج داخل القسم 9.') + '</div>' +
+      '</div>' +
+      '<div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.075);display:flex;justify-content:flex-end;gap:9px;">' +
+        '<button type="button" class="s9-combo-cancel" style="border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.7);border-radius:9px;padding:8px 14px;font-family:inherit;font-size:11px;font-weight:850;cursor:pointer;">' + p9Txt('Cancel', 'إلغاء') + '</button>' +
+        '<button type="button" class="s9-combo-confirm"' + (canCombine ? '' : ' disabled') + ' style="border:1px solid rgba(168,85,247,.48);background:rgba(168,85,247,.2);color:#ddd6fe;border-radius:9px;padding:8px 15px;font-family:inherit;font-size:11px;font-weight:950;cursor:' + (canCombine ? 'pointer' : 'default') + ';opacity:' + (canCombine ? '1' : '.4') + ';">' + p9Txt('Combine', 'دمج') + '</button>' +
+      '</div>' +
+    '</div>';
+
+    combinationModal.querySelector('.s9-combo-close').addEventListener('click', closeCombinationModal);
+    combinationModal.querySelector('.s9-combo-cancel').addEventListener('click', closeCombinationModal);
+    combinationModal.querySelectorAll('.s9-combo-selector').forEach(function (selector) {
+      var trigger = selector.querySelector('.s9-combo-trigger');
+      var panel = selector.querySelector('.s9-combo-panel');
+      var search = selector.querySelector('.s9-combo-search');
+      trigger.addEventListener('click', function (event) {
+        event.stopPropagation();
+        combinationModal.querySelectorAll('.s9-combo-panel').forEach(function (other) { if (other !== panel) other.style.display = 'none'; });
+        panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+        if (panel.style.display === 'block') { search.value = ''; search.focus(); }
+      });
+      trigger.addEventListener('keydown', function (event) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        event.stopPropagation();
+        combinationModal.querySelectorAll('.s9-combo-panel').forEach(function (other) { if (other !== panel) other.style.display = 'none'; });
+        panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+        if (panel.style.display === 'block') { search.value = ''; search.focus(); }
+      });
+      search.addEventListener('click', function (event) { event.stopPropagation(); });
+      search.addEventListener('input', function () {
+        var query = textKey(search.value);
+        selector.querySelectorAll('.s9-combo-option').forEach(function (option) {
+          option.style.display = !query || (option.getAttribute('data-search') || '').indexOf(query) !== -1 ? 'flex' : 'none';
+        });
+      });
+      selector.querySelectorAll('.s9-combo-option').forEach(function (option) {
+        option.addEventListener('click', function (event) {
+          event.stopPropagation();
+          if (option.getAttribute('data-side') === 'primary') combinationModalState.primarySku = option.getAttribute('data-sku') || '';
+          else combinationModalState.secondarySku = option.getAttribute('data-sku') || '';
+          renderCombinationModal();
+        });
+        option.addEventListener('keydown', function (event) {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (option.getAttribute('data-side') === 'primary') combinationModalState.primarySku = option.getAttribute('data-sku') || '';
+          else combinationModalState.secondarySku = option.getAttribute('data-sku') || '';
+          renderCombinationModal();
+        });
+      });
+    });
+    combinationModal.querySelector('.s9-combo-confirm').addEventListener('click', function () {
+      if (!canCombine) return;
+      var primary = combinationProduct(combinationModalState.primarySku);
+      var secondary = combinationProduct(combinationModalState.secondarySku);
+      if (!primary || !secondary) return;
+      var group = {
+        id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8),
+        primarySku: String(primary.sku || '').trim(),
+        skus: [String(primary.sku || '').trim(), String(secondary.sku || '').trim()],
+        createdAt: new Date().toISOString()
+      };
+      productCombinations = productCombinations.concat([group]);
+      writeProductCombinations(productCombinations);
+      closeCombinationModal();
+      mountEl._s9SelectedProductId = 's9-combination:' + group.id;
+      mountEl._s9CurrentPage = 1;
+      window.renderSectionProductForecast(mountEl, data, ctx);
+    });
+  }
+  function openCombinationModal() {
+    combinationModalState = { primarySku: '', secondarySku: '' };
+    combinationModal = document.createElement('div');
+    combinationModal.className = 'dash-overlay-scope';
+    combinationModal.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.74);font-family:Cairo,sans-serif;direction:' + (isAr ? 'rtl' : 'ltr') + ';box-sizing:border-box;';
+    combinationModal.addEventListener('click', function (event) {
+      if (event.target === combinationModal) {
+        closeCombinationModal();
+        return;
+      }
+      if (combinationModal) combinationModal.querySelectorAll('.s9-combo-panel').forEach(function (panel) { panel.style.display = 'none'; });
+    });
+    document.body.appendChild(combinationModal);
+    mountEl._s9CombinationModal = combinationModal;
+    document.body.style.overflow = 'hidden';
+    renderCombinationModal();
   }
 
   // ── 12. Main render ─────────────────────────────────────────────────────────
@@ -1664,6 +1993,22 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   // ── 13. Event binding ───────────────────────────────────────────────────────
   function bindEvents(rootEl) {
     var eventRoot = rootEl || mountEl;
+    var combineProductsButton = eventRoot.querySelector('#s9-combine-products');
+    if (combineProductsButton) combineProductsButton.addEventListener('click', openCombinationModal);
+    eventRoot.querySelectorAll('.s9-uncombine-products').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var groupId = button.getAttribute('data-combination-id') || '';
+        var group = productCombinations.find(function (item) { return String(item.id) === String(groupId); });
+        if (!group) return;
+        productCombinations = productCombinations.filter(function (item) { return String(item.id) !== String(groupId); });
+        writeProductCombinations(productCombinations);
+        var primary = combinationProduct(group.primarySku);
+        mountEl._s9SelectedProductId = primary ? (primary.key || primary.sku || primary.name) : '';
+        mountEl._s9CurrentPage = 1;
+        window.renderSectionProductForecast(mountEl, data, ctx);
+      });
+    });
+
     eventRoot.querySelectorAll('.s9-platform-tab').forEach(function (button) {
       button.addEventListener('click', function () {
         var nextPlatform = button.getAttribute('data-s9-platform') || 'all';
@@ -1774,7 +2119,6 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     var simSpendInp = eventRoot.querySelector('.s9-sim-spend-input');
     if (simSpendInp) {
       simSpendInp.addEventListener('input', function (e) {
-        if (isSpendLocked(simulations[selectedIdx])) return;
         var v = parseFloat(e.target.value);
         if (isNaN(v) || v < 0) return;
         simulations[selectedIdx].adSpend = toSAR(v);
@@ -1840,31 +2184,6 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       });
     }
 
-    var syncNowBtn = eventRoot.querySelector('#s9-sync-now');
-    if (syncNowBtn && window.DashboardMarketingState && typeof window.DashboardMarketingState.sync === 'function') {
-      syncNowBtn.addEventListener('click', function () {
-        var period = forecastPeriod || {};
-        syncNowBtn.disabled = true;
-        syncNowBtn.textContent = p9Txt('Syncing...', 'جاري المزامنة...');
-        var result = window.DashboardMarketingState.sync(forecastAccountId, {
-          dateFrom: period.from || period.dateFrom || period.start || '',
-          dateTo: period.to || period.dateTo || period.end || '',
-          targetCurrency: viewCurrency || window.dashboardActiveCurrency || 'SAR',
-          egpRate: egpRate || 52
-        });
-        if (result && typeof result.catch === 'function') {
-          result.catch(function (error) {
-            console.warn('[ProductForecast] marketing sync failed', error && error.message ? error.message : error);
-          }).finally(function () {
-            if (syncNowBtn && syncNowBtn.isConnected) {
-              syncNowBtn.disabled = false;
-              syncNowBtn.textContent = p9Txt('Sync Now', 'زامن الآن');
-            }
-          });
-        }
-      });
-    }
-
     // Currency toggle
     eventRoot.querySelectorAll('.s9-curr-btn').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
@@ -1918,6 +2237,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   var baseSectionCleanup = mountEl._dashboardSectionCleanup;
   mountEl._dashboardSectionCleanup = function () {
     if (typeof baseSectionCleanup === 'function') baseSectionCleanup();
+    closeCombinationModal();
     if (tableSearchTimer) {
       clearTimeout(tableSearchTimer);
       tableSearchTimer = null;
@@ -1941,6 +2261,10 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     mountEl._s9RoiListener = function (settings) {
       if (ctx && ctx.sectionId && ctx.sectionId !== 'productForecast') return;
       if (!settings || String(settings.accountId) !== String(forecastAccountId)) return;
+      if (!mountEl.isConnected || mountEl.hidden) {
+        mountEl._dashboardNeedsRefresh = true;
+        return;
+      }
       var nextCurrency = settings.currency || 'SAR';
       var nextRate = Number(settings.egpRate) > 0 ? Number(settings.egpRate) : 52.0;
       var changed = nextCurrency !== viewCurrency || nextRate !== egpRate;
@@ -1973,6 +2297,10 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     mountEl._s9MarketingListener = function (next) {
       if (ctx && ctx.sectionId && ctx.sectionId !== 'productForecast') return;
       if (!next || String(next.accountId) !== String(forecastAccountId)) return;
+      if (!mountEl.isConnected || mountEl.hidden) {
+        mountEl._dashboardNeedsRefresh = true;
+        return;
+      }
       window.renderSectionProductForecast(mountEl, data, ctx);
     };
     window.DashboardMarketingState.subscribe(mountEl._s9MarketingListener);

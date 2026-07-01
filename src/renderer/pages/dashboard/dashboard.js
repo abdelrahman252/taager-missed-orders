@@ -1,4 +1,4 @@
-/*
+﻿/*
    dashboard.js
    Outer Dashboard page mount. The inner shell owns the fixed topbar, section
    routing, and account changes; this file owns loading aggregator data.
@@ -10,7 +10,10 @@
     Object.keys(target).forEach(function (key) {
       delete target[key];
     });
-    Object.assign(target, source || {});
+    Object.keys(source || {}).forEach(function (key) {
+      var descriptor = Object.getOwnPropertyDescriptor(source, key);
+      if (descriptor) Object.defineProperty(target, key, descriptor);
+    });
   }
 
   function emptyDashboardData() {
@@ -34,15 +37,29 @@
       cod: null,
       products: null,
       commissionTrend: null,
+      orderSources: null,
       roi: null,
       geo: null
     };
   }
 
   function mapAggregatorToSections(result) {
-    var orders = Array.isArray(result.orders) ? result.orders : [];
-    var outcomeOrders = Array.isArray(result.outcomeOrders) ? result.outcomeOrders : orders;
-    var pipeline = result.pipeline ? Object.assign({}, result.pipeline, { orders: orders }) : null;
+    function getOrders() {
+      if (result && typeof result.getCreatedOrders === 'function') return result.getCreatedOrders();
+      return Array.isArray(result && result.orders) ? result.orders : [];
+    }
+    function getOutcomeOrders() {
+      if (result && typeof result.getOutcomeOrders === 'function') return result.getOutcomeOrders();
+      return Array.isArray(result && result.outcomeOrders) ? result.outcomeOrders : getOrders();
+    }
+    var pipeline = result.pipeline ? Object.assign({}, result.pipeline) : null;
+    if (pipeline) {
+      Object.defineProperty(pipeline, 'orders', {
+        enumerable: true,
+        configurable: true,
+        get: getOrders
+      });
+    }
     return {
       _loaded: true,
       meta: result.meta || {},
@@ -51,8 +68,11 @@
       stages: result.pipeline && result.pipeline.stages ? result.pipeline.stages : [],
       statusSummary: result.statusSummary || (result.pipeline && result.pipeline.statusSummary) || [],
       lostBreakdown: result.lostBreakdown || (result.pipeline && result.pipeline.lostBreakdown) || [],
-      orders: orders,
-      outcomeOrders: outcomeOrders,
+      get orders() { return getOrders(); },
+      get outcomeOrders() { return getOutcomeOrders(); },
+      getCreatedOrders: getOrders,
+      getOutcomeOrders: getOutcomeOrders,
+      orderSources: result.orderSources || null,
       cod: result.cod || null,
       products: result.products || null,
       commissionTrend: result.commissionTrend || null,
@@ -95,6 +115,50 @@
     var marketingSectionRefreshes = {};
     var activeMarketingSyncPromise = null;
     var activeMarketingSyncKey = '';
+    var aiMirrorWarmVersion = null;
+    var aiMirrorWarmHandle = null;
+    var dashboardHasCompletedInitialLoad = false;
+    var dashboardAggregatorRunId = 0;
+
+    function dashboardRangeKey(range) {
+      if (!range) return '';
+      return [
+        range.preset || '',
+        range.dateFrom || '',
+        range.dateTo || ''
+      ].join(':');
+    }
+
+    function dashboardAggregationKey() {
+      var activeId = window.getActiveAccountId ? window.getActiveAccountId() : '__all__';
+      var period = window.DashboardPeriodState && typeof window.DashboardPeriodState.get === 'function'
+        ? window.DashboardPeriodState.get()
+        : null;
+      var deliveredMode = window.DashboardDeliveredDateState && typeof window.DashboardDeliveredDateState.get === 'function'
+        ? window.DashboardDeliveredDateState.get()
+        : 'actual';
+      var ndrRange = deliveredMode === 'expected' && window.DashboardExpectedNdrRangeState && typeof window.DashboardExpectedNdrRangeState.get === 'function'
+        ? window.DashboardExpectedNdrRangeState.get()
+        : null;
+      var reportingCurrency = '';
+      try { reportingCurrency = localStorage.getItem('taager_dashboard_reporting_currency') || ''; } catch (_) {}
+      return [
+        String(activeId || '__all__'),
+        dashboardRangeKey(period),
+        String(deliveredMode || 'actual'),
+        dashboardRangeKey(ndrRange),
+        String(reportingCurrency || '')
+      ].join('|');
+    }
+
+    function dashboardLazyOrderCount(data) {
+      var total = data && data.overview && data.overview.totalOrders;
+      if (total && total.value != null) return Number(total.value || 0);
+      if (total && total.rawValue != null) return Number(total.rawValue || 0);
+      var meta = data && data.meta;
+      if (meta && meta.rowCount != null) return Number(meta.rowCount || 0);
+      return 0;
+    }
 
     function esc(value) {
       if (window.TaagerUI && typeof window.TaagerUI.esc === 'function') return window.TaagerUI.esc(value);
@@ -144,7 +208,17 @@
       var current = store.get(accountId);
       if (current && current.loading && marketingStatusLoads[accountId]) return marketingStatusLoads[accountId];
       if (marketingStatusLoads[accountId]) return marketingStatusLoads[accountId];
-      if (current && (current.summary || current.status !== 'disconnected' || current.error || current.offline || current.reconnectRequired)) {
+      if (current && current.error && !current.reconnectRequired) {
+        marketingStatusLoads[accountId] = store.load(accountId, undefined, {
+          revalidate: true,
+          background: true
+        }).catch(function () { return current; }).then(function (status) {
+          marketingStatusLoads[accountId] = null;
+          return status;
+        });
+        return marketingStatusLoads[accountId];
+      }
+      if (current && (current.summary || current.status !== 'disconnected' || current.offline || current.reconnectRequired)) {
         return Promise.resolve(current);
       }
 
@@ -153,6 +227,50 @@
         return status;
       });
       return marketingStatusLoads[accountId];
+    }
+
+    function marketingSummaryMatchesRange(status, payload) {
+      var summary = status && status.summary;
+      if (!summary || !payload) return false;
+      var summaryFrom = String(summary.dateFrom || '').slice(0, 10);
+      var summaryTo = String(summary.dateTo || '').slice(0, 10);
+      var payloadFrom = String(payload.dateFrom || '').slice(0, 10);
+      var payloadTo = String(payload.dateTo || '').slice(0, 10);
+      var summaryCurrency = String(summary.currency || '').toUpperCase();
+      var payloadCurrency = String(payload.targetCurrency || '').toUpperCase();
+      var summaryRate = Number(summary.egpRate || 0);
+      var payloadRate = Number(payload.egpRate || 0);
+      var rateMatches = !summaryRate || !payloadRate || Math.abs(summaryRate - payloadRate) < 0.0001;
+      var payloadRates = payload.exchangeRates && typeof payload.exchangeRates === 'object' ? payload.exchangeRates : null;
+      var summaryRates = summary.exchangeRates && typeof summary.exchangeRates === 'object' ? summary.exchangeRates : null;
+      if (payloadRates) {
+        if (!summaryRates) return false;
+        var supported = ['USD', 'SAR', 'EGP', 'AED', 'IQD', 'OMR'];
+        rateMatches = supported.every(function (currency) {
+          var nextRate = Number(payloadRates[currency]);
+          var cachedRate = Number(summaryRates[currency]);
+          if (!(nextRate > 0) && !(cachedRate > 0)) return true;
+          return nextRate > 0 && cachedRate > 0 && Math.abs(nextRate - cachedRate) < 0.0001;
+        });
+      }
+      return !!(
+        summaryFrom && summaryTo &&
+        summaryFrom === payloadFrom &&
+        summaryTo === payloadTo &&
+        (!summaryCurrency || !payloadCurrency || summaryCurrency === payloadCurrency) &&
+        rateMatches
+      );
+    }
+
+    function dashboardCurrencyRates() {
+      if (window.TaagerCurrency && typeof window.TaagerCurrency.snapshot === 'function') {
+        var snapshot = window.TaagerCurrency.snapshot() || {};
+        if (snapshot.rates && typeof snapshot.rates === 'object') return Object.assign({}, snapshot.rates);
+      }
+      if (window.TaagerCurrency && typeof window.TaagerCurrency.rates === 'function') {
+        return Object.assign({}, window.TaagerCurrency.rates() || {});
+      }
+      return {};
     }
 
     function sectionNeedsMarketing(sectionId) {
@@ -164,20 +282,95 @@
     }
 
     function warmDashboardAiMirror(data) {
-      if (window.DashboardAiMirror && typeof window.DashboardAiMirror.warm === 'function') {
-        window.DashboardAiMirror.warm(data, { force: true }).catch(function () {});
+      if (!window.DashboardAiMirror || typeof window.DashboardAiMirror.warm !== 'function') return;
+      if (data && data.meta && data.meta.lazyHeavyModels) return;
+      var version = data && data._version != null ? data._version : 'loaded';
+      if (aiMirrorWarmVersion === version || aiMirrorWarmHandle) return;
+      var run = function () {
+        aiMirrorWarmHandle = null;
+        if (!shellMount.isConnected) return;
+        aiMirrorWarmVersion = version;
+        window.DashboardAiMirror.warm(data, { force: false }).catch(function () {});
+      };
+      if (window.requestIdleCallback) aiMirrorWarmHandle = window.requestIdleCallback(run, { timeout: 2000 });
+      else aiMirrorWarmHandle = window.setTimeout(run, 250);
+    }
+
+    function completeInitialDashboardPreloader(options) {
+      if (window.TaagerPreloader && typeof window.TaagerPreloader.dashboardComplete === 'function') {
+        return Promise.resolve(window.TaagerPreloader.dashboardComplete(options || {}));
       }
+      return Promise.resolve();
     }
 
     function runAggregator(showLoader) {
+      var aggregationKey = dashboardAggregationKey();
+      var existingAggregation = window.__dashboardAggregationInFlight;
+      var sharedAggregation = !!(
+        existingAggregation &&
+        existingAggregation.key === aggregationKey &&
+        existingAggregation.promise
+      );
+      var runId = sharedAggregation ? dashboardAggregatorRunId : ++dashboardAggregatorRunId;
+      var smoothRefreshLoader = !!(showLoader && dashboardHasCompletedInitialLoad);
       var aggregatorTimer = window.TaagerPerf && window.TaagerPerf.start
-        ? window.TaagerPerf.start('dashboard:data:aggregation', { showLoader: !!showLoader })
+        ? window.TaagerPerf.start('dashboard:data:aggregation', {
+          showLoader: !!showLoader,
+          sharedAggregation: sharedAggregation,
+          sourceRunId: sharedAggregation ? existingAggregation.runId : null
+        })
         : null;
       var readyResolve = null;
       var readyPromise = new Promise(function (resolve) { readyResolve = resolve; });
       if (document.getElementById('preloader') && !window._dashboardInitialReady) {
         window._dashboardInitialReady = readyPromise;
       }
+
+      function dashboardLoaderStage(stageId, options) {
+        if (window.TaagerPreloader && typeof window.TaagerPreloader.dashboardStage === 'function') {
+          window.TaagerPreloader.dashboardStage(stageId, options || {});
+        }
+      }
+
+      function completeDashboardLoad(activity, afterComplete, options) {
+        var completeOptions = Object.assign({}, options || {}, {
+          activity: activity || 'Dashboard ready.',
+          smooth: smoothRefreshLoader
+        });
+        if (smoothRefreshLoader) {
+          completeInitialDashboardPreloader(completeOptions).then(function () {
+            if (runId !== dashboardAggregatorRunId) {
+              if (readyResolve) {
+                readyResolve(dashData);
+                readyResolve = null;
+              }
+              return;
+            }
+            if (typeof afterComplete === 'function') afterComplete();
+            dashboardHasCompletedInitialLoad = true;
+            if (readyResolve) {
+              readyResolve(dashData);
+              readyResolve = null;
+            }
+          });
+          return;
+        }
+        if (typeof afterComplete === 'function') afterComplete();
+        completeInitialDashboardPreloader(completeOptions);
+        dashboardHasCompletedInitialLoad = true;
+        if (readyResolve) {
+          readyResolve(dashData);
+          readyResolve = null;
+        }
+      }
+
+      if (window.TaagerPreloader && typeof window.TaagerPreloader.dashboardRefresh === 'function') {
+        window.TaagerPreloader.dashboardRefresh({
+          activity: 'Starting dashboard...',
+          smooth: smoothRefreshLoader
+        });
+      }
+      dashboardLoaderStage('snapshot', { activity: 'Reading saved dashboard snapshots' });
 
       if (showLoader) {
         dashData._loaded = false;
@@ -194,20 +387,63 @@
         resetObject(dashData, emptyDashboardData());
         dashData._version = ++dashVersion;
         dashData._loading = false;
-        if (typeof window.refreshDashboardShell === 'function') {
-          window.refreshDashboardShell(shellMount, dashData);
-        }
-        if (window.TaagerPageLifecycle && typeof window.TaagerPageLifecycle.markMounted === 'function') {
-          window.TaagerPageLifecycle.markMounted('page-dashboard');
-        }
-        if (readyResolve) readyResolve(dashData);
-        if (window.TaagerPerf && window.TaagerPerf.end && aggregatorTimer) {
-          window.TaagerPerf.end(aggregatorTimer, { ok: true, source: 'empty' });
-        }
+        completeDashboardLoad('Dashboard ready.', function () {
+          if (typeof window.refreshDashboardShell === 'function') {
+            window.refreshDashboardShell(shellMount, dashData);
+          }
+          if (window.TaagerPageLifecycle && typeof window.TaagerPageLifecycle.markMounted === 'function') {
+            window.TaagerPageLifecycle.markMounted('page-dashboard');
+          }
+          if (window.TaagerPerf && window.TaagerPerf.end && aggregatorTimer) {
+            window.TaagerPerf.end(aggregatorTimer, { ok: true, source: 'empty' });
+          }
+        });
         return readyPromise;
       }
 
-      window.runDashboardAggregator(function (result) {
+      var aggregationPromise = null;
+      if (sharedAggregation) {
+        aggregationPromise = existingAggregation.promise;
+      } else {
+        aggregationPromise = new Promise(function (resolve) {
+          window.runDashboardAggregator(function (result) {
+            resolve(result || null);
+          });
+        });
+        window.__dashboardAggregationInFlight = {
+          key: aggregationKey,
+          promise: aggregationPromise,
+          runId: runId,
+          startedAt: Date.now()
+        };
+        aggregationPromise.then(function () {
+          if (window.__dashboardAggregationInFlight && window.__dashboardAggregationInFlight.promise === aggregationPromise) {
+            window.__dashboardAggregationInFlight = null;
+          }
+        }, function () {
+          if (window.__dashboardAggregationInFlight && window.__dashboardAggregationInFlight.promise === aggregationPromise) {
+            window.__dashboardAggregationInFlight = null;
+          }
+        });
+      }
+
+      aggregationPromise.then(function (result) {
+        if (runId !== dashboardAggregatorRunId) {
+          if (window.TaagerPerf && window.TaagerPerf.end && aggregatorTimer) {
+            window.TaagerPerf.end(aggregatorTimer, {
+              ok: true,
+              stale: true,
+              requestId: runId,
+              sharedAggregation: sharedAggregation,
+              sourceRunId: sharedAggregation ? existingAggregation.runId : null
+            });
+          }
+          if (readyResolve) {
+            readyResolve(dashData);
+            readyResolve = null;
+          }
+          return;
+        }
         if (!result) {
           resetObject(dashData, emptyDashboardData());
         } else {
@@ -215,6 +451,14 @@
         }
         dashData._version = ++dashVersion;
         window.dashboardGeoData = dashData;
+        if (window.TaagerPreloader && typeof window.TaagerPreloader.dashboardStage === 'function') {
+          var preparedOrders = dashData.overview && dashData.overview.totalOrders
+            ? Number(dashData.overview.totalOrders.value || dashData.overview.totalOrders.rawValue || 0)
+            : 0;
+          window.TaagerPreloader.dashboardStage('modules', {
+            activity: preparedOrders ? (preparedOrders + ' orders prepared') : 'Dashboard metrics prepared'
+          });
+        }
         warmDashboardAiMirror(dashData);
 
         var activeSection = shellMount._dashboardActiveSection || 'master';
@@ -222,21 +466,30 @@
         if (!shouldPrimeMarketing && !activeMarketingSyncPromise) {
           dashData._loading = false;
           window.dashboardGeoData = dashData;
-          if (typeof window.refreshDashboardShell === 'function') {
-            window.refreshDashboardShell(shellMount, dashData);
+          if (!smoothRefreshLoader) {
+            dashboardLoaderStage('rendering', { activity: 'Rendering final dashboard' });
           }
-          if (readyResolve) readyResolve(dashData);
-          if (window.TaagerPerf && window.TaagerPerf.end && aggregatorTimer) {
-            window.TaagerPerf.end(aggregatorTimer, {
-              ok: true,
-              source: result ? 'aggregator' : 'empty',
-              orders: Array.isArray(dashData.orders) ? dashData.orders.length : 0
-            });
-          }
+          completeDashboardLoad('Dashboard ready.', function () {
+            if (typeof window.refreshDashboardShell === 'function') {
+              window.refreshDashboardShell(shellMount, dashData);
+            }
+            if (window.TaagerPerf && window.TaagerPerf.end && aggregatorTimer) {
+              window.TaagerPerf.end(aggregatorTimer, {
+                ok: true,
+                source: result ? 'aggregator' : 'empty',
+                sharedAggregation: sharedAggregation,
+                sourceRunId: sharedAggregation ? existingAggregation.runId : null,
+                orders: dashboardLazyOrderCount(dashData)
+              });
+            }
+          });
           return;
         }
 
         dashData._loading = true;
+        if (window.TaagerPreloader && typeof window.TaagerPreloader.dashboardStage === 'function') {
+          window.TaagerPreloader.dashboardStage('marketing', { activity: activeMarketingSyncPromise ? 'Syncing connected marketing spend' : 'Checking cached marketing status' });
+        }
         var marketingPromise = activeMarketingSyncPromise || Promise.resolve();
         Promise.all([
           ensureMarketingStatusLoaded(dashData).catch(function () { return null; }),
@@ -248,7 +501,7 @@
           }
           dashData._loading = false;
           if (!shellMount.isConnected) {
-            if (readyResolve) readyResolve(dashData);
+            completeDashboardLoad('Dashboard ready.');
             return;
           }
           var activeSection = shellMount._dashboardActiveSection || 'master';
@@ -256,17 +509,40 @@
             dashData._version = ++dashVersion;
           }
           window.dashboardGeoData = dashData;
+          if (!smoothRefreshLoader) {
+            dashboardLoaderStage('rendering', { activity: 'Rendering final dashboard' });
+          }
           warmDashboardAiMirror(dashData);
+          completeDashboardLoad('Dashboard ready.', function () {
+            if (typeof window.refreshDashboardShell === 'function') {
+              window.refreshDashboardShell(shellMount, dashData);
+            }
+            if (window.TaagerPerf && window.TaagerPerf.end && aggregatorTimer) {
+              window.TaagerPerf.end(aggregatorTimer, {
+                ok: true,
+                source: result ? 'aggregator+marketing' : 'empty',
+                sharedAggregation: sharedAggregation,
+                sourceRunId: sharedAggregation ? existingAggregation.runId : null,
+                orders: dashboardLazyOrderCount(dashData)
+              });
+            }
+          });
+        });
+      }, function (err) {
+        if (window.TaagerPerf && window.TaagerPerf.end && aggregatorTimer) {
+          window.TaagerPerf.end(aggregatorTimer, {
+            ok: false,
+            sharedAggregation: sharedAggregation,
+            sourceRunId: sharedAggregation ? existingAggregation.runId : null,
+            error: err && err.message ? err.message : String(err || '')
+          });
+        }
+        resetObject(dashData, emptyDashboardData());
+        dashData._version = ++dashVersion;
+        dashData._loading = false;
+        completeDashboardLoad('Dashboard ready.', function () {
           if (typeof window.refreshDashboardShell === 'function') {
             window.refreshDashboardShell(shellMount, dashData);
-          }
-          if (readyResolve) readyResolve(dashData);
-          if (window.TaagerPerf && window.TaagerPerf.end && aggregatorTimer) {
-            window.TaagerPerf.end(aggregatorTimer, {
-              ok: true,
-              source: result ? 'aggregator+marketing' : 'empty',
-              orders: Array.isArray(dashData.orders) ? dashData.orders.length : 0
-            });
           }
         });
       });
@@ -277,12 +553,14 @@
       var period = window.DashboardPeriodState ? window.DashboardPeriodState.get() : {};
       var activeId = window.getActiveAccountId ? window.getActiveAccountId() : '__all__';
       var roi = window.DashboardRoiState ? window.DashboardRoiState.get(activeId, {}) : {};
+      var exchangeRates = dashboardCurrencyRates();
       var store = window.DashboardMarketingState;
       var syncPayload = {
         dateFrom: period.from || period.dateFrom || period.start || '',
         dateTo: period.to || period.dateTo || period.end || '',
         targetCurrency: roi.currency || window.dashboardActiveCurrency || 'SAR',
-        egpRate: roi.egpRate || 52,
+        egpRate: Number(exchangeRates.EGP) || roi.egpRate || 52,
+        exchangeRates: exchangeRates,
         mode: 'incremental'
       };
       if (store && typeof store.sync === 'function' && syncPayload.dateFrom && syncPayload.dateTo) {
@@ -295,6 +573,12 @@
           syncPayload.mode
         ].join('|');
         if (activeMarketingSyncPromise && activeMarketingSyncKey === syncKey) return activeMarketingSyncPromise;
+        var cachedStatus = typeof store.get === 'function' ? store.get(activeId) : null;
+        var hasExactCachedRange = marketingSummaryMatchesRange(cachedStatus, syncPayload) && !cachedStatus.error && !cachedStatus.reconnectRequired;
+        if (hasExactCachedRange) {
+          console.log('[Marketing] Using exact cached marketing range:', activeId, reason || 'dashboard', syncPayload);
+          return Promise.resolve(cachedStatus);
+        }
         console.log('[Marketing] Loading connections before dashboard auto-sync:', activeId, reason || 'dashboard', syncPayload);
         var connectionPromise = typeof store.load === 'function'
           ? store.load(activeId).catch(function (error) {
@@ -355,7 +639,7 @@
       onSectionChange: function (sectionId) {
         if (!sectionNeedsMarketing(sectionId)) return;
         var marketingAccountId = String(dashData && dashData.meta && dashData.meta.activeAccountId || '__all__');
-        var refreshKey = marketingAccountId + '|' + sectionId;
+        var refreshKey = marketingAccountId;
         if (marketingSectionRefreshes[refreshKey]) return;
 
         // If the aggregator is not loaded yet, do NOT register or trigger refresh yet.
@@ -397,16 +681,16 @@
       },
       onDashboardUpdate: function (period) {
         var activeId = window.getActiveAccountId ? window.getActiveAccountId() : '__all__';
+        var liveAccountIds = (Array.isArray(window._kbotAccounts) ? window._kbotAccounts : [])
+          .filter(function (account) { return account && account.id && account.accountType !== 'static'; })
+          .map(function (account) { return account.id; });
         var ids = [];
-        if (activeId && activeId !== '__all__') ids = [activeId];
+        if (activeId && activeId !== '__all__' && liveAccountIds.indexOf(activeId) !== -1) ids = [activeId];
         else ids = (window.dashboardAccountsList || [])
-          .filter(function (acc) { return acc && acc.id && acc.id !== '__all__'; })
+          .filter(function (acc) { return acc && acc.id && acc.id !== '__all__' && liveAccountIds.indexOf(acc.id) !== -1; })
           .map(function (acc) { return acc.id; });
-        if (!ids.length && Array.isArray(window._kbotAccounts)) {
-          ids = window._kbotAccounts
-            .filter(function (acc) { return acc && acc.id; })
-            .map(function (acc) { return acc.id; });
-        }
+        if (!ids.length) ids = liveAccountIds.slice();
+        if (!ids.length) return;
         if (typeof window._onRunForDashboard === 'function') {
           window._onRunForDashboard(ids, period || (window.DashboardPeriodState && window.DashboardPeriodState.get()), {
             stayOnDashboard: true,
@@ -424,3 +708,5 @@
     return initialReady;
   };
 })();
+
+

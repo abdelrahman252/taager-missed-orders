@@ -166,8 +166,12 @@
 
       var nameStr = p.name || p.sku || '؟';
       // Removed truncation to show full name
-      var nameHtml = '<div data-i18n-preserve style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.85);word-break:break-word" title="' + nameStr + '">' + nameStr + '</div>';
-      var skuHtml = (p.sku && p.sku !== p.name) ? '<div style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.4);word-break:break-all;margin-top:2px" title="' + p.sku + '">' + p.sku + '</div>' : '';
+      var nameHtml = '<div data-i18n-preserve style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.85);word-break:break-word" title="' + escapeAttr(nameStr) + '">' + escapeAttr(nameStr) + '</div>';
+      var skuHtml = (p.sku && p.sku !== p.name)
+        ? (window.dashboardSkuCopyHtml
+          ? window.dashboardSkuCopyHtml(p.sku, { block: true, prefix: false, style: 'font-size:10px;font-weight:600;color:rgba(255,255,255,0.4);word-break:break-all;margin-top:2px' })
+          : '<div style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.4);word-break:break-all;margin-top:2px" title="' + escapeAttr(p.sku) + '">' + escapeAttr(p.sku) + '</div>')
+        : '';
       
       var overallDr = p.deliveryPct || 0;
       var drColor = window.dashboardRateColor ? window.dashboardRateColor(overallDr) : (overallDr >= 40 ? '#22d3ee' : overallDr >= 30 ? '#00e676' : overallDr >= 20 ? '#f59e0b' : '#ef4444');

@@ -369,7 +369,7 @@
     var insights = (local.insights || []).map(function (text, idx) {
       return {
         id: "local-" + idx,
-        title: local.message || tr("dashboardAi.signal.title", "AI insights available"),
+        title: local.message || tr("dashboardAi.signal.title", "Dashboard insights available"),
         summary: text,
         severity: "info",
         confidence: "limited",
@@ -473,7 +473,7 @@
         status: "loading",
         count: 0,
         urgent: 0,
-        title: tr("dashboardAi.loadingTitle", "AI is reviewing dashboard signals"),
+        title: tr("dashboardAi.loadingTitle", "Reviewing dashboard signals"),
         body: tr("dashboardAi.loadingBody", "Insights will appear when the dashboard finishes loading."),
         items: [],
       };
@@ -500,17 +500,17 @@
     var title;
     var body;
     if (status === "alert") {
-      title = tr("dashboardAi.alertTitle", "AI detected urgent opportunities");
+      title = tr("dashboardAi.alertTitle", "Urgent dashboard opportunities detected");
       body = tr("dashboardAi.alertBody", "Review the highest-impact signals in AI Intelligence.");
     } else if (status === "empty") {
-      title = tr("dashboardAi.emptyTitle", "AI is quiet right now");
-      body = tr("dashboardAi.emptyBody", "No strong AI findings are available for this dashboard view.");
+      title = tr("dashboardAi.emptyTitle", "No strong signals right now");
+      body = tr("dashboardAi.emptyBody", "No strong findings are available for this dashboard view.");
     } else if (status === "unavailable") {
-      title = tr("dashboardAi.unavailableTitle", "AI Intelligence is unavailable");
+      title = tr("dashboardAi.unavailableTitle", "Dashboard insights are unavailable");
       body = tr("dashboardAi.unavailableBody", "Local dashboard analytics remain available.");
     } else {
-      title = tr("dashboardAi.populatedTitle", "{count} AI insights available", { count: num(count) });
-      body = tr("dashboardAi.populatedBody", "Open AI Intelligence for recommendations and forecasts.");
+      title = tr("dashboardAi.populatedTitle", "{count} Dashboard insights available", { count: num(count) });
+      body = tr("dashboardAi.populatedBody", "Open Business Intelligence for recommendations and forecasts.");
     }
 
     return {
@@ -586,7 +586,7 @@
   }
 
   function renderRoot(state) {
-    var toggleText = isOpen ? tr("dashboardAi.closePanel", "Close AI insights") : tr("dashboardAi.openPanel", "Show AI insights");
+    var toggleText = isOpen ? tr("dashboardAi.closePanel", "Close dashboard insights") : tr("dashboardAi.openPanel", "Show dashboard insights");
     var placeholderText = tr("ai.askPlaceholder", "Ask for strategy, best cities, scale plan, or what to do next...");
 
     // Suggested prompts
@@ -616,12 +616,12 @@
       '<button type="button" class="ai-copilot-orb state-' + esc(state.status) + '" id="ai-copilot-orb" aria-expanded="' + (isOpen ? "true" : "false") + '" aria-controls="ai-copilot-panel" aria-label="' + esc(toggleText) + '" data-tooltip="' + esc(toggleText) + '">' +
         '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L22 12L12 22L2 12L12 2Z"/></svg>' +
       '</button>' +
-      '<section id="ai-copilot-panel" class="ai-copilot-panel" role="dialog" aria-label="' + esc(tr("dashboardAi.panelTitle", "Dashboard AI insights")) + '" aria-hidden="' + (isOpen ? "false" : "true") + '">' +
+      '<section id="ai-copilot-panel" class="ai-copilot-panel" role="dialog" aria-label="' + esc(tr("dashboardAi.panelTitle", "Dashboard insights")) + '" aria-hidden="' + (isOpen ? "false" : "true") + '">' +
         '<div class="ai-panel-header">' +
-          '<div class="ai-panel-title"><strong>Taager AI</strong><span>' + esc(popupBusy
+          '<div class="ai-panel-title"><strong>Taager Assistant</strong><span>' + esc(popupBusy
             ? uiText("Analyzing", "جاري التحليل")
             : (state.status === "loading" ? uiText("Scanning", "جاري الفحص") : uiText("Ready", "جاهز"))) + '</span></div>' +
-          '<button type="button" id="ai-panel-close" class="ai-panel-close" aria-label="' + esc(tr("dashboardAi.closePanel", "Close AI insights")) + '">&#10005;</button>' +
+          '<button type="button" id="ai-panel-close" class="ai-panel-close" aria-label="' + esc(tr("dashboardAi.closePanel", "Close dashboard insights")) + '">&#10005;</button>' +
         '</div>' +
         renderAssistantControlStrip() +
         '<div class="ai-copilot-feed" id="ai-copilot-feed">' +
@@ -930,7 +930,7 @@
         rememberAssistantTurn(context, localStrategic);
         setPopupAssistant(requestId, "complete", localStrategic.message, localStrategic.actions || []);
       } else {
-        setPopupAssistant(requestId, "error", tr("ai.requestFailed", "AI request failed.") + " " + (err && err.message ? err.message : ""), []);
+        setPopupAssistant(requestId, "error", tr("ai.requestFailed", "Request failed.") + " " + (err && err.message ? err.message : ""), []);
       }
     }
   }

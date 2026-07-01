@@ -19,6 +19,7 @@ const path = require("path");
 const Store = require("electron-store");
 const fs = require("fs");
 const crypto = require("crypto");
+const zlib = require("zlib");
 const os = require("os");
 const https = require("https");
 const log = require("electron-log");
@@ -28,6 +29,7 @@ const { normalizePhone } = require("../bot/phone");
 const { processDashboardSheets } = require("../bot/dashboard-sheet-processing");
 const { createDashboardQueryService } = require("./dashboard-query-service");
 const { findNewDuplicateConflict } = require("./account-duplicates");
+const { fetchActiveAdminNotification } = require("./admin-notifications");
 const {
   replaceRowsInDateRange,
   validateCurrentYearDashboardRange,
@@ -720,6 +722,23 @@ function taagerLoginMethodOf(acc) {
   return ["email", "phone", "google"].includes(method) ? method : "email";
 }
 
+function isStaticAccount(acc) {
+  return !!acc && acc.accountType === "static";
+}
+
+function staticAccountIdentityOf(acc) {
+  if (!isStaticAccount(acc)) return "";
+  const id = String(acc.id || "").trim().toLowerCase();
+  return id ? `static:${id}` : "";
+}
+
+function licenseEasyStoreOf(acc) {
+  if (isStaticAccount(acc)) {
+    return String(acc.label || acc.memberName || "Static account").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+  return String(acc && acc.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
 function taagerMerchantIdentityOf(acc) {
   const merchantId = String(acc && acc.taagerAffiliateCode || "").trim().toLowerCase();
   const country = String(acc && acc.taagerCountry || "sa").trim().toLowerCase();
@@ -733,6 +752,8 @@ function licenseRowMerchantIdentity(row) {
 }
 
 function taagerLoginIdentityOf(acc) {
+  const staticIdentity = staticAccountIdentityOf(acc);
+  if (staticIdentity) return staticIdentity;
   const merchantIdentity = taagerMerchantIdentityOf(acc);
   if (merchantIdentity) return merchantIdentity;
   const method = taagerLoginMethodOf(acc);
@@ -752,6 +773,8 @@ function taagerMarketingKeyOf(acc) {
 }
 
 function accountIdentityKey(acc) {
+  const staticIdentity = staticAccountIdentityOf(acc);
+  if (staticIdentity) return staticIdentity;
   const easy = (acc.easyEmail  || "").toLowerCase().trim();
   const method = taagerLoginMethodOf(acc);
   const merchantId = String(acc && acc.taagerAffiliateCode || "").trim().toLowerCase();
@@ -815,7 +838,7 @@ function _buildAccountIdents() {
     const accounts = store.get("accounts", []);
     return accounts.map(a => ({
       easy_email: (a.easyEmail || "").toLowerCase().trim(),
-      taager_email: (a.taagerEmail || a.taagerEmail || "").toLowerCase().trim(),
+      taager_email: staticAccountIdentityOf(a) || (a.taagerEmail || a.taagerEmail || "").toLowerCase().trim(),
       taager_phone: normalizePhone(a.taagerPhone || a.taagerPhone || "", a.taagerCountry || "sa"),
       taager_merchant_id: String(a.taagerAffiliateCode || "").trim().toLowerCase(),
       taager_country: String(a.taagerCountry || "sa").trim().toLowerCase(),
@@ -881,6 +904,7 @@ function accountForCredentialBackup(account) {
   const id = backupString(account && account.id, 80);
   return {
     id,
+    accountType: isStaticAccount(account) ? "static" : "live",
     memberName: backupString(account && account.memberName, 120),
     label: backupString(account && account.label, 160),
     licenseAccountHash: backupString(account && account.licenseAccountHash, 160),
@@ -948,6 +972,7 @@ function normalizeRestoredCredentialAccount(raw, index) {
   const id = backupString(src.id || fallbackId, 80).replace(/[^\w-]/g, "_") || fallbackId;
   const restored = {
     id,
+    accountType: src.accountType === "static" ? "static" : "live",
     memberName: backupString(src.memberName, 120),
     label: backupString(src.label, 160),
     easyEmail: backupString(src.easyEmail, 320),
@@ -1069,6 +1094,61 @@ function looksLikeEmail(value) {
 function accountDisplayName(acc, fallback = "Account") {
   if (!acc) return fallback;
   return (acc.memberName || acc.easyEmail || acc.email || acc.taagerEmail || acc.easyStore || acc.storeName || acc.label || acc.name || fallback || "Account").trim();
+}
+
+const ADMIN_ERROR_ALERT_COOLDOWN_MS = 10 * 60 * 1000;
+const adminErrorAlertRecent = new Map();
+
+function compactAdminAlertText(value, max = 600) {
+  return String(value == null ? "" : value).replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+function adminAlertAccountInfo(account, fallbackId) {
+  const id = String(account && account.id || fallbackId || "__single__");
+  const stored = account || getStoredAccountById(id) || {};
+  return {
+    accountId: id,
+    accountLabel: accountDisplayName(stored, id === "__single__" || id === "legacy" ? "Account 1" : id),
+    accountEmail: compactAdminAlertText(stored.easyEmail || stored.email || "", 180),
+    taagerCountry: compactAdminAlertText(stored.taagerCountry || store.get("taagerCountry", "sa") || "sa", 32),
+  };
+}
+
+function notifyAdminErrorAlert(details = {}) {
+  const errorText = compactAdminAlertText(details.error || details.message || "Unknown error", 900);
+  if (!errorText || errorText === "LICENSE_INVALID") return;
+
+  const licenseKey = compactAdminAlertText(licenseStore.get("licenseKey", ""), 80);
+  const customerName = compactAdminAlertText(licenseStore.get("customerName", ""), 180);
+  const account = adminAlertAccountInfo(details.account || null, details.accountId);
+  const flow = compactAdminAlertText(details.flow || "app", 80);
+  const operation = compactAdminAlertText(details.operation || "", 120);
+  const dedupeKey = [licenseKey, customerName, flow, operation, account.accountId, errorText.slice(0, 220)].join("|");
+  const now = Date.now();
+  const previous = adminErrorAlertRecent.get(dedupeKey) || 0;
+  if (now - previous < ADMIN_ERROR_ALERT_COOLDOWN_MS) return;
+  adminErrorAlertRecent.set(dedupeKey, now);
+
+  const recentLogs = Array.isArray(details.recentLogs)
+    ? details.recentLogs.slice(-8).map((line) => compactAdminAlertText(line, 240)).filter(Boolean)
+    : [];
+
+  supabaseFunctionRequest("admin-error-alert", {
+    licenseKey,
+    customerName,
+    flow,
+    operation,
+    error: errorText,
+    account,
+    dateFrom: compactAdminAlertText(details.dateFrom || "", 32),
+    dateTo: compactAdminAlertText(details.dateTo || "", 32),
+    lastStage: compactAdminAlertText(details.lastStage || "", 180),
+    recentLogs,
+    appVersion: app.getVersion(),
+    timestamp: new Date().toISOString(),
+  }).catch((error) => {
+    log.warn("[AdminAlert] WhatsApp alert failed:", error && error.message ? error.message : error);
+  });
 }
 
 function getStoredAccountById(accountId) {
@@ -1855,9 +1935,25 @@ const monthlyDataCleanupScheduler = createMonthlyCleanupScheduler({
 let _licenseCache = null;
 let _licenseCacheAt = 0;
 const LICENSE_CACHE_TTL_MS = 60 * 1000; // 60 seconds
+let adminNotificationRpcWarned = false;
+const LICENSE_PRESENCE_INTERVAL_MS = 60 * 1000;
+let licensePresenceTimer = null;
+let licensePresenceRpcWarned = false;
 
 function isValidKeyFormat(key) {
   return /^TAAGER-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(key.trim().toUpperCase());
+}
+
+async function getActiveAdminNotification(licenseKey) {
+  try {
+    return await fetchActiveAdminNotification(supabaseRpc, licenseKey);
+  } catch (error) {
+    if (!adminNotificationRpcWarned) {
+      adminNotificationRpcWarned = true;
+      log.warn("[AdminNotification] Fetch failed:", error && error.message ? error.message : error);
+    }
+    return null;
+  }
 }
 
 async function isLicenseValid() {
@@ -1892,6 +1988,41 @@ async function isLicenseValid() {
 // ════════════════════════════════════════
 // TRAY
 // ════════════════════════════════════════
+async function recordLicensePresence() {
+  const key = licenseStore.get("licenseKey", "");
+  if (!key) return false;
+  try {
+    const result = await supabaseRpc("taager_record_license_presence", {
+      p_license_key: key,
+      p_machine_uuid: _getOrCreateMachineUUID(),
+      p_device_id: getDeviceFingerprint(),
+    });
+    return result && result.ok === true;
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error || "");
+    if (!licensePresenceRpcWarned) {
+      licensePresenceRpcWarned = true;
+      log.warn("[LicensePresence] Heartbeat failed:", message);
+    }
+    return false;
+  }
+}
+
+function startLicensePresenceHeartbeat() {
+  stopLicensePresenceHeartbeat();
+  recordLicensePresence();
+  licensePresenceTimer = setInterval(() => {
+    recordLicensePresence();
+  }, LICENSE_PRESENCE_INTERVAL_MS);
+}
+
+function stopLicensePresenceHeartbeat() {
+  if (licensePresenceTimer) {
+    clearInterval(licensePresenceTimer);
+    licensePresenceTimer = null;
+  }
+}
+
 function createTray() {
   const iconPath = getIconPath();
   console.log("[tray] icon path:", iconPath, "| exists:", require("fs").existsSync(iconPath));
@@ -2017,6 +2148,11 @@ function scheduleAutoRun() {
         scheduleTick();
         return;
       }
+      if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.webContents || mainWindow.webContents.isDestroyed()) {
+        autoRunStartedAt = Date.now();
+        scheduleTick();
+        return;
+      }
       autoRunStartedAt = Date.now();
       mainWindow.webContents.send("auto-run-tick", { dateFrom: todayStr(), dateTo: todayStr() });
       scheduleTick();
@@ -2043,6 +2179,7 @@ function clearAutoRun() {
 app.whenReady().then(() => {
   createWindow();
   createTray();
+  startLicensePresenceHeartbeat();
   autoRunEnabled = store.get("autoRun", false);
   if (autoRunEnabled) scheduleAutoRun();
   monthlyDataCleanupScheduler.start();
@@ -2061,6 +2198,7 @@ app.whenReady().then(() => {
 });
 app.on("before-quit", () => {
   app.isQuitting = true;
+  stopLicensePresenceHeartbeat();
   monthlyDataCleanupScheduler.stop();
 });
 
@@ -2296,7 +2434,8 @@ const OFFLINE_GRACE_MS = 48 * 60 * 60 * 1000;
 const STARTUP_LICENSE_FAST_PATH_MS = 6 * 60 * 60 * 1000;
 
 function _saveLastValidResult(result) {
-  licenseStore.set("lastValidResult", result);
+  const { adminNotification, ...persistedResult } = result || {};
+  licenseStore.set("lastValidResult", persistedResult);
   licenseStore.set("lastValidAt", Date.now());
 }
 
@@ -2418,6 +2557,7 @@ async function _checkLicenseImpl(bustCache) {
     licenseStore.set("operationsEnabled", operationsSuiteEnabled);
     licenseStore.set("dashboardEnabled",  r.dashboard_enabled === true || teamLeaderEnabled);
     licenseStore.set("teamLeaderEnabled", teamLeaderEnabled);
+    const adminNotification = await getActiveAdminNotification(key);
     const result = {
       valid: true, key, daysLeft, customerName, allowReset: false,
       maxDevices: r.max_devices || licenseStore.get("maxDevices", 1),
@@ -2426,6 +2566,7 @@ async function _checkLicenseImpl(bustCache) {
       operationsEnabled: operationsSuiteEnabled,
       dashboardEnabled:  r.dashboard_enabled === true || teamLeaderEnabled,
       teamLeaderEnabled,
+      adminNotification,
     };
     _licenseCache = result;
     _licenseCacheAt = Date.now();
@@ -2472,6 +2613,7 @@ ipcMain.handle("submit-license", async (_, key) => {
     licenseStore.set("teamLeaderEnabled", teamLeaderEnabled);
     _licenseCache = null;
     _licenseCacheAt = 0;
+    recordLicensePresence();
     return {
       success: true,
       daysLeft,
@@ -2541,9 +2683,10 @@ function persistAccountsAfterAdminDelete(nextAccounts) {
   const accounts = Array.isArray(nextAccounts) ? nextAccounts : [];
   store.set("accounts", accounts);
   const remainingIds = accounts.map(a => a.id);
+  const runnableIds = accounts.filter(a => !isStaticAccount(a)).map(a => a.id);
   const savedAutoRunIds = store.get("autoRunAccountIds", []);
   if (Array.isArray(savedAutoRunIds)) {
-    store.set("autoRunAccountIds", savedAutoRunIds.filter(id => remainingIds.includes(id)));
+    store.set("autoRunAccountIds", savedAutoRunIds.filter(id => runnableIds.includes(id)));
   }
   store.set("unlockedAccountIds", store.get("unlockedAccountIds", []).filter(id => remainingIds.includes(id)));
 
@@ -2750,6 +2893,11 @@ ipcMain.handle("save-credentials", async (_, creds) => {
 });
 
 function validateAccountCredentialsForSave(a) {
+  if (isStaticAccount(a)) {
+    return String(a.label || a.memberName || "").trim()
+      ? { success: true }
+      : { success: false, reason: "static_name_required" };
+  }
   const method = taagerLoginMethodOf(a);
   const easyPassword = a.easyPassword || (a.id ? store.get(`pwd_easy_${a.id}`, "") : "");
   const taagerPassword = a.taagerPassword || (a.id ? store.get(`pwd_taager_${a.id}`, "") : "");
@@ -2773,6 +2921,7 @@ function validateAccountCredentialsForSave(a) {
 function safeAccountForStorage(a) {
   return {
     id:         a.id,
+    accountType: isStaticAccount(a) ? "static" : "live",
     memberName: String(a.memberName || "").trim(),
     label:      a.label || a.easyStore || a.easyEmail || a.taagerEmail || a.taagerEmail || a.taagerPhone || "",
     licenseAccountHash: a.licenseAccountHash && a.licenseIdentityKey === accountIdentityKey(a) ? a.licenseAccountHash : "",
@@ -2795,9 +2944,10 @@ function persistAccountsWithoutDeleting(accounts, maxAccounts) {
   store.set("accounts", accounts.map(safeAccountForStorage));
 
   const remainingIds = accounts.map(a => a.id);
+  const runnableIds = accounts.filter(a => !isStaticAccount(a)).map(a => a.id);
   const savedAutoRunIds = store.get("autoRunAccountIds", []);
   if (Array.isArray(savedAutoRunIds)) {
-    store.set("autoRunAccountIds", savedAutoRunIds.filter(id => remainingIds.includes(id)));
+    store.set("autoRunAccountIds", savedAutoRunIds.filter(id => runnableIds.includes(id)));
   }
   const cachedUnlocked = store.get("unlockedAccountIds", []).filter(id => remainingIds.includes(id));
   store.set("unlockedAccountIds", cachedUnlocked);
@@ -2860,7 +3010,7 @@ async function syncRestoredAccountLicenseSlots(accounts, maxAccounts) {
       p_license_key: licKey,
       p_account_hash: hash,
       p_easy_email: (account.easyEmail || "").toLowerCase().trim() || null,
-      p_easy_store: String(account.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase() || null,
+      p_easy_store: licenseEasyStoreOf(account) || null,
       p_taager_email: taagerLoginIdentityOf(account) || null,
       p_taager_login_method: taagerLoginMethodOf(account),
       p_unlocked: false,
@@ -2959,8 +3109,8 @@ async function syncSingleEditedAccountLicenseSlot(oldAccount, newAccount, maxAcc
     const newH = accountHash(newAccount);
 
     if (newH === oldH && dbHashes.includes(newH)) {
-      const oldStore = String(oldAccount?.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase();
-      const newStore = String(newAccount?.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase();
+      const oldStore = licenseEasyStoreOf(oldAccount);
+      const newStore = licenseEasyStoreOf(newAccount);
       if (oldStore !== newStore) {
         const currentRow = dbRows.find(row => row.account_hash === newH);
         const syncRes = await supabaseRpc("taager_insert_license_account", {
@@ -2989,7 +3139,7 @@ async function syncSingleEditedAccountLicenseSlot(oldAccount, newAccount, maxAcc
         p_old_account_hash: oldH,
         p_new_account_hash: newH,
         p_easy_email: (newAccount.easyEmail || "").toLowerCase().trim() || null,
-        p_easy_store: String(newAccount.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase() || null,
+        p_easy_store: licenseEasyStoreOf(newAccount) || null,
         p_taager_email: newTaagerIdentity || null,
         p_taager_login_method: taagerLoginMethodOf(newAccount),
       });
@@ -3007,7 +3157,7 @@ async function syncSingleEditedAccountLicenseSlot(oldAccount, newAccount, maxAcc
         p_license_key: licKey,
         p_account_hash: newH,
         p_easy_email: (newAccount.easyEmail || "").toLowerCase().trim() || null,
-        p_easy_store: String(newAccount.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase() || null,
+        p_easy_store: licenseEasyStoreOf(newAccount) || null,
         p_taager_email: taagerLoginIdentityOf(newAccount) || null,
         p_taager_login_method: taagerLoginMethodOf(newAccount),
         p_unlocked: false,
@@ -3097,6 +3247,12 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
 
   const teamLeaderEnabled = licenseStore.get("teamLeaderEnabled", false) === true;
   for (const a of accounts) {
+    if (isStaticAccount(a)) {
+      if (!String(a.label || a.memberName || "").trim()) {
+        return { success: false, reason: "static_name_required" };
+      }
+      continue;
+    }
     const method = taagerLoginMethodOf(a);
     const easyPassword = a.easyPassword || (a.id ? store.get(`pwd_easy_${a.id}`, "") : "");
     const taagerPassword = a.taagerPassword || (a.id ? store.get(`pwd_taager_${a.id}`, "") : "");
@@ -3144,8 +3300,8 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
         // Case 1: hash unchanged — already in DB, nothing to do
         if (newH === oldH && dbHashes.includes(newH)) {
           const oldAccount = storedAccountsBeforeSave.find(item => item.id === a.id);
-          const oldStore = String(oldAccount?.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase();
-          const newStore = String(a.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase();
+          const oldStore = licenseEasyStoreOf(oldAccount);
+          const newStore = licenseEasyStoreOf(a);
           if (oldStore !== newStore) {
             const currentRow = dbRows.find(row => row.account_hash === newH);
             const syncRes = await supabaseRpc("taager_insert_license_account", {
@@ -3179,7 +3335,7 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
             p_old_account_hash: oldH,
             p_new_account_hash: newH,
             p_easy_email:   (newAccObj?.easyEmail || "").toLowerCase().trim() || null,
-            p_easy_store:   String(newAccObj?.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase() || null,
+            p_easy_store:   licenseEasyStoreOf(newAccObj) || null,
             // RPC/column name is legacy; value is the Taager lock identity.
             p_taager_email:   newTaagerIdentity || null,
             p_taager_login_method: taagerLoginMethodOf(newAccObj),
@@ -3210,7 +3366,7 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
             p_license_key:  licKey,
             p_account_hash: newH,
             p_easy_email:   (newAccForInsert?.easyEmail || "").toLowerCase().trim() || null,
-            p_easy_store:   String(newAccForInsert?.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase() || null,
+            p_easy_store:   licenseEasyStoreOf(newAccForInsert) || null,
             // RPC/column name is legacy; value is the Taager lock identity.
             p_taager_email:   newTaagerIdentity || null,
             p_taager_login_method: taagerLoginMethodOf(newAccForInsert),
@@ -3263,6 +3419,7 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
 
   const safeAccounts = accounts.map(a => ({
     id:         a.id,
+    accountType: isStaticAccount(a) ? "static" : "live",
     memberName: String(a.memberName || "").trim(),
     label:      a.label || a.easyStore || a.easyEmail || a.taagerEmail || a.taagerEmail || a.taagerPhone || "",
     licenseAccountHash: a.licenseAccountHash && a.licenseIdentityKey === accountIdentityKey(a) ? a.licenseAccountHash : "",
@@ -3283,9 +3440,10 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
 
   // Prune local unlockedAccountIds cache — remove IDs that no longer exist
   const remainingIds = accounts.map(a => a.id);
+  const runnableIds = accounts.filter(a => !isStaticAccount(a)).map(a => a.id);
   const savedAutoRunIds = store.get("autoRunAccountIds", []);
   if (Array.isArray(savedAutoRunIds)) {
-    store.set("autoRunAccountIds", savedAutoRunIds.filter(id => remainingIds.includes(id)));
+    store.set("autoRunAccountIds", savedAutoRunIds.filter(id => runnableIds.includes(id)));
   }
   const cachedUnlocked = store.get("unlockedAccountIds", []).filter(id => remainingIds.includes(id));
   store.set("unlockedAccountIds", cachedUnlocked);
@@ -3381,7 +3539,7 @@ ipcMain.handle("set-auto-run", (_, v) => { autoRunEnabled = v; store.set("autoRu
 ipcMain.handle("set-auto-run-interval", (_, m) => { store.set("autoRunInterval", m); if (autoRunEnabled) scheduleAutoRun(); return true; });
 ipcMain.handle("set-auto-run-accounts", (_, ids) => {
   const accounts = store.get("accounts", []) || [];
-  const validIds = accounts.map(a => a.id);
+  const validIds = accounts.filter(a => !isStaticAccount(a)).map(a => a.id);
   const selected = Array.isArray(ids) ? ids.filter(id => validIds.includes(id)) : [];
   store.set("autoRunAccountIds", selected);
   return selected;
@@ -3620,7 +3778,17 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
   if (allAccounts && allAccounts.length > 0) {
     if (accountId) {
       acc = allAccounts.find(a => a.id === accountId);
-      if (!acc) return { success: false, error: `Dashboard account not found: ${accountId}` };
+      if (!acc) {
+        notifyAdminErrorAlert({
+          flow: "dashboard-fetch",
+          operation: "preflight",
+          accountId,
+          error: `Dashboard account not found: ${accountId}`,
+          dateFrom,
+          dateTo,
+        });
+        return { success: false, error: `Dashboard account not found: ${accountId}` };
+      }
     } else {
       acc = allAccounts[0];
     }
@@ -3634,7 +3802,29 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
     };
   }
 
-  if (!acc) return { success: false, error: "No account found" };
+  if (!acc) {
+    notifyAdminErrorAlert({
+      flow: "dashboard-fetch",
+      operation: "preflight",
+      accountId: accountId || "__single__",
+      error: "No account found",
+      dateFrom,
+      dateTo,
+    });
+    return { success: false, error: "No account found" };
+  }
+  if (isStaticAccount(acc)) {
+    notifyAdminErrorAlert({
+      flow: "dashboard-fetch",
+      operation: "preflight",
+      account: acc,
+      accountId: accountId || acc.id || "__single__",
+      error: "STATIC_ACCOUNT_OFFLINE",
+      dateFrom,
+      dateTo,
+    });
+    return { success: false, error: "STATIC_ACCOUNT_OFFLINE" };
+  }
 
   const userData = app.getPath("userData");
   const dashboardAccountId = accountId || acc.id || "__single__";
@@ -3649,10 +3839,28 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
     : DASHBOARD_FETCH_ACCOUNT_TIMEOUT_MS;
   if (taagerLoginMethod !== "google" && !taagerEmail && !taagerPhone) {
     const label = accountDisplayName(acc, dashboardAccountId);
+    notifyAdminErrorAlert({
+      flow: "dashboard-fetch",
+      operation: "preflight",
+      account: acc,
+      accountId: dashboardAccountId,
+      error: `Taager credentials missing for ${label}. Re-save this account, then retry dashboard update.`,
+      dateFrom,
+      dateTo,
+    });
     return { success: false, error: `Taager credentials missing for ${label}. Re-save this account, then retry dashboard update.` };
   }
   if (!String(acc.taagerAffiliateCode || "").trim()) {
     const label = accountDisplayName(acc, dashboardAccountId);
+    notifyAdminErrorAlert({
+      flow: "dashboard-fetch",
+      operation: "preflight",
+      account: acc,
+      accountId: dashboardAccountId,
+      error: `Taager merchant ID missing for ${label}. Re-save this account and add the merchant ID from Taager profile.`,
+      dateFrom,
+      dateTo,
+    });
     return { success: false, error: `Taager merchant ID missing for ${label}. Re-save this account and add the merchant ID from Taager profile.` };
   }
   const profilePath = path.join(userData, `bot-profile${acc.id ? `-${acc.id}` : ""}`);
@@ -3758,6 +3966,17 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
       killedByWatchdog = true;
       const error = `DASHBOARD_FETCH_TIMEOUT: last stage was ${lastStage}; timeout=${Math.round(accountTimeoutMs / 1000)}s; recent logs=${childLogTail.slice(-5).join(" | ")}`;
       forwardDashboardLog(error, { stream: "stderr" });
+      notifyAdminErrorAlert({
+        flow: "dashboard-fetch",
+        operation: "watchdog-timeout",
+        account: acc,
+        accountId: dashboardAccountId,
+        error,
+        dateFrom,
+        dateTo,
+        lastStage,
+        recentLogs: childLogTail.slice(-10),
+      });
       try { child.kill(); } catch (_) {}
       safeResolve({ success: false, error, lastStage, recentLogs: childLogTail.slice(-10) });
     }, accountTimeoutMs);
@@ -3853,6 +4072,17 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
         } catch (e) {
           console.error("[Dashboard] Failed to save snapshot:", e.message);
           monitoring.captureException(e, { operation: "dashboard.fetch.saveSnapshot", extra: { accountId: dashboardAccountId } });
+          notifyAdminErrorAlert({
+            flow: "dashboard-fetch",
+            operation: "save-snapshot",
+            account: acc,
+            accountId: dashboardAccountId,
+            error: e.message,
+            dateFrom,
+            dateTo,
+            lastStage,
+            recentLogs: childLogTail.slice(-10),
+          });
         }
         safeResolve({
           success: true,
@@ -3866,6 +4096,17 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
           recentLogs: childLogTail.slice(-10)
         });
       } else if (msg.type === "error") {
+        notifyAdminErrorAlert({
+          flow: "dashboard-fetch",
+          operation: "child-message",
+          account: acc,
+          accountId: dashboardAccountId,
+          error: msg.error,
+          dateFrom,
+          dateTo,
+          lastStage,
+          recentLogs: childLogTail.slice(-10),
+        });
         safeResolve({ success: false, error: msg.error, lastStage, recentLogs: childLogTail.slice(-10) });
       } else if (msg.type === "export-timestamp") {
         lastExportTimestamp = msg.timestamp || Date.now();
@@ -3897,10 +4138,35 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
 
     child.on("error", (err) => {
       monitoring.captureException(err, { operation: "dashboard.fetch.childProcess", extra: { accountId: dashboardAccountId } });
+      notifyAdminErrorAlert({
+        flow: "dashboard-fetch",
+        operation: "child-process",
+        account: acc,
+        accountId: dashboardAccountId,
+        error: err.message,
+        dateFrom,
+        dateTo,
+        lastStage,
+        recentLogs: childLogTail.slice(-10),
+      });
       safeResolve({ success: false, error: err.message, lastStage, recentLogs: childLogTail.slice(-10) });
     });
     child.on("exit", (code) => {
-      if (!resolved && !killedByWatchdog) safeResolve({ success: false, error: `Process exited with code ${code}`, lastStage, recentLogs: childLogTail.slice(-10) });
+      if (!resolved && !killedByWatchdog) {
+        const error = `Process exited with code ${code}`;
+        notifyAdminErrorAlert({
+          flow: "dashboard-fetch",
+          operation: "child-exit",
+          account: acc,
+          accountId: dashboardAccountId,
+          error,
+          dateFrom,
+          dateTo,
+          lastStage,
+          recentLogs: childLogTail.slice(-10),
+        });
+        safeResolve({ success: false, error, lastStage, recentLogs: childLogTail.slice(-10) });
+      }
     });
   });
 });
@@ -4050,7 +4316,7 @@ ipcMain.handle("save-dashboard-snapshot", async (_, accountId, data) => {
   }
 });
 
-ipcMain.handle("get-dashboard-snapshot", async (_, accountId, knownRevision) => {
+function getDashboardSnapshotResult(accountId, knownRevision) {
   try {
     const allowedIds = (store.get("accounts", []) || []).map((account) => account && account.id).filter(Boolean);
     const revision = String(Number(dashboardStore.get("snapshotRevision", 0) || 0)) + "|" + allowedIds.join(",");
@@ -4074,6 +4340,74 @@ ipcMain.handle("get-dashboard-snapshot", async (_, accountId, knownRevision) => 
     monitoring.captureException(err, { operation: "dashboard.getSnapshot", extra: { accountId } });
     return { ok: false, data: null, error: err.message };
   }
+}
+
+const dashboardSnapshotTransportCache = new Map();
+function getDashboardSnapshotTransport(accountId, knownRevision) {
+  const totalStartedAt = Date.now();
+  const resultStartedAt = Date.now();
+  const result = getDashboardSnapshotResult(accountId, knownRevision);
+  const resultMs = Date.now() - resultStartedAt;
+  if (!result || !result.ok) {
+    return {
+      result,
+      json: JSON.stringify(result),
+      cacheHit: false,
+      timings: { resultMs, stringifyMs: 0, gzipMs: 0, totalMs: Date.now() - totalStartedAt }
+    };
+  }
+  const key = String(accountId || "__all__") + "|" + String(result.revision || "") + "|" + (result.unchanged ? "unchanged" : "data");
+  let cached = dashboardSnapshotTransportCache.get(key);
+  let cacheHit = true;
+  if (!cached) {
+    cacheHit = false;
+    const stringifyStartedAt = Date.now();
+    const json = JSON.stringify(result);
+    const stringifyMs = Date.now() - stringifyStartedAt;
+    const gzipStartedAt = Date.now();
+    const gzipBytes = zlib.gzipSync(json, { level: 1 });
+    const gzipMs = Date.now() - gzipStartedAt;
+    cached = {
+      json,
+      gzipBytes,
+      timings: { stringifyMs, gzipMs }
+    };
+    if (dashboardSnapshotTransportCache.size >= 2) dashboardSnapshotTransportCache.clear();
+    dashboardSnapshotTransportCache.set(key, cached);
+  }
+  return {
+    result,
+    json: cached.json,
+    gzipBytes: cached.gzipBytes,
+    cacheHit,
+    timings: {
+      resultMs,
+      stringifyMs: cacheHit ? 0 : cached.timings.stringifyMs,
+      gzipMs: cacheHit ? 0 : cached.timings.gzipMs,
+      totalMs: Date.now() - totalStartedAt
+    }
+  };
+}
+
+ipcMain.handle("get-dashboard-snapshot", async (_, accountId, knownRevision) => {
+  return getDashboardSnapshotResult(accountId, knownRevision);
+});
+
+ipcMain.handle("get-dashboard-snapshot-json", async (_, accountId, knownRevision) => {
+  return getDashboardSnapshotTransport(accountId, knownRevision).json;
+});
+
+ipcMain.handle("get-dashboard-snapshot-gzip", async (_, accountId, knownRevision) => {
+  const transport = getDashboardSnapshotTransport(accountId, knownRevision);
+  const gzipBytes = transport.gzipBytes || zlib.gzipSync(transport.json, { level: 1 });
+  return {
+    encoding: "gzip",
+    data: gzipBytes,
+    revision: transport.result && transport.result.revision,
+    unchanged: !!(transport.result && transport.result.unchanged),
+    cacheHit: !!transport.cacheHit,
+    timings: transport.timings || null
+  };
 });
 
 ipcMain.handle("get-dashboard-query-flags", async () => ({
@@ -4240,23 +4574,48 @@ function normalizeMarketingAccountSettings(settings = []) {
       dashboardAccountKeys: allKeys,
       currency: setting.currency || countryCurrency,
       egpRate: Number(setting.egpRate) || 52,
+      exchangeRates: normalizeMarketingRates(setting.exchangeRates, setting.egpRate),
     };
   });
 }
 
 const TAAGER_USD_RATES = { USD: 1, SAR: 3.75, EGP: 52, AED: 3.6725, IQD: 1310, OMR: 0.385 };
+const TAAGER_RATE_CURRENCIES = Object.keys(TAAGER_USD_RATES);
 
 function marketingCurrency(value, fallback = "USD") {
   const cur = String(value || fallback || "USD").trim().toUpperCase();
   return TAAGER_USD_RATES[cur] ? cur : String(fallback || "USD").toUpperCase();
 }
 
-function convertMarketingAmount(amount, from, to, egpRate = 52) {
+function convertMarketingAmount(amount, from, to, egpRate = 52, exchangeRates = null) {
   const source = marketingCurrency(from);
   const target = marketingCurrency(to, source);
   if (source === target) return Number(amount || 0) || 0;
-  const rates = { ...TAAGER_USD_RATES, EGP: Number(egpRate) > 0 ? Number(egpRate) : TAAGER_USD_RATES.EGP };
+  const rates = normalizeMarketingRates(exchangeRates, egpRate);
   return ((Number(amount || 0) || 0) / Number(rates[source] || 1)) * Number(rates[target] || 1);
+}
+
+function normalizeMarketingRates(rawRates, egpRate) {
+  const out = { ...TAAGER_USD_RATES };
+  const source = rawRates && typeof rawRates === "object" ? rawRates : {};
+  TAAGER_RATE_CURRENCIES.forEach((currency) => {
+    const value = Number(source[currency]);
+    if (Number.isFinite(value) && value > 0) out[currency] = value;
+  });
+  const explicitEgp = Number(egpRate);
+  if (Number.isFinite(explicitEgp) && explicitEgp > 0) out.EGP = explicitEgp;
+  out.USD = 1;
+  return out;
+}
+
+function marketingRatesChanged(summary, range) {
+  const current = normalizeMarketingRates(range && range.exchangeRates, range && range.egpRate);
+  const cached = summary && summary.exchangeRates
+    ? normalizeMarketingRates(summary.exchangeRates, summary.egpRate)
+    : normalizeMarketingRates(null, summary && summary.egpRate);
+  return TAAGER_RATE_CURRENCIES.some((currency) => {
+    return Math.abs(Number(cached[currency] || 0) - Number(current[currency] || 0)) >= 0.0001;
+  });
 }
 
 function mergeMarketingSourceAccounts(...lists) {
@@ -4481,7 +4840,7 @@ function getCachedMarketingStatus(accountId, platform) {
 
     const allSummary = connectedStatuses.reduce((summary, s) => {
       const source = s.summary || {};
-      summary.adSpend += convertMarketingAmount(source.adSpend || 0, source.currency || "USD", "USD", source.egpRate || 52);
+      summary.adSpend += convertMarketingAmount(source.adSpend || 0, source.currency || "USD", "USD", source.egpRate || 52, source.exchangeRates || null);
       summary.impressions += Number(source.impressions || 0);
       summary.clicks += Number(source.clicks || 0);
       summary.campaignCount += Number(source.campaignCount || 0);
@@ -4702,6 +5061,9 @@ async function callMarketingBackend(action, accountId, platform, range) {
     mappings: range && Array.isArray(range.mappings) ? range.mappings : [],
     targetCurrency: range && range.targetCurrency ? range.targetCurrency : "",
     egpRate: range && range.egpRate ? range.egpRate : null,
+    exchangeRates: range && range.exchangeRates && typeof range.exchangeRates === "object"
+      ? normalizeMarketingRates(range.exchangeRates, range.egpRate)
+      : null,
     accountSettings: range && Array.isArray(range.accountSettings) ? range.accountSettings : [],
     dateFrom: range && range.dateFrom ? range.dateFrom : "",
     dateTo: range && range.dateTo ? range.dateTo : "",
@@ -4733,6 +5095,9 @@ async function callMarketingBackend(action, accountId, platform, range) {
     mappings: range && Array.isArray(range.mappings) ? range.mappings : [],
     targetCurrency: range && range.targetCurrency ? range.targetCurrency : "",
     egpRate: range && range.egpRate ? range.egpRate : null,
+    exchangeRates: range && range.exchangeRates && typeof range.exchangeRates === "object"
+      ? normalizeMarketingRates(range.exchangeRates, range.egpRate)
+      : null,
     accountSettings: range && Array.isArray(range.accountSettings)
       ? range.accountSettings
       : (action === "status" && dashboardAccountId === "__all__" ? normalizeMarketingAccountSettings([]) : []),
@@ -4789,6 +5154,19 @@ const MARKETING_STATUS_TTL_MS = 15 * 60 * 1000;
 function marketingStatusIsFresh(status) {
   const checkedAt = status && status.statusCheckedAt ? new Date(status.statusCheckedAt).getTime() : 0;
   return checkedAt > 0 && Date.now() - checkedAt < MARKETING_STATUS_TTL_MS;
+}
+
+function marketingSyncShouldRetry(result) {
+  if (!result || result.ok || result.reconnectRequired) return false;
+  const text = String(result.error || result.message || "").toUpperCase();
+  return text === "WINDSOR_AUTH_FAILED" ||
+    text.includes("TIMEOUT") ||
+    text.includes("ECONNRESET") ||
+    text.includes("FETCH");
+}
+
+function delayMarketingRetry(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 ipcMain.handle("get-marketing-status", async (_, accountId, platform = "tiktok", options = {}) => {
@@ -4897,12 +5275,25 @@ ipcMain.handle("sync-marketing-data", async (_, accountId, platform = "tiktok", 
     const sameRange = String(cachedSummary.dateFrom || "") === String(range && range.dateFrom || "") &&
       String(cachedSummary.dateTo || "") === String(range && range.dateTo || "");
     const currencyChanged = String(cachedSummary.currency || "").toUpperCase() !== String(range && range.targetCurrency || "").toUpperCase() ||
-      Number(cachedSummary.egpRate || 52) !== Number(range && range.egpRate || 52);
-    const result = await callMarketingBackend("sync", dashboardAccountId, platform, {
+      marketingRatesChanged(cachedSummary, range || {});
+    let result = await callMarketingBackend("sync", dashboardAccountId, platform, {
       ...(range || {}),
       mode: incrementalEnabled ? requestedMode : undefined,
       recomposeOnly: incrementalEnabled && requestedMode === "incremental" && sameRange && currencyChanged,
     });
+    if (marketingSyncShouldRetry(result)) {
+      log.warn("[Marketing][Main] sync retrying after transient failure", {
+        accountId: dashboardAccountId,
+        platform,
+        error: result && result.error || "",
+      });
+      await delayMarketingRetry(700);
+      result = await callMarketingBackend("sync", dashboardAccountId, platform, {
+        ...(range || {}),
+        mode: incrementalEnabled ? requestedMode : undefined,
+        recomposeOnly: incrementalEnabled && requestedMode === "incremental" && sameRange && currencyChanged,
+      });
+    }
     if (result && result.ok) saveCachedMarketingStatus(dashboardAccountId, platform, result);
     else if (result && result.reconnectRequired) return result;
     else {
@@ -4928,10 +5319,13 @@ ipcMain.handle("sync-all-marketing-data", async (_, platform = "tiktok", range =
         sameRange: String(summary.dateFrom || "") === String(range && range.dateFrom || "") &&
           String(summary.dateTo || "") === String(range && range.dateTo || ""),
         currencyChanged: String(summary.currency || "").toUpperCase() !== String(setting.currency || "").toUpperCase() ||
-          Number(summary.egpRate || 52) !== Number(setting.egpRate || 52),
+          marketingRatesChanged(summary, {
+            exchangeRates: setting.exchangeRates,
+            egpRate: setting.egpRate,
+          }),
       };
     });
-    const result = await callMarketingBackend("sync_all", "__all__", platform, {
+    let result = await callMarketingBackend("sync_all", "__all__", platform, {
       ...(range || {}),
       mode: incrementalEnabled ? requestedMode : undefined,
       recomposeOnly: incrementalEnabled && requestedMode === "incremental" &&
@@ -4940,6 +5334,22 @@ ipcMain.handle("sync-all-marketing-data", async (_, platform = "tiktok", range =
         cacheComparisons.some((item) => item.currencyChanged),
       accountSettings,
     });
+    if (marketingSyncShouldRetry(result)) {
+      log.warn("[Marketing][Main] sync all retrying after transient failure", {
+        platform,
+        error: result && result.error || "",
+      });
+      await delayMarketingRetry(700);
+      result = await callMarketingBackend("sync_all", "__all__", platform, {
+        ...(range || {}),
+        mode: incrementalEnabled ? requestedMode : undefined,
+        recomposeOnly: incrementalEnabled && requestedMode === "incremental" &&
+          cacheComparisons.length > 0 &&
+          cacheComparisons.every((item) => item.sameRange) &&
+          cacheComparisons.some((item) => item.currencyChanged),
+        accountSettings,
+      });
+    }
     if (result && result.ok && result.accountStatuses) {
       Object.keys(result.accountStatuses).forEach((accountId) => {
         saveCachedMarketingStatus(accountId, platform, result.accountStatuses[accountId]);
@@ -5294,7 +5704,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
     // Multi-account: filter by selected ids (if provided), else run all
     const selected = Array.isArray(accountIds) && accountIds.length > 0 ? accountIds : allAccounts.map(a => a.id);
     accountsToRun = allAccounts
-      .filter(a => selected.includes(a.id))
+      .filter(a => selected.includes(a.id) && !isStaticAccount(a))
       .map(a => ({
         ...a,
         easyPassword: store.get(`pwd_easy_${a.id}`, ""),
@@ -5305,7 +5715,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
   }
 
   // Fallback to legacy single-account
-  if (accountsToRun.length === 0) {
+  if (accountsToRun.length === 0 && (!allAccounts || allAccounts.length === 0)) {
     accountsToRun = [{
       id: "legacy",
       label: "Account 1",
@@ -5325,14 +5735,73 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
     }];
   }
 
-  // ── Single account: original flow ──
-  const missingMerchant = accountsToRun.find((acc) => !String(acc.taagerAffiliateCode || "").trim());
-  if (missingMerchant) {
-    const label = accountDisplayName(missingMerchant, missingMerchant.id || "Account");
-    return { success: false, error: `Taager merchant ID missing for ${label}. Re-save this account and add the merchant ID from Taager profile.` };
+  if (accountsToRun.length === 0) {
+    notifyAdminErrorAlert({
+      flow: "runner",
+      operation: "preflight",
+      error: "STATIC_ACCOUNTS_CANNOT_RUN",
+      dateFrom,
+      dateTo,
+    });
+    return { success: false, error: "STATIC_ACCOUNTS_CANNOT_RUN" };
   }
 
-  if (accountsToRun.length === 1) {
+  // ── Single account: original flow ──
+  const merchantIdMissingMessage = (acc) => {
+    const label = accountDisplayName(acc, acc.id || "Account");
+    return `Taager merchant ID missing for ${label}. Re-save this account and add the merchant ID from Taager profile.`;
+  };
+  const missingMerchantAccounts = accountsToRun.filter((acc) => !String(acc.taagerAffiliateCode || "").trim());
+  const preflightFailures = [];
+
+  if (missingMerchantAccounts.length && accountsToRun.length > 1) {
+    for (const acc of missingMerchantAccounts) {
+      const message = merchantIdMissingMessage(acc);
+      notifyAdminErrorAlert({
+        flow: "runner",
+        operation: "preflight",
+        account: acc,
+        accountId: acc.id || "__single__",
+        error: message,
+        dateFrom,
+        dateTo,
+      });
+      const now = Date.now();
+      preflightFailures.push({
+        success: false,
+        error: message,
+        accountId: acc.id || "__single__",
+        accountEmail: acc.easyEmail || "",
+        accountLabel: accountDisplayName(acc, "Account"),
+        runStartedAt: now,
+        runEndedAt: now,
+        runtimeMs: 0,
+      });
+    }
+    accountsToRun = accountsToRun.filter((acc) => String(acc.taagerAffiliateCode || "").trim());
+  }
+
+  const missingMerchant = accountsToRun.find((acc) => !String(acc.taagerAffiliateCode || "").trim());
+  if (missingMerchant) {
+    const message = merchantIdMissingMessage(missingMerchant);
+    notifyAdminErrorAlert({
+      flow: "runner",
+      operation: "preflight",
+      account: missingMerchant,
+      accountId: missingMerchant.id || "__single__",
+      error: message,
+      dateFrom,
+      dateTo,
+    });
+    return { success: false, error: message };
+  }
+
+  if (accountsToRun.length === 0 && preflightFailures.length > 0) {
+    mainWindow.webContents.send("bot-run-complete");
+    return { success: false, multiAccount: true, results: preflightFailures };
+  }
+
+  if (accountsToRun.length === 1 && preflightFailures.length === 0) {
     const acc = accountsToRun[0];
     const profilePath = path.join(app.getPath("userData"), `bot-profile-${acc.id}`);
     if (!fs.existsSync(profilePath)) fs.mkdirSync(profilePath, { recursive: true });
@@ -5391,6 +5860,16 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
           });
         }
         if (msg.type === "error") {
+          notifyAdminErrorAlert({
+            flow: "runner",
+            operation: "child-message",
+            account: acc,
+            accountId: acc.id || "__single__",
+            error: msg.error,
+            dateFrom,
+            dateTo,
+            recentLogs: logs.slice(-10),
+          });
           mainWindow.webContents.send("bot-run-complete");
           safeResolve({
             success: false,
@@ -5447,6 +5926,16 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
       });
       child.on("error", (err) => {
         monitoring.captureException(err, { operation: "bot.childProcess", extra: { accountId: acc.id || "__single__" } });
+        notifyAdminErrorAlert({
+          flow: "runner",
+          operation: "child-process",
+          account: acc,
+          accountId: acc.id || "__single__",
+          error: err.message,
+          dateFrom,
+          dateTo,
+          recentLogs: logs.slice(-10),
+        });
         mainWindow.webContents.send("bot-run-complete");
         safeResolve({
           success: false,
@@ -5459,6 +5948,18 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
         });
       });
       child.on("exit", (code) => {
+        if (!resolved && code !== 0) {
+          notifyAdminErrorAlert({
+            flow: "runner",
+            operation: "child-exit",
+            account: acc,
+            accountId: acc.id || "__single__",
+            error: "Bot exited with code " + code,
+            dateFrom,
+            dateTo,
+            recentLogs: logs.slice(-10),
+          });
+        }
         mainWindow.webContents.send("bot-run-complete");
         safeResolve({
           success: code === 0,
@@ -5473,12 +5974,13 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
     });
   }
 
-  // Multiple accounts — run fully sequential: account 1 finishes everything, then account 2, etc.
+  // Multiple accounts use a fixed 6-minute start stagger. A later account can run
+  // while the previous account is still finishing non-export work.
   mainWindow.webContents.send("bot-log",
     `🚀 تشغيل ${accountsToRun.length} حسابات بشكل تسلسلي — حساب واحد في كل مرة...`);
 
   const accountExportTimestamps = new Array(accountsToRun.length).fill(0);
-  mainWindow.webContents.send("bot-log", "Multi-account mode: account starts are staggered by the Easy-Orders export cooldown; later phases may overlap.");
+  mainWindow.webContents.send("bot-log", "Multi-account mode: account starts are staggered by 6 minutes to stay beyond the EasyOrders 5-minute limit; later phases may overlap.");
 
   function runOneAccount(acc, idx) {
     const profilePath = path.join(app.getPath("userData"), `bot-profile-${acc.id}`);
@@ -5543,7 +6045,19 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
           }
           safeResolve({ success: true, data, ...finishTiming(), accountId, accountEmail, accountLabel });
         }
-        if (msg.type === "error") safeResolve({ success: false, error: msg.error, ...finishTiming(), accountId, accountEmail, accountLabel });
+        if (msg.type === "error") {
+          notifyAdminErrorAlert({
+            flow: "runner",
+            operation: "child-message",
+            account: acc,
+            accountId,
+            error: msg.error,
+            dateFrom,
+            dateTo,
+            recentLogs: logs.slice(-10),
+          });
+          safeResolve({ success: false, error: msg.error, ...finishTiming(), accountId, accountEmail, accountLabel });
+        }
 
         if (msg.type === "export-timestamp") {
           lastExportTimestamp = msg.timestamp;
@@ -5582,6 +6096,16 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
 
       child.on("error", (err) => {
         monitoring.captureException(err, { operation: "bot.childProcess", extra: { accountId: acc.id } });
+        notifyAdminErrorAlert({
+          flow: "runner",
+          operation: "child-process",
+          account: acc,
+          accountId: acc.id,
+          error: err.message,
+          dateFrom,
+          dateTo,
+          recentLogs: logs.slice(-10),
+        });
         safeResolve({
           success: false,
           error: `${prefix}${err.message}`,
@@ -5594,6 +6118,18 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
       });
 
       child.on("exit", (code) => {
+        if (!resolved && code !== 0) {
+          notifyAdminErrorAlert({
+            flow: "runner",
+            operation: "child-exit",
+            account: acc,
+            accountId: acc.id,
+            error: `${prefix}exited with code ${code}`,
+            dateFrom,
+            dateTo,
+            recentLogs: logs.slice(-10),
+          });
+        }
         safeResolve({
           success: code === 0,
           error: code !== 0 ? `${prefix}exited with code ${code}` : null,
@@ -5609,7 +6145,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
 
   botChildren = [];
 
-  const INTER_ACCOUNT_COOLDOWN_MS = 6 * 60 * 1000; // Launch the next account 6 minutes after the previous account starts
+  const INTER_ACCOUNT_COOLDOWN_MS = 6 * 60 * 1000; // Start the next account 6 minutes after the previous account launch.
   const INTER_ACCOUNT_COOLDOWN_LOG_INTERVAL_MS = 60 * 1000;
 
   async function waitForExportCooldown(previousAccountIndex, nextAccountIndex, previousResultPromise) {
@@ -5746,7 +6282,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
     resultPromises.push(promise);
   }
 
-  const results = await Promise.all(resultPromises);
+  const results = preflightFailures.concat(await Promise.all(resultPromises));
 
   botChildren = [];
   mainWindow.webContents.send("bot-run-complete");

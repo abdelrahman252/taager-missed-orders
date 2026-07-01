@@ -480,6 +480,7 @@
 
   window.DashboardQueryRuntime = {
     flags: loadFlags,
+    currentFlags: function () { return resolvedFlags ? Object.assign({}, resolvedFlags) : null; },
     isEnabled: function (kind) { return !!(resolvedFlags && resolvedFlags[kind]); },
     query: query,
     observe: observe,

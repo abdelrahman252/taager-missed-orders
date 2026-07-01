@@ -615,6 +615,7 @@
       push(account);
       return keys;
     }
+    if (account && account.accountType === 'static') push('static:' + String(account.id || '').trim().toLowerCase());
     var merchantId = String(account && (account.taagerAffiliateCode || account.taager_affiliate_code) || '').trim().toLowerCase();
     var country = String(account && (account.taagerCountry || account.taager_country) || 'sa').trim().toLowerCase();
     if (Array.isArray(account && account.keys)) account.keys.forEach(push);
@@ -637,6 +638,7 @@
   }
 
   function marketingStableKey(account) {
+    if (account && account.accountType === 'static') return 'static:' + String(account.id || '').trim().toLowerCase();
     var keys = marketingAccountKeys(account);
     var taager = keys.filter(function (key) {
       return key.indexOf('taager:') === 0;
@@ -668,6 +670,9 @@
     var summary = summarizeMarketingPlatforms(accountId);
     var platformStatus = platform ? normalizeMarketingStatus(marketingBucket(accountId)[normalizeMarketingPlatform(platform)], accountId, platform) : null;
     var mappings = (platformStatus && platformStatus.mappings) || (summary && summary.mappings) || {};
+    var exchangeRates = window.TaagerCurrency && typeof window.TaagerCurrency.rates === 'function'
+      ? window.TaagerCurrency.rates()
+      : {};
     return dashboardMarketingAccounts().map(function (account) {
       var id = String(account && (account.id || account.accountId || account.key || '') || '');
       var keys = marketingAccountKeys(account);
@@ -682,7 +687,8 @@
         dashboardAccountKey: mappedKey || marketingStableKey(account) || id,
         dashboardAccountKeys: keys,
         currency: roi.currency || dashboardAccountCurrency(id),
-        egpRate: Number(roi.egpRate) || 52
+        egpRate: Number(roi.egpRate) || 52,
+        exchangeRates: exchangeRates
       };
     });
   }
@@ -1456,6 +1462,11 @@
     setLoading: function (loading, accountId, platform) {
       var current = this.get(accountId, platform);
       current.loading = !!loading;
+      if (loading) {
+        current.error = '';
+        current.errorCode = '';
+        current.offline = false;
+      }
       try {
         console.info('[Marketing][Store] loading', {
           accountId: marketingAccountId(accountId),

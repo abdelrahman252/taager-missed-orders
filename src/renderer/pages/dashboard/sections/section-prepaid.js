@@ -278,6 +278,121 @@
     '</div>';
   }
 
+  function fmtInt(value) {
+    var n = Number(value || 0);
+    if (!isFinite(n)) n = 0;
+    return Math.round(n).toLocaleString('en-US');
+  }
+
+  function buildMiniStat(label, value, sub, color) {
+    color = color || C.text;
+    return '<div style="background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.06);' +
+      'border-radius:12px;padding:13px 14px;min-width:0;">' +
+      '<div style="font-size:21px;font-weight:900;color:' + color + ';line-height:1;margin-bottom:5px;">' + value + '</div>' +
+      '<div style="font-size:11px;font-weight:800;color:' + C.text + ';line-height:1.35;">' + label + '</div>' +
+      '<div style="font-size:10px;color:' + C.muted + ';line-height:1.45;margin-top:4px;">' + sub + '</div>' +
+    '</div>';
+  }
+
+  function buildPrepaidMatchDiagnosticsCard(diag, pi) {
+    diag = diag || {};
+    var provider = String(diag.provider || 'none');
+    var status = String(diag.status || 'missing');
+    var accountsWithDiagnostics = Number(diag.accountsWithDiagnostics || 0);
+    var paymentTargets = Number(diag.paymentTargets || diag.paymentRows || 0);
+    var paymentMatches = Number(diag.paymentMatches || 0);
+    var prepaidTargets = Number(diag.prepaidTargetItemRows || 0);
+    var prepaidMatchedItems = Number(diag.prepaidTargetMatchedItemRows || 0);
+    var prepaidMatchedRows = Number(diag.prepaidTargetMatchedRows || 0);
+    var prepaidUnmatched = Number(diag.prepaidTargetUnmatchedRows || Math.max(0, prepaidTargets - prepaidMatchedItems));
+    var conflicts = Number(diag.paymentMatchConflicts || 0);
+    var dashboardPrepaid = pi ? Number(pi.totalPrepaid || 0) : 0;
+    var prepaidMatchRate = prepaidTargets > 0 ? prepaidMatchedItems / prepaidTargets : 0;
+    var paymentMatchRate = paymentTargets > 0 ? paymentMatches / paymentTargets : 0;
+    var statusColor = status === 'ok' ? C.green : status === 'partial' ? C.cod : C.red;
+    var hasDiagnostics = accountsWithDiagnostics > 0 && provider !== 'none';
+    var sourceParts = Object.keys(diag.paymentMatchSources || {}).map(function (key) {
+      return key + ': ' + fmtInt(diag.paymentMatchSources[key]);
+    });
+    var sourceText = sourceParts.length ? sourceParts.join(' | ') : sTx('No successful match source recorded', 'لا يوجد مصدر مطابقة ناجح مسجل');
+    var statusText = status === 'ok'
+      ? sTx('EasyOrders enrichment connected', 'ربط EasyOrders يعمل')
+      : status === 'partial'
+        ? sTx('Some selected accounts have EasyOrders diagnostics', 'بعض الحسابات المحددة لديها بيانات مطابقة EasyOrders')
+        : status === 'not_enabled'
+          ? sTx('EasyOrders enrichment is not enabled', 'ربط EasyOrders غير مفعل')
+          : sTx('No EasyOrders matching diagnostics found', 'لا توجد بيانات مطابقة من EasyOrders');
+    var explanation = hasDiagnostics
+      ? sTx(
+          'This shows the import matching funnel. NDR is then calculated from the matched Taager rows and their Taager statuses.',
+          'هذا يوضح مسار مطابقة الاستيراد. بعد ذلك يتم حساب NDR من صفوف تاجر المطابقة وحالاتها داخل تاجر.'
+        )
+      : sTx(
+          'Connect or upload EasyOrders enrichment to see how many payment-method rows were matched back to Taager.',
+          'اربط أو ارفع بيانات EasyOrders لمعرفة عدد صفوف طريقة الدفع التي تمت مطابقتها مع تاجر.'
+        );
+
+    var stats =
+      buildMiniStat(
+        sTx('EasyOrders payment rows', 'صفوف EasyOrders بطريقة دفع'),
+        fmtInt(paymentTargets),
+        sTx('Any payment method found in EasyOrders', 'أي طريقة دفع موجودة في EasyOrders'),
+        C.text
+      ) +
+      buildMiniStat(
+        sTx('EasyOrders prepaid targets', 'طلبات دفع مسبق من EasyOrders'),
+        fmtInt(prepaidTargets),
+        sTx('Payment method classified as prepaid', 'طريقة الدفع مصنفة دفع مسبق'),
+        C.prepaid
+      ) +
+      buildMiniStat(
+        sTx('Matched to Taager', 'تمت مطابقتها مع تاجر'),
+        fmtInt(prepaidMatchedItems),
+        fmtInt(prepaidMatchedRows) + ' ' + sTx('unique order/product rows', 'صف طلب/منتج فريد') + ' | ' + pct(prepaidMatchRate),
+        prepaidMatchRate >= 0.8 ? C.green : prepaidMatchRate > 0 ? C.cod : C.red
+      ) +
+      buildMiniStat(
+        sTx('Not matched', 'لم تتم مطابقتها'),
+        fmtInt(prepaidUnmatched),
+        sTx('Prepaid EasyOrders rows not found safely in Taager', 'صفوف دفع مسبق من EasyOrders لم يتم إيجادها بأمان في تاجر'),
+        prepaidUnmatched > 0 ? C.red : C.green
+      ) +
+      buildMiniStat(
+        sTx('Dashboard prepaid orders', 'طلبات الدفع المسبق في اللوحة'),
+        fmtInt(dashboardPrepaid),
+        sTx('Classified prepaid inside selected dashboard range', 'مصنفة دفع مسبق داخل فترة اللوحة المحددة'),
+        C.purple
+      ) +
+      buildMiniStat(
+        sTx('All payment matches', 'كل مطابقات الدفع'),
+        fmtInt(paymentMatches),
+        pct(paymentMatchRate) + ' ' + sTx('of EasyOrders payment rows', 'من صفوف الدفع في EasyOrders'),
+        paymentMatchRate >= 0.8 ? C.green : paymentMatchRate > 0 ? C.cod : C.red
+      );
+
+    var detail =
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">' +
+        '<div style="display:flex;align-items:center;gap:8px;min-width:0;">' +
+          '<span style="width:9px;height:9px;border-radius:50%;background:' + statusColor + ';box-shadow:0 0 0 4px ' + statusColor + '20;"></span>' +
+          '<span style="font-size:12px;font-weight:800;color:' + C.text + ';">' + esc(statusText) + '</span>' +
+        '</div>' +
+        '<div style="font-size:10px;color:' + C.muted + ';font-weight:700;">' +
+          esc(sTx('Provider', 'المصدر')) + ': ' + esc(provider) + ' | ' +
+          esc(sTx('Accounts', 'الحسابات')) + ': ' + fmtInt(accountsWithDiagnostics) + '/' + fmtInt(diag.accounts || 0) +
+        '</div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:13px;">' + stats + '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;border-top:1px solid ' + C.border + ';padding-top:12px;">' +
+        '<div style="font-size:11px;color:' + C.muted + ';line-height:1.7;">' + esc(explanation) + '<br>' +
+          esc(sTx('Match sources', 'مصادر المطابقة')) + ': ' + esc(sourceText) + '</div>' +
+        '<div style="font-size:11px;font-weight:800;color:' + (conflicts > 0 ? C.red : C.green) + ';white-space:nowrap;">' +
+          esc(sTx('Conflicts', 'تعارضات')) + ': ' + fmtInt(conflicts) +
+        '</div>' +
+      '</div>';
+
+    return sectionCard(sTx('EasyOrders Match Audit', 'فحص مطابقة EasyOrders'), 'link', detail);
+  }
+
   /* ── 2. Global Comparison Panel ──────────────────────────────────────────── */
   function buildComparisonPanel(pi) {
     var noData = !pi || (pi.globalPrepaidPct === 0 && pi.globalCodPct === 0);
@@ -767,12 +882,12 @@
       var pName = (pStat && pStat.name) ? pStat.name : p.name;
       var pSku = (pStat && pStat.sku) ? pStat.sku : '';
 
-      var displayName = pName;
-      if (pSku && pSku !== pName) {
-        displayName = pName + ' (' + pSku + ')';
-      }
-
-      var name = esc(displayName);
+      var name = esc(pName);
+      var skuLine = pSku && pSku !== pName
+        ? (window.dashboardSkuCopyHtml
+          ? window.dashboardSkuCopyHtml(pSku, { style: 'font-size:10px;color:rgba(255,255,255,0.42);font-weight:700;margin-top:3px' })
+          : '<div style="font-size:10px;color:rgba(255,255,255,0.42);font-weight:700;margin-top:3px">SKU: ' + esc(pSku) + '</div>')
+        : '';
 
       var prepaidPct = p.totalOrders > 0 ? Math.round(p.prepaidOrders / p.totalOrders * 100) : 0;
       var codPct     = p.totalOrders > 0 ? Math.round(p.codOrders     / p.totalOrders * 100) : 0;
@@ -785,6 +900,7 @@
         'onmouseout="this.style.background=\'transparent\'">' +
         '<div style="overflow:hidden;padding-left:10px;">' +
           '<div data-i18n-preserve style="font-size:13px;font-weight:700;color:' + C.text + ';line-height:1.4;">' + name + '</div>' +
+          skuLine +
           '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:5px;font-weight:600;">' +
             // Taager dashboard/status/NDR migration: totalCommission is Taager Profit After Tax.
             'COD ' + sTx(fmtSAR(p.totalCommission) + ' Taager Profit After Tax', fmtSAR(p.totalCommission) + ' ربح تاجر بعد الضريبة') +
@@ -1101,15 +1217,15 @@
         var pStat = (card.product && geo && geo.productStats && geo.productStats[card.product]) ? geo.productStats[card.product] : null;
         var pName = (pStat && pStat.name) ? pStat.name : card.product;
         var pSku = (pStat && pStat.sku) ? pStat.sku : '';
-        var displayProduct = pName;
-        if (pSku && pSku !== pName) {
-            displayProduct = pName + ' (' + pSku + ')';
-        }
+        var displayProduct = pName && pName.length > 30 ? pName.slice(0, 28) + '...' : (pName || '');
+        var productSkuCopy = pSku && pSku !== pName && window.dashboardSkuCopyHtml
+          ? window.dashboardSkuCopyHtml(pSku, { style: 'font-size:10px;color:inherit;font-weight:700;margin-inline-start:4px' })
+          : (pSku && pSku !== pName ? ' <span dir="ltr">SKU: ' + esc(pSku) + '</span>' : '');
 
         var productTag = card.product
           ? '<span data-i18n-preserve style="padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;' +
               'background:rgba(255,255,255,0.03);color:rgba(255,255,255,0.7);border:1px solid rgba(255,255,255,0.06);">' +
-              'BOX ' + (displayProduct && displayProduct.length > 30 ? displayProduct.slice(0, 28) + '...' : (displayProduct || '')) + '</span>'
+              'BOX ' + esc(displayProduct) + productSkuCopy + '</span>'
           : '';
 
         var priority = isFeatured ? 'high' : (index === 1 ? 'medium' : 'low');
@@ -1528,6 +1644,7 @@
         headerHtml +
         (!hasPrepaidData && hasGeoData ? buildNoDataBanner() : '') +
         buildKpiStrip(pi) +
+        buildPrepaidMatchDiagnosticsCard(data && data.meta && data.meta.prepaidMatchDiagnostics, pi) +
         buildComparisonPanel(pi) +
         buildPrepaidPromoSuggester(pi, geoData) +
         buildCityRanking(pi, geoData) +

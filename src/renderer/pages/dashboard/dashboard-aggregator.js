@@ -19,7 +19,7 @@
   // Force showing the city and the province name in Arabic everywhere.
   // =======================================================================
 
-  // ─── T-02: THRESHOLDS ────────────────────────────────────────────────────────
+  // T-02: THRESHOLDS
   // Configurable thresholds for Saudi COD e-commerce market.
   // Exposed via window.getDashboardThresholds() for use by other modules.
   var THRESHOLDS = {
@@ -37,7 +37,7 @@
     RISK_SCORE_RED:              65
   };
   window.getDashboardThresholds = function () { return THRESHOLDS; };
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
 
   var ALL_ACCOUNTS = '__all__';
   var AR_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
@@ -309,6 +309,91 @@
     return latest || null;
   }
 
+  function numberValue(value) {
+    var n = Number(value || 0);
+    return isFinite(n) ? n : 0;
+  }
+
+  function dashboardEnrichmentDiagnostics(snap) {
+    snap = snap || {};
+    return snap.enrichmentDiagnostics ||
+      (snap.lastFetchRange && snap.lastFetchRange.enrichment) ||
+      (snap.lastFetchRange && snap.lastFetchRange.parseDiagnostics && snap.lastFetchRange.parseDiagnostics.enrichment) ||
+      null;
+  }
+
+  function buildPrepaidMatchDiagnostics(accounts, selectedIds) {
+    var ids = Array.isArray(selectedIds) && selectedIds.length ? selectedIds : Object.keys(accounts || {});
+    var statusCounts = {};
+    var paymentMatchSources = {};
+    var diagAccounts = 0;
+    var result = {
+      provider: '',
+      status: 'missing',
+      accounts: ids.length,
+      accountsWithDiagnostics: 0,
+      sourceRows: 0,
+      paymentRowsScanned: 0,
+      paymentRows: 0,
+      paymentTargets: 0,
+      prepaidTargetItemRows: 0,
+      prepaidTargetMatchedItemRows: 0,
+      prepaidTargetMatchedRows: 0,
+      prepaidTargetUnmatchedRows: 0,
+      paymentMatches: 0,
+      unmatchedPaymentRows: 0,
+      paymentMatchConflicts: 0,
+      structuredPaymentPreserved: 0,
+      uniquePaymentOrderIds: 0,
+      uniquePaymentPhoneSku: 0,
+      paymentMatchSources: paymentMatchSources,
+      statusCounts: statusCounts
+    };
+
+    ids.forEach(function (id) {
+      var snap = accounts && accounts[id] || {};
+      var diag = dashboardEnrichmentDiagnostics(snap);
+      if (!diag) return;
+      diagAccounts++;
+      result.accountsWithDiagnostics++;
+      if (!result.provider && diag.provider) result.provider = diag.provider;
+      var status = String(diag.status || 'unknown');
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+      [
+        'sourceRows', 'paymentRowsScanned', 'paymentRows', 'paymentTargets',
+        'prepaidTargetItemRows', 'prepaidTargetMatchedItemRows',
+        'prepaidTargetMatchedRows', 'prepaidTargetUnmatchedRows',
+        'paymentMatches', 'unmatchedPaymentRows', 'paymentMatchConflicts',
+        'structuredPaymentPreserved', 'uniquePaymentOrderIds', 'uniquePaymentPhoneSku'
+      ].forEach(function (key) {
+        result[key] += numberValue(diag[key]);
+      });
+      Object.keys(diag.paymentMatchSources || {}).forEach(function (source) {
+        paymentMatchSources[source] = (paymentMatchSources[source] || 0) + numberValue(diag.paymentMatchSources[source]);
+      });
+    });
+
+    if (!diagAccounts) {
+      result.provider = 'none';
+      result.status = 'missing';
+    } else if (statusCounts.ok) {
+      result.status = statusCounts.ok === diagAccounts ? 'ok' : 'partial';
+    } else if (statusCounts.missing) {
+      result.status = 'missing';
+    } else if (statusCounts.not_enabled) {
+      result.status = 'not_enabled';
+    } else {
+      result.status = Object.keys(statusCounts)[0] || 'unknown';
+    }
+    result.prepaidTargetMatchRate = result.prepaidTargetItemRows > 0
+      ? result.prepaidTargetMatchedItemRows / result.prepaidTargetItemRows
+      : 0;
+    result.paymentTargetMatchRate = result.paymentTargets > 0
+      ? result.paymentMatches / result.paymentTargets
+      : 0;
+    return result;
+  }
+
   function formatTimestamp(ts) {
     if (window.dashboardI18n) return window.dashboardI18n.formatTimestamp(ts);
     if (!ts) return noUpdate();
@@ -496,23 +581,24 @@
     var map = {};
     var lineSeen = {};
     (Array.isArray(rows) ? rows : []).forEach(function (row, idx) {
-      var key = orderOnlyKey(row, idx);
-      var bucket = exactStatusBucket(row);
+      var key = row.__dashboardOrderKey || orderOnlyKey(row, idx);
+      var bucket = row.__dashboardExactBucket || exactStatusBucket(row);
       if (!includeCanceled && isCanceledByYouBucket(bucket)) return;
-      var lineKey = financialLineKey(row, idx);
+      var lineKey = row.__dashboardFinancialLineKey || financialLineKey(row, idx);
       if (lineSeen[lineKey]) return;
       lineSeen[lineKey] = true;
       if (!map[key]) {
         map[key] = Object.assign({}, row, {
           dashboardTotalPrice: 0,
+          exactStatusBucket: bucket,
           itemCount: 0,
           itemSkus: [],
           itemProducts: []
         });
       }
-      map[key].dashboardTotalPrice += rowTotalPrice(row);
+      map[key].dashboardTotalPrice += row.dashboardTotalPrice != null ? Number(row.dashboardTotalPrice) || 0 : rowTotalPrice(row);
       map[key].totalPrice = map[key].dashboardTotalPrice;
-      map[key].dashboardAmountDue = rowAmountDue(row);
+      map[key].dashboardAmountDue = row.dashboardAmountDue != null ? Number(row.dashboardAmountDue) || 0 : rowAmountDue(row);
       map[key].itemCount += 1;
       if (row && row.sku) map[key].itemSkus.push(row.sku);
       if (row && (row.products || row.productName)) map[key].itemProducts.push(row.products || row.productName);
@@ -521,6 +607,10 @@
       var row = map[key];
       if (row.itemSkus.length) row.sku = row.itemSkus.join(', ');
       if (row.itemProducts.length) row.products = row.itemProducts.join(', ');
+      delete row.__dashboardOrderKey;
+      delete row.__dashboardFinancialLineKey;
+      delete row.__dashboardExactBucket;
+      delete row.__dashboardInCreatedPeriod;
       return row;
     });
   }
@@ -627,6 +717,209 @@
       ? parseFloat(((summary.deliveredCount / summary.confirmedCount) * 100).toFixed(1))
       : 0;
     return summary;
+  }
+
+  function orderSourceRawValue(row) {
+    var value = row && (
+      row.orderSource != null ? row.orderSource :
+      (row.rawOrderSource != null ? row.rawOrderSource :
+      (row.receivedBy != null ? row.receivedBy :
+      (row.orderReceivedBy != null ? row.orderReceivedBy : '')))
+    );
+    return String(value == null ? '' : value).trim();
+  }
+
+  function orderSourceDisplayValue(rawValue) {
+    rawValue = String(rawValue == null ? '' : rawValue).trim();
+    if (rawValue) return rawValue;
+    return window.dashboardI18n && window.dashboardI18n.isRtl && window.dashboardI18n.isRtl()
+      ? '\u0645\u0635\u062f\u0631 \u063a\u064a\u0631 \u0645\u0639\u0631\u0648\u0641'
+      : 'Unknown source';
+  }
+
+  function emptyOrderSourceBucket(rawValue) {
+    return {
+      key: rawValue || '__unknown__',
+      rawSource: rawValue,
+      label: orderSourceDisplayValue(rawValue),
+      rawOrders: 0,
+      canceledByYou: 0,
+      netOrders: 0,
+      delivered: 0,
+      confirmed: 0,
+      pending: 0,
+      shipping: 0,
+      failed: 0,
+      confirmationCount: 0,
+      confirmationRate: 0,
+      ndr: 0,
+      deliveredProfit: 0,
+      deliveredSales: 0,
+      deliveredAov: 0,
+      avgProfit: 0,
+      isLowSample: true,
+      topProducts: [],
+      topCities: [],
+      _sets: {},
+      _products: {},
+      _cities: {}
+    };
+  }
+
+  function buildOrderSourceBreakdown(rows, meta, minSample) {
+    rows = Array.isArray(rows) ? rows : [];
+    meta = meta || {};
+    minSample = minSample || 30;
+    var period = meta.period || activePeriod();
+    var mode = meta.deliveredDateMode || 'actual';
+    var ndrPeriod = mode === 'expected' ? (meta.ndrPeriod || activeNdrPeriod(mode) || period) : period;
+    var buckets = {};
+    var sourceOrderSet = {};
+
+    function bucketFor(rawSource) {
+      rawSource = String(rawSource || '').trim();
+      var key = rawSource || '__unknown__';
+      if (!buckets[key]) buckets[key] = emptyOrderSourceBucket(rawSource);
+      return buckets[key];
+    }
+
+    function addMetricOnce(bucket, metric, key, fn) {
+      if (!bucket._sets[metric]) bucket._sets[metric] = {};
+      if (!addOnce(bucket._sets[metric], key)) return false;
+      if (typeof fn === 'function') fn();
+      return true;
+    }
+
+    rows.forEach(function (row, rowIndex) {
+      if (!row) return;
+      var rawSource = orderSourceRawValue(row);
+      var bucket = bucketFor(rawSource);
+      var orderKey = row.__dashboardOrderKey || orderOnlyKey(row, rowIndex);
+      var lineKey = row.__dashboardFinancialLineKey || financialLineKey(row, rowIndex);
+      var exactBucket = row.__dashboardExactBucket || exactStatusBucket(row);
+      var rowIsCanceledByYou = isCanceledByYouBucket(exactBucket);
+      var rowIsNetOrder = !rowIsCanceledByYou;
+      var inCreatedPeriod = row.__dashboardInCreatedPeriod != null
+        ? !!row.__dashboardInCreatedPeriod
+        : isRowCreatedInPeriod(row, period);
+      var inNdrCohortPeriod = isRowCreatedInPeriod(row, ndrPeriod);
+      var ndrEligible = window.TaagerStatus
+        ? window.TaagerStatus.isEligibleForNdr(row.orderStatus || row.status)
+        : !isNdrCanceledBucket(exactBucket);
+      var statusGroup = productStatusGroup(exactBucket);
+      var sourceOrderKey = bucket.key + ':' + orderKey;
+      var sourceLineKey = bucket.key + ':' + lineKey;
+
+      if (inCreatedPeriod) {
+        addMetricOnce(bucket, 'raw', sourceOrderKey, function () { bucket.rawOrders++; });
+        if (rowIsCanceledByYou) addMetricOnce(bucket, 'canceledByYou', sourceOrderKey, function () { bucket.canceledByYou++; });
+        if (rowIsNetOrder) {
+          addMetricOnce(bucket, 'net', sourceOrderKey, function () { bucket.netOrders++; });
+          if (statusGroup === 'confirmation') addMetricOnce(bucket, 'confirmation', sourceOrderKey, function () { bucket.confirmationCount++; });
+          else if (exactBucket === 'received' || exactBucket === 'pending') addMetricOnce(bucket, 'pending', sourceOrderKey, function () { bucket.pending++; });
+          if (exactBucket === 'confirmed') addMetricOnce(bucket, 'confirmed', sourceOrderKey, function () { bucket.confirmed++; });
+          if (exactBucket === 'shipping' || exactBucket === 'delivery_suspended' || exactBucket === 'after_sales_progress') {
+            addMetricOnce(bucket, 'shipping', sourceOrderKey, function () { bucket.shipping++; });
+          }
+          if (isLostBucket(exactBucket)) addMetricOnce(bucket, 'failed', sourceOrderKey, function () { bucket.failed++; });
+
+          var cityName = String(row.city || '').trim();
+          if (cityName) {
+            if (!bucket._cities[cityName]) bucket._cities[cityName] = { name: cityName, orders: 0, delivered: 0, _sets: {} };
+            var city = bucket._cities[cityName];
+            if (!city._sets.orders) city._sets.orders = {};
+            if (addOnce(city._sets.orders, sourceOrderKey)) city.orders++;
+          }
+          var productName = window.TaagerStatus ? window.TaagerStatus.productName(row) : (row.products || row.productName || row.product || row.sku || '');
+          productName = String(productName || '').trim();
+          if (productName) {
+            if (!bucket._products[productName]) bucket._products[productName] = { name: productName, orders: 0, delivered: 0, _sets: {} };
+            var product = bucket._products[productName];
+            if (!product._sets.orders) product._sets.orders = {};
+            if (addOnce(product._sets.orders, sourceOrderKey)) product.orders++;
+          }
+        }
+      }
+
+      if (ndrEligible && inNdrCohortPeriod && rowIsNetOrder) {
+        if (exactBucket === 'delivered') {
+          addMetricOnce(bucket, 'delivered', sourceOrderKey, function () { bucket.delivered++; });
+          if (sourceOrderSet[sourceOrderKey] == null) sourceOrderSet[sourceOrderKey] = bucket.key;
+        }
+      }
+
+      if (isDeliveredRowInPeriod(row, period, mode) && rowIsNetOrder) {
+        addMetricOnce(bucket, 'deliveredProfit', sourceOrderKey, function () {
+          bucket.deliveredProfit += rowCommissionValue(row);
+        });
+        addMetricOnce(bucket, 'deliveredSales', sourceLineKey, function () {
+          bucket.deliveredSales += row.dashboardTotalPrice != null ? Number(row.dashboardTotalPrice) || 0 : rowTotalPrice(row);
+        });
+        var deliveredCityName = String(row.city || '').trim();
+        if (deliveredCityName && bucket._cities[deliveredCityName]) {
+          var deliveredCity = bucket._cities[deliveredCityName];
+          if (!deliveredCity._sets.delivered) deliveredCity._sets.delivered = {};
+          if (addOnce(deliveredCity._sets.delivered, sourceOrderKey)) deliveredCity.delivered++;
+        }
+        var deliveredProductName = window.TaagerStatus ? window.TaagerStatus.productName(row) : (row.products || row.productName || row.product || row.sku || '');
+        deliveredProductName = String(deliveredProductName || '').trim();
+        if (deliveredProductName && bucket._products[deliveredProductName]) {
+          var deliveredProduct = bucket._products[deliveredProductName];
+          if (!deliveredProduct._sets.delivered) deliveredProduct._sets.delivered = {};
+          if (addOnce(deliveredProduct._sets.delivered, sourceOrderKey)) deliveredProduct.delivered++;
+        }
+      }
+    });
+
+    var sources = Object.keys(buckets).map(function (key) {
+      var bucket = buckets[key];
+      bucket.ndr = bucket.netOrders > 0 ? parseFloat(((bucket.delivered / bucket.netOrders) * 100).toFixed(2)) : 0;
+      bucket.confirmationRate = bucket.netOrders > 0 ? parseFloat(((bucket.confirmationCount / bucket.netOrders) * 100).toFixed(1)) : 0;
+      bucket.deliveredSales = roundMoney(bucket.deliveredSales);
+      bucket.deliveredProfit = roundMoney(bucket.deliveredProfit);
+      bucket.deliveredAov = bucket.delivered > 0 ? roundMoney(bucket.deliveredSales / bucket.delivered) : 0;
+      bucket.avgProfit = bucket.delivered > 0 ? roundMoney(bucket.deliveredProfit / bucket.delivered) : 0;
+      bucket.isLowSample = bucket.netOrders < minSample;
+      bucket.topProducts = Object.keys(bucket._products).map(function (name) {
+        var item = bucket._products[name];
+        return { name: item.name, orders: item.orders, delivered: item.delivered };
+      }).sort(function (a, b) { return b.orders - a.orders || b.delivered - a.delivered; }).slice(0, 5);
+      bucket.topCities = Object.keys(bucket._cities).map(function (name) {
+        var item = bucket._cities[name];
+        return { name: item.name, orders: item.orders, delivered: item.delivered };
+      }).sort(function (a, b) { return b.orders - a.orders || b.delivered - a.delivered; }).slice(0, 5);
+      delete bucket._sets;
+      delete bucket._products;
+      delete bucket._cities;
+      return bucket;
+    }).sort(function (a, b) {
+      return b.netOrders - a.netOrders || b.delivered - a.delivered || b.ndr - a.ndr;
+    });
+
+    var summary = sources.reduce(function (acc, item) {
+      acc.rawOrders += item.rawOrders;
+      acc.canceledByYou += item.canceledByYou;
+      acc.netOrders += item.netOrders;
+      acc.delivered += item.delivered;
+      acc.deliveredProfit += item.deliveredProfit;
+      acc.deliveredSales += item.deliveredSales;
+      return acc;
+    }, { sourceCount: sources.length, rawOrders: 0, canceledByYou: 0, netOrders: 0, delivered: 0, deliveredProfit: 0, deliveredSales: 0 });
+    summary.ndr = summary.netOrders > 0 ? parseFloat(((summary.delivered / summary.netOrders) * 100).toFixed(2)) : 0;
+    summary.deliveredProfit = roundMoney(summary.deliveredProfit);
+    summary.deliveredSales = roundMoney(summary.deliveredSales);
+    summary.deliveredAov = summary.delivered > 0 ? roundMoney(summary.deliveredSales / summary.delivered) : 0;
+    summary.avgProfit = summary.delivered > 0 ? roundMoney(summary.deliveredProfit / summary.delivered) : 0;
+
+    var reliableSources = sources.filter(function (item) { return item.netOrders >= minSample; })
+      .slice().sort(function (a, b) { return b.ndr - a.ndr || b.netOrders - a.netOrders; });
+    return {
+      minSample: minSample,
+      summary: summary,
+      sources: sources,
+      bestReliableSource: reliableSources[0] || null,
+      reliableSources: reliableSources
+    };
   }
 
   function percentOf(part, total) {
@@ -814,7 +1107,7 @@
     return_verified: true,
     after_sales_done: true
   };
-  // canceled_by_you is NOT in PRODUCT_CANCEL_BUCKETS — it is excluded from the
+  // canceled_by_you is NOT in PRODUCT_CANCEL_BUCKETS - it is excluded from the
   // net-orders denominator entirely. Rates (confirmation/cancel/pending) are
   // computed over net orders = all orders minus canceled_by_you.
   var PRODUCT_CANCEL_BUCKETS = {
@@ -888,9 +1181,9 @@
   }
 
 
-  // ─── T-01: resolveProvince(cityName) ─────────────────────────────────────────
+  // T-01: resolveProvince(cityName)
   // Maps a city name string to one of 11 province IDs.
-  // Extracted from section-cities.js coordMap — exact keys preserved.
+  // Extracted from section-cities.js coordMap - exact keys preserved.
   var _PROVINCE_MAP = [
     { id: 'riyadh',  keys: ['الرياض', 'الخرج', 'المجمعة', 'الدوادمي', 'riyadh'] },
     { id: 'eastern', keys: ['الشرقية', 'الدمام', 'الخبر', 'الأحساء', 'eastern'] },
@@ -905,7 +1198,7 @@
     { id: 'najran',   keys: ['نجران', 'najran'] },
     { id: 'jawf',     keys: ['الجوف', 'سكاكا', 'jawf', 'jouf'] },
     { id: 'northern', keys: ['الحدود الشمالية', 'عرعر', 'northern', 'arar'] }
-    // 'other' is the fallback — no keys needed
+    // 'other' is the fallback - no keys needed
   ];
 
   function resolveProvince(cityName, country) {
@@ -930,11 +1223,11 @@
     if (active && active !== 'mixed') return active;
     return fallback || 'sa';
   }
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
 
-  // ─── T-05: isRowPrepaid(row) ──────────────────────────────────────────────────
+  // T-05: isRowPrepaid(row)
   // Determines if an order row is a prepaid (non-COD) order.
-  // Defaults to false (COD) — accurate for Saudi COD-heavy market.
+  // Defaults to false (COD) - accurate for Saudi COD-heavy market.
   var _PREPAID_METHODS = ['prepaid', 'online', 'card', 'visa', 'mada', 'apple pay', 'applepay', 'stc pay', 'stcpay', 'tabby', 'tabi', 'tamara', 'paymob', 'network', 'taager'];
   function normalizePaymentText(value) {
     return String(value || '')
@@ -1020,33 +1313,32 @@
   function prepareReportingRows(rows, meta) {
     var target = meta.reportingCurrency || meta.activeCurrency || 'SAR';
     var rates = meta.exchangeRates || {};
-    return (rows || []).map(function (row) {
+    (rows || []).forEach(function (row) {
       var country = effectiveCountry(row.taagerCountry || row.country, meta, 'sa');
       var nativeCurrency = window.TaagerCountry && window.TaagerCountry.currency ? window.TaagerCountry.currency(country) : 'SAR';
       var nativeTotalPrice = rowTotalPrice(row);
       var nativeAmountDue = rowAmountDue(row);
       var nativeCommission = rowCommissionValue(row);
       var payment = classifyRowPayment(row);
-      return Object.assign({}, row, {
-        taagerCountry: country,
-        country: row.country || country,
-        nativeCurrency: nativeCurrency,
-        reportingCurrency: target,
-        nativeTotalPrice: nativeTotalPrice,
-        nativeAmountDue: nativeAmountDue,
-        nativeCommission: nativeCommission,
-        dashboardTotalPrice: convertDashboardCurrency(nativeTotalPrice, nativeCurrency, target, null, rates),
-        dashboardAmountDue: convertDashboardCurrency(nativeAmountDue, nativeCurrency, target, null, rates),
-        dashboardCommission: convertDashboardCurrency(nativeCommission, nativeCurrency, target, null, rates),
-        paymentClassification: payment.classification,
-        paymentEvidenceSource: payment.source,
-        effectivePaymentClassification: payment.effectiveCod ? 'cod' : 'prepaid',
-        isEffectiveCod: payment.effectiveCod,
-        isPrepaid: payment.classification === 'prepaid'
-      });
+      row.taagerCountry = country;
+      row.country = row.country || country;
+      row.nativeCurrency = nativeCurrency;
+      row.reportingCurrency = target;
+      row.nativeTotalPrice = nativeTotalPrice;
+      row.nativeAmountDue = nativeAmountDue;
+      row.nativeCommission = nativeCommission;
+      row.dashboardTotalPrice = convertDashboardCurrency(nativeTotalPrice, nativeCurrency, target, null, rates);
+      row.dashboardAmountDue = convertDashboardCurrency(nativeAmountDue, nativeCurrency, target, null, rates);
+      row.dashboardCommission = convertDashboardCurrency(nativeCommission, nativeCurrency, target, null, rates);
+      row.paymentClassification = payment.classification;
+      row.paymentEvidenceSource = payment.source;
+      row.effectivePaymentClassification = payment.effectiveCod ? 'cod' : 'prepaid';
+      row.isEffectiveCod = payment.effectiveCod;
+      row.isPrepaid = payment.classification === 'prepaid';
     });
+    return rows || [];
   }
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
 
   function buildAmountDueLookup(rows) {
     var samplesByKey = {};
@@ -1114,6 +1406,53 @@
       };
     });
     return lookup;
+  }
+
+  function buildAmountRepairLookups(rows) {
+    var dueSamplesByKey = {};
+    var priceSamplesByKey = {};
+    (rows || []).forEach(function (row) {
+      var key = amountLookupKey(row);
+      if (!key) return;
+      var amount = rowAmountDue(row);
+      if (amount > 0) {
+        if (!dueSamplesByKey[key]) dueSamplesByKey[key] = [];
+        dueSamplesByKey[key].push(amount);
+      }
+      var price = rowTotalPrice(row);
+      if (price > 0) {
+        if (!priceSamplesByKey[key]) priceSamplesByKey[key] = [];
+        priceSamplesByKey[key].push(price);
+      }
+    });
+    function modeLookup(samplesByKey) {
+      var lookup = {};
+      Object.keys(samplesByKey).forEach(function (key) {
+        var samples = samplesByKey[key];
+        var freq = {};
+        var mode = samples[0];
+        var modeCount = 0;
+        samples.forEach(function (amount) {
+          var k = String(amount);
+          freq[k] = (freq[k] || 0) + 1;
+          if (freq[k] > modeCount) {
+            mode = amount;
+            modeCount = freq[k];
+          }
+        });
+        lookup[key] = {
+          amount: mode,
+          referenceCount: samples.length,
+          modeCount: modeCount,
+          distinctAmountCount: Object.keys(freq).length
+        };
+      });
+      return lookup;
+    }
+    return {
+      amountDue: modeLookup(dueSamplesByKey),
+      totalPrice: modeLookup(priceSamplesByKey)
+    };
   }
 
 
@@ -1310,8 +1649,11 @@
   var AGGREGATOR_CACHE_TTL = Number.MAX_SAFE_INTEGER;
   var _snapshotAccountsCache = null;
   var _snapshotRevision = null;
+  var _aggregationRequestSequence = 0;
+  var _latestAggregationRequestId = 0;
+  var _snapshotRequestsInFlight = {};
 
-  // ─── T-04: Hash-based cache invalidation ──────────────────────────────────────
+  // T-04: Hash-based cache invalidation
   // Prevents stale cache after same-account re-fetch with new data.
   // Uses row count + first/last order reference as a cheap structural hash.
   function hashRows(rows) {
@@ -1320,7 +1662,7 @@
     var last  = rows[rows.length - 1] ? (rows[rows.length - 1].taagerOrderNumber || rows[rows.length - 1].orderNumber || rows[rows.length - 1].id || '') : '';
     return rows.length + '_' + first + '_' + last;
   }
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
 
   window.invalidateDashboardCache = function (reason) {
     _aggregatorCache = null;
@@ -1335,9 +1677,48 @@
   };
 
   window.runDashboardAggregator = function (callback) {
+    var aggregationRequestId = ++_aggregationRequestSequence;
+    _latestAggregationRequestId = aggregationRequestId;
     var previewActive = window.TaagerPremiumPreview && window.TaagerPremiumPreview.isActive('dashboard');
     var requestedDeliveredDateMode = deliveredDateMode();
     var requestedNdrPeriod = activeNdrPeriod(requestedDeliveredDateMode);
+    var aggregationPhaseTimings = [];
+    function startAggregationPhase(name, detail) {
+      detail = Object.assign({ requestId: aggregationRequestId }, detail || {});
+      var entry = {
+        name: name,
+        startedAt: window.performance && typeof window.performance.now === 'function' ? window.performance.now() : Date.now(),
+        detail: detail
+      };
+      entry.timer = window.TaagerPerf && typeof window.TaagerPerf.start === 'function'
+        ? window.TaagerPerf.start('dashboard:aggregation:phase:' + name, detail || {})
+        : null;
+      window.__taagerPerfLastPhase = { name: 'dashboard:aggregation:phase:' + name, phase: name, state: 'running', at: Date.now() };
+      return entry;
+    }
+    function endAggregationPhase(entry, extra) {
+      if (!entry) return;
+      var endedAt = window.performance && typeof window.performance.now === 'function' ? window.performance.now() : Date.now();
+      var timing = {
+        name: entry.name,
+        durationMs: Math.round(Math.max(0, endedAt - entry.startedAt) * 10) / 10
+      };
+      if (entry.detail) timing.detail = entry.detail;
+      if (extra) timing.extra = extra;
+      aggregationPhaseTimings.push(timing);
+      window.__taagerPerfLastPhase = { name: 'dashboard:aggregation:phase:' + entry.name, phase: entry.name, state: 'complete', at: Date.now() };
+      if (entry.timer && window.TaagerPerf && typeof window.TaagerPerf.end === 'function') {
+        window.TaagerPerf.end(entry.timer, Object.assign({ ok: !(extra && extra.ok === false), phase: entry.name }, extra || {}));
+      }
+    }
+    function runAggregationPhase(name, detail, fn) {
+      var phase = startAggregationPhase(name, detail);
+      try {
+        return fn();
+      } finally {
+        endAggregationPhase(phase);
+      }
+    }
     if (!previewActive && (!window.api || typeof window.api.getDashboardSnapshot !== 'function')) {
       console.warn('[Dashboard] getDashboardSnapshot is not available.');
       callback(null);
@@ -1345,7 +1726,7 @@
     }
 
     // T-04: Cache is valid only if within TTL AND rows haven't changed structurally.
-    // Hash is computed after rows are collected below — so we do a pre-flight with TTL only,
+    // Hash is computed after rows are collected below - so we do a pre-flight with TTL only,
     // then re-validate with hash after rows are assembled.
     if (_aggregatorCache && _aggregatorCachePreview !== !!previewActive) {
       _aggregatorCache = null;
@@ -1353,7 +1734,7 @@
     }
     var ttlValid = _aggregatorCache && (Date.now() - _aggregatorCacheAt) < AGGREGATOR_CACHE_TTL;
     if (ttlValid && !_aggregatorCacheHash) {
-      // Old cache without hash — invalidate to force rebuild
+      // Old cache without hash - invalidate to force rebuild
       _aggregatorCache = null;
     } else if (ttlValid && _aggregatorCache && _aggregatorCache.meta && _aggregatorCache.meta.deliveredDateMode !== requestedDeliveredDateMode) {
       _aggregatorCache = null;
@@ -1366,14 +1747,154 @@
       return;
     }
 
+    var snapshotTransportMeta = {
+      requestId: aggregationRequestId,
+      transport: previewActive ? 'preview' : 'unknown',
+      cacheHit: false,
+      sharedRequest: false,
+      mainProcess: null
+    };
+
+    function inheritSnapshotTransportMeta(sourceMeta, sharedRequest) {
+      if (!sourceMeta) return;
+      var currentRequestId = snapshotTransportMeta.requestId;
+      Object.keys(sourceMeta).forEach(function (key) {
+        if (key === 'requestId') return;
+        snapshotTransportMeta[key] = sourceMeta[key];
+      });
+      snapshotTransportMeta.requestId = currentRequestId;
+      snapshotTransportMeta.sharedRequest = !!sharedRequest;
+      snapshotTransportMeta.sourceRequestId = sourceMeta.requestId || sourceMeta.sourceRequestId || null;
+    }
+
+    function parseSnapshotJson(json, transport) {
+      return runAggregationPhase('snapshot-json-parse', { transport: transport }, function () {
+        return typeof json === 'string' ? JSON.parse(json) : json;
+      });
+    }
+
+    function fetchDashboardSnapshot() {
+      if (window.TaagerPreloader && typeof window.TaagerPreloader.dashboardStage === 'function') {
+        window.TaagerPreloader.dashboardStage('snapshot', { activity: 'Loading saved snapshot payload' });
+      }
+      if (window.api.getDashboardSnapshotGzip && typeof window.DecompressionStream === 'function') {
+        var snapshotKey = ALL_ACCOUNTS + '|' + String(_snapshotRevision || 'cold');
+        if (_snapshotRequestsInFlight[snapshotKey]) {
+          var sharedSnapshotRequest = _snapshotRequestsInFlight[snapshotKey];
+          snapshotTransportMeta.sharedRequest = true;
+          snapshotTransportMeta.sourceRequestId = sharedSnapshotRequest.meta && sharedSnapshotRequest.meta.requestId || null;
+          return sharedSnapshotRequest.promise.then(function (value) {
+            inheritSnapshotTransportMeta(sharedSnapshotRequest.meta, true);
+            return value;
+          }, function (err) {
+            inheritSnapshotTransportMeta(sharedSnapshotRequest.meta, true);
+            throw err;
+          });
+        }
+        var transferPhase = startAggregationPhase('snapshot-transfer', { transport: 'gzip' });
+        var request = window.api.getDashboardSnapshotGzip(ALL_ACCOUNTS, _snapshotRevision).then(function (payload) {
+          snapshotTransportMeta.transport = typeof payload === 'string' ? 'gzip-base64' : 'gzip-binary';
+          snapshotTransportMeta.cacheHit = !!(payload && payload.cacheHit);
+          snapshotTransportMeta.mainProcess = payload && payload.timings ? payload.timings : null;
+          endAggregationPhase(transferPhase, {
+            ok: true,
+            transport: snapshotTransportMeta.transport,
+            cacheHit: snapshotTransportMeta.cacheHit
+          });
+          transferPhase = null;
+          var bytes;
+          if (typeof payload === 'string') {
+            bytes = runAggregationPhase('snapshot-base64-decode', null, function () {
+              var binary = window.atob(payload);
+              var decoded = new Uint8Array(binary.length);
+              for (var i = 0; i < binary.length; i++) decoded[i] = binary.charCodeAt(i);
+              return decoded;
+            });
+          } else {
+            bytes = runAggregationPhase('snapshot-binary-copy', null, function () {
+              var source = payload && payload.data ? payload.data : payload || [];
+              return source instanceof Uint8Array ? source : new Uint8Array(source);
+            });
+          }
+          var decompressPhase = startAggregationPhase('snapshot-decompression', { bytes: bytes.byteLength || bytes.length || 0 });
+          var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+          return new Response(stream).text().then(function (json) {
+            endAggregationPhase(decompressPhase, { ok: true, chars: json.length });
+            return json;
+          }, function (err) {
+            endAggregationPhase(decompressPhase, { ok: false, error: err && err.message ? err.message : String(err || '') });
+            throw err;
+          });
+        }).then(function (json) {
+          return parseSnapshotJson(json, snapshotTransportMeta.transport);
+        }).catch(function (gzipError) {
+          if (transferPhase) {
+            endAggregationPhase(transferPhase, { ok: false, error: gzipError && gzipError.message ? gzipError.message : String(gzipError || '') });
+            transferPhase = null;
+          }
+          snapshotTransportMeta.fallback = 'json';
+          var fallbackPhase = startAggregationPhase('snapshot-transfer', { transport: 'json-fallback' });
+          var fallback = window.api.getDashboardSnapshotJson
+            ? window.api.getDashboardSnapshotJson(ALL_ACCOUNTS, _snapshotRevision)
+            : window.api.getDashboardSnapshot(ALL_ACCOUNTS, _snapshotRevision);
+          return fallback.then(function (json) {
+            endAggregationPhase(fallbackPhase, { ok: true });
+            return parseSnapshotJson(json, 'json-fallback');
+          }, function (err) {
+            endAggregationPhase(fallbackPhase, { ok: false, error: err && err.message ? err.message : String(err || '') });
+            throw err;
+          });
+        });
+        _snapshotRequestsInFlight[snapshotKey] = {
+          promise: request,
+          meta: snapshotTransportMeta
+        };
+        request.then(function () { delete _snapshotRequestsInFlight[snapshotKey]; }, function () { delete _snapshotRequestsInFlight[snapshotKey]; });
+        return request;
+      }
+      if (window.api.getDashboardSnapshotJson) {
+        snapshotTransportMeta.transport = 'json';
+        var jsonTransferPhase = startAggregationPhase('snapshot-transfer', { transport: 'json' });
+        return window.api.getDashboardSnapshotJson(ALL_ACCOUNTS, _snapshotRevision).then(function (payload) {
+          endAggregationPhase(jsonTransferPhase, { ok: true });
+          return parseSnapshotJson(payload, 'json');
+        }, function (err) {
+          endAggregationPhase(jsonTransferPhase, { ok: false, error: err && err.message ? err.message : String(err || '') });
+          throw err;
+        });
+      }
+      snapshotTransportMeta.transport = 'object';
+      var objectTransferPhase = startAggregationPhase('snapshot-transfer', { transport: 'object' });
+      return window.api.getDashboardSnapshot(ALL_ACCOUNTS, _snapshotRevision).then(function (payload) {
+        endAggregationPhase(objectTransferPhase, { ok: true });
+        return payload;
+      }, function (err) {
+        endAggregationPhase(objectTransferPhase, { ok: false, error: err && err.message ? err.message : String(err || '') });
+        throw err;
+      });
+    }
+
+    var snapshotPhase = startAggregationPhase('snapshot-ipc', { preview: !!previewActive });
+    var snapshotPromise = (previewActive
+      ? Promise.resolve({ ok: true, data: window.TaagerPremiumPreview.dashboardAccounts() })
+      : fetchDashboardSnapshot()).then(function (value) {
+        endAggregationPhase(snapshotPhase, { ok: !!(value && value.ok), unchanged: !!(value && value.unchanged) });
+        return value;
+      }, function (err) {
+        endAggregationPhase(snapshotPhase, { ok: false, error: err && err.message ? err.message : String(err || '') });
+        throw err;
+      });
+
     Promise.all([
-      previewActive
-        ? Promise.resolve({ ok: true, data: window.TaagerPremiumPreview.dashboardAccounts() })
-        : window.api.getDashboardSnapshot(ALL_ACCOUNTS, _snapshotRevision),
+      snapshotPromise,
       previewActive
         ? Promise.resolve({ accounts: [{ id: 'preview-store', easyEmail: 'preview@taagerwhaat.com', taagerEmail: 'preview@taagerwhaat.com', label: 'Preview Store' }] })
         : (window.api.getCredentials ? window.api.getCredentials() : Promise.resolve({}))
     ]).then(function (results) {
+      if (aggregationRequestId !== _latestAggregationRequestId) {
+        callback(null);
+        return;
+      }
       var snapshotRes = results[0];
       var creds = results[1] || {};
       if (!snapshotRes || !snapshotRes.ok) { callback(null); return; }
@@ -1385,6 +1906,12 @@
       }
 
       var accounts = snapshotRes.data || {};
+      if (window.TaagerPreloader && typeof window.TaagerPreloader.dashboardStage === 'function') {
+        var accountCountForLoader = Object.keys(accounts || {}).length;
+        window.TaagerPreloader.dashboardStage('accounts', {
+          activity: accountCountForLoader ? (accountCountForLoader + ' account snapshots loaded') : 'No saved account snapshot yet'
+        });
+      }
       var period = activePeriod();
       var accountOptions = buildAccountOptions(accounts, Array.isArray(creds.accounts) ? creds.accounts : [], period);
       var totalOrders = accountOptions.reduce(function (sum, acc) { return sum + acc.orderCount; }, 0);
@@ -1420,6 +1947,12 @@
         : accountOptions.find(function (acc) { return acc.id === activeId; });
       var activeLabel = activeOption ? activeOption.label : allLabel();
       window.currentActiveAccountLabel = activeLabel;
+      var selectedDashboardAccountIds = accountOptions.filter(function (accInfo) {
+        return activeId === ALL_ACCOUNTS || accInfo.id === activeId;
+      }).map(function (accInfo) {
+        return accInfo.id;
+      });
+      var prepaidMatchDiagnostics = buildPrepaidMatchDiagnostics(accounts, selectedDashboardAccountIds);
 
       var rows = [];
       accountOptions.forEach(function (accInfo) {
@@ -1529,7 +2062,11 @@
         lastUpdatedAt: lastUpdatedAt,
         lastUpdatedLabel: formatTimestamp(lastUpdatedAt),
         accountOptions: window.dashboardAccountsList,
-        hasData: rows.length > 0
+        hasData: rows.length > 0,
+        aggregationRequestId: aggregationRequestId,
+        snapshotRevision: snapshotRes.revision || _snapshotRevision || '',
+        snapshotTransport: snapshotTransportMeta,
+        prepaidMatchDiagnostics: prepaidMatchDiagnostics
       };
 
       Object.keys(countryGroups).forEach(function (key) {
@@ -1539,16 +2076,37 @@
         group.reportingProfit = convertDashboardCurrency(group.nativeProfit, group.currency, reportingCurrency, null, meta.exchangeRates);
       });
       meta.countryGroups = Object.keys(countryGroups).map(function (key) { return countryGroups[key]; });
-      rows = prepareReportingRows(rows, meta);
-      meta.previousRows = prepareReportingRows(previousRows, meta);
-      meta.ndrSourceRows = prepareReportingRows(ndrSourceRows, meta);
+      if (window.TaagerPreloader && typeof window.TaagerPreloader.dashboardStage === 'function') {
+        window.TaagerPreloader.dashboardStage('metrics', {
+          activity: rows.length ? (rows.length + ' rows in selected period') : 'Preparing empty dashboard metrics'
+        });
+      }
+      runAggregationPhase('reporting-row-prep', { rows: rows.length, previousRows: previousRows.length, ndrRows: ndrSourceRows.length }, function () {
+        rows = prepareReportingRows(rows, meta);
+        meta.previousRows = prepareReportingRows(previousRows, meta);
+        meta.ndrSourceRows = ndrSourceRows === periodRows
+          ? rows
+          : prepareReportingRows(ndrSourceRows, meta);
+      });
 
-      var result = processSnapshotRows(rows, activeId, meta);
+      var result = runAggregationPhase('process-snapshot-rows', { rows: rows.length, activeAccountId: activeId }, function () {
+        return processSnapshotRows(rows, activeId, meta);
+      });
+      if (result && result.meta) {
+        result.meta.aggregationPhaseTimings = aggregationPhaseTimings.slice();
+      }
+      if (window.TaagerPreloader && typeof window.TaagerPreloader.dashboardStage === 'function') {
+        window.TaagerPreloader.dashboardStage('modules', { activity: 'Dashboard views prepared' });
+      }
       // T-04: Validate hash AFTER rows assembled. If hash matches, old cache is still good.
       var accountHash = window.dashboardAccountsList.map(function (acc) {
         return (acc.id || '') + ':' + (acc.orderCount || 0) + ':' + (acc.lastUpdatedAt || '');
       }).join('|');
       var rowHash = hashRows(rows) + '|' + accountHash + '|' + activeDeliveredDateMode + '|' + reportingCurrency + '|' + JSON.stringify(meta.exchangeRates) + '|' + (period ? (period.preset + ':' + period.dateFrom + ':' + period.dateTo) : '') + '|' + rangeCacheKey(requestedNdrPeriod);
+      if (aggregationRequestId !== _latestAggregationRequestId) {
+        callback(null);
+        return;
+      }
       if (_aggregatorCache && rowHash === _aggregatorCacheHash) {
         callback(_aggregatorCache);
         return;
@@ -1567,6 +2125,40 @@
   function processSnapshotRows(rows, accountId, meta) {
     rows = Array.isArray(rows) ? rows : [];
     meta = meta || {};
+    var processPhaseTimings = [];
+    function startProcessPhase(name, detail) {
+      var entry = {
+        name: name,
+        startedAt: window.performance && typeof window.performance.now === 'function' ? window.performance.now() : Date.now(),
+        detail: detail || null
+      };
+      entry.timer = window.TaagerPerf && typeof window.TaagerPerf.start === 'function'
+        ? window.TaagerPerf.start('dashboard:aggregation:phase:' + name, detail || {})
+        : null;
+      return entry;
+    }
+    function endProcessPhase(entry, extra) {
+      if (!entry) return;
+      var endedAt = window.performance && typeof window.performance.now === 'function' ? window.performance.now() : Date.now();
+      var timing = {
+        name: entry.name,
+        durationMs: Math.round(Math.max(0, endedAt - entry.startedAt) * 10) / 10
+      };
+      if (entry.detail) timing.detail = entry.detail;
+      if (extra) timing.extra = extra;
+      processPhaseTimings.push(timing);
+      if (entry.timer && window.TaagerPerf && typeof window.TaagerPerf.end === 'function') {
+        window.TaagerPerf.end(entry.timer, Object.assign({ ok: !(extra && extra.ok === false), phase: entry.name }, extra || {}));
+      }
+    }
+    function runProcessPhase(name, detail, fn) {
+      var phase = startProcessPhase(name, detail);
+      try {
+        return fn();
+      } finally {
+        endProcessPhase(phase);
+      }
+    }
 
     var dateState = emptyDailyStats(meta.period, meta.snapshotMonth);
     var dayKeys = dateState.dayKeys;
@@ -1594,10 +2186,21 @@
     var prepaidDrBaseOrders = 0, prepaidDrDeliveredOrders = 0;
     var codDrBaseOrders = 0, codDrDeliveredOrders = 0;
     var cityStats = {}, productStats = {}, campaignProductStats = {}, deliveryDays = [], displayRows = [];
+    var buildHeavyStatsInMainLoop = meta.__forceDashboardHeavyModels === true || meta.deliveredDateMode === 'expected';
+    var buildCityStatsInMainLoop = buildHeavyStatsInMainLoop || meta.__forceDashboardCitiesModel === true;
+    var buildProductStatsInMainLoop = buildHeavyStatsInMainLoop || meta.__forceDashboardProductsModel === true;
+    var buildCampaignStatsInMainLoop = buildHeavyStatsInMainLoop && meta.deliveredDateMode === 'expected';
+    var lazyCampaignProductStats = null;
+    var lazyHeavyResult = null;
+    var lazyCitiesResult = null;
+    var lazyProductsResult = null;
     var statusCounts = {};
     var statusFinancials = {};
-    var amountDueLookup = buildAmountDueLookup(rows);
-    var totalPriceLookup = buildTotalPriceLookup(rows);
+    var repairLookups = runProcessPhase('process:repair-lookups', { rows: rows.length }, function () {
+      return buildAmountRepairLookups(rows);
+    });
+    var amountDueLookup = repairLookups.amountDue;
+    var totalPriceLookup = repairLookups.totalPrice;
     var totalSales = 0, totalDeliveredSales = 0;
     var rawOrderSet = {}, placedOrderSet = {}, canceledByYouOrderSet = {};
     var ndrBaseOrderSet = {}, deliveredOrderSet = {}, drBaseOrderSet = {}, drDeliveredOrderSet = {};
@@ -1607,6 +2210,7 @@
     var statusFinancialOrderSet = {};
     var cityOrderSet = {};
     var productOrderSet = {};
+    var totalPrepaidCount = 0, totalCodCount = 0;
 
     function statusFinancial(bucket) {
       bucket = bucket || 'other';
@@ -1641,6 +2245,7 @@
       fillRate: 0, filledRows: [], unfilledRows: []
     };
 
+    var mainRowPhase = startProcessPhase('process:main-row-loop', { rows: rows.length });
     rows.forEach(function (row, rowIndex) {
       var bucket = getStatusBucket(row.orderStatus || row.status);
       var exactBucket = exactStatusBucket(row);
@@ -1660,12 +2265,26 @@
       var inSelectedNdrBase = ndrEligible && inNdrCohortPeriod;
       var rowIsPrepaid = isRowPrepaid(row);
       var rowIsFailedOutcome = isFailedOutcomeBucket(exactBucket);
+      var exactStatusMeta = window.TaagerStatus && typeof window.TaagerStatus.statusInfo === 'function'
+        ? window.TaagerStatus.statusInfo(exactBucket)
+        : null;
+      var rowIsLostBucket = exactStatusMeta
+        ? exactStatusMeta.businessGroup === 'lost'
+        : isLostBucket(exactBucket);
+      var rowIsIncomingBucket = exactStatusMeta
+        ? exactStatusMeta.businessGroup === 'incoming'
+        : isIncomingBucket(exactBucket);
       var rowIsCanceledByYou = isCanceledByYouBucket(exactBucket);
       var rowIsNetOrder = !rowIsCanceledByYou;
       var isCalculatorDelivered = bucket === 'delivered' && inCreatedPeriod && rowIsNetOrder;
       var rowInConfirmedBase = inNdrCohortPeriod && rowIsNetOrder && !isConfirmedBaseExcludedBucket(exactBucket);
       var rowInBusinessConfirmedBase = inCreatedPeriod && rowIsNetOrder && !isConfirmedBaseExcludedBucket(exactBucket);
       var orderKey = orderOnlyKey(row, rowIndex);
+      var rowFinancialLineKey = financialLineKey(row);
+      row.__dashboardOrderKey = orderKey;
+      row.__dashboardFinancialLineKey = rowFinancialLineKey;
+      row.__dashboardExactBucket = exactBucket;
+      row.__dashboardInCreatedPeriod = inCreatedPeriod;
 
       if (inCreatedPeriod) {
         if (addOnce(rawOrderSet, orderKey)) {
@@ -1677,6 +2296,8 @@
 
       if (inCreatedPeriod && rowIsNetOrder && addOnce(placedOrderSet, orderKey)) {
         placedCount++;
+        if (rowIsPrepaid) totalPrepaidCount++;
+        else totalCodCount++;
       }
       if (inSelectedNdrBase && addOnce(ndrBaseOrderSet, orderKey)) {
         ndrBaseOrders++;
@@ -1730,18 +2351,17 @@
         }
       }
 
-      displayRows.push(Object.assign({}, row, {
-        dashboardTotalPrice: priceVal,
-        dashboardAmountDue: dueVal
-      }));
+      row.dashboardTotalPrice = priceVal;
+      row.dashboardAmountDue = dueVal;
+      displayRows.push(row);
 
-      if (inCreatedPeriod && rowIsNetOrder && addOnce(statusFinancialOrderSet, 'businessSales:' + financialLineKey(row))) {
+      if (inCreatedPeriod && rowIsNetOrder && addOnce(statusFinancialOrderSet, 'businessSales:' + rowFinancialLineKey)) {
         totalSales += priceVal;
       }
       if (inCreatedPeriod && rowIsNetOrder && addOnce(statusFinancialOrderSet, 'businessCommission:' + orderKey)) {
         totalPlacedCommission += commissionVal;
       }
-      if (isDeliveredInPeriod && rowIsNetOrder && addOnce(statusFinancialOrderSet, 'deliveredSales:' + financialLineKey(row))) {
+      if (isDeliveredInPeriod && rowIsNetOrder && addOnce(statusFinancialOrderSet, 'deliveredSales:' + rowFinancialLineKey)) {
         totalDeliveredSales += priceVal;
       }
 
@@ -1771,7 +2391,7 @@
         }
       }
 
-      if (isLostBucket(exactBucket)) {
+      if (rowIsLostBucket) {
         if (inCreatedPeriod && rowIsNetOrder) {
           if (addOnce(lostOrderSet, orderKey)) {
             failedCount++;
@@ -1779,7 +2399,7 @@
           }
           if (!rowIsPrepaid && addOnce(codOrderSet, 'lost:' + orderKey)) lostCodSar += dueVal;
         }
-      } else if (isIncomingBucket(exactBucket)) {
+      } else if (rowIsIncomingBucket) {
         if (inCreatedPeriod && rowIsNetOrder) {
           if (addOnce(stageOrderSet, exactBucket + ':' + orderKey)) {
             if (bucket === 'shipping')    shippingCount++;
@@ -1797,7 +2417,6 @@
       if (dateKey && !dailyStats[dateKey]) {
         dailyStats[dateKey] = emptyDayBucket();
         dayKeys.push(dateKey);
-        dayKeys.sort();
       }
       if (dateKey) {
         if (inCreatedPeriod && rowIsNetOrder) {
@@ -1810,10 +2429,10 @@
           if (addOnce(dailyOrderSet, dateKey + ':earned:' + orderKey)) dailyStats[dateKey].earned += commissionVal;
           if (!rowIsPrepaid && addOnce(dailyOrderSet, dateKey + ':codCollected:' + orderKey)) dailyStats[dateKey].codCollected += dueVal;
           if (!rowIsPrepaid && addOnce(dailyOrderSet, dateKey + ':codDue:' + orderKey)) dailyStats[dateKey].codDue += dueVal;
-        } else if (isLostBucket(exactBucket) && inCreatedPeriod && rowIsNetOrder) {
+        } else if (rowIsLostBucket && inCreatedPeriod && rowIsNetOrder) {
           if (addOnce(dailyOrderSet, dateKey + ':lostOrder:' + orderKey)) dailyStats[dateKey].orders++;
           if (addOnce(dailyOrderSet, dateKey + ':lost:' + orderKey)) dailyStats[dateKey].lost += commissionVal;
-        } else if (isIncomingBucket(exactBucket) && inCreatedPeriod && rowIsNetOrder) {
+        } else if (rowIsIncomingBucket && inCreatedPeriod && rowIsNetOrder) {
           if (addOnce(dailyOrderSet, dateKey + ':incomingOrder:' + orderKey)) dailyStats[dateKey].orders++;
           if (addOnce(dailyOrderSet, dateKey + ':incoming:' + orderKey)) dailyStats[dateKey].incoming += commissionVal;
           if (!rowIsPrepaid && isCodActiveBucket(bucket) && addOnce(dailyOrderSet, dateKey + ':incomingCodDue:' + orderKey)) dailyStats[dateKey].codDue += dueVal;
@@ -1826,10 +2445,13 @@
         if (span != null && span <= 60) deliveryDays.push(span);
       }
 
-      var rowCountry = effectiveCountry(row.taagerCountry || row.country, meta, 'sa');
-      var cityName = (row.city || '').toString().trim();
-      var cityKeyName = meta.isMixedCountry ? (rowCountry + '|' + cityName) : cityName;
-      if (cityName) {
+      if (buildCityStatsInMainLoop || buildProductStatsInMainLoop) {
+        var rowCountry = effectiveCountry(row.taagerCountry || row.country, meta, 'sa');
+        var cityName = (row.city || '').toString().trim();
+        var cityKeyName = meta.isMixedCountry ? (rowCountry + '|' + cityName) : cityName;
+        var productName = window.TaagerStatus ? window.TaagerStatus.productName(row) : (row.products || row.productName || row.product || '');
+        var productKey = (row.sku || productName || '').toLowerCase();
+        if (buildCityStatsInMainLoop && cityName) {
         if (!cityStats[cityKeyName]) {
           cityStats[cityKeyName] = {
             name: cityName,
@@ -1944,7 +2566,7 @@
             cityAccount.commission += commissionVal;
             cityAccount.deliveredSales += priceVal;
           }
-        } else if (isLostBucket(exactBucket) && inCreatedPeriod && rowIsNetOrder) {
+        } else if (rowIsLostBucket && inCreatedPeriod && rowIsNetOrder) {
           if (addOnce(cityOrderSet, 'lost:' + cityOrderKey)) {
             cs.canceledCount++;
             cs.lostCommission += commissionVal;
@@ -1955,7 +2577,7 @@
               cs.codCanceledCount++;
             }
           }
-        } else if (isIncomingBucket(exactBucket) && inCreatedPeriod && rowIsNetOrder) {
+        } else if (rowIsIncomingBucket && inCreatedPeriod && rowIsNetOrder) {
           if (addOnce(cityOrderSet, 'incoming:' + cityOrderKey)) {
             if (bucket === 'shipping')   cs.shippingCount++;
             if (bucket === 'confirmed')  cs.confirmedCount++;
@@ -1969,8 +2591,8 @@
           }
         }
 
-        var cityProductName = window.TaagerStatus ? window.TaagerStatus.productName(row) : (row.products || row.productName || row.product || '');
-        var cityProductKey = (row.sku || cityProductName || '').toLowerCase();
+        var cityProductName = productName;
+        var cityProductKey = productKey;
         if (cityProductKey) {
           if (!cs.productMap[cityProductKey]) {
             cs.productMap[cityProductKey] = {
@@ -2029,7 +2651,7 @@
             } else {
               cp.codDelivered++;
             }
-          } else if (isLostBucket(exactBucket) && inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'cityProductCanceled:' + cpOrderKey)) {
+          } else if (rowIsLostBucket && inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'cityProductCanceled:' + cpOrderKey)) {
             cp.canceled++;
 
             if (rowIsPrepaid) {
@@ -2041,9 +2663,8 @@
         }
       }
 
-      var productName = window.TaagerStatus ? window.TaagerStatus.productName(row) : (row.products || row.productName || row.product || '');
-      var productKey = (row.sku || productName || '').toLowerCase();
-      if (productKey) {
+      if (buildProductStatsInMainLoop && productKey) {
+        if (buildCampaignStatsInMainLoop) {
         var campaignProductKey = [
           String(row.accountId || meta.activeAccountId || ''),
           rowCountry,
@@ -2098,16 +2719,16 @@
           campaignProduct.placedCount++;
           campaignProduct.totalPlacedCommission += commissionVal;
           if (rowInBusinessConfirmedBase) campaignProduct.confirmedCount++;
-          if (isLostBucket(exactBucket)) {
+          if (rowIsLostBucket) {
             campaignProduct.failedCount++;
-          } else if (isIncomingBucket(exactBucket)) {
+          } else if (rowIsIncomingBucket) {
             if (bucket === 'shipping') campaignProduct.shippingCount++;
             else if (bucket === 'processing') campaignProduct.processingCount++;
             else if (bucket === 'waiting') campaignProduct.waitingCount++;
             else if (bucket === 'pending') campaignProduct.pendingCount++;
           }
         }
-        if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'campaignPlacedSales:' + campaignProductKey + ':' + financialLineKey(row))) {
+        if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'campaignPlacedSales:' + campaignProductKey + ':' + rowFinancialLineKey)) {
           campaignProduct.totalPlacedSales += priceVal;
         }
         if (inSelectedNdrBase && addOnce(productOrderSet, 'campaignNdr:' + campaignProductOrderKey)) {
@@ -2125,6 +2746,7 @@
         if (isDeliveredInPeriod && rowIsNetOrder && addOnce(productOrderSet, 'campaignDelivered:' + campaignProductOrderKey)) {
           campaignProduct.commission += commissionVal;
           campaignProduct.deliveredCount++;
+        }
         }
 
         if (!productStats[productKey]) {
@@ -2183,10 +2805,10 @@
           if (rowInBusinessConfirmedBase) {
             productStats[productKey].confirmedCount++;
           }
-          if (isLostBucket(exactBucket)) {
+          if (rowIsLostBucket) {
             productStats[productKey].realFailedCount++;
             productStats[productKey].failedCount++;
-          } else if (isIncomingBucket(exactBucket)) {
+          } else if (rowIsIncomingBucket) {
             if (bucket === 'shipping') productStats[productKey].shippingCount++;
             else if (bucket === 'processing') productStats[productKey].processingCount++;
             else if (bucket === 'waiting') productStats[productKey].waitingCount++;
@@ -2199,7 +2821,7 @@
         if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'accountPlaced:' + productAccountOrderKey)) {
           productAccount.orders++;
         }
-        if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'productFinancial:' + productKey + ':' + financialLineKey(row))) {
+        if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'productFinancial:' + productKey + ':' + rowFinancialLineKey)) {
           productStats[productKey].qty += rowQty;
           productStats[productKey].revenue += priceVal;
         }
@@ -2286,20 +2908,20 @@
           if (isDeliveredInPeriod && rowIsNetOrder && addOnce(productOrderSet, 'productCityDelivered:' + pcmOrderKey)) {
             pcm.delivered++;
             pcm.commission += commissionVal;
-          } else if (isLostBucket(exactBucket) && inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'productCityCanceled:' + pcmOrderKey)) {
+          } else if (rowIsLostBucket && inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'productCityCanceled:' + pcmOrderKey)) {
             pcm.canceled++;
           }
 
           if (rowIsPrepaid) {
             if (isDeliveredInPeriod && rowIsNetOrder && addOnce(productOrderSet, 'productCityPrepaidDelivered:' + pcmOrderKey)) {
               pcm.prepaidDelivered++;
-            } else if (isLostBucket(exactBucket) && inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'productCityPrepaidCanceled:' + pcmOrderKey)) {
+            } else if (rowIsLostBucket && inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'productCityPrepaidCanceled:' + pcmOrderKey)) {
               pcm.prepaidCanceled++;
             }
           } else {
             if (isDeliveredInPeriod && rowIsNetOrder && addOnce(productOrderSet, 'productCityCodDelivered:' + pcmOrderKey)) {
               pcm.codDelivered++;
-            } else if (isLostBucket(exactBucket) && inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'productCityCodCanceled:' + pcmOrderKey)) {
+            } else if (rowIsLostBucket && inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'productCityCodCanceled:' + pcmOrderKey)) {
               pcm.codCanceled++;
             }
           }
@@ -2362,8 +2984,11 @@
             productStats[productKey].quantityCityMap[piecesKey][cityKey] = _qcEntry;
           }
         }
+        }
       }
     });
+    if (dayKeys.length > 1) dayKeys.sort();
+    endProcessPhase(mainRowPhase);
 
     function resetExpectedRateCountersFromSource() {
       if (meta.deliveredDateMode !== 'expected') return;
@@ -2759,6 +3384,37 @@
       : deliveredCount;
     var deliveredAov = deliveredAovBase > 0 ? parseFloat((totalDeliveredSales / deliveredAovBase).toFixed(2)) : 0;
 
+    function ensureHeavyResult() {
+      if (buildHeavyStatsInMainLoop) return null;
+      if (lazyHeavyResult) return lazyHeavyResult;
+      lazyHeavyResult = runProcessPhase('process:heavy-models-lazy', { rows: rows.length }, function () {
+        return processSnapshotRows(rows, accountId, Object.assign({}, meta, {
+          __forceDashboardHeavyModels: true
+        }));
+      });
+      return lazyHeavyResult;
+    }
+
+    function ensureCitiesResult() {
+      if (buildCityStatsInMainLoop) return null;
+      if (lazyCitiesResult) return lazyCitiesResult;
+      lazyCitiesResult = runProcessPhase('process:cities-model-lazy', { rows: rows.length }, function () {
+        return processSnapshotRows(rows, accountId, Object.assign({}, meta, {
+          __forceDashboardCitiesModel: true
+        }));
+      });
+      return lazyCitiesResult;
+    }
+
+    function ensureCitiesModel() {
+      if (!buildCityStatsInMainLoop) {
+        var citiesResult = ensureCitiesResult();
+        return citiesResult && citiesResult.cod
+          ? { cities: citiesResult.cod.cities || [], mapCities: citiesResult.cod.mapCities || [] }
+          : { cities: [], mapCities: [] };
+      }
+      if (ensureCitiesModel.cache) return ensureCitiesModel.cache;
+      return (ensureCitiesModel.cache = runProcessPhase('process:cities-model', { cities: Object.keys(cityStats).length }, function () {
     var sortedCities = Object.keys(cityStats).map(function (keyName) {
       var stat = cityStats[keyName];
       var displayName = stat.name || keyName;
@@ -2899,17 +3555,15 @@
         : (coords[city.name] || fallbackCoords[idx] || { x: 150, y: 150 });
       return Object.assign({}, city, { x: dot.x, y: dot.y, sar: city.collected || 0 });
     });
+    return { cities: sortedCities, mapCities: mapCities };
+      }));
+    }
 
-    // ── T-18: Compute national KPI baselines for geo layer (moved up for product scaling score) ──────────────────────
+    // T-18: Compute national KPI baselines for geo layer (moved up for product scaling score)
     var nationalNdr = parseFloat(netDeliveryRate(ndrDeliveredOrders, ndrBaseOrders).toFixed(4));
     var nationalDr = drBaseOrders > 0
       ? parseFloat((drDeliveredOrders / drBaseOrders).toFixed(4))
       : 0;
-    var totalPrepaidCount = 0, totalCodCount = 0;
-    Object.keys(cityStats).forEach(function (cn) {
-      totalPrepaidCount += cityStats[cn].prepaidCount;
-      totalCodCount     += cityStats[cn].codCount;
-    });
     var nationalPrepaidPct = placedCount > 0
       ? parseFloat((totalPrepaidCount / placedCount).toFixed(4))
       : 0;
@@ -2926,15 +3580,19 @@
       avgCommission: avgCommission,
       taagerProfitAfterTax: taagerProfitAfterTax,
       avgOrderValue: placedCount > 0
-        ? parseFloat((Object.keys(cityStats).reduce(function (s, cn) { return s + cityStats[cn].totalRevenue; }, 0) / placedCount).toFixed(2))
+        ? parseFloat((totalSales / placedCount).toFixed(2))
         : 0
     };
 
-    var totalPiecesAll = Object.keys(productStats).reduce(function (sum, key) {
-      return sum + productStats[key].qty;
-    }, 0);
+    var totalPiecesAll = buildProductStatsInMainLoop
+      ? Object.keys(productStats).reduce(function (sum, key) {
+        return sum + productStats[key].qty;
+      }, 0)
+      : 0;
 
-    var rankedProducts = Object.keys(productStats).filter(function (key) {
+    function computeRankedProducts() {
+      return runProcessPhase('process:products-model', { products: Object.keys(productStats).length }, function () {
+    return Object.keys(productStats).filter(function (key) {
       return Number(productStats[key].placedCount || 0) > 0;
     }).map(function (key) {
       var p = productStats[key];
@@ -2970,7 +3628,10 @@
       var activeTotal = confirmationBase;
       var drPct = boundedProductRatePct(productDrDelivered, activeTotal, key + ':dr');
 
-      var productCities = Object.keys(p.cityMap)
+      var productCities = null;
+      function getProductCities() {
+        if (productCities) return productCities;
+        productCities = Object.keys(p.cityMap)
         .map(function (c) {
           var cm = p.cityMap[c];
           // T-11: cm is now a full object {orders, delivered, canceled, commission, revenue, ...}
@@ -3011,8 +3672,13 @@
         })
         .sort(function (a, b) { return b.count - a.count; })
         .slice(0, 5);
+        return productCities;
+      }
 
-      var piecesBreakdown = Object.keys(p.piecesMap)
+      var piecesBreakdown = null;
+      function getPiecesBreakdown() {
+        if (piecesBreakdown) return piecesBreakdown;
+        piecesBreakdown = Object.keys(p.piecesMap)
         .map(function (k) {
           var entry = p.piecesMap[k];
           var qtyCount = typeof entry === 'object' ? entry.count || 0 : entry;
@@ -3042,8 +3708,13 @@
           };
         })
         .sort(function (a, b) { return Number(a.qty) - Number(b.qty); });
+        return piecesBreakdown;
+      }
 
-      var quantityCityBreakdown = Object.keys(p.quantityCityMap)
+      var quantityCityBreakdown = null;
+      function getQuantityCityBreakdown() {
+        if (quantityCityBreakdown) return quantityCityBreakdown;
+        quantityCityBreakdown = Object.keys(p.quantityCityMap)
         .map(function (qtyKey) {
           return {
             qty: qtyKey,
@@ -3080,6 +3751,8 @@
           };
         })
         .sort(function (a, b) { return Number(a.qty) - Number(b.qty); });
+        return quantityCityBreakdown;
+      }
 
       var productPrepaidCount = 0;
       Object.keys(p.cityMap).forEach(function(c) {
@@ -3091,7 +3764,10 @@
         count: p.placedCount,
         prepaidPct: productPrepaidPct
       }, nationalAverages) : 0;
-      var productAccountBreakdown = Object.keys(p.accountMap || {}).map(function (accountKey) {
+      var productAccountBreakdown = null;
+      function getProductAccountBreakdown() {
+        if (productAccountBreakdown) return productAccountBreakdown;
+        productAccountBreakdown = Object.keys(p.accountMap || {}).map(function (accountKey) {
         var account = p.accountMap[accountKey];
         var accountNdrBase = account.ndrBaseOrders || account.orders || 0;
         return {
@@ -3106,6 +3782,8 @@
       }).sort(function (a, b) {
         return (b.orders - a.orders) || String(a.accountLabel || '').localeCompare(String(b.accountLabel || ''));
       });
+        return productAccountBreakdown;
+      }
 
       return {
         key: key,
@@ -3161,23 +3839,163 @@
         ndrPct:           ndrPct,
         deliveryPct:      deliveryPct,
         scalingScore:     scaleScore,
-        accountBreakdown: productAccountBreakdown,
-        cityBreakdown:    productCities,
-        piecesBreakdown:  piecesBreakdown,
-        quantityCityBreakdown: quantityCityBreakdown
+        get accountBreakdown() { return getProductAccountBreakdown(); },
+        get cityBreakdown() { return getProductCities(); },
+        get piecesBreakdown() { return getPiecesBreakdown(); },
+        get quantityCityBreakdown() { return getQuantityCityBreakdown(); }
       };
-    // FIX: sort descending — highest deliveredCount first; commission as tiebreaker (b - a = desc); key as alphabetical tie-breaker
+    // FIX: sort descending - highest deliveredCount first; commission as tiebreaker (b - a = desc); key as alphabetical tie-breaker
     }).sort(function (a, b) {
       return (b.deliveredCount - a.deliveredCount) || (b.commission - a.commission) || String(a.key || '').localeCompare(String(b.key || ''));
     });
 
-    var productsWithEmojis = rankedProducts.map(function (p, idx) {
+      });
+    }
+
+    function ensureProductsModel() {
+      if (!buildProductStatsInMainLoop) {
+        if (!lazyProductsResult) {
+          lazyProductsResult = runProcessPhase('process:products-model-lazy', { rows: rows.length }, function () {
+            return processSnapshotRows(rows, accountId, Object.assign({}, meta, {
+              __forceDashboardProductsModel: true
+            }));
+          });
+        }
+        return lazyProductsResult && lazyProductsResult.products
+          ? {
+            rankedList: lazyProductsResult.products.rankedList || [],
+            uniqueProducts: Number(lazyProductsResult.products.summary && lazyProductsResult.products.summary.uniqueProducts) || 0,
+            campaignList: []
+          }
+          : { rankedList: [], uniqueProducts: 0, campaignList: [] };
+      }
+      if (ensureProductsModel.cache) return ensureProductsModel.cache;
+      var rankedProducts = computeRankedProducts();
+      ensureProductsModel.cache = {
+        uniqueProducts: Object.keys(productStats).length,
+        rankedList: rankedProducts.map(function (p, idx) {
       return Object.assign({}, p, { rank: idx + 1, emoji: '📦' });
-    });
-    var campaignProducts = Object.keys(campaignProductStats).filter(function (key) {
-      return Number(campaignProductStats[key].placedCount || 0) > 0;
+        })
+      };
+      return ensureProductsModel.cache;
+    }
+
+    function ensureCampaignProductStats() {
+      if (buildCampaignStatsInMainLoop) return campaignProductStats;
+      if (lazyCampaignProductStats) return lazyCampaignProductStats;
+      return (lazyCampaignProductStats = runProcessPhase('process:campaign-row-loop', { rows: rows.length }, function () {
+        var stats = {};
+        var seen = {};
+        rows.forEach(function (row, rowIndex) {
+          var bucket = getStatusBucket(row.orderStatus || row.status);
+          var exactBucket = exactStatusBucket(row);
+          var productName = window.TaagerStatus ? window.TaagerStatus.productName(row) : (row.products || row.productName || row.product || '');
+          var productKey = (row.sku || productName || '').toLowerCase();
+          if (!productKey) return;
+
+          var commissionVal = rowCommissionValue(row);
+          var priceVal = rowTotalPrice(row);
+          var shouldProcessSales = isRowCreatedInPeriod(row, meta.period) || isDeliveredRowInPeriod(row, meta.period, meta.deliveredDateMode || 'actual');
+          if (shouldProcessSales && hasMissingTotalPrice(row)) {
+            var priceLookupInfo = totalPriceLookup[amountLookupKey(row)];
+            priceVal = priceLookupInfo && priceLookupInfo.amount > 0 ? priceLookupInfo.amount : 0;
+          }
+
+          var rowCountry = effectiveCountry(row.taagerCountry || row.country, meta, 'sa');
+          var orderKey = orderOnlyKey(row, rowIndex);
+          var ndrPeriodForRow = (meta.deliveredDateMode || 'actual') === 'expected' ? (meta.ndrPeriod || meta.period) : meta.period;
+          var inCreatedPeriod = isRowCreatedInPeriod(row, meta.period);
+          var inNdrCohortPeriod = isRowCreatedInPeriod(row, ndrPeriodForRow);
+          var ndrEligible = window.TaagerStatus ? window.TaagerStatus.isEligibleForNdr(row.orderStatus || row.status) : !isNdrCanceledBucket(exactBucket);
+          var inSelectedNdrBase = ndrEligible && inNdrCohortPeriod;
+          var isDeliveredInPeriod = isDeliveredRowInPeriod(row, meta.period, meta.deliveredDateMode || 'actual');
+          var isDeliveredInNdrCohort = bucket === 'delivered' && inNdrCohortPeriod;
+          var rowIsCanceledByYou = isCanceledByYouBucket(exactBucket);
+          var rowIsNetOrder = !rowIsCanceledByYou;
+          var rowInConfirmedBase = inNdrCohortPeriod && rowIsNetOrder && !isConfirmedBaseExcludedBucket(exactBucket);
+          var rowInBusinessConfirmedBase = inCreatedPeriod && rowIsNetOrder && !isConfirmedBaseExcludedBucket(exactBucket);
+          var campaignProductKey = [
+            String(row.accountId || meta.activeAccountId || ''),
+            rowCountry,
+            productKey
+          ].join('|');
+          if (!stats[campaignProductKey]) {
+            stats[campaignProductKey] = {
+              accountId: String(row.accountId || meta.activeAccountId || ''),
+              country: rowCountry,
+              currency: meta.reportingCurrency || meta.activeCurrency || 'SAR',
+              sku: row.sku || '',
+              name: productName || row.sku || raw('منتج غير معروف'),
+              placedCount: 0,
+              totalOrderCount: 0,
+              statusTotalCount: 0,
+              confirmationStatusCount: 0,
+              cancelStatusCount: 0,
+              pendingStatusCount: 0,
+              deliveredCount: 0,
+              ndrBaseCount: 0,
+              ndrConfirmedCount: 0,
+              ndrDeliveredCount: 0,
+              confirmedCount: 0,
+              canceledCount: 0,
+              failedCount: 0,
+              pendingCount: 0,
+              shippingCount: 0,
+              processingCount: 0,
+              waitingCount: 0,
+              commission: 0,
+              deliveredSales: 0,
+              totalPlacedSales: 0,
+              totalPlacedCommission: 0
+            };
+          }
+          var campaignProduct = stats[campaignProductKey];
+          var campaignProductOrderKey = campaignProductKey + ':' + orderKey;
+          if (inCreatedPeriod && addOnce(seen, 'campaignTotal:' + campaignProductOrderKey)) {
+            campaignProduct.totalOrderCount++;
+            if (rowIsCanceledByYou) campaignProduct.canceledCount++;
+            else {
+              campaignProduct.statusTotalCount++;
+              var campaignGroup = productStatusGroup(exactBucket);
+              if (campaignGroup === 'confirmation') campaignProduct.confirmationStatusCount++;
+              else if (campaignGroup === 'cancel') campaignProduct.cancelStatusCount++;
+              else campaignProduct.pendingStatusCount++;
+            }
+          }
+          if (inCreatedPeriod && rowIsNetOrder && addOnce(seen, 'campaignPlaced:' + campaignProductOrderKey)) {
+            campaignProduct.placedCount++;
+            campaignProduct.totalPlacedCommission += commissionVal;
+            if (rowInBusinessConfirmedBase) campaignProduct.confirmedCount++;
+            if (isLostBucket(exactBucket)) campaignProduct.failedCount++;
+            else if (isIncomingBucket(exactBucket)) {
+              if (bucket === 'shipping') campaignProduct.shippingCount++;
+              else if (bucket === 'processing') campaignProduct.processingCount++;
+              else if (bucket === 'waiting') campaignProduct.waitingCount++;
+              else if (bucket === 'pending') campaignProduct.pendingCount++;
+            }
+          }
+          if (inCreatedPeriod && rowIsNetOrder && addOnce(seen, 'campaignPlacedSales:' + campaignProductKey + ':' + financialLineKey(row))) campaignProduct.totalPlacedSales += priceVal;
+          if (inSelectedNdrBase && addOnce(seen, 'campaignNdr:' + campaignProductOrderKey)) campaignProduct.ndrBaseCount++;
+          if (rowInConfirmedBase && addOnce(seen, 'campaignNdrConfirmed:' + campaignProductOrderKey)) campaignProduct.ndrConfirmedCount++;
+          if (isDeliveredInNdrCohort && rowIsNetOrder && addOnce(seen, 'campaignNdrDelivered:' + campaignProductOrderKey)) campaignProduct.ndrDeliveredCount++;
+          if (isDeliveredInPeriod && rowIsNetOrder && addOnce(seen, 'campaignDeliveredSales:' + campaignProductKey + ':' + financialLineKey(row))) campaignProduct.deliveredSales += priceVal;
+          if (isDeliveredInPeriod && rowIsNetOrder && addOnce(seen, 'campaignDelivered:' + campaignProductOrderKey)) {
+            campaignProduct.commission += commissionVal;
+            campaignProduct.deliveredCount++;
+          }
+        });
+        return stats;
+      }));
+    }
+
+    function ensureCampaignModel() {
+      if (ensureCampaignModel.cache) return ensureCampaignModel.cache;
+      var campaignStats = ensureCampaignProductStats();
+      return (ensureCampaignModel.cache = runProcessPhase('process:campaign-model', { products: Object.keys(campaignStats).length }, function () {
+    return Object.keys(campaignStats).filter(function (key) {
+      return Number(campaignStats[key].placedCount || 0) > 0;
     }).map(function (key) {
-      var p = campaignProductStats[key];
+      var p = campaignStats[key];
       var expectedCampaignRateMode = meta.deliveredDateMode === 'expected';
       var campaignUsesGlobalNdr = expectedCampaignRateMode && p.ndrBaseCount <= 0;
       var campaignUsesGlobalDr = expectedCampaignRateMode && p.ndrConfirmedCount <= 0;
@@ -3220,6 +4038,8 @@
     }).sort(function (a, b) {
       return (b.placedCount - a.placedCount) || (b.commission - a.commission) || String(a.key || '').localeCompare(String(b.key || ''));
     });
+      }));
+    }
 
     function generatePeriodData(daysBack, field) {
       field = field || 'earned';
@@ -3241,6 +4061,9 @@
       : null;
     // NDR = delivered / (created orders - canceled-status orders).
     var ndrPct = netDeliveryRatePct(ndrDeliveredOrders, ndrBaseOrders);
+    // Keep the account calculator on the unrounded ratio. Other dashboard
+    // surfaces intentionally continue to use the compact one-decimal value.
+    var ndrPctExact = netDeliveryRate(ndrDeliveredOrders, ndrBaseOrders) * 100;
     var statusGroupCounts = { confirmation: 0, cancel: 0, pending: 0 };
     Object.keys(statusCounts).forEach(function (statusBucketKey) {
       var statusGroup = productStatusGroup(statusBucketKey);
@@ -3257,29 +4080,55 @@
 
     // National KPIs moved up before rankedProducts
 
-    // Call geo pass-2 builder if available (dashboard-aggregator-geo.js)
-    var geoProductMap = null, provinceMap = null, prepaidIntelligence = null, geoInsights = [];
-    if (typeof window.buildGeoProductMap === 'function') {
-      try {
-        var geoResult = window.buildGeoProductMap(cityStats, productStats, nationalAverages, meta);
-        geoProductMap       = geoResult.geoProductMap   || null;
-        provinceMap         = geoResult.provinceMap     || null;
-        prepaidIntelligence = geoResult.prepaidIntelligence || null;
-      } catch (geoErr) {
-        console.warn('[Dashboard][geo] buildGeoProductMap failed:', geoErr);
+    function ensureGeoModel() {
+      if (!buildHeavyStatsInMainLoop && !buildCityStatsInMainLoop) {
+        var citiesResult = ensureCitiesResult();
+        return citiesResult && citiesResult.geo
+          ? {
+            geoProductMap: citiesResult.geo.geoProductMap || null,
+            provinceMap: citiesResult.geo.provinceMap || null,
+            prepaidIntelligence: citiesResult.geo.prepaidIntelligence || null,
+            insights: citiesResult.geo.insights || [],
+            kpis: citiesResult.geo.kpis || nationalAverages
+          }
+          : { geoProductMap: null, provinceMap: null, prepaidIntelligence: null, insights: [], kpis: nationalAverages };
       }
+      if (ensureGeoModel.cache) return ensureGeoModel.cache;
+      return (ensureGeoModel.cache = runProcessPhase('process:geo-model', {
+        cities: Object.keys(cityStats).length,
+        products: Object.keys(productStats).length
+      }, function () {
+        var geoProductMap = null, provinceMap = null, prepaidIntelligence = null, geoInsights = [];
+        if (typeof window.buildGeoProductMap === 'function') {
+          try {
+            var geoResult = window.buildGeoProductMap(cityStats, productStats, nationalAverages, meta);
+            geoProductMap       = geoResult.geoProductMap   || null;
+            provinceMap         = geoResult.provinceMap     || null;
+            prepaidIntelligence = geoResult.prepaidIntelligence || null;
+          } catch (geoErr) {
+            console.warn('[Dashboard][geo] buildGeoProductMap failed:', geoErr);
+          }
+        }
+        if (typeof window.runInsightEngine === 'function' && geoProductMap) {
+          try {
+            geoInsights = window.runInsightEngine(
+              { cityStats: cityStats, productStats: productStats, geoProductMap: geoProductMap, provinceMap: provinceMap, kpis: nationalAverages },
+              THRESHOLDS
+            ) || [];
+          } catch (insightErr) {
+            console.warn('[Dashboard][geo] runInsightEngine failed:', insightErr);
+          }
+        }
+        return {
+          geoProductMap: geoProductMap,
+          provinceMap: provinceMap,
+          prepaidIntelligence: prepaidIntelligence,
+          insights: geoInsights,
+          kpis: nationalAverages
+        };
+      }));
     }
-    if (typeof window.runInsightEngine === 'function' && geoProductMap) {
-      try {
-        geoInsights = window.runInsightEngine(
-          { cityStats: cityStats, productStats: productStats, geoProductMap: geoProductMap, provinceMap: provinceMap, kpis: nationalAverages },
-          THRESHOLDS
-        ) || [];
-      } catch (insightErr) {
-        console.warn('[Dashboard][geo] runInsightEngine failed:', insightErr);
-      }
-    }
-    // ─────────────────────────────────────────────────────────────────────────────
+    // ---------------------------------------------------------------------------
 
     var savedRoiSettings = null;
     try {
@@ -3371,8 +4220,27 @@
       adSpend: roiAdSpend
     });
     // Taager dashboard/status/NDR migration: dashboard rows are created-date based.
-    var createdOrders = filterCreatedOrders(displayRows, meta.period);
-    var outcomeOrders = filterOutcomeOrders(displayRows, meta.period, meta.deliveredDateMode || 'actual');
+    var createdOrders = null;
+    var outcomeOrders = null;
+    function getCreatedOrders() {
+      if (createdOrders === null) {
+        createdOrders = orderLevelRows(
+          displayRows.filter(function (row) { return !!row.__dashboardInCreatedPeriod; }),
+          true
+        );
+      }
+      return createdOrders;
+    }
+    function getOutcomeOrders() {
+      if (outcomeOrders === null) {
+        outcomeOrders = orderLevelRows(
+          filterOutcomeOrders(displayRows, meta.period, meta.deliveredDateMode || 'actual'),
+          true
+        );
+      }
+      return outcomeOrders;
+    }
+    var orderSources = buildOrderSourceBreakdown(displayRows, meta, 30);
 
     var pmTotalCount = totalPrepaidCount + totalCodCount;
     var codVal = pmTotalCount > 0 ? parseFloat(((totalCodCount / pmTotalCount) * 100).toFixed(1)) : 0;
@@ -3381,7 +4249,10 @@
       { label: 'الدفع عند الاستلام', value: codVal, color: '#00e676' },
       { label: 'دفع مسبق', value: prepaidVal, color: '#3b82f6' }
     ] : [];
+    meta.processPhaseTimings = processPhaseTimings;
+    meta.lazyHeavyModels = !buildHeavyStatsInMainLoop;
 
+    return runProcessPhase('process:return-shape', null, function () {
     return {
       meta: meta,
       overview: {
@@ -3458,8 +4329,11 @@
       statusBreakdown: statusBreakdown,
       statusSummary: exactStatusSummary,
       lostBreakdown: lostBreakdown,
-      orders: orderLevelRows(createdOrders, true),
-      outcomeOrders: orderLevelRows(outcomeOrders, true),
+      getCreatedOrders: getCreatedOrders,
+      get orders() { return getCreatedOrders(); },
+      getOutcomeOrders: getOutcomeOrders,
+      get outcomeOrders() { return getOutcomeOrders(); },
+      orderSources: orderSources,
       cod: {
         netOrderCount: placedCount,
         totalOrderCount: rawTotalOrders,
@@ -3484,20 +4358,32 @@
         totalSalesRepairReport: totalSalesRepairReport,
         avgDays: avgDays, gapDelta: calcDelta(secondHalfOrders * 12, firstHalfOrders * 12),
         daysDelta: 0, rateDelta: calcDelta(collectionRate, 50),
-        gapSparkData: gapSpark, cities: sortedCities, mapCities: mapCities,
+        gapSparkData: gapSpark,
+        get cities() { return ensureCitiesModel().cities; },
+        get mapCities() { return ensureCitiesModel().mapCities; },
         payMethods: calculatedPayMethods, deliveredCount: pmTotalCount,
-        totalCitiesCount: Object.keys(cityStats).length
+        get totalCitiesCount() {
+          return buildCityStatsInMainLoop ? Object.keys(cityStats).length : ensureCitiesModel().cities.length;
+        }
       },
       products: {
         summary: {
           totalOrders: placedCount, netOrderCount: placedCount, totalOrderCount: rawTotalOrders, submitted: deliveredCount,
           confirmationRate: confirmationPct, drPct: drPct,
           totalComm: earnedCommission,
-          uniqueProducts: Object.keys(productStats).length,
-          totalPieces: totalPiecesAll
+          get uniqueProducts() {
+            return buildProductStatsInMainLoop ? Object.keys(productStats).length : ensureProductsModel().uniqueProducts;
+          },
+          get totalPieces() {
+            return buildProductStatsInMainLoop
+              ? totalPiecesAll
+              : ensureProductsModel().rankedList.reduce(function (sum, product) {
+                return sum + Number(product.totalPieces || product.qty || 0);
+              }, 0);
+          }
         },
-        rankedList: productsWithEmojis,
-        campaignList: campaignProducts
+        get rankedList() { return ensureProductsModel().rankedList; },
+        get campaignList() { return ensureCampaignModel(); }
       },
       commissionTrend: {
         total: earnedCommission,
@@ -3522,10 +4408,14 @@
       },
       roi: {
         adSpend: roiAdSpend, currency: roiCurrency, egpRate: roiEgpRate, sarRate: 3.75,
-        totalOrders: placedCount, netOrderCount: placedCount, totalOrderCount: rawTotalOrders, ndrPct: ndrPct, confirmationRate: confirmationPct, drPct: drPct,
+        totalOrders: placedCount, netOrderCount: placedCount, totalOrderCount: rawTotalOrders,
+        ndrPct: ndrPct, ndrPctExact: ndrPctExact,
+        orderSources: orderSources,
+        ndrBaseOrders: ndrBaseOrders, ndrDeliveredOrders: ndrDeliveredOrders,
+        confirmationRate: confirmationPct, drPct: drPct,
         averageProfit: avgCommission, avgCommission: avgCommission,
         taagerProfitAfterTax: taagerProfitAfterTax,
-        deliveredCount: deliveredCount, totalDeliveredSales: totalDeliveredSales,
+        deliveredCount: deliveredCount, shippingCount: shippingCount, totalDeliveredSales: totalDeliveredSales,
         actualDeliveredCount: actualDeliveredCount, actualEarnedProfitAfterTax: actualEarnedCommission, actualDeliveredSales: actualTotalDeliveredSales,
         expectedDeliveriesExact: accountFinancials.expectedDeliveriesExact,
         expectedDeliveriesDisplay: accountFinancials.expectedDeliveriesDisplay,
@@ -3541,20 +4431,31 @@
         avgCPA: accountFinancials.cpa
       },
 
-      // ── T-18: GEO Intelligence layer ────────────────────────────────────────
+      // T-18: GEO Intelligence layer
       // cityStats and productStats are the extended versions built during Pass 1.
       // geoProductMap / provinceMap are built by dashboard-aggregator-geo.js (Pass 2),
       // null until that file is loaded.
       geo: {
-        cityStats:          cityStats,
-        productStats:       productStats,
-        geoProductMap:      geoProductMap,
-        provinceMap:        provinceMap,
-        prepaidIntelligence: prepaidIntelligence,
-        insights:           geoInsights,
+        get cityStats() {
+          if (buildCityStatsInMainLoop) {
+            ensureCitiesModel();
+            return cityStats;
+          }
+          return (ensureCitiesResult() && ensureCitiesResult().geo && ensureCitiesResult().geo.cityStats) || {};
+        },
+        get productStats() {
+          return buildHeavyStatsInMainLoop
+            ? productStats
+            : ((ensureHeavyResult() && ensureHeavyResult().geo && ensureHeavyResult().geo.productStats) || {});
+        },
+        get geoProductMap() { return ensureGeoModel().geoProductMap; },
+        get provinceMap() { return ensureGeoModel().provinceMap; },
+        get prepaidIntelligence() { return ensureGeoModel().prepaidIntelligence; },
+        get insights() { return ensureGeoModel().insights; },
         kpis:               nationalAverages
       }
-      // ─────────────────────────────────────────────────────────────────────────
+      // ---------------------------------------------------------------------------
     };
+    });
   }
 })();

@@ -1,15 +1,25 @@
 <!doctype html>
-<html lang="en" dir="ltr">
+<html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co https://generativelanguage.googleapis.com https://open.er-api.com https://*.ingest.sentry.io https://sentry.io;">
     <title>Taager Bot</title>
+    <script>
+      (function () {
+        var lang = 'ar';
+        try { lang = localStorage.getItem('kbot-lang') || lang; } catch (e) {}
+        lang = lang === 'en' ? 'en' : 'ar';
+        window.__TAAGER_BOOT_LANG = lang;
+        document.documentElement.setAttribute('lang', lang);
+        document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <!-- Load fonts async so a slow/offline network never blocks first paint -->
-    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Syne:wght@400..800&family=Tajawal:wght@200;300;400;500;700;800;900&display=swap" onload="this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Syne:wght@400..800&family=Tajawal:wght@200;300;400;500;700;800;900&display=swap"></noscript>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Syne:wght@400..800&family=Tajawal:wght@200;300;400;500;700;800;900&display=swap" onload="this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Syne:wght@400..800&family=Tajawal:wght@200;300;400;500;700;800;900&display=swap"></noscript>
     <link rel="stylesheet" href="../../node_modules/country-flag-icons/3x2/flags.css" />
     <link rel="stylesheet" href="styles/main.css" />
     <style>
@@ -22,7 +32,7 @@
         overflow: hidden;
         background: #0b0f1a;
       }
-      /* ── Preloader ── */
+      /* Preloader */
       #preloader {
         position: fixed;
         top: 0;
@@ -37,7 +47,7 @@
       }
       .preloader-center {
         width: min(360px, calc(100vw - 48px));
-        min-height: 190px;
+        min-height: 210px;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -46,11 +56,7 @@
         text-align: center;
         padding: 12px;
       }
-      .preloader-mark {
-        position: relative;
-        width: 120px;
-        height: 120px;
-      }
+      .preloader-mark { position: relative; width: 120px; height: 120px; }
       .ring {
         position: absolute;
         inset: 0;
@@ -84,52 +90,54 @@
       .preloader-copy {
         display: flex;
         flex-direction: column;
-        gap: 7px;
+        gap: 8px;
+        width: min(320px, 100%);
         max-width: 320px;
         font-family: 'Tajawal', 'Segoe UI', sans-serif;
       }
-      .preloader-title {
-        color: #ffffff;
-        font-size: 15px;
-        font-weight: 800;
-        line-height: 1.35;
+      .preloader-title { color:#fff; font-size:15px; font-weight:800; line-height:1.35; }
+      [lang="ar"] [data-preloader-lang="en"],
+      [lang="en"] [data-preloader-lang="ar"] {
+        display: none;
       }
       .preloader-body {
-        color: rgba(226, 232, 240, 0.72);
-        font-size: 12px;
-        font-weight: 600;
-        line-height: 1.55;
+        position: relative;
+        min-height: 20px;
+        color:rgba(226,232,240,.72);
+        font-size:12px;
+        font-weight:600;
+        line-height:1.55;
+        overflow: hidden;
       }
-      @keyframes preloader-spin {
-        to {
-          transform: rotate(360deg);
-        }
+      .preloader-body .preloader-phrase {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        transform: translateY(8px);
+        animation: preloader-phrase 7.2s ease-in-out infinite;
       }
+      .preloader-body .preloader-phrase:nth-child(2) { animation-delay: 2.4s; }
+      .preloader-body .preloader-phrase:nth-child(3) { animation-delay: 4.8s; }
+      @keyframes preloader-spin { to { transform: rotate(360deg); } }
       @keyframes preloader-pulse {
-        0%,
-        100% {
-          transform: scale(0.9);
-          opacity: 0.5;
-        }
-        50% {
-          transform: scale(1.2);
-          opacity: 1;
-        }
+        0%,100% { transform: scale(.9); opacity:.5; }
+        50% { transform: scale(1.2); opacity:1; }
       }
-
-      [data-theme="light"] #preloader {
-        background: #f6f7f9;
+      @keyframes preloader-phrase {
+        0%, 12% { opacity: 0; transform: translateY(8px); }
+        18%, 44% { opacity: 1; transform: translateY(0); }
+        52%, 100% { opacity: 0; transform: translateY(-8px); }
       }
-      [data-theme="light"] .logo {
-        color: #1e2535;
+      [data-theme="light"] #preloader { background:#f6f7f9; }
+      [data-theme="light"] .logo { color:#1e2535; }
+      [data-theme="light"] .preloader-title { color:#111827; }
+      [data-theme="light"] .preloader-body { color:#64748b; }
+      @media (prefers-reduced-motion: reduce) {
+        .ring,
+        .glow,
+        .preloader-body .preloader-phrase { animation: none; }
+        .preloader-body .preloader-phrase:first-child { opacity: 1; transform: none; }
       }
-      [data-theme="light"] .preloader-title {
-        color: #111827;
-      }
-      [data-theme="light"] .preloader-body {
-        color: #64748b;
-      }
-
       /* ── Titlebar overrides ── */
       .titlebar {
         height: 48px !important;
@@ -551,12 +559,27 @@
           <div class="logo">MO</div>
         </div>
         <div class="preloader-copy" role="status" aria-live="polite">
-          <div class="preloader-title" id="preloader-title">Preparing workspace...</div>
-          <div class="preloader-body" id="preloader-body">Loading your saved account, permissions, and app settings.</div>
+          <div class="preloader-title" id="preloader-title">
+            <span data-preloader-lang="en">Preparing workspace...</span>
+            <span data-preloader-lang="ar">جارٍ تجهيز مساحة العمل...</span>
+          </div>
+          <div class="preloader-body" id="preloader-body">
+            <span class="preloader-phrase">
+              <span data-preloader-lang="en">Checking your saved session...</span>
+              <span data-preloader-lang="ar">جارٍ فحص الجلسة المحفوظة...</span>
+            </span>
+            <span class="preloader-phrase">
+              <span data-preloader-lang="en">Loading app settings...</span>
+              <span data-preloader-lang="ar">جارٍ تحميل إعدادات التطبيق...</span>
+            </span>
+            <span class="preloader-phrase">
+              <span data-preloader-lang="en">Preparing your workspace...</span>
+              <span data-preloader-lang="ar">جارٍ تجهيز مساحة العمل...</span>
+            </span>
+          </div>
         </div>
       </div>
     </div>
-
     <!-- Titlebar: [⚡ App Name] ···· [avatar + name + days] ···· [EN 🌐] [Dark 🌙] [— □ ✖] -->
     <div class="titlebar" id="main-titlebar">
       <!-- App branding -->
@@ -681,6 +704,7 @@
     <script src="pages/license.js"></script>
     <script src="pages/expired-overlay.js"></script>
     <script src="pages/license-expiry-warning.js"></script>
+    <script src="admin-notifications.js"></script>
     <script src="pages/analytics/analytics-utils.js"></script>
     <script src="pages/setup.js"></script>
     <script src="pages/run.js?v=sidebar-fix-20260523"></script>

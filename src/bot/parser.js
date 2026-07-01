@@ -1,8 +1,9 @@
 "use strict";
 
 const XLSX = require("xlsx");
-const { normalizePhone, normalizePhoneWithMeta } = require("./phone");
+const { normalizePhone, normalizePhoneCandidatesWithMeta } = require("./phone");
 const { normalizeTaagerCountry } = require("./taager-country");
+const { normalizeProvinceMatch } = require("./output");
 
 const config = JSON.parse(process.env.BOT_CONFIG || "{}");
 const COUNTRY = normalizeTaagerCountry(config.taagerCountry || config.taagerCountry || "sa");
@@ -226,6 +227,11 @@ function explodeRealOrderRow(row, phoneMeta) {
     source: "real",
     normPhone: phoneMeta.digits,
     uncertain: !!phoneMeta.uncertain,
+    phoneAmbiguous: !!phoneMeta.phoneAmbiguous,
+    phoneAmbiguityGroupId: phoneMeta.phoneAmbiguityGroupId || "",
+    phoneCandidateIndex: phoneMeta.phoneCandidateIndex || 1,
+    phoneCandidateCount: phoneMeta.phoneCandidateCount || 1,
+    phoneCorrection: phoneMeta.correction || "",
     rawPhone: row["Phone"],
     name: String(row["FullName"] || "").trim() || ("0" + phoneMeta.digits),
     city: rawCity || null,
@@ -282,20 +288,36 @@ function parseRealOrders(buffer, dateFrom, dateTo) {
   const skipped = { date: 0, phone: 0, status: 0, sku: 0 };
   let uncertainPhones = 0;
 
-  for (const row of rows) {
+  let ambiguousPhones = 0;
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    const row = rows[rowIndex];
     if (!matchesDateRange(row["CreatedAt"], dateFrom, dateTo)) { skipped.date++; continue; }
     const status = String(row["Status"] || "").toLowerCase();
     if (status === "cancelled" || status === "canceled") { skipped.status++; continue; }
-    const phoneMeta = normalizePhoneWithMeta(row["Phone"], COUNTRY);
-    if (!phoneMeta) { skipped.phone++; continue; }
-    if (phoneMeta.uncertain) uncertainPhones++;
-    const exploded = explodeRealOrderRow(row, phoneMeta);
-    if (!exploded.length) { skipped.sku++; continue; }
-    orders.push(...exploded);
+    const phoneMetas = normalizePhoneCandidatesWithMeta(row["Phone"], COUNTRY);
+    if (!phoneMetas.length) { skipped.phone++; continue; }
+    if (phoneMetas.some((meta) => meta.uncertain)) uncertainPhones++;
+    if (phoneMetas.length > 1) ambiguousPhones++;
+
+    const groupId = phoneMetas.length > 1 ? `real-${rowIndex + 2}` : "";
+    let explodedCount = 0;
+    phoneMetas.forEach((phoneMeta, candidateIndex) => {
+      const exploded = explodeRealOrderRow(row, {
+        ...phoneMeta,
+        phoneAmbiguous: phoneMetas.length > 1,
+        phoneAmbiguityGroupId: groupId,
+        phoneCandidateIndex: candidateIndex + 1,
+        phoneCandidateCount: phoneMetas.length,
+      });
+      explodedCount += exploded.length;
+      orders.push(...exploded);
+    });
+    if (!explodedCount) skipped.sku++;
   }
 
   console.log(`Real orders: ${orders.length} valid items | skipped date:${skipped.date} phone:${skipped.phone} status:${skipped.status} sku:${skipped.sku}`);
   if (uncertainPhones > 0) console.log(`Real orders uncertain phones rescued with trailing 0: ${uncertainPhones}`);
+  if (ambiguousPhones > 0) console.log(`Real orders expanded from ambiguous phones: ${ambiguousPhones}`);
   return orders;
 }
 
@@ -308,7 +330,9 @@ function parseMissedOrders(buffer, dateFrom, dateTo) {
   const skipped = { date: 0, phone: 0, completed: 0 };
   let uncertainPhones = 0;
 
-  for (const row of rows) {
+  let ambiguousPhones = 0;
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    const row = rows[rowIndex];
     const isCompleted = String(row["Is Completed"] || "").toLowerCase();
     if (isCompleted === "true" || isCompleted === "1") { skipped.completed++; continue; }
     if (!matchesDateRange(row["Created At"], dateFrom, dateTo)) { skipped.date++; continue; }
@@ -317,8 +341,8 @@ function parseMissedOrders(buffer, dateFrom, dateTo) {
 
     const rawProducts = String(row["Products"] || "").trim();
     const productText = stripProductBrackets(rawProducts) || rawProducts;
-    const phoneMeta = normalizePhoneWithMeta(row["Phone"], COUNTRY);
-    if (!phoneMeta) {
+    const phoneMetas = normalizePhoneCandidatesWithMeta(row["Phone"], COUNTRY);
+    if (!phoneMetas.length) {
       skipped.phone++;
       skippedOrders.push({
         name: String(row["Full Name"] || "").trim(),
@@ -331,31 +355,42 @@ function parseMissedOrders(buffer, dateFrom, dateTo) {
       continue;
     }
 
-    if (phoneMeta.uncertain) uncertainPhones++;
-    const baseOrder = {
-      source: "missed",
-      normPhone: phoneMeta.digits,
-      uncertain: !!phoneMeta.uncertain,
-      rawPhone: row["Phone"],
-      name: String(row["Full Name"] || "").trim() || ("0" + phoneMeta.digits),
-      city: String(row["Government"] || row["City"] || "").trim(),
-      address: String(row["Address"] || "").trim(),
-      date: createdDate,
-      createdAt: createdDate,
-      easyCreatedAt,
-      sku: null,
-      qty: null,
-      subtotal: null,
-      unitPrice: null,
-    };
+    if (phoneMetas.some((meta) => meta.uncertain)) uncertainPhones++;
+    if (phoneMetas.length > 1) ambiguousPhones++;
+    const groupId = phoneMetas.length > 1 ? `missed-${rowIndex + 2}` : "";
 
-    productText.split("|").map((part) => part.trim()).filter(Boolean).forEach((productName) => {
-      orders.push({ ...baseOrder, productName });
+    phoneMetas.forEach((phoneMeta, candidateIndex) => {
+      const baseOrder = {
+        source: "missed",
+        normPhone: phoneMeta.digits,
+        uncertain: !!phoneMeta.uncertain,
+        phoneAmbiguous: phoneMetas.length > 1,
+        phoneAmbiguityGroupId: groupId,
+        phoneCandidateIndex: candidateIndex + 1,
+        phoneCandidateCount: phoneMetas.length,
+        phoneCorrection: phoneMeta.correction || "",
+        rawPhone: row["Phone"],
+        name: String(row["Full Name"] || "").trim() || ("0" + phoneMeta.digits),
+        city: String(row["Government"] || row["City"] || "").trim(),
+        address: String(row["Address"] || "").trim(),
+        date: createdDate,
+        createdAt: createdDate,
+        easyCreatedAt,
+        sku: null,
+        qty: null,
+        subtotal: null,
+        unitPrice: null,
+      };
+
+      productText.split("|").map((part) => part.trim()).filter(Boolean).forEach((productName) => {
+        orders.push({ ...baseOrder, productName });
+      });
     });
   }
 
   console.log(`Missed orders: ${orders.length} valid | skipped date:${skipped.date} phone:${skipped.phone} completed:${skipped.completed}`);
   if (uncertainPhones > 0) console.log(`Missed orders uncertain phones rescued with trailing 0: ${uncertainPhones}`);
+  if (ambiguousPhones > 0) console.log(`Missed orders expanded from ambiguous phones: ${ambiguousPhones}`);
   if (skippedOrders.length > 0) console.log(`Phone-parse failures: ${skippedOrders.length}`);
   return { orders, skippedOrders };
 }
@@ -380,8 +415,12 @@ function buildProductCatalog(realOrders) {
     const prices = {};
     for (const [qty, samples] of Object.entries(entry.prices)) {
       const freq = {};
-      for (const sample of samples) freq[sample] = (freq[sample] || 0) + 1;
-      prices[qty] = Number(Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0]);
+      for (const sample of Array.isArray(samples) ? samples : []) {
+        if (!Number.isFinite(Number(sample))) continue;
+        freq[sample] = (freq[sample] || 0) + 1;
+      }
+      const entries = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+      prices[qty] = entries.length ? Number(entries[0][0]) : 0;
     }
     result[name] = { sku: entry.sku, productName: name, minQty: qtys[0] || 1, prices };
   }
@@ -503,12 +542,120 @@ function splitTaagerProducts(value) {
   return splitCellLines(value).flatMap((line) => String(line).split(/[|,]/).map((part) => part.trim()).filter(Boolean));
 }
 
+const PROVINCE_FALLBACK_POLICY = Object.freeze({
+  skuMinDelivered: 10,
+  skuMinWinner: 3,
+  skuMinShare: 0.30,
+  globalMinDelivered: 10,
+  globalMinWinner: 3,
+  globalMinShare: 0.20,
+});
+
+function chooseProvinceFallback(counts, total, policy) {
+  let province = "";
+  let winnerCount = 0;
+  for (const [candidate, count] of counts.entries()) {
+    // Strictly greater keeps first-seen as the deterministic tie-breaker.
+    if (count > winnerCount) {
+      province = candidate;
+      winnerCount = count;
+    }
+  }
+  const share = total > 0 ? winnerCount / total : 0;
+  const qualified = total >= policy.minDelivered
+    && winnerCount >= policy.minWinner
+    && share >= policy.minShare;
+  return { province: qualified ? province : "", winner: province, winnerCount, total, share, qualified };
+}
+
+function buildProvinceFallback(rows, indexes, country = COUNTRY) {
+  const globalCounts = new Map();
+  const skuCounts = new Map();
+  const skuTotals = new Map();
+  let deliveredRows = 0;
+  let validDeliveredRows = 0;
+
+  if (!Array.isArray(rows) || indexes.city < 0 || indexes.status < 0 || indexes.products < 0) {
+    return { provinceFallback: "", provinceFallbackBySku: {}, provinceFallbackCounts: {}, provinceFallbackStats: {} };
+  }
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    if (!isTaagerStatus(row[indexes.status], "DELIVERED")) continue;
+    deliveredRows++;
+
+    const rawCity = String(row[indexes.city] || "").trim();
+    if (!rawCity || rawCity.toLowerCase() === "unspecified") continue;
+    const match = normalizeProvinceMatch(rawCity, country);
+    if (!match.matched || !match.province) continue;
+    validDeliveredRows++;
+    globalCounts.set(match.province, (globalCounts.get(match.province) || 0) + 1);
+
+    // Each distinct SKU receives one sample per Taager order row, regardless of quantity.
+    const rowSkus = new Set(splitTaagerProducts(row[indexes.products]));
+    for (const sku of rowSkus) {
+      if (!skuCounts.has(sku)) skuCounts.set(sku, new Map());
+      const counts = skuCounts.get(sku);
+      counts.set(match.province, (counts.get(match.province) || 0) + 1);
+      skuTotals.set(sku, (skuTotals.get(sku) || 0) + 1);
+    }
+  }
+
+  const globalChoice = chooseProvinceFallback(globalCounts, validDeliveredRows, {
+    minDelivered: PROVINCE_FALLBACK_POLICY.globalMinDelivered,
+    minWinner: PROVINCE_FALLBACK_POLICY.globalMinWinner,
+    minShare: PROVINCE_FALLBACK_POLICY.globalMinShare,
+  });
+  const provinceFallbackBySku = Object.create(null);
+  const skuStats = Object.create(null);
+  for (const [sku, counts] of skuCounts.entries()) {
+    const choice = chooseProvinceFallback(counts, skuTotals.get(sku) || 0, {
+      minDelivered: PROVINCE_FALLBACK_POLICY.skuMinDelivered,
+      minWinner: PROVINCE_FALLBACK_POLICY.skuMinWinner,
+      minShare: PROVINCE_FALLBACK_POLICY.skuMinShare,
+    });
+    if (choice.qualified) provinceFallbackBySku[sku] = choice.province;
+    skuStats[sku] = { ...choice, counts: Object.fromEntries(counts.entries()) };
+  }
+
+  return {
+    provinceFallback: globalChoice.province,
+    provinceFallbackBySku,
+    provinceFallbackCounts: Object.fromEntries(globalCounts.entries()),
+    provinceFallbackStats: {
+      policy: PROVINCE_FALLBACK_POLICY,
+      deliveredRows,
+      validDeliveredRows,
+      global: globalChoice,
+      bySku: skuStats,
+    },
+  };
+}
+
+function logProvinceFallbackDecision(fallbackStats) {
+  const stats = fallbackStats.provinceFallbackStats || {};
+  const global = stats.global || {};
+  const percentage = Number.isFinite(global.share) ? `${Math.round(global.share * 100)}%` : "0%";
+  const globalDecision = global.qualified
+    ? `${global.province} (${global.winnerCount}/${global.total}, ${percentage})`
+    : `none; leading=${global.winner || "none"} (${global.winnerCount || 0}/${global.total || 0}, ${percentage})`;
+  const qualifiedSkus = Object.entries(fallbackStats.provinceFallbackBySku || {});
+  const skuPreview = qualifiedSkus.slice(0, 20).map(([sku, province]) => `${sku}=>${province}`).join(", ");
+  console.log(
+    `[Province fallback] delivered rows=${stats.deliveredRows || 0} | usable city rows=${stats.validDeliveredRows || 0}`
+    + ` | global=${globalDecision} | qualified SKUs=${qualifiedSkus.length}`
+  );
+  if (skuPreview) {
+    console.log(`[Province fallback] SKU choices: ${skuPreview}${qualifiedSkus.length > 20 ? `, ... +${qualifiedSkus.length - 20} more` : ""}`);
+  }
+}
+
 function parseTaagerAnalyticsMap(buffer) {
   try {
     const wb = XLSX.read(buffer, { type: "buffer" });
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
-    if (!rows || rows.length < 2) return { byPhoneSku: new Map(), skuDefaults: {} };
+    if (!rows || rows.length < 2) return { byPhoneSku: new Map(), skuDefaults: {}, provinceFallback: "", provinceFallbackBySku: {}, provinceFallbackCounts: {}, provinceFallbackStats: {} };
 
     const header = rows[0] || [];
     const orderIdx = findHeaderIndex(header, ["رقم الطلب", "Order Number"], 0);
@@ -522,6 +669,7 @@ function parseTaagerAnalyticsMap(buffer) {
     const productsIdx = findHeaderIndex(header, ["المنتجات", "Products", "SKU"], 16);
     const qtyIdx = findHeaderIndex(header, ["الكميات", "Quantity", "Qty"], 17);
     const priceIdx = findHeaderIndex(header, ["الأسعار", "Prices", "Price"], 18);
+    const fallbackStats = buildProvinceFallback(rows, { city: cityIdx, status: statusIdx, products: productsIdx }, COUNTRY);
 
     const byPhoneSku = new Map();
     const skuSamples = {};
@@ -575,11 +723,12 @@ function parseTaagerAnalyticsMap(buffer) {
       skuDefaults[sku] = { amountDue, marketerCommission };
     }
 
-    console.log(`Taager analytics map: ${byPhoneSku.size} phone+SKU pairs | ${Object.keys(skuDefaults).length} SKU templates`);
-    return { byPhoneSku, skuDefaults };
+    logProvinceFallbackDecision(fallbackStats);
+    console.log(`Taager analytics map: ${byPhoneSku.size} phone+SKU pairs | ${Object.keys(skuDefaults).length} SKU templates | fallback province: ${fallbackStats.provinceFallback || "none"}`);
+    return { byPhoneSku, skuDefaults, ...fallbackStats };
   } catch (err) {
     console.error("[Analytics] parseTaagerAnalyticsMap error:", err.message);
-    return { byPhoneSku: new Map(), skuDefaults: {} };
+    return { byPhoneSku: new Map(), skuDefaults: {}, provinceFallback: "", provinceFallbackBySku: {}, provinceFallbackCounts: {}, provinceFallbackStats: {} };
   }
 }
 
@@ -633,6 +782,7 @@ function parseFullMonthSnapshot(buffer, options = {}) {
       storeOrder: findHeaderIndex(header, ["كود الطلب للمتجر", "Order ID on your store"], 22),
     };
 
+    idx.orderSource = findHeaderIndex(header, ["\u0627\u0644\u0637\u0644\u0628 \u0627\u0644\u0645\u0633\u062a\u0644\u0645 \u0628\u0648\u0627\u0633\u0637\u0629", "Order received by", "Received By", "Order Source"], 19);
     idx.payment = findHeaderIndex(header, ["Payment Method", "Payment"], -1);
     const diagnostics = {
       sourceRows: Math.max(0, rows.length - 1),
@@ -762,6 +912,8 @@ function parseFullMonthSnapshot(buffer, options = {}) {
           marketerCommission: taagerProfitValue,
           orderType: "",
           notes,
+          orderSource: String(row[idx.orderSource] || "").trim(),
+          rawOrderSource: String(row[idx.orderSource] || "").trim(),
           paymentMethod: payment.method,
           paymentClassification: payment.classification,
           paymentEvidenceSource: payment.source,

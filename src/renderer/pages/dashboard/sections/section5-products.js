@@ -1,4 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
+﻿// ─────────────────────────────────────────────────────────────────────────────
 // section5-products.js  -  Task 5: أفضل المنتجات
 //
 // FIXES vs v6:
@@ -8,7 +8,25 @@
 //  Product values render at their final value with no count-up or entry motion.
 // ─────────────────────────────────────────────────────────────────────────────
 
-window.renderSection5 = function (mountEl, data, ctx) {
+function isActiveProductsPane(mountEl) {
+  var shell = document.getElementById('db-shell-mount');
+  return !!(mountEl && mountEl.isConnected && shell &&
+    shell._dashboardActiveSection === 'products' &&
+    shell._dashboardActivePane === mountEl && !mountEl.hidden);
+}
+
+function productsHydrationSkeleton() {
+  return '<div class="dash-scroll" data-dashboard-hydrating="products" role="status" aria-live="polite" aria-label="Loading" ' +
+    'style="flex:1;display:flex;align-items:center;justify-content:center;background:#080b12;">' +
+      '<div aria-hidden="true" style="width:min(720px,78%);display:grid;gap:14px;">' +
+        '<div style="height:28px;width:38%;border-radius:10px;background:rgba(255,255,255,0.07);"></div>' +
+        '<div style="height:92px;border-radius:16px;background:rgba(255,255,255,0.045);"></div>' +
+        '<div style="height:160px;border-radius:16px;background:rgba(255,255,255,0.035);"></div>' +
+      '</div>' +
+    '</div>';
+}
+
+function renderSection5Hydrated(mountEl, data, ctx) {
   const isAr = window.dashboardI18n ? window.dashboardI18n.currentLocale === 'ar' : true;
   function s5Txt(en, ar) {
     var value = window.dashboardI18n && window.dashboardI18n.pick
@@ -29,7 +47,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
       .replace(/\u2193/g, '↓')
       .replace(/\u2191/g, '↑')
       .replace(/\u2195/g, '↕')
-      .replace(/x/g, '×');
+      .replace(/\u00d7/g, 'x');
   }
   function tx(key) {
     var str = window.dashboardI18n ? window.dashboardI18n.t(key) : key;
@@ -65,6 +83,19 @@ window.renderSection5 = function (mountEl, data, ctx) {
     return esc(value).replace(/`/g, '&#96;');
   }
 
+  function skuCopyHtml(sku, opts) {
+    opts = opts || {};
+    if (window.dashboardSkuCopyHtml) return window.dashboardSkuCopyHtml(sku, opts);
+    var value = String(sku || '').trim();
+    if (!value && opts.hideEmpty) return '';
+    var display = opts.text != null ? String(opts.text) : (value || opts.emptyText || 'N/A');
+    var label = opts.label == null ? 'SKU' : String(opts.label || '');
+    var prefix = opts.prefix === false || !label ? '' : label + (opts.separator == null ? ': ' : opts.separator);
+    var tag = opts.block ? 'div' : 'span';
+    var style = opts.style ? ' style="' + attr(opts.style) + '"' : '';
+    return '<' + tag + ' dir="ltr"' + style + '>' + esc(prefix + display) + '</' + tag + '>';
+  }
+
   function escData(value) {
     return String(value == null ? '' : value)
       .replace(/&/g, '&amp;')
@@ -88,6 +119,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
   // ── data defaults ────────────────────────────────────────────────────────
   const pd = (data && data.products) ? data.products : null;
+  const forceProductsModel = true;
+  const deferProductsModel = false;
   const activeCurrency = data && data.meta && data.meta.activeCurrency || window.dashboardActiveCurrency || 'SAR';
 
   const PRODUCTS_DEFAULT = [];
@@ -165,7 +198,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
     overlay.innerHTML =
       '<div role="dialog" aria-modal="true" aria-labelledby="s5-edit-name-title" style="width:min(440px,94vw);border-radius:16px;background:#0b1120;border:1px solid rgba(255,255,255,0.12);padding:18px;color:#fff;font-family:inherit">' +
         '<div id="s5-edit-name-title" style="font-size:16px;font-weight:900;margin-bottom:6px">' + esc(s5Txt('Edit product name', 'تعديل اسم المنتج')) + '</div>' +
-        '<div style="font-size:11px;color:rgba(255,255,255,0.48);font-weight:700;margin-bottom:12px;direction:ltr;text-align:left">' + esc(sku) + '</div>' +
+        skuCopyHtml(sku, { block: true, prefix: false, style: 'font-size:11px;color:rgba(255,255,255,0.48);font-weight:700;margin-bottom:12px;direction:ltr;text-align:left' }) +
         '<input id="s5-product-name-edit-input" data-i18n-preserve type="text" value="' + attrData(currentName) + '" autocomplete="off" spellcheck="false" style="width:100%;box-sizing:border-box;border-radius:11px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.06);color:#fff;font-family:inherit;font-size:13px;font-weight:700;padding:11px 12px;outline:none" />' +
         '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;flex-wrap:wrap">' +
           '<button type="button" data-s5-edit-cancel style="border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.78);border-radius:10px;padding:9px 14px;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer">' + esc(s5Txt('Cancel', 'إلغاء')) + '</button>' +
@@ -349,7 +382,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
     var statUnit = mountEl.querySelector('[data-stat-unit="3"]');
     if (statUnit) statUnit.textContent = currency;
 
-    INSIGHTS = buildInsights(PRODUCTS_RAW);
+    INSIGHTS = forceProductsModel ? [] : buildInsights(PRODUCTS_RAW);
     var insightRow = mountEl.querySelector('.s5-insights-row');
     if (insightRow) {
       if (insightRow.children.length !== INSIGHTS.length) {
@@ -561,7 +594,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
   }
 
   // ── Build real data ───────────────────────────────────────────────────────
-  if (pd && (!pd.rankedList || pd.rankedList.length === 0)) {
+  if (!deferProductsModel && pd && (!pd.rankedList || pd.rankedList.length === 0)) {
     PRODUCTS_RAW = [];
     const summaryNetOrders = (pd.summary && (pd.summary.netOrderCount != null ? pd.summary.netOrderCount : pd.summary.totalOrders)) || 0;
     const summaryTotalOrders = (pd.summary && (pd.summary.totalOrderCount != null ? pd.summary.totalOrderCount : summaryNetOrders)) || 0;
@@ -573,7 +606,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
       { label: s5Txt('Products generating 80% of Taager Profit After Tax', 'منتجات تحقق 80% من ربح تاجر بعد الضريبة'), value: 0,                                               unit: s5Txt('product', 'منتج'),       color: '#ef4444', iconType: 'pie'    },
     ];
     INSIGHTS = [];
-  } else if (pd && pd.rankedList && pd.rankedList.length > 0) {
+  } else if (!deferProductsModel && pd && pd.rankedList && pd.rankedList.length > 0) {
     const totalDeliveries = pd.rankedList.reduce((acc, x) => acc + (x.deliveredCount || x.units || 0), 0) || 1;
 
     PRODUCTS_RAW = pd.rankedList.map((p, idx) => {
@@ -636,16 +669,18 @@ window.renderSection5 = function (mountEl, data, ctx) {
         rateSource: p.rateSource || 'product',
         scalingScore:    p.scalingScore    || Math.round((commission * (p.drRate || 0)) / 100),
         deliveryPct:     p.deliveryPct     || p.deliveryRate || 0,
-        cityBreakdown:   p.cityBreakdown   || [],
-        piecesBreakdown: (p.piecesBreakdown || []).map(function (item) {
-          var count = Number(item.count || item.orders || 0);
-          var delivered = Number(item.delivered || item.deliveredCount || 0);
-          var ndr = delivered > 0 && item.ndr !== undefined
-            ? Number(item.ndr || 0)
-            : (count > 0 ? parseFloat((delivered / count * 100).toFixed(1)) : 0);
-          return Object.assign({}, item, { count: count, delivered: delivered, ndr: ndr });
-        }),
-        quantityCityBreakdown: p.quantityCityBreakdown || [],
+        get cityBreakdown() { return p.cityBreakdown || []; },
+        get piecesBreakdown() {
+          return (p.piecesBreakdown || []).map(function (item) {
+            var count = Number(item.count || item.orders || 0);
+            var delivered = Number(item.delivered || item.deliveredCount || 0);
+            var ndr = delivered > 0 && item.ndr !== undefined
+              ? Number(item.ndr || 0)
+              : (count > 0 ? parseFloat((delivered / count * 100).toFixed(1)) : 0);
+            return Object.assign({}, item, { count: count, delivered: delivered, ndr: ndr });
+          });
+        },
+        get quantityCityBreakdown() { return p.quantityCityBreakdown || []; },
       };
     });
 
@@ -1720,6 +1755,9 @@ window.renderSection5 = function (mountEl, data, ctx) {
     const hlCountText = productCompactNumber(hlCount, 0, 10000);
     const revenueInFinancialCurrency = commissionInCurrency(p.revenue || 0);
     const revenueText = productCompactNumber(revenueInFinancialCurrency, 0, 10000);
+    const productSkuLine = p.sku
+      ? skuCopyHtml(p.sku, { block: true, style: 'font-size:11px;color:rgba(255,255,255,0.32);margin-top:3px;font-weight:700' })
+      : esc(p.cat);
 
     return `<div class="s5-product-row s5-metrics-track" data-idx="${i}" data-product-key="${attr(productKey)}"
          style="display:flex;align-items:center;border-radius:14px;
@@ -1735,7 +1773,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         <div style="text-align:start;min-width:0">
           <div class="s5-product-title s5-product-name-edit" data-i18n-preserve data-product-sku="${attrData(p.sku || productKey)}" data-product-name="${attrData(p.name || '')}" title="${attrData(p.name || '')}" style="font-size:14px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">${escData(p.name)}</div>
           <button type="button" class="s5-product-name-edit" data-product-sku="${attrData(p.sku || productKey)}" data-product-name="${attrData(p.name || '')}" style="margin-top:4px;background:transparent;border:0;color:#38bdf8;font-size:10px;font-weight:800;cursor:pointer;padding:0">${s5Txt('Edit name', 'تعديل الاسم')}</button>
-          <div style="font-size:11px;color:rgba(255,255,255,0.32);margin-top:3px">${esc(p.cat)}</div>
+          ${productSkuLine}
         </div>
       </div>
       ${DIV}
@@ -2556,7 +2594,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         opacity:1 !important;
       }
       .s5-cmp-dd-list::-webkit-scrollbar {
-        width:8px;
+        width:12px;
       }
       .s5-cmp-dd-list::-webkit-scrollbar-thumb {
         background:rgba(245,158,11,0.35);
@@ -2817,6 +2855,10 @@ window.renderSection5 = function (mountEl, data, ctx) {
     if (_scheduleRenderTimer) clearTimeout(_scheduleRenderTimer);
     _scheduleRenderTimer = setTimeout(function () {
       _scheduleRenderTimer = null;
+      if (!mountEl.isConnected || mountEl.hidden) {
+        mountEl._dashboardNeedsRefresh = true;
+        return;
+      }
       renderProductPage(options || { keepFilterBar: true });
     }, 0);
   }
@@ -4203,11 +4245,11 @@ window.renderSection5 = function (mountEl, data, ctx) {
       var label = side === 'left' ? s5Txt('Product A', 'المنتج A') : s5Txt('Product B', 'المنتج B');
       var stateKey = side === 'left' ? compareState.leftKey : compareState.rightKey;
       var displayName = product ? esc(product.name || s5Txt('Unnamed', 'بدون اسم')) : '';
-      var displaySku = product ? esc(product.sku || '') : '';
+      var displaySku = product ? String(product.sku || '') : '';
       var placeholder = s5Txt('Search products...', 'ابحث عن منتج...');
       var triggerInner = product
         ? '<span style="display:flex;flex-direction:column;align-items:flex-start;min-width:0;flex:1;gap:1px"><span style="font-size:12px;font-weight:850;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">' + displayName + '</span>' +
-          (displaySku ? '<span style="font-size:10px;color:rgba(255,255,255,0.42);font-weight:700">SKU: ' + displaySku + '</span>' : '') + '</span>'
+          (displaySku ? skuCopyHtml(displaySku, { style: 'font-size:10px;color:rgba(255,255,255,0.42);font-weight:700' }) : '') + '</span>'
         : '<span style="font-size:12px;color:rgba(255,255,255,0.35);font-weight:750;flex:1">' + placeholder + '</span>';
       var options = productOptionSource().map(function (pr, idx) {
         var key = productKeyOf(pr, idx);
@@ -4219,17 +4261,17 @@ window.renderSection5 = function (mountEl, data, ctx) {
         }
         return '<div class="s5-cmp-dd-option' + (selected ? ' selected' : '') + '" data-key="' + attr(key) + '" data-search="' + attr(pr._searchKey) + '" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;cursor:pointer;background:' + (selected ? sideColor + '18' : 'transparent') + ';border:1px solid ' + (selected ? sideColor + '44' : 'transparent') + ';margin-bottom:3px">' +
           '<span style="min-width:0;flex:1"><span style="display:block;font-size:12px;font-weight:850;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(name) + '</span>' +
-          (sku ? '<span style="display:block;font-size:10px;color:rgba(255,255,255,0.38);font-weight:700;margin-top:1px">SKU: ' + esc(sku) + '</span>' : '') + '</span>' +
+          (sku ? skuCopyHtml(sku, { block: true, style: 'font-size:10px;color:rgba(255,255,255,0.38);font-weight:700;margin-top:1px' }) : '') + '</span>' +
           (selected ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="' + sideColor + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '') +
         '</div>';
       }).join('');
       return '<div class="s5-cmp-dd-wrap" data-side="' + side + '" style="margin-bottom:14px;position:relative">' +
         '<div style="font-size:10px;font-weight:950;color:' + sideColor + ';margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px">' + label + '</div>' +
-        '<button type="button" class="s5-cmp-dd-trigger" data-side="' + side + '" style="width:100%;min-height:44px;border-radius:11px;border:1px solid ' + (product ? sideColor + '55' : 'rgba(255,255,255,0.12)') + ';background:' + (product ? 'rgba(255,255,255,0.055)' : 'rgba(255,255,255,0.035)') + ';color:#fff;padding:0 12px;font-size:12px;font-weight:750;font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:10px;text-align:start;box-sizing:border-box;outline:none">' +
+        '<div role="button" tabindex="0" class="s5-cmp-dd-trigger" data-side="' + side + '" style="width:100%;min-height:44px;border-radius:11px;border:1px solid ' + (product ? sideColor + '55' : 'rgba(255,255,255,0.12)') + ';background:' + (product ? 'rgba(255,255,255,0.055)' : 'rgba(255,255,255,0.035)') + ';color:#fff;padding:0 12px;font-size:12px;font-weight:750;font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:10px;text-align:start;box-sizing:border-box;outline:none">' +
           (product ? '<span style="width:28px;height:28px;border-radius:8px;flex-shrink:0;background:' + sideColor + '22;border:1px solid ' + sideColor + '55;color:' + sideColor + ';display:flex;align-items:center;justify-content:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>' : '<span style="width:28px;height:28px;border-radius:8px;flex-shrink:0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.3);display:flex;align-items:center;justify-content:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>') +
           triggerInner +
           '<svg class="s5-cmp-dd-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:rgba(255,255,255,0.35)"><polyline points="6 9 12 15 18 9"/></svg>' +
-        '</button>' +
+        '</div>' +
         '<div class="s5-cmp-dd-panel" data-side="' + side + '" style="display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:99999;background:#0d1526;border:1px solid rgba(255,255,255,0.13);border-radius:14px;overflow:hidden;flex-direction:column">' +
           '<div style="padding:10px 10px 8px;border-bottom:1px solid rgba(255,255,255,0.07)"><input type="text" class="s5-cmp-dd-search" placeholder="' + attr(placeholder) + '" style="width:100%;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:#fff;padding:0 10px;font-size:12px;font-weight:750;font-family:inherit;outline:none;box-sizing:border-box;direction:' + (isAr ? 'rtl' : 'ltr') + '"></div>' +
           '<div class="s5-cmp-dd-list" style="max-height:220px;overflow-y:auto;padding:6px">' + options + '</div>' +
@@ -4319,7 +4361,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         '<div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:' + color + '10;border:1px solid ' + color + '44;margin-bottom:4px">' +
           '<div style="width:36px;height:36px;border-radius:10px;flex-shrink:0;background:' + color + '22;border:1px solid ' + color + '55;color:' + color + ';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:950">' + (isExpected ? 'EXP' : 'ACT') + '</div>' +
           '<div style="min-width:0"><div style="font-size:13px;font-weight:950;color:#fff">' + title + '</div>' +
-          '<div data-i18n-preserve style="font-size:10px;color:rgba(255,255,255,0.38);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(product.name || '') + (product.sku ? ' - SKU: ' + esc(product.sku) : '') + '</div></div>' +
+          '<div data-i18n-preserve style="font-size:10px;color:rgba(255,255,255,0.38);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(product.name || '') + (product.sku ? ' - ' + skuCopyHtml(product.sku, { style: 'font-size:10px;color:rgba(255,255,255,0.38);font-weight:700' }) : '') + '</div></div>' +
         '</div>' +
         sections +
       '</div>';
@@ -4356,7 +4398,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
         '<div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:rgba(0,0,0,0.18);border:1px solid rgba(255,255,255,0.06);margin-bottom:4px">' +
           '<div style="width:36px;height:36px;border-radius:10px;flex-shrink:0;background:' + sideColor + '22;border:1px solid ' + sideColor + '55;color:' + sideColor + ';display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:950">#' + cmpNum(product.rank) + '</div>' +
           '<div style="min-width:0"><div data-i18n-preserve style="font-size:13px;font-weight:950;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(product.name || '') + '</div>' +
-          '<div style="font-size:10px;color:rgba(255,255,255,0.38);margin-top:2px">SKU: ' + esc(product.sku || '-') + '</div></div>' +
+          skuCopyHtml(product.sku || '', { emptyText: '-', block: true, style: 'font-size:10px;color:rgba(255,255,255,0.38);margin-top:2px;font-weight:700' }) + '</div>' +
         '</div>' +
         sections +
       '</div>';
@@ -4452,6 +4494,13 @@ window.renderSection5 = function (mountEl, data, ctx) {
         }
 
         trigger.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (panel.style.display === 'flex') closePanel();
+          else openPanel();
+        });
+        trigger.addEventListener('keydown', function (e) {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
           e.preventDefault();
           e.stopPropagation();
           if (panel.style.display === 'flex') closePanel();
@@ -4699,7 +4748,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
           s5Txt('Loading details\u2026', 'جار التحميل\u2026') + '</div>';
       }
 
-      /* Quantity × City breakdown */
+      /* Quantity x City breakdown */
       var qtyCityHtml = '';
       if (false && Array.isArray(p.quantityCityBreakdown) && p.quantityCityBreakdown.length) {
         qtyCityHtml = p.quantityCityBreakdown.slice(0, 4).map(function (item) {
@@ -4772,7 +4821,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
             '</div>' +
             '<div>' +
               '<div data-i18n-preserve style="font-size:18px;font-weight:900;color:#fff">' + esc(p.name || s5Txt('product', 'منتج')) + '</div>' +
-              '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:3px">SKU: ' + esc(p.sku || '-') + '  ·  ' + s5Txt('Rank #', 'رتبة #') + esc(p.rank || '-') + '</div>' +
+              '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:3px;display:flex;align-items:center;gap:7px;flex-wrap:wrap">' + skuCopyHtml(p.sku || '', { emptyText: '-', style: 'font-size:11px;color:rgba(255,255,255,0.4);font-weight:700' }) + '<span>· ' + s5Txt('Rank #', 'رتبة #') + esc(p.rank || '-') + '</span></div>' +
             '</div>' +
           '</div>' +
           '<button id="s5-modal-close" style="background:rgba(255,255,255,0.07);border:none;color:rgba(255,255,255,0.6);' +
@@ -4804,7 +4853,7 @@ window.renderSection5 = function (mountEl, data, ctx) {
           }).join('') +
         '</div>' +
 
-        /* Body: Funnel | Cities / Quantity Distribution / Qty×City */
+        /* Body: Funnel | Cities / Quantity Distribution / Qty x City */
         '<div class="s5-modal-analysis-grid" style="padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:20px;">' +
 
           /* Funnel */
@@ -4864,6 +4913,21 @@ window.renderSection5 = function (mountEl, data, ctx) {
       if (closeBtn) closeBtn.addEventListener('click', closeModal);
     }
     refreshProductModal = refreshModal;
+
+    function onModalRoiChange(settings) {
+      if (!settings || modal.style.display === 'none') return;
+      if (String(settings.accountId) !== String(productAccountId)) return;
+      productFinancialSettings = settings;
+      refreshModal();
+    }
+    if (window.DashboardRoiState && typeof window.DashboardRoiState.subscribe === 'function') {
+      window.DashboardRoiState.subscribe(onModalRoiChange);
+      addProductCleanup(function () {
+        if (window.DashboardRoiState && typeof window.DashboardRoiState.unsubscribe === 'function') {
+          window.DashboardRoiState.unsubscribe(onModalRoiChange);
+        }
+      });
+    }
 
     function bindModalCityPagination() {
       if (window.bindDashboardPagination) {
@@ -4982,6 +5046,8 @@ window.renderSection5 = function (mountEl, data, ctx) {
       productFinancialSettings = settings;
       if (refreshBackendProducts(true)) {
         updateProductCurrencyUIOnly();
+        refreshProductModal();
+        refreshProductCompareModal();
         return;
       }
       applyProductFinancials();
@@ -5061,4 +5127,48 @@ window.renderSection5 = function (mountEl, data, ctx) {
 
   if (window.dashboardI18n) window.dashboardI18n.apply(mountEl);
   if (window.TaagerUI) window.TaagerUI.enhance(mountEl);
+}
+
+window.renderSection5 = function (mountEl, data, ctx) {
+  if (!mountEl) return;
+  var shouldDefer = !!(data && data.meta && data.meta.lazyHeavyModels);
+  if (!shouldDefer) {
+    renderSection5Hydrated(mountEl, data, ctx);
+    mountEl.dataset.dashboardReady = 'products';
+    return mountEl._dashboardSectionCleanup;
+  }
+
+  var state = { cancelled: false, started: false, frame: null, cleanup: null };
+  mountEl._s5HydrationState = state;
+  mountEl.innerHTML = productsHydrationSkeleton();
+  delete mountEl.dataset.dashboardReady;
+
+  function hydrateProductsPane() {
+    if (state.cancelled || state.started || mountEl._s5HydrationState !== state) return;
+    if (!isActiveProductsPane(mountEl)) {
+      if (mountEl.isConnected) mountEl._dashboardNeedsRefresh = true;
+      return;
+    }
+    state.started = true;
+    renderSection5Hydrated(mountEl, data, ctx);
+    state.cleanup = mountEl._dashboardSectionCleanup;
+    if (!state.cancelled && isActiveProductsPane(mountEl)) {
+      mountEl.dataset.dashboardReady = 'products';
+      mountEl.dataset.s5ProductsReady = mountEl.querySelector('.s5-product-row') ? '1' : '0';
+    }
+  }
+
+  state.frame = window.requestAnimationFrame
+    ? window.requestAnimationFrame(hydrateProductsPane)
+    : window.setTimeout(hydrateProductsPane, 0);
+
+  return function () {
+    state.cancelled = true;
+    if (!state.started && state.frame != null) {
+      if (window.cancelAnimationFrame && window.requestAnimationFrame) window.cancelAnimationFrame(state.frame);
+      else window.clearTimeout(state.frame);
+    }
+    if (typeof state.cleanup === 'function') state.cleanup();
+    if (mountEl._s5HydrationState === state) mountEl._s5HydrationState = null;
+  };
 };

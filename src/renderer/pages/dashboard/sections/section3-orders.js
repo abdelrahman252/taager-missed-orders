@@ -123,8 +123,17 @@ window.renderSection3 = function (mountEl, data, ctx) {
 
   var stages  = (data && data.stages)  ? data.stages  : STAGES_DEFAULT;
   var kpis    = (data && data.kpis)    ? data.kpis    : KPIS_DEFAULT;
-  var orders  = (data && data.orders)  ? data.orders  : ORDERS_DEFAULT;
-  var outcomeOrders = (data && data.outcomeOrders) ? data.outcomeOrders : orders;
+  var createdOrdersProvider = data && typeof data.getCreatedOrders === 'function' ? data.getCreatedOrders : null;
+  var outcomeOrdersProvider = data && typeof data.getOutcomeOrders === 'function' ? data.getOutcomeOrders : null;
+  var orders  = createdOrdersProvider ? createdOrdersProvider() : ((data && data.orders) ? data.orders : ORDERS_DEFAULT);
+  var outcomeOrders = outcomeOrdersProvider ? null : ((data && data.outcomeOrders) ? data.outcomeOrders : orders);
+  function getCreatedOrders() {
+    return orders;
+  }
+  function getOutcomeOrders() {
+    if (outcomeOrdersProvider) return outcomeOrdersProvider();
+    return outcomeOrders;
+  }
   function moneyValue(value) {
     if (window.TaagerStatus && typeof window.TaagerStatus.moneyValue === 'function') {
       var n = window.TaagerStatus.moneyValue(value);
@@ -185,6 +194,8 @@ window.renderSection3 = function (mountEl, data, ctx) {
     return rows;
   }
   if (data && data.orders) {
+    var dateCache = {};
+    var phoneCache = {};
     function normalizeOrder(o) {
       var total = moneyValue(o.dashboardTotalPrice != null ? o.dashboardTotalPrice : (o.totalPrice || o.total || o.orderValue || 0));
       // Taager dashboard/status/NDR migration:
@@ -207,9 +218,10 @@ window.renderSection3 = function (mountEl, data, ctx) {
       else if (prodLower.includes('eye') || prodLower.includes('عين')) type = 'eye';
       
       var rawStatus = String(o.orderStatus || o.status || '').trim();
+      var exactBucket = String(o.exactStatusBucket || o.orderStatusBucket || '').trim();
       var status = 'مسلمة';
       if (window.TaagerStatus) {
-        status = window.TaagerStatus.display(rawStatus || o.orderStatusBucket || 'other', { locale: isAr ? 'ar' : 'en' });
+        status = window.TaagerStatus.display(exactBucket || rawStatus || 'other', { locale: isAr ? 'ar' : 'en' });
       } else {
         var lowerStatus = rawStatus.toLowerCase();
         if (lowerStatus === 'delivered' || lowerStatus === 'مسلمة' || lowerStatus === 'تم التسليم') {
@@ -236,11 +248,26 @@ window.renderSection3 = function (mountEl, data, ctx) {
       var date = o.createdAt || o.date || '';
       var phone = o.phone || o.phone1 || o.phone2 || o.rawPhone || o.normPhone || o.customerPhone || o.phoneNumber || '';
       var sku = o.sku || o.skuNumber || '';
-      var parsedDate = date ? new Date(date) : null;
-      var dateTime = parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate.getTime() : 0;
-      var phoneClean = phone ? phone.toString().replace(/[\s\-\+]/g, '') : '';
-      var phoneLocal = phoneClean ? phoneClean.replace(/^966/, '0') : '';
-      var phoneNoCode = phoneClean ? phoneClean.replace(/^966/, '') : '';
+      var dateInfo = dateCache[date];
+      if (!dateInfo) {
+        var parsedDate = date ? new Date(date) : null;
+        var dateTime = parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate.getTime() : 0;
+        dateInfo = { time: dateTime, key: dateTime ? dateKeyFromDate(parsedDate) : '' };
+        dateCache[date] = dateInfo;
+      }
+      var phoneInfo = phoneCache[phone];
+      if (!phoneInfo) {
+        var phoneCleanValue = phone ? phone.toString().replace(/[\s\-\+]/g, '') : '';
+        phoneInfo = {
+          clean: phoneCleanValue,
+          local: phoneCleanValue ? phoneCleanValue.replace(/^966/, '0') : '',
+          noCode: phoneCleanValue ? phoneCleanValue.replace(/^966/, '') : ''
+        };
+        phoneCache[phone] = phoneInfo;
+      }
+      var phoneClean = phoneInfo.clean;
+      var phoneLocal = phoneInfo.local;
+      var phoneNoCode = phoneInfo.noCode;
       var stageId = statusToStageId(status);
       var searchText = [
         cleanId,
@@ -269,22 +296,43 @@ window.renderSection3 = function (mountEl, data, ctx) {
         lastUpdatedAt: o.lastUpdatedAt || o.updatedAt || '',
         status: status,
         rawStatus: rawStatus,
-        statusBucket: window.TaagerStatus ? window.TaagerStatus.dashboardBucket(rawStatus || status) : stageId,
-        exactStatusBucket: window.TaagerStatus ? window.TaagerStatus.normalize(rawStatus || status).bucket : stageId,
+        statusBucket: window.TaagerStatus ? window.TaagerStatus.dashboardBucket(exactBucket || rawStatus || status) : stageId,
+        exactStatusBucket: window.TaagerStatus ? (exactBucket || window.TaagerStatus.normalize(rawStatus || status).bucket) : stageId,
         phone: phone,
         phone1: o.phone1 || '',
         phone2: o.phone2 || '',
         sku: sku,
-        _dateTime: dateTime,
-        _dateKey: dateTime ? dateKeyFromDate(parsedDate) : '',
+        _dateTime: dateInfo.time,
+        _dateKey: dateInfo.key,
         _stageId: stageId,
         _searchText: searchText,
         _phoneSearch: phoneClean + ' ' + phoneLocal + ' ' + phoneNoCode
       };
     }
     var normalizationCacheKey = [window.dashboardI18n && window.dashboardI18n.currentLocale || (isRtl ? 'ar' : 'en'), window.TaagerStatus ? 'taager-status' : 'legacy-status'].join('|');
-    orders = normalizeOrderArray(orders, normalizeOrder, 'orders|' + normalizationCacheKey);
-    outcomeOrders = normalizeOrderArray(outcomeOrders, normalizeOrder, 'outcome|' + normalizationCacheKey);
+    var rawCreatedOrders = orders;
+    var normalizedCreatedOrders = null;
+    getCreatedOrders = function () {
+      if (!normalizedCreatedOrders) {
+        normalizedCreatedOrders = normalizeOrderArray(rawCreatedOrders, normalizeOrder, 'orders|' + normalizationCacheKey);
+      }
+      return normalizedCreatedOrders;
+    };
+    var rawOutcomeOrders = outcomeOrders;
+    var rawOutcomeOrdersCache = null;
+    var normalizedOutcomeOrders = null;
+    getOutcomeOrders = function () {
+      if (outcomeOrdersProvider) {
+        if (!rawOutcomeOrdersCache) rawOutcomeOrdersCache = outcomeOrdersProvider();
+        rawOutcomeOrders = rawOutcomeOrdersCache;
+      } else if (!data || !data.outcomeOrders) {
+        return getCreatedOrders();
+      }
+      if (!normalizedOutcomeOrders) {
+        normalizedOutcomeOrders = normalizeOrderArray(rawOutcomeOrders, normalizeOrder, 'outcome|' + normalizationCacheKey);
+      }
+      return normalizedOutcomeOrders;
+    };
   }
 
   function normalizeBackendOrder(o) {
@@ -529,11 +577,13 @@ window.renderSection3 = function (mountEl, data, ctx) {
   var statusFilter  = '';
   var dateFilter    = '';
   var perPage       = 10;
-  var backendOrdersEnabled = Boolean(window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.query === 'function');
+  // Query-runtime availability is not the feature flag. Keep the aggregator's
+  // in-memory rows unless the main-process flag explicitly enables orders.
+  var backendOrdersEnabled = false;
   var backendOrdersRequest = 0;
   if (window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.flags === 'function') {
     window.DashboardQueryRuntime.flags().then(function (flags) {
-      backendOrdersEnabled = backendOrdersEnabled || !!(flags && flags.orders);
+      backendOrdersEnabled = !!(flags && flags.orders);
       if (backendOrdersEnabled && mountEl.isConnected) refreshTableData();
     });
   }
@@ -555,8 +605,12 @@ window.renderSection3 = function (mountEl, data, ctx) {
       if (stage && stage.id) stageCounts[stage.id] = Number(stage.count || 0);
     });
   }
-  var productOptionsCache = [{ value: '', label: tx('جميع المنتجات') }];
-  var cityOptionsCache = [{ value: '', label: tx('جميع المدن') }];
+  var productOptionsBase = [{ value: '', label: tx('جميع المنتجات') }];
+  var cityOptionsBase = [{ value: '', label: tx('جميع المدن') }];
+  var productOptionsCache = productOptionsBase;
+  var cityOptionsCache = cityOptionsBase;
+  var productCityOptionsReady = false;
+  var productCityOptionsWarmScheduled = false;
 
   function exactStatusId(bucket) {
     return 'status:' + String(bucket || 'other');
@@ -573,7 +627,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
       return exactStatusStagesCache;
     }
     var counts = {};
-    orders.forEach(function (order) {
+    getCreatedOrders().forEach(function (order) {
       var bucket = order.exactStatusBucket || window.TaagerStatus.normalize(order.rawStatus || order.status).bucket;
       counts[bucket] = (counts[bucket] || 0) + 1;
     });
@@ -637,25 +691,48 @@ window.renderSection3 = function (mountEl, data, ctx) {
     return filters;
   }
 
-  (function buildSectionIndexes() {
+  function ensureProductCityOptions() {
+    if (productCityOptionsReady) return;
     var productsSeen = {};
     var citiesSeen = {};
-    orders.forEach(function (order) {
+    getCreatedOrders().forEach(function (order) {
       if (order.product && !productsSeen[order.product]) productsSeen[order.product] = true;
       if (order.city && !citiesSeen[order.city]) citiesSeen[order.city] = true;
     });
+    productOptionsCache = productOptionsBase.concat(Object.keys(productsSeen).sort().map(function (p) {
+      return { value: p, label: p.length > 25 ? p.slice(0, 24) + '...' : p };
+    }));
+    cityOptionsCache = cityOptionsBase.concat(Object.keys(citiesSeen).sort().map(function (c) {
+      return { value: c, label: c };
+    }));
+    productCityOptionsReady = true;
+  }
+
+  function scheduleProductCityOptionsWarm() {
+    if (productCityOptionsReady || productCityOptionsWarmScheduled) return;
+    productCityOptionsWarmScheduled = true;
+    var run = function () {
+      productCityOptionsWarmScheduled = false;
+      if (!mountEl.isConnected || productCityOptionsReady) return;
+      ensureProductCityOptions();
+      var productWrap = mountEl.querySelector('#s3-product-wrap');
+      var cityWrap = mountEl.querySelector('#s3-city-wrap');
+      if (productWrap) renderProductSelect(productWrap);
+      if (cityWrap) renderCitySelect(cityWrap);
+    };
+    setTimeout(function () {
+      if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 2500 });
+      else run();
+    }, 2500);
+  }
+
+  (function buildStageCounts() {
     if (!hasCertifiedStages) {
-      outcomeOrders.forEach(function (order) {
+      getOutcomeOrders().forEach(function (order) {
         var stageId = order._stageId || statusToStageId(order.status);
         stageCounts[stageId] = (stageCounts[stageId] || 0) + 1;
       });
     }
-    productOptionsCache = productOptionsCache.concat(Object.keys(productsSeen).sort().map(function (p) {
-      return { value: p, label: p.length > 25 ? p.slice(0, 24) + '...' : p };
-    }));
-    cityOptionsCache = cityOptionsCache.concat(Object.keys(citiesSeen).sort().map(function (c) {
-      return { value: c, label: c };
-    }));
   }());
 
   /* ── Custom Select options ───────────────────────────────────────────────── */
@@ -705,7 +782,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
       return filteredCacheValue;
     }
 
-    var results = activeStageId === 'all' ? orders : outcomeOrders;
+    var results = activeStageId === 'all' ? getCreatedOrders() : getOutcomeOrders();
 
     // 1. Pipeline Stage filter
     if (activeStageId !== 'all') {
@@ -835,7 +912,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
     }
   }());
   function refreshPipeline() {
-    var container = document.getElementById('s3-pipeline-container');
+    var container = mountEl.querySelector('#s3-pipeline-container');
     if (!container) return;
 
     var intakeCount = stageCounts.intake;
@@ -963,7 +1040,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
 
   /* ── 2. Stage Details panel Module ───────────────────────────────────────── */
   function refreshDetails() {
-    var container = document.getElementById('s3-details-container');
+    var container = mountEl.querySelector('#s3-details-container');
     if (!container) return;
 
     var incomingStage = STAGES_BY_ID[activeStageId] || {};
@@ -1116,7 +1193,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
     // Numbers are rendered immediately in this dense orders view to keep filters responsive.
 
     // Wire export click
-    var exportBtn = document.getElementById('s3-export-btn');
+    var exportBtn = mountEl.querySelector('#s3-export-btn');
     if (exportBtn) {
       exportBtn.addEventListener('click', function() {
         if (canUseBackendOrdersPage() && window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.exportOrders === 'function') {
@@ -1148,7 +1225,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
 
   /* ── 3. Table Container Module ───────────────────────────────────────────── */
   function refreshTableContainer() {
-    var container = document.getElementById('s3-table-container');
+    var container = mountEl.querySelector('#s3-table-container');
     if (!container) return;
     
     var isRtl = window.dashboardI18n ? window.dashboardI18n.isRtl() : true;
@@ -1221,7 +1298,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
     // Draw the custom dropdown select components
     initCustomSelects();
 
-    var clearSortBtn = document.getElementById('s3-clear-sort');
+    var clearSortBtn = mountEl.querySelector('#s3-clear-sort');
     if (clearSortBtn) {
       clearSortBtn.addEventListener('click', function () {
         if (sortVal === 'date_desc') return;
@@ -1234,7 +1311,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
     }
 
     // Bind instant search with debounced support
-    var searchInput = document.getElementById('s3-search');
+    var searchInput = mountEl.querySelector('#s3-search');
     if (searchInput) {
       var debounceFn = window.debounce || function(f, delay) {
         var tm;
@@ -1249,19 +1326,43 @@ window.renderSection3 = function (mountEl, data, ctx) {
         searchTerm = e.target.value;
         currentPage = 1; // Reset to page 1 on new search query
         invalidateFilteredCache();
-        refreshDetails();
         refreshTableData();
-      }, 120));
+        setTimeout(function () {
+          if (mountEl.isConnected) refreshDetails();
+        }, 80);
+      }, 40));
     }
   }
 
   /* ── Initialize Custom select menus ──────────────────────────────────────── */
+  function renderProductSelect(productWrap) {
+    if (!productWrap || !window.renderCustomSelect) return;
+    window.renderCustomSelect(productWrap, productOptionsCache, productFilter, function(val) {
+      productFilter = val;
+      currentPage = 1;
+      invalidateFilteredCache();
+      refreshDetails();
+      refreshTableData();
+    }, { searchable: true, maxHeight: '250px' });
+  }
+
+  function renderCitySelect(cityWrap) {
+    if (!cityWrap || !window.renderCustomSelect) return;
+    window.renderCustomSelect(cityWrap, cityOptionsCache, cityFilter, function(val) {
+      cityFilter = val;
+      currentPage = 1;
+      invalidateFilteredCache();
+      refreshDetails();
+      refreshTableData();
+    });
+  }
+
   function initCustomSelects() {
-    var sortWrap = document.getElementById('s3-sort-wrap');
-    var statusWrap = document.getElementById('s3-status-wrap');
-    var dateWrap = document.getElementById('s3-date-wrap');
-    var productWrap = document.getElementById('s3-product-wrap');
-    var cityWrap = document.getElementById('s3-city-wrap');
+    var sortWrap = mountEl.querySelector('#s3-sort-wrap');
+    var statusWrap = mountEl.querySelector('#s3-status-wrap');
+    var dateWrap = mountEl.querySelector('#s3-date-wrap');
+    var productWrap = mountEl.querySelector('#s3-product-wrap');
+    var cityWrap = mountEl.querySelector('#s3-city-wrap');
 
     // 1. Sort Select
     if (sortWrap && window.renderCustomSelect) {
@@ -1292,49 +1393,9 @@ window.renderSection3 = function (mountEl, data, ctx) {
       });
     }
 
-    // 2. Product Select Options
-    var uniqueProducts = [];
-    [].forEach(function(o) {
-      if (o.product && uniqueProducts.indexOf(o.product) === -1) {
-        uniqueProducts.push(o.product);
-      }
-    });
-    uniqueProducts.sort();
-    var productOptions = [{ value: '', label: 'جميع المنتجات' }].concat(
-      uniqueProducts.map(function(p) {
-        return { value: p, label: p.length > 25 ? p.slice(0, 24) + '...' : p };
-      })
-    );
-    if (productWrap && window.renderCustomSelect) {
-      window.renderCustomSelect(productWrap, productOptionsCache, productFilter, function(val) {
-        productFilter = val;
-        currentPage = 1;
-        invalidateFilteredCache();
-        refreshDetails();
-        refreshTableData();
-      }, { searchable: true, maxHeight: '250px' });
-    }
+    renderProductSelect(productWrap);
 
-    // 3. City Select Options
-    var uniqueCities = [];
-    [].forEach(function(o) {
-      if (o.city && uniqueCities.indexOf(o.city) === -1) {
-        uniqueCities.push(o.city);
-      }
-    });
-    uniqueCities.sort();
-    var cityOptions = [{ value: '', label: 'جميع المدن' }].concat(
-      uniqueCities.map(function(c) { return { value: c, label: c }; })
-    );
-    if (cityWrap && window.renderCustomSelect) {
-      window.renderCustomSelect(cityWrap, cityOptionsCache, cityFilter, function(val) {
-        cityFilter = val;
-        currentPage = 1;
-        invalidateFilteredCache();
-        refreshDetails();
-        refreshTableData();
-      });
-    }
+    renderCitySelect(cityWrap);
   }
 
   /* ── 4. Table Rows and Pagination data binder ────────────────────────────── */
@@ -1363,8 +1424,8 @@ window.renderSection3 = function (mountEl, data, ctx) {
   async function refreshTableData() {
     var requestId = ++backendOrdersRequest;
     var isRtl = window.dashboardI18n ? window.dashboardI18n.isRtl() : true;
-    var rowsEl = document.getElementById('s3-rows');
-    var pagWrap = document.getElementById('s3-pagination-wrap');
+    var rowsEl = mountEl.querySelector('#s3-rows');
+    var pagWrap = mountEl.querySelector('#s3-pagination-wrap');
     if (!rowsEl) return;
 
     // Filter, search, and sort records
@@ -1488,7 +1549,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
       }
 
       // Initialize dynamic per-page limits dropdown selector
-      var perPageWrap = document.getElementById('s3-per-page-wrap');
+      var perPageWrap = mountEl.querySelector('#s3-per-page-wrap');
       var perPageOptions = [
         { value: '10', label: '10' },
         { value: '25', label: '25' },
@@ -1514,8 +1575,8 @@ window.renderSection3 = function (mountEl, data, ctx) {
         });
       });
 
-      var prevBtn = document.getElementById('s3-pag-prev');
-      var nextBtn = document.getElementById('s3-pag-next');
+      var prevBtn = mountEl.querySelector('#s3-pag-prev');
+      var nextBtn = mountEl.querySelector('#s3-pag-next');
       
       if (prevBtn && currentPage > 1) {
         prevBtn.addEventListener('click', function() {
@@ -1558,11 +1619,17 @@ window.renderSection3 = function (mountEl, data, ctx) {
 
     mountEl.innerHTML = html;
     
-    // Draw all dynamic blocks
+    // Draw the lightweight chrome immediately; hydrate dense row data after paint.
     refreshPipeline();
-    refreshDetails();
     refreshTableContainer();
-    refreshTableData();
+    var hydrateDenseOrders = function () {
+      if (!mountEl.isConnected) return;
+      refreshDetails();
+      refreshTableData();
+      scheduleProductCityOptionsWarm();
+    };
+    if (window.requestAnimationFrame) requestAnimationFrame(hydrateDenseOrders);
+    else setTimeout(hydrateDenseOrders, 0);
     
     // Trigger entrance animations
     animate();
@@ -1572,8 +1639,8 @@ window.renderSection3 = function (mountEl, data, ctx) {
   function animate() {
     requestAnimationFrame(function () {
       requestAnimationFrame(function () {
-        var h1  = document.getElementById('s3-h1');
-        var sub = document.getElementById('s3-sub');
+        var h1  = mountEl.querySelector('#s3-h1');
+        var sub = mountEl.querySelector('#s3-sub');
         if (h1)  { h1.style.opacity = '1';  h1.style.transform  = 'translateY(0)'; }
         if (sub) { sub.style.opacity = '1'; }
       });

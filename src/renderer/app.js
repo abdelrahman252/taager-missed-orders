@@ -3,7 +3,7 @@
 let sessionDate = null;
 
 // ── Global state ──
-window._kbotLang  = "ar";
+window._kbotLang  = window.__TAAGER_BOOT_LANG || "ar";
 window._kbotTheme = "dark";
 window._kbotUser  = { customerName: null, daysLeft: null };
 
@@ -28,6 +28,44 @@ const _STRINGS = {
     "titlebar.minimize": "Minimize window",
     "titlebar.maximize": "Maximize or restore window",
     "titlebar.close": "Close Taager Bot",
+    "preloader.workspace.title": "Preparing workspace...",
+    "preloader.workspace.session": "Checking your saved session...",
+    "preloader.workspace.settings": "Loading app settings...",
+    "preloader.workspace.ready": "Preparing your workspace...",
+    "preloader.dashboard.stage.engine.label": "Dashboard engine",
+    "preloader.dashboard.stage.engine.body": "Loading dashboard code, styles, and controls.",
+    "preloader.dashboard.stage.snapshot.label": "Saved snapshots",
+    "preloader.dashboard.stage.snapshot.body": "Reading saved account snapshots from this device.",
+    "preloader.dashboard.stage.accounts.label": "Accounts",
+    "preloader.dashboard.stage.accounts.body": "Matching accounts, countries, currencies, and date range.",
+    "preloader.dashboard.stage.metrics.label": "Metrics",
+    "preloader.dashboard.stage.metrics.body": "Preparing orders, revenue, profit, COD, and NDR metrics.",
+    "preloader.dashboard.stage.modules.label": "Dashboard views",
+    "preloader.dashboard.stage.modules.body": "Building product, city, campaign, calculator, and master views.",
+    "preloader.dashboard.stage.marketing.label": "Marketing spend",
+    "preloader.dashboard.stage.marketing.body": "Checking connected marketing spend for the selected range.",
+    "preloader.dashboard.stage.rendering.label": "Rendering",
+    "preloader.dashboard.stage.rendering.body": "Rendering the final dashboard view.",
+    "preloader.dashboard.activity.starting": "Starting dashboard...",
+    "preloader.dashboard.activity.engineLoaded": "Dashboard engine loaded",
+    "preloader.dashboard.activity.snapshotPayload": "Loading saved snapshot payload",
+    "preloader.dashboard.activity.savedSnapshots": "Reading saved dashboard snapshots",
+    "preloader.dashboard.activity.accountScope": "Matching dashboard account scope",
+    "preloader.dashboard.activity.metrics": "Preparing dashboard metrics",
+    "preloader.dashboard.activity.views": "Building dashboard views",
+    "preloader.dashboard.activity.viewsPrepared": "Dashboard views prepared",
+    "preloader.dashboard.activity.marketing": "Checking connected marketing spend",
+    "preloader.dashboard.activity.marketingSync": "Syncing connected marketing spend",
+    "preloader.dashboard.activity.marketingCached": "Checking cached marketing status",
+    "preloader.dashboard.activity.rendering": "Rendering final dashboard",
+    "preloader.dashboard.activity.ready": "Dashboard ready.",
+    "preloader.dashboard.activity.bestData": "Dashboard opened with the best available data.",
+    "preloader.dashboard.activity.metricsPrepared": "Dashboard metrics prepared",
+    "preloader.dashboard.activity.emptyMetrics": "Preparing empty dashboard metrics",
+    "preloader.dashboard.activity.noSnapshot": "No saved account snapshot yet",
+    "preloader.dashboard.activity.accountSnapshotsLoaded": (n) => `${n} account snapshots loaded`,
+    "preloader.dashboard.activity.rowsSelected": (n) => `${n} rows in selected period`,
+    "preloader.dashboard.activity.ordersPrepared": (n) => `${n} orders prepared`,
     "setup.nav_dashboard": "Dashboard",
     "setup.nav_ai": "Taager AI",
     "setup.update_dashboard_btn": "Update Dashboard",
@@ -204,6 +242,14 @@ const _STRINGS = {
     "setup.your_accounts":      "Your Accounts",
     "setup.your_accounts_desc": "Manage the accounts available for running tasks.",
     "setup.add_account":        "Add Account",
+    "setup.account_type":       "Account type",
+    "setup.normal_account":     "Normal Account",
+    "setup.static_account":     "Static Account",
+    "setup.static_badge":       "Static",
+    "setup.static_name":        "Account name",
+    "setup.static_name_placeholder": "Example: Jake",
+    "setup.static_name_required": "Account name is required.",
+    "setup.static_hint":        "This account uses Excel Static Update and does not connect to Taager or EasyOrders.",
     "setup.next_btn":           "Next: Run Setup →",
     "setup.continue_date":      "Continue to date",
     "setup.run_title":          "Run Execution",
@@ -519,6 +565,44 @@ const _STRINGS = {
     "titlebar.minimize": "تصغير النافذة",
     "titlebar.maximize": "تكبير أو استعادة النافذة",
     "titlebar.close": "إغلاق Taager Bot",
+    "preloader.workspace.title": "جارٍ تجهيز مساحة العمل...",
+    "preloader.workspace.session": "جارٍ فحص الجلسة المحفوظة...",
+    "preloader.workspace.settings": "جارٍ تحميل إعدادات التطبيق...",
+    "preloader.workspace.ready": "جارٍ تجهيز مساحة العمل...",
+    "preloader.dashboard.stage.engine.label": "محرك لوحة التحكم",
+    "preloader.dashboard.stage.engine.body": "جارٍ تحميل كود لوحة التحكم والأنماط وأدوات التحكم.",
+    "preloader.dashboard.stage.snapshot.label": "اللقطات المحفوظة",
+    "preloader.dashboard.stage.snapshot.body": "جارٍ قراءة لقطات الحسابات المحفوظة على هذا الجهاز.",
+    "preloader.dashboard.stage.accounts.label": "الحسابات",
+    "preloader.dashboard.stage.accounts.body": "جارٍ مطابقة الحسابات والدول والعملات ونطاق التاريخ.",
+    "preloader.dashboard.stage.metrics.label": "المؤشرات",
+    "preloader.dashboard.stage.metrics.body": "جارٍ تجهيز الطلبات والإيرادات والأرباح وCOD وNDR.",
+    "preloader.dashboard.stage.modules.label": "عروض لوحة التحكم",
+    "preloader.dashboard.stage.modules.body": "جارٍ بناء عروض المنتجات والمدن والحملات والحاسبة والرؤى السريعة.",
+    "preloader.dashboard.stage.marketing.label": "الإنفاق التسويقي",
+    "preloader.dashboard.stage.marketing.body": "جارٍ فحص الإنفاق التسويقي المتصل للنطاق المحدد.",
+    "preloader.dashboard.stage.rendering.label": "العرض",
+    "preloader.dashboard.stage.rendering.body": "جارٍ عرض لوحة التحكم النهائية.",
+    "preloader.dashboard.activity.starting": "جارٍ بدء لوحة التحكم...",
+    "preloader.dashboard.activity.engineLoaded": "تم تحميل محرك لوحة التحكم",
+    "preloader.dashboard.activity.snapshotPayload": "جارٍ تحميل بيانات اللقطة المحفوظة",
+    "preloader.dashboard.activity.savedSnapshots": "جارٍ قراءة لقطات لوحة التحكم المحفوظة",
+    "preloader.dashboard.activity.accountScope": "جارٍ مطابقة نطاق حسابات لوحة التحكم",
+    "preloader.dashboard.activity.metrics": "جارٍ تجهيز مؤشرات لوحة التحكم",
+    "preloader.dashboard.activity.views": "جارٍ بناء عروض لوحة التحكم",
+    "preloader.dashboard.activity.viewsPrepared": "تم تجهيز عروض لوحة التحكم",
+    "preloader.dashboard.activity.marketing": "جارٍ فحص الإنفاق التسويقي المتصل",
+    "preloader.dashboard.activity.marketingSync": "جارٍ مزامنة الإنفاق التسويقي المتصل",
+    "preloader.dashboard.activity.marketingCached": "جارٍ فحص حالة التسويق المحفوظة",
+    "preloader.dashboard.activity.rendering": "جارٍ عرض لوحة التحكم النهائية",
+    "preloader.dashboard.activity.ready": "لوحة التحكم جاهزة.",
+    "preloader.dashboard.activity.bestData": "تم فتح لوحة التحكم بأفضل بيانات متاحة.",
+    "preloader.dashboard.activity.metricsPrepared": "تم تجهيز مؤشرات لوحة التحكم",
+    "preloader.dashboard.activity.emptyMetrics": "جارٍ تجهيز مؤشرات لوحة تحكم فارغة",
+    "preloader.dashboard.activity.noSnapshot": "لا توجد لقطة حساب محفوظة بعد",
+    "preloader.dashboard.activity.accountSnapshotsLoaded": (n) => `تم تحميل ${n} لقطات حساب`,
+    "preloader.dashboard.activity.rowsSelected": (n) => `${n} صفوف في الفترة المحددة`,
+    "preloader.dashboard.activity.ordersPrepared": (n) => `تم تجهيز ${n} طلبات`,
     "setup.nav_dashboard": "لوحة التحكم",
     "setup.update_dashboard_btn": "تحديث لوحة التحكم",
     "setup.title":        "أهلاً بك في Taager Bot",
@@ -686,6 +770,14 @@ const _STRINGS = {
     "setup.your_accounts_desc": "إدارة الحسابات المتاحة لتشغيل المهام.",
     "setup.add_account":        "إضافة حساب",
     "setup.next_btn":           "التالي: إعداد التشغيل ←",
+    "setup.account_type":       "\u0646\u0648\u0639 \u0627\u0644\u062d\u0633\u0627\u0628",
+    "setup.normal_account":     "\u062d\u0633\u0627\u0628 \u0639\u0627\u062f\u064a",
+    "setup.static_account":     "\u062d\u0633\u0627\u0628 \u062b\u0627\u0628\u062a",
+    "setup.static_badge":       "\u062b\u0627\u0628\u062a",
+    "setup.static_name":        "\u0627\u0633\u0645 \u0627\u0644\u062d\u0633\u0627\u0628",
+    "setup.static_name_placeholder": "\u0645\u062b\u0627\u0644: Jake",
+    "setup.static_name_required": "\u0627\u0633\u0645 \u0627\u0644\u062d\u0633\u0627\u0628 \u0645\u0637\u0644\u0648\u0628.",
+    "setup.static_hint":        "\u064a\u0633\u062a\u062e\u062f\u0645 \u0647\u0630\u0627 \u0627\u0644\u062d\u0633\u0627\u0628 \u0627\u0644\u062a\u062d\u062f\u064a\u062b \u0627\u0644\u062b\u0627\u0628\u062a \u0628\u0645\u0644\u0641 Excel \u0648\u0644\u0627 \u064a\u062a\u0635\u0644 \u0628\u062a\u0627\u062c\u0631 \u0623\u0648 EasyOrders.",
     "setup.continue_date":      "\u0627\u0644\u0645\u062a\u0627\u0628\u0639\u0629 \u0644\u0627\u062e\u062a\u064a\u0627\u0631 \u0627\u0644\u062a\u0627\u0631\u064a\u062e",
     "setup.run_title":          "تنفيذ التشغيل",
     "setup.run_sub":            "اختر المستخدمين وحدد التاريخ ثم ابدأ.",
@@ -1013,19 +1105,26 @@ window.TaagerUI = (() => {
       document.body.appendChild(host);
     }
     const item = document.createElement("div");
-    item.className = `taager-toast taager-toast-${kind}`;
+    item.className = `taager-toast taager-toast-${kind}${options.variant === "admin" ? " taager-toast-admin" : ""}`;
     item.innerHTML = `
       <div class="taager-toast-dot" aria-hidden="true"></div>
-      <div class="taager-toast-body">${esc(message || t(`ui.toast_${kind}`, t("ui.toast_info", "Updated")))}</div>
+      <div class="taager-toast-content">
+        ${options.title ? `<div class="taager-toast-title">${esc(options.title)}</div>` : ""}
+        <div class="taager-toast-body">${esc(message || t(`ui.toast_${kind}`, t("ui.toast_info", "Updated")))}</div>
+      </div>
       <button class="taager-toast-close" type="button" aria-label="${esc(t("ui.dismiss", "Dismiss"))}">×</button>
     `;
     host.appendChild(item);
+    let closed = false;
     const close = () => {
+      if (closed) return;
+      closed = true;
       item.classList.add("taager-toast-out");
       setTimeout(() => item.remove(), 160);
+      if (typeof options.onClose === "function") options.onClose();
     };
     item.querySelector("button")?.addEventListener("click", close);
-    setTimeout(close, options.timeout || 4200);
+    if (!options.persistent) setTimeout(close, options.timeout == null ? 4200 : options.timeout);
     return close;
   }
 
@@ -1105,6 +1204,19 @@ window.TaagerUI = (() => {
 
   return { t, esc, toast, confirm: confirmDialog, loader, stateBlock, help, enhance };
 })();
+
+const adminNotificationManager = window.AdminNotifications.createManager({
+  storage: window.localStorage,
+  showToast: (message, options) => window.TaagerUI.toast(message, options),
+  isBlocked: () => Boolean(
+    (window.isLicenseExpiryWarningVisible && window.isLicenseExpiryWarningVisible()) ||
+    (window.isExpiredOverlayVisible && window.isExpiredOverlayVisible())
+  ),
+});
+
+function handleAdminNotification(notification) {
+  adminNotificationManager.offer(notification || null);
+}
 
 window.TaagerCountry = (() => {
   const COUNTRIES = {
@@ -1754,6 +1866,9 @@ function applyLang(lang) {
   updateTopBarText();
   try { localStorage.setItem("kbot-lang", lang); } catch(e) {}
   window.dispatchEvent(new CustomEvent("taager-lang-change", { detail: { lang } }));
+  if (window.TaagerPreloader && typeof window.TaagerPreloader.dashboardRefresh === "function") {
+    window.TaagerPreloader.dashboardRefresh();
+  }
   if (typeof invalidatePage === "function") {
     invalidatePage("page-dashboard", "language");
     invalidatePage("page-analytics", "language");
@@ -2037,6 +2152,7 @@ const FEATURE_SCRIPT_GROUPS = {
   dashboardOverview: ["pages/dashboard/sections/section1-overview.js"],
   dashboardPipeline: ["pages/dashboard/sections/section2-pipeline.js"],
   dashboardOrders: ["pages/dashboard/sections/section3-orders.js"],
+  dashboardOrderSources: ["pages/dashboard/sections/section-order-sources.js"],
   dashboardOrdersExport: ["../../node_modules/xlsx/dist/xlsx.full.min.js"],
   dashboardCod: [
     "pages/smart-insights-core.js",
@@ -2054,6 +2170,10 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/smart-insights-core.js",
     "pages/dashboard/dashboard-financial-core.js",
     "pages/dashboard/sections/section7-calculator.js",
+  ],
+  dashboardGmvTarget: [
+    "pages/dashboard/dashboard-financial-core.js",
+    "pages/dashboard/sections/section-gmv-target.js",
   ],
   dashboardCities: [
     "pages/dashboard/dashboard-country-atlas.js",
@@ -2076,15 +2196,16 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/dashboard/dashboard-ai-mirror.js",
     "pages/dashboard/dashboard-ai-ui.js",
     "pages/ai-intelligence/ai-intelligence-data.js",
+    "pages/ai-intelligence/engine/session-memory.js",
+    "pages/dashboard/sections/section-taager-ai.js",
+  ],
+  dashboardAiChat: [
     "pages/ai-intelligence/engine/intent-detector.js",
     "pages/ai-intelligence/engine/analytics-engine.js",
     "pages/ai-intelligence/engine/context-compressor.js",
-    "pages/ai-intelligence/engine/session-memory.js",
     "pages/ai-intelligence/engine/local-reasoning-engine.js",
     "pages/ai-intelligence/engine/scenario-database.js",
     "pages/ai-intelligence/engine/business-orchestrator.js",
-    "pages/dashboard/sections/section-taager-ai.js",
-    "pages/ai-intelligence/ai-intelligence.js",
   ],
 };
 
@@ -2108,6 +2229,7 @@ const FEATURE_STYLE_GROUPS = {
   dashboardOverview: ["pages/dashboard/dashboard-overview.css"],
   dashboardPipeline: ["pages/dashboard/dashboard-pipeline.css"],
   dashboardOrders: ["pages/dashboard/dashboard-orders.css"],
+  dashboardOrderSources: ["pages/dashboard/dashboard-order-sources.css"],
   dashboardCod: ["pages/dashboard/dashboard-cod.css"],
   dashboardProducts: ["pages/dashboard/dashboard-products.css"],
   dashboardCities: ["pages/dashboard/dashboard-cities.css"],
@@ -2116,6 +2238,7 @@ const FEATURE_STYLE_GROUPS = {
   dashboardMarketing: ["pages/dashboard/dashboard-marketing.css"],
   dashboardCampaigns: ["pages/dashboard/dashboard-campaigns.css"],
   dashboardCalculator: ["pages/dashboard/dashboard-calculator.css"],
+  dashboardGmvTarget: ["pages/dashboard/dashboard-gmv-target.css"],
   dashboardForecast: ["pages/dashboard/dashboard-forecast.css"],
   dashboardAi: [
     "pages/dashboard/dashboard-ai.css",
@@ -2222,6 +2345,7 @@ const DASHBOARD_SECTION_FEATURES = {
   overview: "dashboardOverview",
   pipeline: "dashboardPipeline",
   orders: "dashboardOrders",
+  orderSources: "dashboardOrderSources",
   cod: "dashboardCod",
   products: "dashboardProducts",
   cities: "dashboardCities",
@@ -2229,6 +2353,7 @@ const DASHBOARD_SECTION_FEATURES = {
   marketing: "dashboardMarketing",
   campaigns: "dashboardCampaigns",
   calculator: "dashboardCalculator",
+  gmvTarget: "dashboardGmvTarget",
   productForecast: "dashboardForecast",
   prepaid: "dashboardPrepaid",
   staticUpdate: "dashboardStaticUpdate",
@@ -2239,12 +2364,15 @@ window.ensureDashboardSection = function ensureDashboardSection(sectionId) {
   return ensureFeatureScripts(DASHBOARD_SECTION_FEATURES[sectionId] || "dashboard");
 };
 
+let _dashboardSectionPrewarmStarted = false;
 window.prewarmDashboardSections = function prewarmDashboardSections() {
-  const start = () => {
-    [
+  if (_dashboardSectionPrewarmStarted) return;
+  _dashboardSectionPrewarmStarted = true;
+  const queue = [
       "dashboardOverview",
       "dashboardPipeline",
       "dashboardOrders",
+      "dashboardOrderSources",
       "dashboardCod",
       "dashboardProducts",
       "dashboardCommission",
@@ -2252,15 +2380,26 @@ window.prewarmDashboardSections = function prewarmDashboardSections() {
       "dashboardCities",
       "dashboardCampaigns",
       "dashboardCalculator",
+      "dashboardGmvTarget",
       "dashboardForecast",
       "dashboardMarketing",
-    ].reduce(
-      (chain, feature) => chain.then(() => ensureFeatureScripts(feature).catch(() => {})),
-      Promise.resolve()
-    );
+    ];
+  const scheduleNext = () => {
+    if (!queue.length) return;
+    const run = (deadline) => {
+      const phase = window.__taagerPerfLastPhase;
+      const inputPending = navigator.scheduling && typeof navigator.scheduling.isInputPending === "function" && navigator.scheduling.isInputPending();
+      if (inputPending || (phase && phase.state === "running") || (deadline && !deadline.didTimeout && deadline.timeRemaining() < 8)) {
+        scheduleNext();
+        return;
+      }
+      const feature = queue.shift();
+      ensureFeatureScripts(feature).catch(() => {}).finally(scheduleNext);
+    };
+    if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 2500 });
+    else setTimeout(() => run(null), 400);
   };
-  if (window.requestIdleCallback) window.requestIdleCallback(start, { timeout: 2500 });
-  else setTimeout(start, 800);
+  scheduleNext();
 };
 
 function nextFeatureRouteToken(feature) {
@@ -2378,6 +2517,7 @@ window.addEventListener("beforeunload", function () {
 
 function routeAfterCredentialsReady(creds, restoreState) {
   const hasAccounts = creds && creds.accounts && creds.accounts.length > 0;
+  const hasRunnableAccounts = hasAccounts && creds.accounts.some(account => account && account.accountType !== "static");
   const restorePage = restoreState && restoreState.pageId;
 
   if (restorePage === "page-dashboard" && hasAccounts && window._dashboardEnabled) {
@@ -2402,11 +2542,13 @@ function routeAfterCredentialsReady(creds, restoreState) {
   }
 
   if (restorePage === "page-setup" && !window._teamLeaderEnabled) {
-    goToSetup(restoreState.setupStep || (hasAccounts ? "run" : "accounts"));
+    const restoredSetupStep = restoreState.setupStep || (hasRunnableAccounts ? "run" : "accounts");
+    if (!hasRunnableAccounts && restoredSetupStep === "run") goToDashboard();
+    else goToSetup(restoredSetupStep);
     return;
   }
 
-  if (window._teamLeaderEnabled && hasAccounts) goToDashboard();
+  if ((window._teamLeaderEnabled || !hasRunnableAccounts) && hasAccounts) goToDashboard();
   else goToSetup(hasAccounts ? "run" : "accounts");
 }
 
@@ -2574,11 +2716,26 @@ const TaagerPerf = (() => {
       ? sequence
       : ["products", "cities", "orders", "productForecast", "calculator", "cod", "master"];
     const count = Math.max(1, Number(rounds) || 50);
+    // Populate every pane exercised by the check before taking the baseline.
+    // Otherwise a legitimate first-time COD/products pane can look like a leak,
+    // especially at larger datasets where one cached pane exceeds 500 nodes.
+    for (const section of sections.filter((value, index, values) => values.indexOf(value) === index)) {
+      const warmButton = mount.querySelector('.dash-nav-btn[data-section="' + section + '"]');
+      if (warmButton) warmButton.click();
+      await new Promise((resolve) => setTimeout(resolve, 180));
+    }
+    const baselineSection = mount._dashboardActiveSection || sections[sections.length - 1];
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const before = snapshot("before-" + count + "-section-switches");
     for (let i = 0; i < count; i += 1) {
       const section = sections[i % sections.length];
       const button = mount.querySelector('.dash-nav-btn[data-section="' + section + '"]');
       if (button) button.click();
+      await new Promise((resolve) => setTimeout(resolve, 180));
+    }
+    if (mount._dashboardActiveSection !== baselineSection) {
+      const baselineButton = mount.querySelector('.dash-nav-btn[data-section="' + baselineSection + '"]');
+      if (baselineButton) baselineButton.click();
       await new Promise((resolve) => setTimeout(resolve, 180));
     }
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -2634,7 +2791,8 @@ const TaagerPerf = (() => {
             durationMs: entry.duration,
             detail: {
               activeRoute: window.__taagerActiveRoute || "",
-              activeSection: (document.getElementById("db-shell-mount") || {})._dashboardActiveSection || ""
+              activeSection: (document.getElementById("db-shell-mount") || {})._dashboardActiveSection || "",
+              lastSectionPhase: window.__taagerPerfLastPhase || null
             }
           });
         });
@@ -2760,14 +2918,274 @@ function setPreloaderCopy(title, body) {
   if (bodyEl && body) bodyEl.textContent = body;
 }
 
+
+const DASHBOARD_PRELOADER_STAGES = [
+  { id: "engine", labelKey: "preloader.dashboard.stage.engine.label", label: "Dashboard engine", target: 14, bodyKey: "preloader.dashboard.stage.engine.body", body: "Loading dashboard code, styles, and controls." },
+  { id: "snapshot", labelKey: "preloader.dashboard.stage.snapshot.label", label: "Saved snapshots", target: 30, bodyKey: "preloader.dashboard.stage.snapshot.body", body: "Reading saved account snapshots from this device." },
+  { id: "accounts", labelKey: "preloader.dashboard.stage.accounts.label", label: "Accounts", target: 44, bodyKey: "preloader.dashboard.stage.accounts.body", body: "Matching accounts, countries, currencies, and date range." },
+  { id: "metrics", labelKey: "preloader.dashboard.stage.metrics.label", label: "Metrics", target: 66, bodyKey: "preloader.dashboard.stage.metrics.body", body: "Preparing orders, revenue, profit, COD, and NDR metrics." },
+  { id: "modules", labelKey: "preloader.dashboard.stage.modules.label", label: "Dashboard views", target: 80, bodyKey: "preloader.dashboard.stage.modules.body", body: "Building product, city, campaign, calculator, and master views." },
+  { id: "marketing", labelKey: "preloader.dashboard.stage.marketing.label", label: "Marketing spend", target: 91, bodyKey: "preloader.dashboard.stage.marketing.body", body: "Checking connected marketing spend for the selected range." },
+  { id: "rendering", labelKey: "preloader.dashboard.stage.rendering.label", label: "Rendering", target: 97, bodyKey: "preloader.dashboard.stage.rendering.body", body: "Rendering the final dashboard view." }
+];
+
+const DASHBOARD_PRELOADER_ACTIVITY_KEYS = {
+  "Starting dashboard...": "preloader.dashboard.activity.starting",
+  "Dashboard engine loaded": "preloader.dashboard.activity.engineLoaded",
+  "Loading saved snapshot payload": "preloader.dashboard.activity.snapshotPayload",
+  "Reading saved dashboard snapshots": "preloader.dashboard.activity.savedSnapshots",
+  "Matching dashboard account scope": "preloader.dashboard.activity.accountScope",
+  "Preparing dashboard metrics": "preloader.dashboard.activity.metrics",
+  "Building dashboard views": "preloader.dashboard.activity.views",
+  "Dashboard views prepared": "preloader.dashboard.activity.viewsPrepared",
+  "Checking connected marketing spend": "preloader.dashboard.activity.marketing",
+  "Syncing connected marketing spend": "preloader.dashboard.activity.marketingSync",
+  "Checking cached marketing status": "preloader.dashboard.activity.marketingCached",
+  "Rendering final dashboard": "preloader.dashboard.activity.rendering",
+  "Dashboard ready.": "preloader.dashboard.activity.ready",
+  "Dashboard opened with the best available data.": "preloader.dashboard.activity.bestData",
+  "Dashboard metrics prepared": "preloader.dashboard.activity.metricsPrepared",
+  "Preparing empty dashboard metrics": "preloader.dashboard.activity.emptyMetrics",
+  "No saved account snapshot yet": "preloader.dashboard.activity.noSnapshot"
+};
+
+const _dashboardPreloaderState = {
+  percent: 6,
+  target: 6,
+  stageId: "engine",
+  activity: "Starting dashboard...",
+  motionTimer: null,
+  complete: false
+};
+let _dashboardSmoothTimers = [];
+let _dashboardSmoothResolve = null;
+
+function preloaderEscape(value) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+}
+
+function preloaderText(key, fallback) {
+  const value = window._t ? window._t(key) : key;
+  return typeof value === "string" && value !== key ? value : (fallback || value || key);
+}
+
+function preloaderCall(key, fallback, value) {
+  const translated = window._t ? window._t(key) : key;
+  if (typeof translated === "function") return translated(value);
+  return typeof translated === "string" && translated !== key ? translated : fallback;
+}
+
+function dashboardPreloaderStageLabel(stage) {
+  return preloaderText(stage.labelKey, stage.label);
+}
+
+function dashboardPreloaderStageBody(stage) {
+  return preloaderText(stage.bodyKey, stage.body);
+}
+
+function dashboardPreloaderActivityText(activity, fallbackBody) {
+  const text = String(activity || "").trim();
+  if (!text) return fallbackBody || "";
+  let match = text.match(/^(\d+)\s+account snapshots loaded$/);
+  if (match) return preloaderCall("preloader.dashboard.activity.accountSnapshotsLoaded", text, match[1]);
+  match = text.match(/^(\d+)\s+rows in selected period$/);
+  if (match) return preloaderCall("preloader.dashboard.activity.rowsSelected", text, match[1]);
+  match = text.match(/^(\d+)\s+orders prepared$/);
+  if (match) return preloaderCall("preloader.dashboard.activity.ordersPrepared", text, match[1]);
+  const key = DASHBOARD_PRELOADER_ACTIVITY_KEYS[text];
+  return key ? preloaderText(key, text) : text;
+}
+
+function dashboardPreloaderStageIndex(id) {
+  return Math.max(0, DASHBOARD_PRELOADER_STAGES.findIndex((stage) => stage.id === id));
+}
+
+function dashboardPreloaderStage(id) {
+  return DASHBOARD_PRELOADER_STAGES.find((stage) => stage.id === id) || DASHBOARD_PRELOADER_STAGES[0];
+}
+
+function dashboardPreloaderRoot() {
+  return document.getElementById("dashboard-live-preloader");
+}
+
+function dashboardStagePercent(stage, index, activeIndex, totalPercent) {
+  if (_dashboardPreloaderState.complete || index < activeIndex) return 100;
+  if (index > activeIndex) return 0;
+  const previousTarget = index > 0 ? Number(DASHBOARD_PRELOADER_STAGES[index - 1].target || 0) : 0;
+  const stageTarget = Number(stage.target || previousTarget + 1);
+  const localPercent = ((totalPercent - previousTarget) / Math.max(1, stageTarget - previousTarget)) * 100;
+  return Math.max(1, Math.min(99, Math.round(localPercent)));
+}
+
+function updateDashboardPreloaderDom() {
+  const root = dashboardPreloaderRoot();
+  if (!root) return;
+  const percent = Math.max(0, Math.min(100, Math.round(_dashboardPreloaderState.percent)));
+  const stage = dashboardPreloaderStage(_dashboardPreloaderState.stageId);
+  const percentEl = root.querySelector("[data-dashboard-loader-percent]");
+  const fillEl = root.querySelector("[data-dashboard-loader-fill]");
+  const ringEl = root.querySelector("[data-dashboard-loader-ring]");
+  const activityEl = root.querySelector("[data-dashboard-loader-activity]");
+  const titleEl = root.querySelector("[data-dashboard-loader-title]");
+  const bodyEl = root.querySelector("[data-dashboard-loader-body]");
+  const panelEl = root.querySelector("[data-dashboard-loader-stages]");
+  root.setAttribute("data-dashboard-loader-stage", stage.id);
+  if (percentEl) percentEl.textContent = String(percent);
+  if (fillEl) fillEl.style.width = percent + "%";
+  if (ringEl) ringEl.style.setProperty("--dashboard-loader-progress", (percent * 3.6) + "deg");
+  const stageBody = dashboardPreloaderStageBody(stage);
+  if (activityEl) activityEl.textContent = dashboardPreloaderActivityText(_dashboardPreloaderState.activity, stageBody);
+  if (titleEl) titleEl.textContent = dashboardPreloaderStageLabel(stage);
+  if (bodyEl) bodyEl.textContent = stageBody;
+  if (!panelEl) return;
+  const activeIndex = dashboardPreloaderStageIndex(stage.id);
+  panelEl.innerHTML = DASHBOARD_PRELOADER_STAGES.map((item, index) => {
+    const stepPercent = dashboardStagePercent(item, index, activeIndex, percent);
+    const cls = index < activeIndex || _dashboardPreloaderState.complete
+      ? "is-done"
+      : (index === activeIndex ? "is-active" : "");
+    return '<div class="dashboard-loader-step ' + cls + '">' +
+      '<span class="dashboard-loader-step-dot" aria-hidden="true"></span>' +
+      '<span class="dashboard-loader-step-label">' + preloaderEscape(dashboardPreloaderStageLabel(item)) + '</span>' +
+      '<span class="dashboard-loader-step-percent">' + stepPercent + '%</span>' +
+      '</div>';
+  }).join("");
+}
+
+function clearDashboardSmoothCompletion() {
+  _dashboardSmoothTimers.forEach((timer) => clearTimeout(timer));
+  _dashboardSmoothTimers = [];
+  if (_dashboardSmoothResolve) {
+    const resolve = _dashboardSmoothResolve;
+    _dashboardSmoothResolve = null;
+    resolve();
+  }
+}
+
+function resetDashboardPreloader(options) {
+  const opts = options || {};
+  clearDashboardSmoothCompletion();
+  _dashboardPreloaderState.percent = 6;
+  _dashboardPreloaderState.target = 6;
+  _dashboardPreloaderState.stageId = "engine";
+  _dashboardPreloaderState.activity = opts.activity || "Starting dashboard...";
+  _dashboardPreloaderState.complete = false;
+  updateDashboardPreloaderDom();
+  startDashboardPreloaderMotion();
+}
+
+function applyDashboardPreloaderComplete(options) {
+  const opts = options || {};
+  _dashboardPreloaderState.stageId = "rendering";
+  _dashboardPreloaderState.complete = true;
+  _dashboardPreloaderState.target = 100;
+  _dashboardPreloaderState.percent = 100;
+  _dashboardPreloaderState.activity = opts.activity || (opts.error ? "Dashboard opened with the best available data." : "Dashboard ready.");
+  updateDashboardPreloaderDom();
+}
+
+function smoothCompleteDashboardPreloader(options) {
+  const opts = options || {};
+  clearDashboardSmoothCompletion();
+  const checkpoints = [
+    { stage: "snapshot", percent: 30, activity: "Reading saved dashboard snapshots" },
+    { stage: "accounts", percent: 44, activity: "Matching dashboard account scope" },
+    { stage: "metrics", percent: 66, activity: "Preparing dashboard metrics" },
+    { stage: "modules", percent: 80, activity: "Building dashboard views" },
+    { stage: "marketing", percent: 91, activity: "Checking connected marketing spend" },
+    { stage: "rendering", percent: 97, activity: opts.activity || "Rendering final dashboard" }
+  ].filter((checkpoint) => checkpoint.percent > _dashboardPreloaderState.percent);
+  const stepMs = Number.isFinite(Number(opts.stepMs)) ? Math.max(40, Number(opts.stepMs)) : 85;
+  const holdMs = Number.isFinite(Number(opts.holdMs)) ? Math.max(40, Number(opts.holdMs)) : 120;
+
+  return new Promise((resolve) => {
+    _dashboardSmoothResolve = resolve;
+    function finish() {
+      applyDashboardPreloaderComplete(opts);
+      const timer = setTimeout(() => {
+        if (_dashboardSmoothResolve === resolve) _dashboardSmoothResolve = null;
+        resolve();
+      }, holdMs);
+      _dashboardSmoothTimers.push(timer);
+    }
+    function next(index) {
+      if (index >= checkpoints.length) {
+        finish();
+        return;
+      }
+      const checkpoint = checkpoints[index];
+      const timer = setTimeout(() => {
+        const stage = dashboardPreloaderStage(checkpoint.stage);
+        _dashboardPreloaderState.stageId = stage.id;
+        _dashboardPreloaderState.complete = false;
+        _dashboardPreloaderState.target = Math.max(_dashboardPreloaderState.target, checkpoint.percent);
+        _dashboardPreloaderState.percent = Math.max(_dashboardPreloaderState.percent, checkpoint.percent);
+        _dashboardPreloaderState.activity = checkpoint.activity;
+        updateDashboardPreloaderDom();
+        next(index + 1);
+      }, stepMs);
+      _dashboardSmoothTimers.push(timer);
+    }
+    next(0);
+  });
+}
+
+function startDashboardPreloaderMotion() {
+  if (_dashboardPreloaderState.motionTimer) return;
+  _dashboardPreloaderState.motionTimer = setInterval(() => {
+    if (!_dashboardPreloaderState.complete && _dashboardPreloaderState.target < 92) {
+      _dashboardPreloaderState.target = Math.min(92, _dashboardPreloaderState.target + 0.22);
+    }
+    const delta = _dashboardPreloaderState.target - _dashboardPreloaderState.percent;
+    if (Math.abs(delta) > 0.12) {
+      _dashboardPreloaderState.percent += Math.max(0.18, Math.abs(delta) * 0.14) * Math.sign(delta);
+    }
+    updateDashboardPreloaderDom();
+    if (_dashboardPreloaderState.complete) {
+      clearInterval(_dashboardPreloaderState.motionTimer);
+      _dashboardPreloaderState.motionTimer = null;
+    }
+  }, 280);
+}
+
+function setDashboardPreloaderStage(stageId, options) {
+  const stage = dashboardPreloaderStage(stageId);
+  const opts = options || {};
+  _dashboardPreloaderState.stageId = stage.id;
+  _dashboardPreloaderState.complete = false;
+  _dashboardPreloaderState.target = Math.max(_dashboardPreloaderState.target, Number(opts.percent || stage.target || 10));
+  _dashboardPreloaderState.activity = opts.activity || _dashboardPreloaderState.activity || stage.body;
+  updateDashboardPreloaderDom();
+  startDashboardPreloaderMotion();
+}
+
+function completeDashboardPreloader(options) {
+  const opts = options || {};
+  if (opts.smooth) return smoothCompleteDashboardPreloader(opts);
+  clearDashboardSmoothCompletion();
+  applyDashboardPreloaderComplete(opts);
+  return Promise.resolve();
+}
+
+window.TaagerPreloader = {
+  dashboardStage: setDashboardPreloaderStage,
+  dashboardActivity: function (activity, percent) {
+    if (activity) _dashboardPreloaderState.activity = String(activity);
+    if (percent != null) _dashboardPreloaderState.target = Math.max(_dashboardPreloaderState.target, Number(percent) || _dashboardPreloaderState.target);
+    updateDashboardPreloaderDom();
+    startDashboardPreloaderMotion();
+  },
+  dashboardRefresh: function (options) {
+    if (options && options.smooth) resetDashboardPreloader(options);
+    else updateDashboardPreloaderDom();
+  },
+  dashboardComplete: completeDashboardPreloader
+};
 function dismissPreloaderWhenReady(pageId) {
   if (_preloaderDismissed) return;
 
   if (pageId === "page-dashboard") {
-    const dashboardReady = window._dashboardInitialReady;
-    if (dashboardReady && typeof dashboardReady.then === "function") {
-      dashboardReady.then(() => dismissPreloader()).catch(() => dismissPreloader());
-    }
+    dismissPreloader();
     return;
   }
 
@@ -2804,10 +3222,10 @@ function showPage(id) {
   if (centerEl) centerEl.classList.toggle("visible", PAGES_WITH_TOPBAR.has(id));
   if (window.TaagerUI) window.TaagerUI.enhance(page);
   if (id === "page-dashboard" && window._dashboardInitialReady) {
-    setPreloaderCopy(
-      window._t ? window._t("dashboard.initial_sync_title") : "Syncing dashboard data...",
-      window._t ? window._t("dashboard.initial_sync_body") : "Preparing saved orders, account metrics, product calculators, marketing spend, and AI context. Large workspaces can take a little while."
-    );
+    setDashboardPreloaderStage("engine", {
+      activity: "Dashboard startup in progress",
+      body: window._t ? window._t("dashboard.initial_sync_body") : "Preparing saved orders, account metrics, product calculators, marketing spend, and AI context. Large workspaces can take a little while."
+    });
   }
   // Dismiss preloader once the first page is ready.
   dismissPreloaderWhenReady(id);
@@ -2847,6 +3265,8 @@ function startPeriodicLicenseCheck() {
         daysLeft:     lr.daysLeft,
         licenseKey:   lr.key || (window._kbotUser || {}).licenseKey || "",
       };
+      updateTopBarText();
+      handleAdminNotification(lr.adminNotification);
 
       // Fetch fresh accounts & features state
       const creds = await window.api.getCredentials();
@@ -2912,6 +3332,7 @@ function _triggerExpiredOverlay(reason) {
         };
         updateTopBarText();
       }
+      handleAdminNotification(freshResult && freshResult.adminNotification);
       startPeriodicLicenseCheck();
     },
   });
@@ -2945,28 +3366,35 @@ window.returnToLicensePage = returnToLicensePage;
 
 function resolveAutoRunAccountIds(creds) {
   const accounts = (creds && creds.accounts) || [];
-  const allIds = accounts.map(a => a.id);
+  const runnableAccounts = accounts.filter(a => a && a.accountType !== "static");
+  const allIds = runnableAccounts.map(a => a.id);
   const savedIds = Array.isArray(creds && creds.autoRunAccountIds) ? creds.autoRunAccountIds : [];
   const selected = savedIds.filter(id => allIds.includes(id));
   return selected.length ? selected : allIds;
 }
 
 async function runAutoRunTick(dateFrom, dateTo) {
+  if (window._autoRunTickInProgress) return;
   const active = document.querySelector(".page.active");
   if (active && active.id === "page-run") return;
 
+  window._autoRunTickInProgress = true;
   let freshCreds = null;
   try {
     freshCreds = await window.api.getCredentials();
     window._kbotAccounts = freshCreds.accounts || [];
   } catch (_) {}
 
-  const accountIds = resolveAutoRunAccountIds(freshCreds || { accounts: window._kbotAccounts || [] });
-  if (!accountIds.length) {
-    console.warn("[auto-run] No accounts found, skipping tick.");
-    return;
+  try {
+    const accountIds = resolveAutoRunAccountIds(freshCreds || { accounts: window._kbotAccounts || [] });
+    if (!accountIds.length) {
+      console.warn("[auto-run] No runnable accounts found, skipping tick.");
+      return;
+    }
+    goToRun(dateFrom, dateTo, accountIds);
+  } finally {
+    setTimeout(() => { window._autoRunTickInProgress = false; }, 5000);
   }
-  goToRun(dateFrom, dateTo, accountIds);
 }
 // ── Admin Sync: re-fetch license + account state from Supabase without restarting ──
 // Called by the ↻ Sync button in the topbar.
@@ -3122,6 +3550,7 @@ async function init() {
   }
   window._kbotAllowReset = licenseResult.allowReset === true;
   updateTopBarText();
+  handleAdminNotification(licenseResult.adminNotification);
 
   // Show admin sync button now that license is confirmed valid
   const _rb = document.getElementById("btn-admin-refresh");
@@ -3189,9 +3618,11 @@ async function refreshStartupStateFromServer() {
     window._dashboardEnabled  = freshCreds.dashboardEnabled  === true;
     window._teamLeaderEnabled = freshCreds.teamLeaderEnabled === true;
     updateTopBarText();
+    handleAdminNotification(freshLicense.adminNotification);
     if (_activePageId === "page-setup" && typeof window.renderSetup === "function") {
       const hasAccounts = freshCreds.accounts && freshCreds.accounts.length > 0;
-      goToSetup(hasAccounts ? "run" : "accounts");
+      const hasRunnableAccounts = hasAccounts && freshCreds.accounts.some(account => account && account.accountType !== "static");
+      goToSetup(hasRunnableAccounts ? "run" : "accounts");
     }
   } catch (e) {
     if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(e, { operation: "startup.backgroundRefresh" });
@@ -3225,6 +3656,7 @@ async function afterLicense(isFlush = false) {
         window._kbotUser = { customerName: lr.customerName || null, daysLeft: lr.daysLeft, licenseKey: lr.key || '' };
         window._kbotAllowReset = lr.allowReset === true;
         updateTopBarText();
+        handleAdminNotification(lr.adminNotification);
         // Show admin sync button now that license is confirmed valid
         const _rb = document.getElementById("btn-admin-refresh");
         if (_rb) _rb.style.display = "inline-flex";
@@ -3261,8 +3693,16 @@ function goToSetup(initialStep) {
 }
 
 function goToRun(dateFrom, dateTo, selectedAccountIds) {
-  if (window._teamLeaderEnabled) {
-    goToDashboard();
+  if (window._teamLeaderEnabled || !(window._kbotAccounts || []).some(account => account && account.accountType !== "static")) {
+    if (window._dashboardEnabled && typeof _onRunForDashboard === "function") {
+      _onRunForDashboard(selectedAccountIds || [], { dateFrom, dateTo }, { stayOnDashboard: true }).catch((err) => {
+        if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(err, { operation: "dashboard.autorunFetch" });
+        console.warn("[Dashboard] Auto-run update failed:", err?.message || err);
+        goToDashboard();
+      });
+    } else {
+      goToDashboard();
+    }
     return;
   }
   renderRun(dateFrom, dateTo, selectedAccountIds || [], (resultData) => {
@@ -3410,7 +3850,7 @@ function _renderLockedPage(pageId, featureNameEn, featureNameAr) {
 }
 
 async function goToAnalytics() {
-  if (window._teamLeaderEnabled) {
+  if (window._teamLeaderEnabled || !(window._kbotAccounts || []).some(account => account && account.accountType !== "static")) {
     goToDashboard();
     return;
   }
@@ -3442,7 +3882,7 @@ async function goToAnalytics() {
 }
 
 async function goToOperations() {
-  if (window._teamLeaderEnabled) {
+  if (window._teamLeaderEnabled || !(window._kbotAccounts || []).some(account => account && account.accountType !== "static")) {
     goToDashboard();
     return;
   }
@@ -3504,7 +3944,9 @@ async function goToDashboard() {
     showPage("page-dashboard");
   }
   try {
+    setDashboardPreloaderStage("engine", { activity: "Loading dashboard engine" });
     await ensureFeatureScripts("dashboard");
+    setDashboardPreloaderStage("snapshot", { activity: "Dashboard engine loaded" });
     if (!isLatestFeatureRoute("dashboard", token) || !isActivePage("page-dashboard")) return;
     let renderResult = null;
     if (typeof renderDashboard === "function") {
@@ -3546,6 +3988,7 @@ async function goToAiIntelligence() {
   try {
     await ensureFeatureScripts("dashboard");
     await ensureFeatureScripts("dashboardAi");
+    await ensureFeatureScripts("ai");
     if (!isLatestFeatureRoute("ai-intelligence", token) || !isActivePage("page-ai-intelligence")) return;
     if (typeof renderAiIntelligence === "function") {
       await renderAiIntelligence(() => goToSetup("run"));
@@ -3567,6 +4010,7 @@ async function renderAiIntelligence() {
   }
   await ensureFeatureScripts("dashboard");
   await ensureFeatureScripts("dashboardAi");
+  await ensureFeatureScripts("ai");
   if (typeof window.renderAiIntelligencePage === "function") {
     try {
       await window.renderAiIntelligencePage(() => goToSetup("run"));
@@ -3697,6 +4141,22 @@ function _dashboardFetchUserError(error) {
 }
 
 async function _onRunForDashboard(selectedAccountIds, period, options) {
+  const shouldMarkBusy = !window._botIsRunning;
+  if (shouldMarkBusy) {
+    window._botIsRunning = true;
+    if (window.api && typeof window.api.botStarted === "function") window.api.botStarted();
+  }
+  try {
+    return await _runDashboardUpdate(selectedAccountIds, period, options);
+  } finally {
+    if (shouldMarkBusy) {
+      window._botIsRunning = false;
+      if (window.api && typeof window.api.botFinished === "function") window.api.botFinished();
+    }
+  }
+}
+
+async function _runDashboardUpdate(selectedAccountIds, period, options) {
   options = options || {};
   if (!window._dashboardEnabled) {
     goToDashboard(); // opens Dashboard preview mode
@@ -3881,7 +4341,12 @@ async function _onRunForDashboard(selectedAccountIds, period, options) {
       dateFrom: range.dateFrom,
       dateTo: range.dateTo,
       targetCurrency: roi.currency || window.dashboardActiveCurrency || "SAR",
-      egpRate: Number(roi.egpRate) || 52
+      egpRate: window.TaagerCurrency && typeof window.TaagerCurrency.rates === "function"
+        ? Number((window.TaagerCurrency.rates() || {}).EGP) || Number(roi.egpRate) || 52
+        : Number(roi.egpRate) || 52,
+      exchangeRates: window.TaagerCurrency && typeof window.TaagerCurrency.rates === "function"
+        ? window.TaagerCurrency.rates()
+        : {}
     };
     try {
       _setDashboardFetchUi({

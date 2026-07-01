@@ -2876,6 +2876,7 @@ window.renderSetup = function (onComplete, initialStep) {
         if (item.dataset.page === "operations") { goToOperations(); return; }
         if (item.dataset.page === "dashboard")  { goToDashboard();  return; }
         const targetStep = item.dataset.step;
+        if (targetStep === "run" && !accounts.some(acc => acc.accountType !== "static")) { goToDashboard(); return; }
         // Only allow going to date/review if accounts exist
         if (targetStep !== "accounts" && accounts.length === 0) return;
         step = targetStep;
@@ -2928,6 +2929,7 @@ window.renderSetup = function (onComplete, initialStep) {
   // ─────────────────────────────────────────────────────────────────
   function renderAccountsStep(content) {
     const canAdd = accounts.length < maxAccounts;
+    const hasRunnableAccounts = accounts.some(acc => acc.accountType !== "static");
     const disabledReason = !canAdd
       ? (maxAccounts <= 1 ? t("setup.license_one") : t("setup.license_max")(maxAccounts))
       : null;
@@ -2990,7 +2992,7 @@ window.renderSetup = function (onComplete, initialStep) {
       <div style="display:flex;justify-content:flex-end">
         <button class="sv3-run-btn" id="sv3-next-btn" style="width:auto;padding:12px 32px"
           ${accounts.length === 0 ? "disabled" : ""}>
-          ${window._teamLeaderEnabled ? (t("setup.nav_dashboard") || "Dashboard") : t("setup.next_btn")}
+          ${window._teamLeaderEnabled || !hasRunnableAccounts ? (t("setup.nav_dashboard") || "Dashboard") : t("setup.next_btn")}
         </button>
       </div>
     `;
@@ -3051,7 +3053,7 @@ window.renderSetup = function (onComplete, initialStep) {
 
     document.getElementById("sv3-next-btn")?.addEventListener("click", () => {
       if (accounts.length) {
-        if (window._teamLeaderEnabled) {
+        if (window._teamLeaderEnabled || !accounts.some(acc => acc.accountType !== "static")) {
           goToDashboard();
           return;
         }
@@ -3068,21 +3070,22 @@ window.renderSetup = function (onComplete, initialStep) {
     const isLocked = !!acc.locked;
     const hasMemberName = !!String(acc.memberName || "").trim();
     const country = accountCountryMeta(acc);
+    const isStatic = acc.accountType === "static";
     return `
       <div class="sv3-acc-card ${isLocked ? "sv3-acc-locked" : ""}" data-id="${acc.id}">
         <div class="sv3-card-meta-stack sv3-manage-meta-row">
           <div class="sv3-lock-badge ${isLocked ? "" : "unlocked"}">${isLocked ? `🔒 ${t("setup.locked")}` : `✓ ${t("setup.unlocked") || "Unlocked"}`}</div>
-          <div class="sv3-country-badge" title="${esc(country.label)}" aria-label="${esc(country.label)}">
+          ${isStatic ? `<div class="sv3-country-badge">${esc(setupText("setup.static_badge", "Static"))}</div>` : `<div class="sv3-country-badge" title="${esc(country.label)}" aria-label="${esc(country.label)}">
             <span class="${esc(country.flagClass)}" aria-hidden="true"></span>
             <span>${esc(country.code)}</span>
-          </div>
+          </div>`}
         </div>
         <div class="sv3-avatar ${isLocked ? "lk" : ""}" style="margin-top:${isLocked ? "18px" : "8px"}">${isLocked ? "🔒" : initial}</div>
         <div class="sv3-acc-name" title="${esc(label)}">${esc(label)}</div>
         <div class="sv3-acc-email" title="${esc(emailLine)}">${esc(emailLine)}</div>
-        <button class="sv3-member-name-btn" type="button" data-id="${acc.id}">
+        ${isStatic ? "" : `<button class="sv3-member-name-btn" type="button" data-id="${acc.id}">
           ${hasMemberName ? t("setup.edit_member_name") : t("setup.add_member_name")}
-        </button>
+        </button>`}
         ${!isLocked ? `<div class="sv3-hover-acts">
           <button class="sv3-act-btn sv3-edit-btn" data-id="${acc.id}">${t("setup.edit_btn")}</button>
           <button class="sv3-act-btn d sv3-del-btn" data-id="${acc.id}">${t("setup.delete_btn") || "Delete"}</button>
@@ -3095,8 +3098,10 @@ window.renderSetup = function (onComplete, initialStep) {
   // ─────────────────────────────────────────────────────────────────
   function renderRunStep(content) {
     injectCalendarStyles();
+    const runnableAccounts = accounts.filter(acc => acc.accountType !== "static");
+    selectedIds = selectedIds.filter(id => runnableAccounts.some(acc => acc.id === id));
     const totalDays   = daysBetween(dateFrom, dateTo);
-    const selAccounts = accounts.filter(a => selectedIds.includes(a.id));
+    const selAccounts = runnableAccounts.filter(a => selectedIds.includes(a.id));
     const dateComplete = dateMode !== "range" || (!!dateFrom && !!dateTo);
     const canLaunch = selAccounts.length > 0 && dateComplete && !isDateRangeInvalid();
     const launchHint = selAccounts.length === 0 ? t("setup.select_user_to_launch") : t("setup.run_security");
@@ -3211,21 +3216,21 @@ window.renderSetup = function (onComplete, initialStep) {
 
         <div class="sv3-users-toolbar">
           <div class="sv3-users-count" id="sv3-users-selected-count">
-            <strong>${t("setup.users_count")(selAccounts.length)}</strong> / ${t("setup.accounts_count")(accounts.length)}
+            <strong>${t("setup.users_count")(selAccounts.length)}</strong> / ${t("setup.accounts_count")(runnableAccounts.length)}
           </div>
         </div>
 
         <div class="sv3-grid sv3-run-accounts" id="sv3-run-acc-grid">
-          <div class="sv3-acc-card ${accounts.length > 0 && accounts.every(a => selectedIds.includes(a.id)) ? "selected" : ""}" id="sv3-all-card" style="border-style:dashed;cursor:pointer">
+          <div class="sv3-acc-card ${runnableAccounts.length > 0 && runnableAccounts.every(a => selectedIds.includes(a.id)) ? "selected" : ""}" id="sv3-all-card" style="border-style:dashed;cursor:pointer">
             <div class="sv3-check">
               <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5l2.5 2.5L8 3" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
             </div>
             <div class="sv3-avatar" style="background:linear-gradient(135deg,#ff2d7a,#7c6af7);margin-top:8px">★</div>
             <div class="sv3-acc-name">${t("setup.all_users")}</div>
-            <div class="sv3-acc-email">${t("setup.accounts_count")(accounts.length)}</div>
+            <div class="sv3-acc-email">${t("setup.accounts_count")(runnableAccounts.length)}</div>
             <div class="sv3-status-pill ok"><span class="sv3-dot"></span>${t("setup.select_all")}</div>
           </div>
-          ${accounts.map((acc, index) => accountRunCard(acc, index + 1)).join("")}
+          ${runnableAccounts.map((acc, index) => accountRunCard(acc, index + 1)).join("")}
         </div>
 
         <div class="sv3-continue-row">
@@ -3314,7 +3319,7 @@ window.renderSetup = function (onComplete, initialStep) {
 
     // Account card selection (All Users + individual)
     document.getElementById("sv3-all-card")?.addEventListener("click", () => {
-      const allIds = accounts.map(a => a.id);
+      const allIds = runnableAccounts.map(a => a.id);
       const allSel = allIds.every(id => selectedIds.includes(id));
       if (allSel) {
         selectedIds = allIds.length > 0 ? [allIds[0]] : selectedIds;
@@ -3345,7 +3350,7 @@ window.renderSetup = function (onComplete, initialStep) {
     });
 
     document.getElementById("sv3-continue-date")?.addEventListener("click", () => {
-      const sel = accounts.filter(a => selectedIds.includes(a.id));
+      const sel = runnableAccounts.filter(a => selectedIds.includes(a.id));
       if (!sel.length) return;
       runFlowStep = "date";
       renderStep();
@@ -3370,7 +3375,7 @@ window.renderSetup = function (onComplete, initialStep) {
     });
 
     document.getElementById("sv3-run-final")?.addEventListener("click", () => {
-      const sel = accounts.filter(a => selectedIds.includes(a.id));
+      const sel = runnableAccounts.filter(a => selectedIds.includes(a.id));
       const dateComplete = dateMode !== "range" || (!!dateFrom && !!dateTo);
       if (sel.length && dateComplete && !isDateRangeInvalid()) {
         onComplete({ dateFrom, dateTo, selectedAccountIds: selectedIds.length ? selectedIds : null });
@@ -3503,7 +3508,7 @@ window.renderSetup = function (onComplete, initialStep) {
       sv3AutoRunEnabled = !sv3AutoRunEnabled;
       await window.api.setAutoRun(sv3AutoRunEnabled);
       if (sv3AutoRunEnabled) {
-        const allIds = accounts.map(a => a.id);
+        const allIds = runnableAccounts.map(a => a.id);
         const autoRunIds = selectedIds.length ? selectedIds : allIds;
         if (!selectedIds.length && allIds.length) {
           selectedIds = [...allIds];
@@ -3532,7 +3537,7 @@ window.renderSetup = function (onComplete, initialStep) {
       sv3AutoRunEnabled      = creds.autoRun         || false;
       sv3AutoRunIntervalMins = creds.autoRunInterval  || 30;
       const savedAutoRunIds = Array.isArray(creds.autoRunAccountIds)
-        ? creds.autoRunAccountIds.filter(id => accounts.some(a => a.id === id))
+        ? creds.autoRunAccountIds.filter(id => runnableAccounts.some(a => a.id === id))
         : [];
       if (sv3AutoRunEnabled && savedAutoRunIds.length) {
         selectedIds = savedAutoRunIds;
@@ -3541,7 +3546,7 @@ window.renderSetup = function (onComplete, initialStep) {
       sv3UpdateLaunchMinUI();
       sv3UpdateAutoConfirmUI();
       if (sv3AutoRunEnabled) {
-        const allIds = accounts.map(a => a.id);
+        const allIds = runnableAccounts.map(a => a.id);
         const autoRunIds = selectedIds.length ? selectedIds : allIds;
         if (!selectedIds.length && allIds.length) {
           selectedIds = [...allIds];
@@ -3582,7 +3587,7 @@ window.renderSetup = function (onComplete, initialStep) {
   }
 
   function updateLaunchState() {
-    const selAccounts = accounts.filter(a => selectedIds.includes(a.id));
+    const selAccounts = accounts.filter(a => a.accountType !== "static" && selectedIds.includes(a.id));
     const invalid = isDateRangeInvalid();
     const dateComplete = dateMode !== "range" || (!!dateFrom && !!dateTo);
     const canLaunch = selAccounts.length > 0 && dateComplete && !invalid;
@@ -3628,7 +3633,8 @@ window.renderSetup = function (onComplete, initialStep) {
   }
 
   function updateRunCards() {
-    const allIds = accounts.map(a => a.id);
+    const runnableAccounts = accounts.filter(a => a.accountType !== "static");
+    const allIds = runnableAccounts.map(a => a.id);
     const allSel = allIds.length > 0 && allIds.every(id => selectedIds.includes(id));
 
     // Update All Users card
@@ -3642,12 +3648,12 @@ window.renderSetup = function (onComplete, initialStep) {
     });
 
     // Update summary
-    const selAccounts = accounts.filter(a => selectedIds.includes(a.id));
+    const selAccounts = runnableAccounts.filter(a => selectedIds.includes(a.id));
     const usersEl = document.getElementById("sv3-sum-users");
     const avsEl   = document.getElementById("sv3-mini-avs");
     const selectedCountEl = document.getElementById("sv3-users-selected-count");
     if (selectedCountEl) {
-      selectedCountEl.innerHTML = `<strong>${t("setup.users_count")(selAccounts.length)}</strong> / ${t("setup.accounts_count")(accounts.length)}`;
+      selectedCountEl.innerHTML = `<strong>${t("setup.users_count")(selAccounts.length)}</strong> / ${t("setup.accounts_count")(runnableAccounts.length)}`;
     }
     if (usersEl) usersEl.textContent = `${t("setup.users_count")(selAccounts.length)}`;
     if (avsEl) {
@@ -3836,6 +3842,7 @@ window.renderSetup = function (onComplete, initialStep) {
     const selectedTaagerCountry = (acc?.taagerCountry || "sa").toLowerCase();
     const selectedTaagerMerchantId = acc?.taagerAffiliateCode || "";
     const selectedDashboardProvider = acc?.dashboardEnrichmentProvider === "easyorders" ? "easyorders" : "none";
+    const selectedAccountType = acc?.accountType === "static" ? "static" : "live";
     const isTeamLeaderMode = window._teamLeaderEnabled === true;
     const easyRequiredMark = '<span data-easy-required-mark style="color:var(--danger)">*</span>';
     const taagerMethodOptions = [
@@ -3870,7 +3877,25 @@ window.renderSetup = function (onComplete, initialStep) {
           <button id="sv3-form-back" style="margin-left:auto;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);font-size:16px;flex-shrink:0;transition:all 0.2s ease" onmouseover="this.style.background='rgba(255,255,255,0.08)';this.style.color='var(--text)'" onmouseout="this.style.background='rgba(255,255,255,0.03)';this.style.color='var(--text2)'">×</button>
         </div>
 
-        <div class="sv3-form-grid">
+        ${!isEdit ? `<div class="form-group" style="margin-bottom:20px">
+          <label>${esc(setupText("setup.account_type", "Account type"))}</label>
+          <input type="hidden" id="sv3-account-type" value="${esc(selectedAccountType)}" />
+          <div class="sv3-tab-control">
+            <button type="button" class="sv3-tab-btn ${selectedAccountType === "live" ? "is-active" : ""}" data-account-type="live">${esc(setupText("setup.normal_account", "Normal Account"))}</button>
+            <button type="button" class="sv3-tab-btn ${selectedAccountType === "static" ? "is-active" : ""}" data-account-type="static">${esc(setupText("setup.static_account", "Static Account"))}</button>
+          </div>
+        </div>` : `<input type="hidden" id="sv3-account-type" value="${esc(selectedAccountType)}" />`}
+
+        <div id="sv3-static-account-panel" class="sv3-form-panel" style="${selectedAccountType === "static" ? "" : "display:none;"}margin-bottom:20px">
+          <div class="form-section-title">${esc(setupText("setup.static_account", "Static Account"))}</div>
+          <div class="form-group">
+            <label>${esc(setupText("setup.static_name", "Account name"))} <span style="color:var(--danger)">*</span></label>
+            <input type="text" id="sv3-static-name" value="${esc(acc?.label || acc?.memberName || "")}" placeholder="${esc(setupText("setup.static_name_placeholder", "Example: Jake"))}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
+            <div class="sv3-field-hint">${esc(setupText("setup.static_hint", "This account uses Excel Static Update and does not connect to Taager or EasyOrders."))}</div>
+          </div>
+        </div>
+
+        <div class="sv3-form-grid" id="sv3-live-account-panel" style="${selectedAccountType === "static" ? "display:none;" : ""}">
           <div class="sv3-form-panel">
         <div class="form-section-title">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
@@ -3965,6 +3990,23 @@ window.renderSetup = function (onComplete, initialStep) {
     `;
 
     document.body.appendChild(overlay);
+
+    const syncAccountTypeFields = () => {
+      const type = document.getElementById("sv3-account-type")?.value === "static" ? "static" : "live";
+      const staticPanel = document.getElementById("sv3-static-account-panel");
+      const livePanel = document.getElementById("sv3-live-account-panel");
+      if (staticPanel) staticPanel.style.display = type === "static" ? "" : "none";
+      if (livePanel) livePanel.style.display = type === "static" ? "none" : "";
+    };
+    overlay.querySelectorAll("[data-account-type]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const input = document.getElementById("sv3-account-type");
+        if (input) input.value = btn.dataset.accountType === "static" ? "static" : "live";
+        overlay.querySelectorAll("[data-account-type]").forEach(tab => tab.classList.toggle("is-active", tab === btn));
+        syncAccountTypeFields();
+      });
+    });
+    syncAccountTypeFields();
 
     const syncTaagerLoginFields = () => {
       const method = document.getElementById("sv3-taager-login-method")?.value || "email";
@@ -4084,6 +4126,8 @@ window.renderSetup = function (onComplete, initialStep) {
     document.getElementById("sv3-form-cancel")?.addEventListener("click", close);
 
     document.getElementById("sv3-form-save")?.addEventListener("click", async () => {
+      const accountType = document.getElementById("sv3-account-type")?.value === "static" ? "static" : "live";
+      const staticName = (document.getElementById("sv3-static-name")?.value || "").trim();
       const easyEmail    = document.getElementById("sv3-easy-email").value.trim();
       const easyPassword = document.getElementById("sv3-easy-pass").value;
       const easyStore    = document.getElementById("sv3-easy-store").value.trim();
@@ -4105,11 +4149,17 @@ window.renderSetup = function (onComplete, initialStep) {
       const nextTaagerPhone = isEdit ? (taagerPhone || currentAccount?.taagerPhone || "") : taagerPhone;
       const nextTaagerMerchantId = isEdit ? (taagerMerchantId || currentAccount?.taagerAffiliateCode || "") : taagerMerchantId;
 
+      if (accountType === "static" && !staticName) {
+        errText.innerHTML = setupText("setup.static_name_required", "Account name is required.");
+        errEl.style.display = "flex";
+        return;
+      }
+
       const needsPhone = taagerLoginMethod === "phone";
       const needsPassword = taagerLoginMethod !== "google";
       const hasTaagerLoginIdentity = needsPhone ? !!nextTaagerPhone : !!nextTaagerEmail;
       const needsEasyOrdersCredentials = !isTeamLeaderMode || dashboardEnrichmentProvider === "easyorders";
-      if (!nextTaagerMerchantId || (needsEasyOrdersCredentials && (!nextEasyStore || !nextEasyEmail || (!isEdit && !easyPassword))) || (!isEdit && (!hasTaagerLoginIdentity || (needsPassword && !taagerPassword)))) {
+      if (accountType !== "static" && (!nextTaagerMerchantId || (needsEasyOrdersCredentials && (!nextEasyStore || !nextEasyEmail || (!isEdit && !easyPassword))) || (!isEdit && (!hasTaagerLoginIdentity || (needsPassword && !taagerPassword))))) {
         errText.innerHTML = t("setup.err_missing");
         errEl.style.display = "flex";
         return;
@@ -4123,7 +4173,10 @@ window.renderSetup = function (onComplete, initialStep) {
       let accountPatch = null;
 
       if (isEdit) {
-        accountPatch = {
+        accountPatch = accountType === "static" ? {
+          label: staticName,
+          memberName: "",
+        } : {
           easyEmail: nextEasyEmail,
           easyStore: nextEasyStore,
           taagerLoginMethod,
@@ -4146,8 +4199,16 @@ window.renderSetup = function (onComplete, initialStep) {
         // reads the already-updated credentials from store when computing the hash.
       } else {
         newAccountId = "account_" + Date.now();
-        nextAccounts.push({
+        nextAccounts.push(accountType === "static" ? {
           id: newAccountId,
+          accountType: "static",
+          label: staticName,
+          memberName: "",
+          taagerCountry: "sa",
+          dashboardEnrichmentProvider: "none",
+        } : {
+          id: newAccountId,
+          accountType: "live",
           label: getNextLabel(),
           memberName: "",
           easyEmail,
@@ -4191,7 +4252,7 @@ window.renderSetup = function (onComplete, initialStep) {
       }
 
       close();
-      if (newAccountId && !selectedIds.includes(newAccountId)) selectedIds.push(newAccountId);
+      if (newAccountId && accountType !== "static" && !selectedIds.includes(newAccountId)) selectedIds.push(newAccountId);
       await refreshAccountStateAfterMutation("accounts-updated");
       renderStep();
     });
@@ -4219,6 +4280,7 @@ window.renderSetup = function (onComplete, initialStep) {
   }
 
   function accountEmailLine(acc) {
+    if (acc && acc.accountType === "static") return setupText("setup.static_account", "Static Account");
     if (!acc) return "—";
     return acc.easyEmail || acc.email || acc.taagerEmail || "—";
   }

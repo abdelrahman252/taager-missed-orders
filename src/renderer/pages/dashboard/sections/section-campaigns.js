@@ -369,7 +369,7 @@
   function headerTip(mode, key, label) {
     var tips = {
       products: {
-        product: "Taager product matched by a complete SKU or a unique product-name fallback in the campaign name. Account and country boundaries are preserved.",
+        product: "Taager product matched by a complete SKU or the exact normalized product name when no SKU is present. Unknown campaign SKUs remain unmatched. Account and country boundaries are preserved.",
         spend: "Attributed campaign spend converted into the shared calculator/product currency. Ambiguous campaigns are excluded.",
         clicks: "Clicks reported by the ad platform for attributed campaigns.",
         taagerOrders: "Product-level Taager order count for this SKU/product. This is not a whole-account unique-order total.",
@@ -567,9 +567,12 @@
       var deliveredConversionLabel = conversionAvailable ? percent(group.deliveredConversionRatePct) : "N/A";
       var totalSales = group.totalSales != null ? group.totalSales : group.deliveredSales;
       var totalSalesRoas = group.totalSalesRoas != null ? group.totalSalesRoas : group.deliveredSalesRoas;
+      var skuSmall = window.dashboardSkuCopyHtml
+        ? window.dashboardSkuCopyHtml(group.sku || "", { emptyText: "missing", style: "font-size:11px;color:inherit;font-weight:inherit" })
+        : "SKU " + esc(group.sku || "missing");
       
       return '<tr>' +
-        '<td class="campaign-cell-name" title="' + esc(productTitle) + '"><strong>' + esc(compactText(productTitle, 58)) + '</strong><small>SKU ' + esc(group.sku || "missing") + '</small></td>' +
+        '<td class="campaign-cell-name" title="' + esc(productTitle) + '"><strong>' + esc(compactText(productTitle, 58)) + '</strong><small>' + skuSmall + '</small></td>' +
         '<td class="campaign-num">' + money(group.spend, currency) + '</td>' +
         '<td class="campaign-num"><strong>' + fmt(group.clicks) + '</strong><small>' + fmt(group.campaignCount) + ' campaigns</small></td>' +
         '<td class="campaign-num"><strong>' + fmt(group.taagerOrders) + '</strong><small>' + conversionLabel + ' conversion · ' + fmt(trafficViewCount) + ' ' + trafficViewLabel + '</small></td>' +
@@ -599,6 +602,9 @@
       var matchSub = row.attributionVerified
         ? ("SKU " + (row.productSku || ""))
         : (row.suggestedProduct ? compactText(row.suggestedProduct, 42) : "No Taager product attribution");
+      var matchSubHtml = row.attributionVerified && row.productSku && window.dashboardSkuCopyHtml
+        ? window.dashboardSkuCopyHtml(row.productSku, { style: "font-size:11px;color:inherit;font-weight:inherit" })
+        : esc(matchSub);
       var rowCurrency = row.rawCurrency || "USD";
       var rowSpend = row.rawSpend != null ? row.rawSpend : row.spend;
       var campaignTitle = row.campaign || "";
@@ -611,7 +617,7 @@
         '<td class="campaign-num">' + percent(row.ctrPct) + '</td>' +
         '<td class="campaign-num"><strong>' + moneyInCurrency(row.platformCpc, row.platformCpcCurrency || rowCurrency) + '</strong><small>Native CPC</small></td>' +
         '<td class="campaign-num">' + moneyInCurrency(row.platformCpm, rowCurrency) + '</td>' +
-        '<td class="campaign-cell-match" title="' + esc(row.attributionVerified ? matchedProductName : (isAmbiguousMatch ? (row.candidateIds || []).join(", ") : (row.suggestedProduct || ""))) + '"><strong>' + esc(matchText) + '</strong><small>' + esc(matchSub) + '</small></td>' +
+        '<td class="campaign-cell-match" title="' + esc(row.attributionVerified ? matchedProductName : (isAmbiguousMatch ? (row.candidateIds || []).join(", ") : (row.suggestedProduct || ""))) + '"><strong>' + esc(matchText) + '</strong><small>' + matchSubHtml + '</small></td>' +
       '</tr>';
     }).join("");
   }

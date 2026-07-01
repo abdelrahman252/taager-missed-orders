@@ -489,7 +489,7 @@ window.renderSection2 = function (mountEl, data, ctx) {
 
       '<div class="s2-header" style="padding:32px 40px;display:flex;flex-direction:row;justify-content:space-between;align-items:center;gap:16px;">' +
         '<div style="text-align:' + (isRtl ? 'right' : 'left') + ';flex:1;">' +
-          '<h1 id="s2-h1" style="font-size:36px;font-weight:900;color:var(--dash-text,#fff);margin:0;line-height:1.15;opacity:0;transform:translateY(-8px);transition:opacity 0.4s ease,transform 0.4s ease;">' + s2Txt('Order Pipeline', 'خط سير الطلبات') + '</h1>' +
+          '<h1 id="s2-h1" style="font-size:36px;font-weight:900;color:var(--dash-text,#fff);margin:0;line-height:1.15;opacity:0;transform:translateY(-8px);transition:opacity 0.4s ease,transform 0.4s ease;">' + s2Txt('Status Pipeline', 'مسار الحالات') + '</h1>' +
           '<div id="s2-sub" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--dash-text-faint,rgba(255,255,255,0.5));margin-top:8px;justify-content:flex-' + (isRtl ? 'end' : 'start') + ';flex-direction:' + (isRtl ? 'row-reverse' : 'row') + ';opacity:0;transition:opacity 0.4s ease 0.12s;">' +
             s2Txt('Track order status and performance from creation to final delivery', 'تتبع حالة وأداء الطلبات من لحظة استلامها وحتى وصولها النهائي للعميل') +
             svgIcon(PATHS.info, '#3b82f6', 14) +

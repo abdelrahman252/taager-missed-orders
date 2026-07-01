@@ -84,12 +84,14 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       .orders-preview-table tbody tr:hover { background: rgba(79,142,247,0.05); }
       .orders-preview-table tbody tr:last-child td { border-bottom: none; }
       .orders-preview-table.results-orders-table {
-        min-width: 1180px;
+        width: 100%;
+        min-width: 1360px;
       }
       .results-orders-table th,
       .results-orders-table td {
-        padding: 8px 12px;
+        padding: 9px 14px;
         vertical-align: middle;
+        line-height: 1.35;
       }
       .results-orders-table .res-index {
         text-align: center;
@@ -103,6 +105,10 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       }
       .results-orders-table .res-name {
         font-weight: 600;
+      }
+      .results-orders-table .res-product {
+        color: var(--text);
+        font-weight: 650;
       }
       .results-orders-table .res-phone {
         direction: ltr;
@@ -126,6 +132,11 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         color: var(--text2);
         direction: rtl;
         text-align: right;
+      }
+      .results-orders-table-wrap {
+        overflow-x: auto;
+        overflow-y: visible;
+        overscroll-behavior-inline: contain;
       }
     `;
     document.head.appendChild(style);
@@ -386,17 +397,17 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         <div style="padding:8px 12px;border-bottom:1px solid var(--border);background:rgba(0,0,0,0.04)">
           <input type="text" placeholder="${t('results.search_orders_placeholder') || 'Search by name, phone or product...'}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font-size:12px;color:var(--text);outline:none" oninput="window._resOrderSearch('${tableUid}',this.value)">
         </div>
-        <div class="dash-section-body no-pad" style="overflow-x:auto">
-          <table class="orders-preview-table results-orders-table" style="width:100%;table-layout:fixed;border-collapse:collapse">
+        <div class="dash-section-body no-pad results-orders-table-wrap" style="overflow-x:auto">
+          <table class="orders-preview-table results-orders-table" style="width:100%;min-width:1360px;table-layout:fixed;border-collapse:collapse">
             <colgroup>
-              <col style="width:40px">
-              <col style="width:18%">
-              <col style="width:130px">
-              <col style="width:34%">
-              <col style="width:52px">
-              <col style="width:76px">
-              <col style="width:136px">
-              <col style="width:150px">
+              <col style="width:46px">
+              <col style="width:190px">
+              <col style="width:160px">
+              <col style="width:430px">
+              <col style="width:70px">
+              <col style="width:90px">
+              <col style="width:190px">
+              <col style="width:180px">
             </colgroup>
             <thead><tr>
               <th>#</th>
@@ -428,6 +439,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
     // ── Helper: build per-product split rows from one account result ──
     function buildProductSplit(products, failedOrders) {
+      products = Array.isArray(products) ? products : [];
       const failedByProduct = failedProductCounts(failedOrders);
       const allNames = new Set([...products.map(p => p.productName || "—"), ...Object.keys(failedByProduct)]);
       return [...allNames].map(name => {

@@ -23,19 +23,19 @@ window.renderSection7 = function (mountEl, data, ctx) {
     if (calcVisualTimer != null) clearTimeout(calcVisualTimer);
     calcUpdateFrame = requestAnimationFrame(function () {
       calcUpdateFrame = null;
-      if (!mountEl.isConnected) return;
+      if (!mountEl.isConnected || mountEl.hidden) { mountEl._dashboardNeedsRefresh = true; return; }
       calcUpdateTimer = setTimeout(function () {
         calcUpdateTimer = null;
         calcUpdateFrame = requestAnimationFrame(function () {
           calcUpdateFrame = null;
-          if (mountEl.isConnected) updateCalcUI({ deferVisuals: true });
+          if (mountEl.isConnected && !mountEl.hidden) updateCalcUI({ deferVisuals: true });
         });
       }, 120);
       calcVisualTimer = setTimeout(function () {
         calcVisualTimer = null;
-        if (!mountEl.isConnected) return;
+        if (!mountEl.isConnected || mountEl.hidden) { mountEl._dashboardNeedsRefresh = true; return; }
         requestAnimationFrame(function () {
-          if (!mountEl.isConnected) return;
+          if (!mountEl.isConnected || mountEl.hidden) { mountEl._dashboardNeedsRefresh = true; return; }
           var res = compute();
           buildGrowthChart(res.cpaSAR, res.spendSAR);
           renderScenarios(res.cpaSAR, res.spendSAR);
@@ -128,7 +128,11 @@ window.renderSection7 = function (mountEl, data, ctx) {
   var realTotalOrders = window.DashboardOrderMetrics
     ? window.DashboardOrderMetrics.netOrders(d)
     : Number(d.netOrderCount != null ? d.netOrderCount : d.totalOrders || 0);
-  var realNdrPct = d.ndrPct != null ? Number(d.ndrPct) : 0;
+  // Account calculations use the exact aggregate ratio. The shared dashboard
+  // NDR remains rounded for compact cards, but values such as 29.89 must not
+  // become 30 inside this calculator.
+  var realNdrPct = d.ndrPctExact != null ? Number(d.ndrPctExact) : (d.ndrPct != null ? Number(d.ndrPct) : 0);
+  var realShippingOrders = d.shippingCount != null ? Number(d.shippingCount) : 0;
   var realConfirmationRate = d.confirmationRate != null ? Number(d.confirmationRate) : 0;
   var realConfirmedOrders =
     d.confirmationStatusCount != null ? Number(d.confirmationStatusCount)
@@ -147,8 +151,10 @@ window.renderSection7 = function (mountEl, data, ctx) {
   var isExpectedRateMode = window.isExpectedNdrMode && window.isExpectedNdrMode();
 
   if (isExpectedRateMode) {
-    var globalExpectedNdrRate = 35;
-    if (ctx && ctx.data && ctx.data.overview) {
+    var globalExpectedNdrRate = Number.isFinite(Number(d.ndrPctExact))
+      ? Number(d.ndrPctExact)
+      : 35;
+    if (!Number.isFinite(Number(d.ndrPctExact)) && ctx && ctx.data && ctx.data.overview) {
       if (ctx.data.overview.deliveryRate != null) {
         globalExpectedNdrRate = Number(ctx.data.overview.deliveryRate);
       } else if (ctx.data.overview.ndrRate && ctx.data.overview.ndrRate.value != null) {
@@ -205,6 +211,12 @@ window.renderSection7 = function (mountEl, data, ctx) {
     _adSpendModified: false,
     _avgCommissionModified: false,
   };
+  var overallAccountNdrPct = realNdrPct;
+  var orderSourcesModel =
+    (d && d.orderSources) ||
+    (ctx && ctx.data && ctx.data.orderSources) ||
+    null;
+  var orderNdrSourceKey = mountEl._s7OrderNdrSourceKey || "overall";
 
   function persistCalculatorSettings() {
     var storedManual = window.DashboardRoiState
@@ -246,8 +258,76 @@ window.renderSection7 = function (mountEl, data, ctx) {
       .replace(/\bTiger profit\b/g, 'profit')
       .replace(/ربح تاجر/g, 'الربح');
   }
+  function s7Esc(value) {
+    if (window.TaagerUI && typeof window.TaagerUI.esc === "function") return window.TaagerUI.esc(value);
+    return String(value == null ? "" : value).replace(/[&<>"']/g, function (ch) {
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch];
+    });
+  }
+  function orderSourceName(source) {
+    var label = String(source && (source.label || source.rawSource) || "").trim();
+    return label || s7Txt("Unknown source", "\u0645\u0635\u062f\u0631 \u063a\u064a\u0631 \u0645\u0639\u0631\u0648\u0641");
+  }
+  function orderNdrChoices() {
+    var rows = orderSourcesModel && Array.isArray(orderSourcesModel.sources)
+      ? orderSourcesModel.sources
+      : [];
+    var minSample = Number(orderSourcesModel && orderSourcesModel.minSample || 30);
+    var choices = [{
+      key: "overall",
+      label: s7Txt("Overall account NDR", "\u0625\u062c\u0645\u0627\u0644\u064a NDR \u0644\u0644\u062d\u0633\u0627\u0628"),
+      ndrPct: overallAccountNdrPct,
+      netOrders: realTotalOrders,
+      lowSample: false
+    }];
+    rows.forEach(function (source, index) {
+      choices.push({
+        key: "source:" + index,
+        label: orderSourceName(source),
+        rawSource: source.rawSource,
+        ndrPct: Number(source.ndr || 0),
+        netOrders: Number(source.netOrders || 0),
+        lowSample: Number(source.netOrders || 0) < minSample
+      });
+    });
+    return choices;
+  }
+  function activeOrderNdrChoice() {
+    var choices = orderNdrChoices();
+    return choices.find(function (choice) { return choice.key === orderNdrSourceKey; }) || choices[0];
+  }
+  function applyOrderNdrChoice(syncSim) {
+    var choice = activeOrderNdrChoice();
+    orderNdrSourceKey = choice.key;
+    mountEl._s7OrderNdrSourceKey = choice.key;
+    realNdrPct = Number(choice.ndrPct || 0);
+    realExpectedDvlExact = (realNdrPct / 100) * realTotalOrders;
+    realExpectedDvl = Math.round(realExpectedDvlExact);
+    if (syncSim || !simState._ndrModified) {
+      simState.ndr = realNdrPct / 100;
+    }
+    return choice;
+  }
+  function orderNdrSelectorHtml() {
+    var choices = orderNdrChoices();
+    if (choices.length <= 1) return "";
+    var active = activeOrderNdrChoice();
+    return '<div class="s7-order-ndr-box">' +
+      '<label for="s7-order-ndr-source">' + s7Txt("NDR assumption", "\u0627\u0641\u062a\u0631\u0627\u0636 NDR") + '</label>' +
+      '<select id="s7-order-ndr-source">' +
+      choices.map(function (choice) {
+        var label = choice.label + " - " + s7PctValue(choice.ndrPct) + "%" +
+          (choice.key !== "overall" ? " (" + s7Num(choice.netOrders) + ")" : "") +
+          (choice.lowSample ? " - " + s7Txt("Low sample", "\u0639\u064a\u0646\u0629 \u0642\u0644\u064a\u0644\u0629") : "");
+        return '<option value="' + s7Esc(choice.key) + '"' + (choice.key === active.key ? " selected" : "") + '>' + s7Esc(label) + '</option>';
+      }).join("") +
+      '</select>' +
+      '<p id="s7-order-ndr-note">' + s7Esc(s7Txt("Using ", "\u064a\u062a\u0645 \u0627\u0633\u062a\u062e\u062f\u0627\u0645 ") + active.label + " NDR: " + s7PctValue(active.ndrPct) + "%") + '</p>' +
+    '</div>';
+  }
+  applyOrderNdrChoice(false);
   function s7Num(value) {
-    return Number(value || 0).toLocaleString(isAr ? "ar-SA" : "en-US");
+    return Number(value || 0).toLocaleString("en-US");
   }
   function s7ValueStack(valueHtml, labelKey, extraClass) {
     return '<span class="expected-value-stack ' + (extraClass || '') + '" dir="auto">' +
@@ -720,7 +800,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
 
   function fmt(n, dec) {
     dec = dec == null ? 1 : dec;
-    return n.toLocaleString(undefined, {
+    return n.toLocaleString("en-US", {
       minimumFractionDigits: dec,
       maximumFractionDigits: dec,
     });
@@ -933,6 +1013,12 @@ window.renderSection7 = function (mountEl, data, ctx) {
     var cpa = calculation.cpa;
     var returnPerSar = calculation.expectedProfitRoas;
     var revenuePerDel = calculation.averageProfit;
+    var deliveredAovNative = convert(
+      overviewDeliveredAov,
+      overviewCurrency,
+      nativeCurrency || window.dashboardActiveCurrency || "SAR",
+    );
+    var netTotalDeliveredSales = expectedDeliveriesExact * deliveredAovNative;
     var ndrRequired =
       s.totalOrders > 0 && s.avgCommission > 0
         ? s.adSpend / (s.totalOrders * s.avgCommission)
@@ -967,6 +1053,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
       cpa,
       returnPerSar,
       revenuePerDel,
+      deliveredAovNative,
+      netTotalDeliveredSales,
       ndrRequired,
       commRequired,
       delivRequired,
@@ -1421,7 +1509,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         ? sign + "$" + (abs / 1000).toFixed(1) + "K"
         : sign + (abs / 1000).toFixed(1) + "K " + curr;
     if (decimals != null) {
-      var precise = abs.toLocaleString(undefined, {
+      var precise = abs.toLocaleString("en-US", {
         minimumFractionDigits: decimals,
         maximumFractionDigits: decimals,
       });
@@ -1516,6 +1604,19 @@ window.renderSection7 = function (mountEl, data, ctx) {
         ),
         "delivered = netOrders * NDR",
         "?",
+      ) +
+      card(
+        "sfe-neutral",
+        s7Txt("Net Total Delivered Sales", "صافي إجمالي مبيعات الطلبات المسلمة"),
+        sfeFmt(c.netTotalDeliveredSales, 2),
+        s7Txt("based on real delivered AOV", "بناءً على متوسط قيمة الطلب المسلم الفعلي"),
+        s7Txt("Net Total Delivered Sales", "صافي إجمالي مبيعات الطلبات المسلمة"),
+        s7Txt(
+          "Projected sales from the exact simulated delivered orders using the account's real delivered average order value.",
+          "المبيعات المتوقعة من العدد الدقيق للطلبات المسلمة في المحاكاة باستخدام متوسط قيمة الطلب المسلم الفعلي للحساب.",
+        ),
+        "netTotalDeliveredSales = expectedDeliveriesExact * realDeliveredAOV",
+        "↗",
       ) +
       card(
         "sfe-neutral",
@@ -2094,15 +2195,24 @@ window.renderSection7 = function (mountEl, data, ctx) {
         ndr: s.ndr,
         comm: s.avgCommission,
         orders: s.totalOrders * 2,
-        spend: s.adSpend * 2,
+        spend: s.adSpend,
       },
     ];
     var rows = scenarios
       .map(function (sc) {
-        var del = Math.round(sc.orders * sc.ndr);
-        var rev = del * sc.comm;
-        var net = rev - sc.spend;
-        var roi = sc.spend > 0 ? (net / sc.spend) * 100 : 0;
+        var calc = window.TaagerDashboardFinancialCore.calculate({
+          mode: "expected",
+          netOrders: sc.orders,
+          actualDeliveredOrders: 1,
+          actualEarnedProfitAfterTax: sc.comm,
+          currentTotalSales: 0,
+          expectedNdrRate: sc.ndr,
+          adSpend: sc.spend,
+        });
+        var del = calc.expectedDeliveriesDisplay;
+        var rev = calc.expectedTotalProfitBeforeAdSpend;
+        var net = calc.expectedNetProfit;
+        var roi = calc.expectedRoi;
         var nCls = net >= 0 ? "col-positive" : "col-negative";
         var rCls = roi >= 0 ? "col-positive" : "col-negative";
         return (
@@ -2161,8 +2271,12 @@ window.renderSection7 = function (mountEl, data, ctx) {
     if (delivEl && document.activeElement !== delivEl) delivEl.value = Math.round(c.deliveredOrders);
     var ndrHint = document.getElementById("sfe-ndr-hint");
     var commHint = document.getElementById("sfe-comm-hint");
+    var adSpendCurr = document.getElementById("sfe-lbl-adspend-curr");
+    var commCurr = document.getElementById("sfe-lbl-comm-curr");
     if (ndrHint) ndrHint.textContent = s7RatioPctValue(simState.ndr) + "%";
     if (commHint) commHint.textContent = formatTwoDecimals(convert(simState.avgCommission, nativeCurrency || window.dashboardActiveCurrency || "SAR", state.currency)) + " " + state.currency;
+    if (adSpendCurr) adSpendCurr.textContent = state.currency;
+    if (commCurr) commCurr.textContent = state.currency;
     var badge = document.getElementById("sfe-sim-badge");
     if (badge) badge.style.display = simState._isModified ? "flex" : "none";
     renderSimMetrics(c);
@@ -2182,6 +2296,17 @@ window.renderSection7 = function (mountEl, data, ctx) {
     }
     syncSimFinancialsFromRealData(false);
     refreshSimInputValues();
+    var activeOrderNdr = activeOrderNdrChoice();
+    var orderNdrSelect = document.getElementById("s7-order-ndr-source");
+    if (orderNdrSelect && orderNdrSelect.value !== activeOrderNdr.key) orderNdrSelect.value = activeOrderNdr.key;
+    var orderNdrNote = document.getElementById("s7-order-ndr-note");
+    if (orderNdrNote) {
+      orderNdrNote.textContent = s7Txt("Using ", "\u064a\u062a\u0645 \u0627\u0633\u062a\u062e\u062f\u0627\u0645 ") + activeOrderNdr.label + " NDR: " + s7PctValue(activeOrderNdr.ndrPct) + "%";
+    }
+    var realDeliveredEl = document.getElementById("s7-real-delivered-orders");
+    if (realDeliveredEl) realDeliveredEl.textContent = s7Num(realExpectedDvl);
+    var realNdrEl = document.getElementById("s7-real-ndr-pct");
+    if (realNdrEl) realNdrEl.textContent = s7PctValue(realNdrPct) + "%";
     if (assignedMarketingAccounts.length) {
       var sourcePanel = document.getElementById("s7-source-breakdown");
       if (sourcePanel) {
@@ -2953,7 +3078,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       ) +
       _kpiMiniTip(
         s7Txt("Delivered Orders", "الطلبات المسلمة"),
-        s7Num(realExpectedDvl),
+        '<span id="s7-real-delivered-orders">' + s7Num(realExpectedDvl) + '</span>',
         document.documentElement.getAttribute("data-theme") === "light"
           ? "#10b981"
           : "#00e676",
@@ -2968,8 +3093,20 @@ window.renderSection7 = function (mountEl, data, ctx) {
         isExpectedRateMode ? "delivered = netOrders * NDR%" : "delivered = sheet delivered status",
       ) +
       _kpiMiniTip(
+        s7Txt("Orders Out for Delivery", "عدد الطلبات قيد التوصيل"),
+        s7Num(realShippingOrders),
+        "#14b8a6",
+        "↗",
+        s7Txt("Orders Out for Delivery", "عدد الطلبات قيد التوصيل"),
+        s7Txt(
+          "Orders whose exact current status is Out for delivery.",
+          "عدد الطلبات التي حالتها الحالية قيد التوصيل.",
+        ),
+        "outForDeliveryOrders = count(status: shipping)",
+      ) +
+      _kpiMiniTip(
         s7Txt("Delivery Rate NDR", "معدل التسليم NDR"),
-        s7PctValue(realNdrPct) + "%",
+        '<span id="s7-real-ndr-pct">' + s7PctValue(realNdrPct) + "%</span>",
         "#f59e0b",
         "??",
         s7Txt("Delivery Rate (NDR)", "معدل التسليم (NDR)"),
@@ -3454,12 +3591,13 @@ window.renderSection7 = function (mountEl, data, ctx) {
       s7Txt("SAFE", "آمن") +
       "<br>40%+</span>" +
       "</div>" +
+      orderNdrSelectorHtml() +
       "</div>" +
       '<div class="sfe-control-row">' +
       '<label class="sfe-label">' +
       s7Txt("Average Profit / Delivered Order", "متوسط الربح لكل طلب مسلم") +
       ' <span class="sfe-label-hint" id="sfe-comm-hint">0 ' + state.currency + '</span></label>' +
-      '<div class="sfe-input-wrap2"><input type="number" id="sfe-comm" class="sfe-input2" min="0" step="0.5" inputmode="decimal"><span class="sfe-input-unit2">' + state.currency + '</span></div>' +
+      '<div class="sfe-input-wrap2"><input type="number" id="sfe-comm" class="sfe-input2" min="0" step="0.5" inputmode="decimal"><span class="sfe-input-unit2" id="sfe-lbl-comm-curr">' + state.currency + '</span></div>' +
       "</div>" +
       '<div class="sfe-global-rate-note">' +
       '<strong>' + s7Txt("Global exchange rates", "أسعار الصرف العامة") + "</strong>" +
@@ -3539,8 +3677,27 @@ window.renderSection7 = function (mountEl, data, ctx) {
           dateFrom: period.from || period.dateFrom || period.start || "",
           dateTo: period.to || period.dateTo || period.end || "",
           targetCurrency: state.currency || window.dashboardActiveCurrency || "SAR",
-          egpRate: state.egpRate || 52,
+          egpRate: window.TaagerCurrency && typeof window.TaagerCurrency.rates === "function"
+            ? Number((window.TaagerCurrency.rates() || {}).EGP) || state.egpRate || 52
+            : state.egpRate || 52,
+          exchangeRates: window.TaagerCurrency && typeof window.TaagerCurrency.rates === "function"
+            ? window.TaagerCurrency.rates()
+            : {},
         });
+      });
+    }
+    var orderNdrSelect = document.getElementById("s7-order-ndr-source");
+    if (orderNdrSelect) {
+      orderNdrSelect.addEventListener("change", function () {
+        orderNdrSourceKey = orderNdrSelect.value || "overall";
+        applyOrderNdrChoice(true);
+        simState._ndrModified = false;
+        var ndrInput = document.getElementById("sfe-ndr");
+        if (ndrInput) ndrInput.value = s7RatioPctValue(simState.ndr);
+        updateSimModifiedFlag();
+        updateCalcUI();
+        updateSimUI();
+        scheduleCalcUI();
       });
     }
 

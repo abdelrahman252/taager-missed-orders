@@ -182,6 +182,13 @@
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
       '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>' +
       '<line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>',
+    gitBranch:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<line x1="6" y1="3" x2="6" y2="15"/><circle cx="6" cy="18" r="3"/><circle cx="6" cy="6" r="3"/>' +
+      '<path d="M18 6a3 3 0 1 0 0 6c-5 0-7 2-9 5"/></svg>',
+    chevronDown:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M6 9l6 6 6-6"/></svg>',
     diamond:
       '<svg viewBox="0 0 36 36" fill="none">' +
       '<polygon points="18,2 34,18 18,34 2,18" fill="none" stroke="currentColor" stroke-width="2"/>' +
@@ -205,6 +212,10 @@
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
       '<path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5z"/>' +
       '<path d="M21 12H16a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"/><path d="M19 12v.01"/></svg>',
+    target:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>' +
+      '<path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>',
   };
 
   /**
@@ -288,6 +299,256 @@
     };
     var formatted = window.dashboardI18n ? window.dashboardI18n.number(n, localeOpts) : Number(n).toLocaleString('en-US', localeOpts);
     return formatted + suffix;
+  };
+
+  function gmvNumber(value) {
+    if (typeof value === 'number') return isFinite(value) ? value : 0;
+    var parsed = Number(String(value == null ? '' : value).replace(/[^0-9.-]/g, ''));
+    return isFinite(parsed) ? parsed : 0;
+  }
+
+  function gmvDate(value) {
+    var text = String(value || '').slice(0, 10);
+    var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+    if (!match) return null;
+    var d = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function gmvIso(date) {
+    return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+  }
+
+  function gmvDayCount(from, to) {
+    if (!from || !to) return 0;
+    var start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+    var end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+    return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000) + 1);
+  }
+
+  function gmvConvert(value, from, to) {
+    var amount = gmvNumber(value);
+    var source = String(from || to || activeDashboardCurrency()).toUpperCase();
+    var target = String(to || source || activeDashboardCurrency()).toUpperCase();
+    if (source === target) return amount;
+    if (window.TaagerCurrency && typeof window.TaagerCurrency.convert === 'function') {
+      return window.TaagerCurrency.convert(amount, source, target);
+    }
+    return amount;
+  }
+
+  function gmvAccountId(accountId) {
+    if (accountId) return String(accountId);
+    return window.getActiveAccountId ? String(window.getActiveAccountId() || '__all__') : '__all__';
+  }
+
+  function gmvCountry(data) {
+    return String((data && data.meta && data.meta.activeCountry) || window.dashboardActiveCountry || 'mixed').toLowerCase();
+  }
+
+  function gmvStorageKey(accountId, country) {
+    return 'taager_gmv_target_v1:' + encodeURIComponent(gmvAccountId(accountId)) + ':' + encodeURIComponent(String(country || 'mixed').toLowerCase());
+  }
+
+  function gmvPeriod(data, settings) {
+    var meta = data && data.meta || {};
+    var period = meta.period || {};
+    var from = gmvDate(period.dateFrom || period.from);
+    var to = gmvDate((settings && settings.deadline) || period.dateTo || period.to);
+    var today = new Date();
+    today = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    if (!from && to) from = new Date(to.getFullYear(), to.getMonth(), 1);
+    if (!to && from) to = new Date(from.getFullYear(), from.getMonth() + 1, 0);
+    if (!from && !to) {
+      from = new Date(today.getFullYear(), today.getMonth(), 1);
+      to = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    }
+    var elapsedEnd = today < from ? from : (today > to ? to : today);
+    var remainingStart = today < from ? from : today;
+    return {
+      from: gmvIso(from),
+      to: gmvIso(to),
+      elapsedDays: Math.max(1, gmvDayCount(from, elapsedEnd)),
+      daysLeft: today > to ? 0 : gmvDayCount(remainingStart, to),
+      totalDays: Math.max(1, gmvDayCount(from, to))
+    };
+  }
+
+  function gmvDefaultTarget(currentGmv) {
+    var base = Math.max(50000, gmvNumber(currentGmv) * 1.35);
+    return base <= 100000 ? Math.ceil(base / 5000) * 5000 : Math.ceil(base / 25000) * 25000;
+  }
+
+  function gmvTargetCompare(value, target) {
+    value = gmvNumber(value);
+    target = gmvNumber(target);
+    if (!(target > 0)) return -1;
+    var diff = value - target;
+    var epsilon = Math.max(0.01, Math.abs(target) * 1e-9);
+    if (Math.abs(diff) <= epsilon) return 0;
+    return diff > 0 ? 1 : -1;
+  }
+
+  var gmvListeners = [];
+  window.DashboardGmvTargetState = {
+    key: function (accountId, country) {
+      return gmvStorageKey(accountId, country || window.dashboardActiveCountry || 'mixed');
+    },
+    get: function (accountId, country) {
+      try {
+        var parsed = JSON.parse(localStorage.getItem(gmvStorageKey(accountId, country)) || 'null');
+        if (!parsed || typeof parsed !== 'object') return null;
+        var targetGmv = gmvNumber(parsed.targetGmv);
+        if (!(targetGmv > 0)) return null;
+        return {
+          targetGmv: targetGmv,
+          currency: String(parsed.currency || activeDashboardCurrency()).toUpperCase(),
+          deadline: String(parsed.deadline || '').slice(0, 10),
+          createdAt: parsed.createdAt || '',
+          updatedAt: parsed.updatedAt || ''
+        };
+      } catch (e) {
+        console.warn('[GMVTarget] Invalid target storage:', e);
+        return null;
+      }
+    },
+    set: function (settings, accountId, country) {
+      settings = settings || {};
+      var next = {
+        targetGmv: Math.max(0, gmvNumber(settings.targetGmv)),
+        currency: String(settings.currency || activeDashboardCurrency()).toUpperCase(),
+        deadline: String(settings.deadline || '').slice(0, 10),
+        createdAt: settings.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      if (!(next.targetGmv > 0)) return this.clear(accountId, country);
+      try {
+        localStorage.setItem(gmvStorageKey(accountId, country), JSON.stringify(next));
+      } catch (e) {
+        console.warn('[GMVTarget] Unable to persist target:', e);
+      }
+      this.notify(accountId, country);
+      return Object.assign({}, next);
+    },
+    clear: function (accountId, country) {
+      try { localStorage.removeItem(gmvStorageKey(accountId, country)); }
+      catch (e) { console.warn('[GMVTarget] Unable to clear target:', e); }
+      this.notify(accountId, country);
+      return null;
+    },
+    subscribe: function (fn) {
+      if (typeof fn === 'function' && gmvListeners.indexOf(fn) === -1) gmvListeners.push(fn);
+    },
+    unsubscribe: function (fn) {
+      gmvListeners = gmvListeners.filter(function (listener) { return listener !== fn; });
+    },
+    notify: function (accountId, country) {
+      var event = { accountId: gmvAccountId(accountId), country: String(country || window.dashboardActiveCountry || 'mixed').toLowerCase() };
+      gmvListeners.forEach(function (fn) {
+        try { fn(Object.assign({}, event)); }
+        catch (e) { console.warn('[GMVTarget] Subscriber threw:', e); }
+      });
+    },
+    snapshot: function (data, options) {
+      data = data || {};
+      options = options || {};
+      var meta = data.meta || {};
+      var overview = data.overview || {};
+      var roi = data.roi || {};
+      var cod = data.cod || {};
+      var accountId = gmvAccountId(options.accountId || meta.activeAccountId);
+      var country = String(options.country || gmvCountry(data)).toLowerCase();
+      var currency = String(options.currency || meta.activeCurrency || meta.reportingCurrency || activeDashboardCurrency()).toUpperCase();
+      var saved = this.get(accountId, country);
+      var savedTarget = saved ? gmvConvert(saved.targetGmv, saved.currency, currency) : 0;
+      var currentGmv = gmvNumber(overview.totalDeliveredSales && overview.totalDeliveredSales.value != null ? overview.totalDeliveredSales.value : (roi.actualDeliveredSales || roi.deliveredSales || 0));
+      var netOrders = window.DashboardOrderMetrics ? window.DashboardOrderMetrics.netOrders(roi) : gmvNumber(roi.netOrderCount || roi.totalOrders || (overview.totalOrders && overview.totalOrders.value));
+      if (!(netOrders > 0)) netOrders = gmvNumber(overview.totalOrders && (overview.totalOrders.value != null ? overview.totalOrders.value : overview.totalOrders.rawValue));
+      var deliveredOrders = window.DashboardOrderMetrics ? window.DashboardOrderMetrics.deliveredOrders(roi) : gmvNumber(roi.actualDeliveredCount || roi.deliveredCount);
+      var deliveredAov = gmvNumber(options.deliveredAov != null ? options.deliveredAov : (overview.deliveredAov && overview.deliveredAov.value != null ? overview.deliveredAov.value : roi.deliveredAov));
+      if (!(deliveredAov > 0) && deliveredOrders > 0) deliveredAov = currentGmv / deliveredOrders;
+      var ndrPct = gmvNumber(options.ndrPct != null ? options.ndrPct : (roi.ndrPctExact != null ? roi.ndrPctExact : (roi.ndrPct != null ? roi.ndrPct : (overview.ndrRate && overview.ndrRate.value != null ? overview.ndrRate.value : cod.ndrPct))));
+      var ndrRate = Math.max(0, Math.min(1, ndrPct / 100));
+      var avgProfit = window.DashboardOrderMetrics ? window.DashboardOrderMetrics.averageProfit(roi) : gmvNumber(roi.averageProfit || roi.avgCommission);
+      var targetGmv = gmvNumber(options.targetGmv != null ? options.targetGmv : savedTarget);
+      var deadline = String(options.deadline || (saved && saved.deadline) || '').slice(0, 10);
+      var period = gmvPeriod(data, { deadline: deadline });
+      if (!deadline) deadline = period.to;
+      period = gmvPeriod(data, { deadline: deadline });
+      var runRate = netOrders > 0 ? netOrders / period.elapsedDays : 0;
+      var remainingGmv = Math.max(0, targetGmv - currentGmv);
+      var neededDeliveredOrders = deliveredAov > 0 ? remainingGmv / deliveredAov : 0;
+      var neededNetOrders = ndrRate > 0 ? neededDeliveredOrders / ndrRate : 0;
+      var dailyOrdersNeeded = period.daysLeft > 0 ? neededNetOrders / period.daysLeft : (neededNetOrders > 0 ? neededNetOrders : 0);
+      var projectedExtraGmv = runRate * period.daysLeft * ndrRate * deliveredAov;
+      var projectedGmv = currentGmv + projectedExtraGmv;
+      var progressPct = targetGmv > 0 ? Math.max(0, Math.min(100, currentGmv / targetGmv * 100)) : 0;
+      var paceGap = Math.max(0, dailyOrdersNeeded - runRate);
+      var targetCompare = gmvTargetCompare(currentGmv, targetGmv);
+      var status = 'not_set';
+      if (targetGmv > 0 && targetCompare > 0) status = 'overachieved';
+      else if (targetGmv > 0 && targetCompare === 0) status = 'achieved';
+      else if (targetGmv > 0 && period.daysLeft <= 0) status = 'ended';
+      else if (targetGmv > 0 && projectedGmv >= targetGmv) status = 'on_track';
+      else if (targetGmv > 0 && projectedGmv >= targetGmv * 0.9) status = 'watch';
+      else if (targetGmv > 0) status = 'behind';
+      function scenario(id, label, dailyOrders, color) {
+        dailyOrders = Math.max(0, gmvNumber(dailyOrders));
+        var finalGmv = currentGmv + dailyOrders * period.daysLeft * ndrRate * deliveredAov;
+        return {
+          id: id,
+          label: label,
+          dailyOrders: dailyOrders,
+          expectedDeliveredOrders: dailyOrders * period.daysLeft * ndrRate,
+          expectedGmv: finalGmv,
+          delta: finalGmv - targetGmv,
+          targetCompare: gmvTargetCompare(finalGmv, targetGmv),
+          hit: targetGmv > 0 && finalGmv >= targetGmv,
+          color: color
+        };
+      }
+      var required = dailyOrdersNeeded;
+      var push = Math.max(required * 1.2, runRate * 1.35, required + 3);
+      var customDaily = options.customDailyOrders != null ? gmvNumber(options.customDailyOrders) : null;
+      var scenarios = [
+        scenario('slower', 'Slower pace', runRate * 0.8, '#f59e0b'),
+        scenario('current', 'Current pace', runRate, '#3b82f6'),
+        scenario('required', 'Required pace', required, '#8b5cf6'),
+        scenario('push', 'Push mode', push, '#22d3ee')
+      ];
+      if (customDaily !== null) scenarios.push(scenario('custom', 'Custom pace', customDaily, '#a855f7'));
+      return {
+        accountId: accountId,
+        country: country,
+        currency: currency,
+        hasTarget: !!saved,
+        targetGmv: targetGmv,
+        savedTargetGmv: savedTarget,
+        suggestedTargetGmv: gmvDefaultTarget(currentGmv),
+        deadline: deadline,
+        currentGmv: currentGmv,
+        remainingGmv: remainingGmv,
+        progressPct: progressPct,
+        deliveredAov: deliveredAov,
+        ndrPct: ndrPct,
+        ndrRate: ndrRate,
+        netOrders: netOrders,
+        deliveredOrders: deliveredOrders,
+        avgProfit: avgProfit,
+        elapsedDays: period.elapsedDays,
+        daysLeft: period.daysLeft,
+        totalDays: period.totalDays,
+        runRate: runRate,
+        neededDeliveredOrders: neededDeliveredOrders,
+        neededNetOrders: neededNetOrders,
+        dailyOrdersNeeded: dailyOrdersNeeded,
+        projectedGmv: projectedGmv,
+        projectedExtraGmv: projectedExtraGmv,
+        paceGap: paceGap,
+        status: status,
+        scenarios: scenarios
+      };
+    }
   };
 
   function dashText(key, fallback) {
@@ -833,5 +1094,144 @@
       });
     }
   };
+
+  function escapeDashboardSku(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function dashboardSkuText(en, ar) {
+    if (window.dashboardI18n && typeof window.dashboardI18n.pick === 'function') {
+      return window.dashboardI18n.pick(en, ar || en);
+    }
+    return en;
+  }
+
+  function dashboardSkuCopyIcon() {
+    return '<svg class="dash-sku-copy-icon dash-sku-copy-icon-copy" viewBox="0 0 24 24" aria-hidden="true">' +
+      '<rect x="9" y="9" width="10" height="10" rx="2"></rect>' +
+      '<path d="M5 15V7a2 2 0 0 1 2-2h8"></path>' +
+      '</svg>' +
+      '<svg class="dash-sku-copy-icon dash-sku-copy-icon-check" viewBox="0 0 24 24" aria-hidden="true">' +
+      '<path d="M20 6 9 17l-5-5"></path>' +
+      '</svg>';
+  }
+
+  function copyDashboardSkuText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (resolve, reject) {
+      var input = document.createElement('textarea');
+      input.value = text;
+      input.setAttribute('readonly', '');
+      input.style.position = 'fixed';
+      input.style.left = '-9999px';
+      input.style.top = '0';
+      document.body.appendChild(input);
+      input.select();
+      try {
+        if (document.execCommand('copy')) resolve();
+        else reject(new Error('Copy command failed'));
+      } catch (error) {
+        reject(error);
+      } finally {
+        if (input.parentNode) input.parentNode.removeChild(input);
+      }
+    });
+  }
+
+  function showDashboardSkuToast(message, kind) {
+    if (window.TaagerUI && typeof window.TaagerUI.toast === 'function') {
+      window.TaagerUI.toast(message, { kind: kind || 'success', timeout: 2200 });
+      return;
+    }
+    if (typeof window.showToast === 'function') {
+      window.showToast(message, { kind: kind || 'success' });
+    }
+  }
+
+  function injectDashboardSkuCopyCss() {
+    if (document.getElementById('dashboard-sku-copy-css')) return;
+    var tag = document.createElement('style');
+    tag.id = 'dashboard-sku-copy-css';
+    tag.textContent =
+      '.dash-sku-copy-wrap{position:relative;display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:100%;vertical-align:middle;color:inherit}' +
+      '.dash-sku-copy-wrap.is-block{display:flex;width:100%}' +
+      '.dash-sku-copy-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit}' +
+      '.dash-sku-copy-btn{position:relative;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;border:1px solid rgba(45,212,191,.28);background:rgba(45,212,191,.08);color:#5eead4;border-radius:7px;cursor:pointer;padding:0;font:inherit;transition:background .16s,border-color .16s,color .16s,transform .16s;flex:0 0 auto}' +
+      '.dash-sku-copy-btn:hover,.dash-sku-copy-btn:focus-visible{background:rgba(45,212,191,.16);border-color:rgba(45,212,191,.55);color:#99f6e4;outline:none;transform:translateY(-1px)}' +
+      '.dash-sku-copy-icon{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;position:absolute;transition:opacity .14s,transform .14s}' +
+      '.dash-sku-copy-icon-check{opacity:0;transform:scale(.75);color:#22c55e}' +
+      '.dash-sku-copy-btn.is-copied{background:rgba(34,197,94,.14);border-color:rgba(34,197,94,.55);color:#22c55e}' +
+      '.dash-sku-copy-btn.is-copied .dash-sku-copy-icon-copy{opacity:0;transform:scale(.75)}' +
+      '.dash-sku-copy-btn.is-copied .dash-sku-copy-icon-check{opacity:1;transform:scale(1)}' +
+      '.dash-sku-copy-tooltip{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translate(-50%,4px);opacity:0;pointer-events:none;white-space:nowrap;background:#052e22;border:1px solid rgba(34,197,94,.48);color:#86efac;border-radius:7px;padding:5px 8px;font-size:10px;font-weight:900;line-height:1.1;box-shadow:0 8px 24px rgba(0,0,0,.24);transition:opacity .14s,transform .14s;z-index:100000}' +
+      '.dash-sku-copy-tooltip::after{content:"";position:absolute;left:50%;top:100%;width:8px;height:8px;background:#052e22;border-right:1px solid rgba(34,197,94,.48);border-bottom:1px solid rgba(34,197,94,.48);transform:translate(-50%,-4px) rotate(45deg)}' +
+      '.dash-sku-copy-btn:hover + .dash-sku-copy-tooltip,.dash-sku-copy-btn:focus-visible + .dash-sku-copy-tooltip,.dash-sku-copy-btn.is-copied + .dash-sku-copy-tooltip{opacity:1;transform:translate(-50%,0)}' +
+      '[data-theme="light"] .dash-sku-copy-btn{background:rgba(20,184,166,.1);border-color:rgba(13,148,136,.24);color:#0f766e}' +
+      '[data-theme="light"] .dash-sku-copy-btn:hover,[data-theme="light"] .dash-sku-copy-btn:focus-visible{background:rgba(20,184,166,.18);border-color:rgba(13,148,136,.45);color:#0d9488}' +
+      '[data-theme="light"] .dash-sku-copy-tooltip,[data-theme="light"] .dash-sku-copy-tooltip::after{background:#ecfdf5;border-color:rgba(22,163,74,.34);color:#15803d}';
+    (document.head || document.documentElement).appendChild(tag);
+  }
+
+  window.dashboardSkuCopyHtml = function (sku, opts) {
+    opts = opts || {};
+    var value = String(sku || '').trim();
+    if (!value && opts.hideEmpty) return '';
+    var display = opts.text != null ? String(opts.text) : (value || opts.emptyText || 'N/A');
+    var label = opts.label == null ? 'SKU' : String(opts.label || '');
+    var prefix = opts.prefix === false || !label ? '' : label + (opts.separator == null ? ': ' : opts.separator);
+    var title = opts.title == null ? (value || display) : opts.title;
+    var className = 'dash-sku-copy-wrap' + (opts.block ? ' is-block' : '') + (opts.className ? ' ' + opts.className : '');
+    var style = opts.style ? ' style="' + escapeDashboardSku(opts.style) + '"' : '';
+    var tooltip = dashboardSkuText('Copy SKU', 'Copy SKU');
+    var copied = dashboardSkuText('Copied to clipboard', 'Copied to clipboard');
+    return '<span class="' + escapeDashboardSku(className) + '" data-i18n-preserve title="' + escapeDashboardSku(title) + '"' + style + '>' +
+      '<span class="dash-sku-copy-text" dir="ltr">' + escapeDashboardSku(prefix + display) + '</span>' +
+      (value ? '<button type="button" class="dash-sku-copy-btn" data-dashboard-copy-sku="' + escapeDashboardSku(value) + '" aria-label="' + escapeDashboardSku(tooltip) + '">' +
+        dashboardSkuCopyIcon() +
+      '</button><span class="dash-sku-copy-tooltip">' + escapeDashboardSku(tooltip) + '</span>' : '') +
+      '<span class="dash-sku-copy-tooltip-template" data-copy-text="' + escapeDashboardSku(tooltip) + '" data-copied-text="' + escapeDashboardSku(copied) + '" hidden></span>' +
+    '</span>';
+  };
+
+  if (!window.__dashboardSkuCopyBound) {
+    window.__dashboardSkuCopyBound = true;
+    injectDashboardSkuCopyCss();
+    document.addEventListener('click', function (event) {
+      var button = event.target && event.target.closest ? event.target.closest('[data-dashboard-copy-sku]') : null;
+      if (!button) return;
+      event.preventDefault();
+      event.stopPropagation();
+      var sku = String(button.getAttribute('data-dashboard-copy-sku') || '').trim();
+      if (!sku) return;
+      copyDashboardSkuText(sku).then(function () {
+        var host = button.closest('.dash-sku-copy-wrap');
+        var template = host ? host.querySelector('.dash-sku-copy-tooltip-template') : null;
+        var copiedText = template ? template.getAttribute('data-copied-text') : dashboardSkuText('Copied to clipboard', 'Copied to clipboard');
+        var copyText = template ? template.getAttribute('data-copy-text') : dashboardSkuText('Copy SKU', 'Copy SKU');
+        var tooltip = host ? host.querySelector('.dash-sku-copy-tooltip') : null;
+        button.classList.add('is-copied');
+        button.setAttribute('aria-label', copiedText);
+        if (tooltip) tooltip.textContent = copiedText;
+        showDashboardSkuToast(dashboardSkuText('SKU copied to clipboard', 'SKU copied to clipboard'), 'success');
+        if (button._dashboardSkuCopyTimer) clearTimeout(button._dashboardSkuCopyTimer);
+        button._dashboardSkuCopyTimer = setTimeout(function () {
+          button.classList.remove('is-copied');
+          button.setAttribute('aria-label', copyText);
+          if (tooltip) tooltip.textContent = copyText;
+          button._dashboardSkuCopyTimer = null;
+        }, 1800);
+      }).catch(function (error) {
+        console.warn('[Dashboard] Unable to copy SKU', error && error.message ? error.message : error);
+        showDashboardSkuToast(dashboardSkuText('Could not copy SKU', 'Could not copy SKU'), 'error');
+      });
+    });
+  }
 
 })();

@@ -11,8 +11,8 @@ const COUNTRY_CONFIG = {
   sa: {
     cartCountryCode: "SAU",
     hasSaudiNatAddr: true,
-    defaultProvince: "المنطقة الشرقية",
-    defaultCity: "المنطقة الشرقية",
+    defaultProvince: "منطقة الرياض",
+    defaultCity: "منطقة الرياض",
     validProvinces: new Set([
       "المنطقة الشرقية",
       "منطقة الباحة",
@@ -213,37 +213,72 @@ function normalizePlaceName(value) {
     .trim();
 }
 
-function normalizeProvince(city, country) {
+function normalizeProvinceMatch(city, country) {
   const cc = normalizeTaagerCountry(country || "sa");
   const cfg = COUNTRY_CONFIG[cc];
   if (!cfg) throw new Error(`UNSUPPORTED_TAAGER_COUNTRY: ${cc}`);
   const raw = city ? String(city).trim() : "";
 
-  if (!raw || raw.toLowerCase() === "unspecified") return cfg.defaultProvince;
+  if (!raw || raw.toLowerCase() === "unspecified") {
+    return { province: cfg.defaultProvince, matched: false, defaulted: true, raw };
+  }
 
-  if (cfg.validProvinces.has(raw)) return raw;
+  if (cfg.validProvinces.has(raw)) return { province: raw, matched: true, defaulted: false, raw };
   const normalized = normalizePlaceName(raw);
   for (const province of cfg.validProvinces) {
-    if (normalizePlaceName(province) === normalized) return province;
+    if (normalizePlaceName(province) === normalized) {
+      return { province, matched: true, defaulted: false, raw };
+    }
   }
   for (const [key, value] of Object.entries(cfg.provinceMap || {})) {
     const normalizedKey = normalizePlaceName(key);
-    if (normalizedKey === normalized) return value;
+    if (normalizedKey === normalized) return { province: value, matched: true, defaulted: false, raw };
     if (cc === "sa" && normalizedKey && (normalized.includes(normalizedKey) || normalizedKey.includes(normalized))) {
-      return value;
+      return { province: value, matched: true, defaulted: false, raw };
     }
   }
 
-  console.warn(`[${cc.toUpperCase()}] Unknown province "${raw}" - defaulting to "${cfg.defaultProvince}"`);
-  return cfg.defaultProvince;
+  return { province: cfg.defaultProvince, matched: false, defaulted: true, raw };
 }
 
+function normalizeFallbackProvince(fallbackProvince, country) {
+  if (!fallbackProvince || !String(fallbackProvince).trim()) return "";
+  const fallback = normalizeProvinceMatch(fallbackProvince, country);
+  return fallback.matched ? fallback.province : "";
+}
+
+function fallbackProvinceForOrder(order, options, country, defaultProvince) {
+  const sku = String(order?.sku || "").trim();
+  const bySku = options?.fallbackProvinceBySku;
+  const skuFallback = bySku instanceof Map
+    ? bySku.get(sku)
+    : (bySku && typeof bySku === "object" && Object.prototype.hasOwnProperty.call(bySku, sku) ? bySku[sku] : "");
+  const normalizedSkuFallback = normalizeFallbackProvince(skuFallback, country);
+  if (normalizedSkuFallback) return { province: normalizedSkuFallback, tier: "sku" };
+  const normalizedGlobalFallback = normalizeFallbackProvince(options?.fallbackProvince, country);
+  if (normalizedGlobalFallback) return { province: normalizedGlobalFallback, tier: "global" };
+  return { province: defaultProvince, tier: "static" };
+}
+
+function normalizeProvince(city, country, options = {}) {
+  const cc = normalizeTaagerCountry(country || "sa");
+  const cfg = COUNTRY_CONFIG[cc];
+  if (!cfg) throw new Error(`UNSUPPORTED_TAAGER_COUNTRY: ${cc}`);
+  const match = normalizeProvinceMatch(city, cc);
+  if (match.matched) return match.province;
+
+  const fallbackProvince = normalizeFallbackProvince(options.fallbackProvince, cc) || cfg.defaultProvince;
+  if (match.raw) {
+    console.warn(`[${cc.toUpperCase()}] Unknown province "${match.raw}" - defaulting to "${fallbackProvince}"`);
+  }
+  return fallbackProvince;
+}
 function truncate(value, max) {
   const text = value == null ? "" : String(value);
   return text.length > max ? text.slice(0, max) : text;
 }
 
-function buildOutputExcel(orders) {
+function buildOutputExcel(orders, options = {}) {
   const cfg = COUNTRY_CONFIG[COUNTRY];
   if (!cfg) throw new Error(`UNSUPPORTED_TAAGER_COUNTRY: ${COUNTRY}`);
   const wb = XLSX.utils.book_new();
@@ -269,8 +304,12 @@ function buildOutputExcel(orders) {
     "(Order ID on your store) كود_الطلب_على_متجرك",
   ];
 
+  const fallbackUsage = { provided: 0, sku: 0, global: 0, static: 0 };
   const dataRows = orders.map((order) => {
-    const province = normalizeProvince(order.city, COUNTRY);
+    const fallback = fallbackProvinceForOrder(order, options, COUNTRY, cfg.defaultProvince);
+    const cityMatch = normalizeProvinceMatch(order.city, COUNTRY);
+    const province = normalizeProvince(order.city, COUNTRY, { fallbackProvince: fallback.province });
+    fallbackUsage[cityMatch.matched ? "provided" : fallback.tier]++;
     const address = order.address && String(order.address).trim()
       ? String(order.address).trim()
       : province || cfg.defaultCity;
@@ -296,6 +335,14 @@ function buildOutputExcel(orders) {
       order.orderId || "",
     ];
   });
+
+  const configuredSkuFallbacks = options.fallbackProvinceBySku instanceof Map
+    ? options.fallbackProvinceBySku.size
+    : Object.keys(options.fallbackProvinceBySku || {}).length;
+  console.log(
+    `[Province fallback] Excel rows=${orders.length} | provided=${fallbackUsage.provided} | SKU=${fallbackUsage.sku} | global=${fallbackUsage.global} | static=${fallbackUsage.static}`
+    + ` | configured SKU fallbacks=${configuredSkuFallbacks} | global province=${normalizeFallbackProvince(options.fallbackProvince, COUNTRY) || "none"}`
+  );
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
   ws["!cols"] = [
@@ -434,4 +481,4 @@ function buildSkippedExcel(skippedOrders) {
   return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 }
 
-module.exports = { buildOutputExcel, buildFailedExcel, buildSkippedExcel, normalizeProvince, COUNTRY_CONFIG };
+module.exports = { buildOutputExcel, buildFailedExcel, buildSkippedExcel, normalizeProvince, normalizeProvinceMatch, COUNTRY_CONFIG };

@@ -204,10 +204,14 @@
     var looksLikeArabicQuestion =
       /(?:ما|ماذا|لماذا|ليه|كيف|أي|اي|أين|اين|اعرض|أظهر|اظهر|حلل|قارن).*(?:حساب|مدينة|مدن|منتج|منتجات|NDR|CPA|ربح|خسار|طلبات)/i.test(cleaned) ||
       /(?:أفضل|افضل|أضعف|اضعف|أسوأ|اسوأ|أقل|اقل|أعلى|اعلى).*(?:مدن|منتجات|حملات)/i.test(cleaned);
+    var looksLikePlanRequest =
+      /\b(?:build|make|create|give me)\b.*\b(?:scale|scaling|growth)\s+plan\b|\bplan\b.*\b(?:scale|scaling|growth)\b/i.test(cleaned) ||
+      /(?:ابن|اعمل|ضع|جهز).*خطة.*(?:توسع|توسيع)|خطة.*(?:توسع|توسيع)/.test(cleaned);
     var looksLikeNewQuestion =
       /\b(what|which|why|how|show|top|worst|best|strongest|weakest|highest|lowest|analyze|compare)\b/i.test(cleaned) ||
       (/\b(account|city|cities|product|products|app|apps|ndr|cpa|roi|profit|commission|orders)\b/i.test(cleaned) && /\?/.test(cleaned)) ||
-      looksLikeArabicQuestion;
+      looksLikeArabicQuestion ||
+      looksLikePlanRequest;
     if (pending.scope === "product_lookup") {
       if (looksLikeNewQuestion) {
         if (window.KhodAiSessionMemory) window.KhodAiSessionMemory.clearPending();
@@ -221,7 +225,7 @@
     }
     var money = extractMoneyAnswer(text);
     var currencyOnly = clean(text, 20).match(/^(sar|usd|egp|aed|iqd|omr|ريال|دولار|جنيه|درهم|دينار)$/i);
-    if (!money && !currencyOnly && (/\b(what|which|why|how|show|top|worst|best|strongest|weakest|highest|lowest|analyze|compare|city|cities|product|products|app|apps|ndr|cpa|roi|profit|commission)\b/i.test(cleaned) || looksLikeArabicQuestion)) {
+    if (!money && !currencyOnly && looksLikeNewQuestion) {
       if (window.KhodAiSessionMemory) window.KhodAiSessionMemory.clearPending();
       return null;
     }

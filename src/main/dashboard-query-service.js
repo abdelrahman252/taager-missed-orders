@@ -1490,7 +1490,7 @@ function createDashboardQueryService(options) {
         scope,
         currency: intel.currency,
         periodLabel: [scope.dateFrom, scope.dateTo].filter(Boolean).join(" - ") || "Synced dashboard period",
-        sourceOfTruth: "Product decisions use unified SKU or unique-name campaign attribution with Taager orders, delivery, and profit. Campaign rows retain native ad-account money.",
+        sourceOfTruth: "Product decisions use unified SKU or exact full-name campaign attribution with Taager orders, delivery, and profit. Unknown campaign SKUs remain unmatched. Campaign rows retain native ad-account money.",
         lastSyncAt,
         totals: intel.totals,
         objectiveMix: intel.objectiveMix,

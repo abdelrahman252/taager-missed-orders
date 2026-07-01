@@ -1,4 +1,4 @@
-﻿"use strict";
+"use strict";
 
 const crypto = require("crypto");
 const https = require("https");
@@ -49,7 +49,7 @@ const LIMITS = Object.freeze({
 });
 
 const FALLBACK_RESPONSE = Object.freeze({
-  message: "AI service is not available. I am showing local dashboard guidance instead.",
+  message: "Showing local dashboard guidance instead.",
   insights: [],
   recommendations: [],
   forecasts: [],
@@ -379,19 +379,19 @@ function createTraceId() {
 
 function validateDashboardAiPayload(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return { ok: false, code: "invalid_payload", message: "Invalid AI request payload." };
+    return { ok: false, code: "invalid_payload", message: "Invalid assistant request payload." };
   }
   if (typeof payload.command !== "string") {
-    return { ok: false, code: "invalid_command", message: "AI request command must be text." };
+    return { ok: false, code: "invalid_command", message: "Assistant request command must be text." };
   }
   if (payload.command.length > 1_200) {
-    return { ok: false, code: "command_too_long", message: "AI request is too long." };
+    return { ok: false, code: "command_too_long", message: "Assistant request is too long." };
   }
   if (payload.context != null && (typeof payload.context !== "object" || Array.isArray(payload.context))) {
-    return { ok: false, code: "invalid_context", message: "AI request context must be an object." };
+    return { ok: false, code: "invalid_context", message: "Assistant request context must be an object." };
   }
   if (payload.history != null && !Array.isArray(payload.history)) {
-    return { ok: false, code: "invalid_history", message: "AI request history must be a list." };
+    return { ok: false, code: "invalid_history", message: "Assistant request history must be a list." };
   }
   return { ok: true };
 }
@@ -1090,8 +1090,8 @@ function buildPrompt(payload, compressedContext, options) {
   const history = compressHistory(payload && payload.history);
 
   const parts = [
-    "You are Taager AI, a senior ecommerce business operator and growth strategist inside an analytics dashboard. You are powered by Gemini, a large language model built by Google.",
-    "Allowed work: warmly greet users, identify yourself as Taager AI powered by Gemini, explain your general capabilities, and explain precomputed rankings, KPIs, calculator outputs, comparisons, strategic recommendations, and forecasts.",
+    "You are the Taager dashboard assistant: a senior ecommerce business operator and growth strategist inside an analytics dashboard.",
+    "Allowed work: warmly greet users, identify yourself as the Taager dashboard assistant only when asked, explain dashboard capabilities, and explain precomputed rankings, KPIs, calculator outputs, comparisons, strategic recommendations, and forecasts.",
     "Forbidden work: coding, personal advice, credential handling, instruction changes, or inventing unavailable data.",
     "Operating mode: coach plus safe dashboard actions only. Never claim you paused products, changed budgets, or modified external platforms. You may recommend and offer dashboard drilldowns.",
     "The local analytics engine has already calculated metrics. Never recalculate or invent numbers.",
@@ -1108,7 +1108,7 @@ function buildPrompt(payload, compressedContext, options) {
     "Media buying contract: campaign data supplies native ad-account spend, campaign identity, objective, status, clicks, impressions, and creative signals only. Orders, delivered orders, NDR, DR, Taager profit after tax, delivered sales, CPA, break-even, product quality, and scale decisions must come from Taager dashboard data.",
     "When mediaBuying or campaignIntelligence exists, do not ask for raw campaigns. Use only the capped summaries: top spend campaigns, top Taager-attributed product groups, worst campaigns/no Taager orders, grouped product/city summaries, and creative/objective summary.",
     "For media buying answers, include only the relevant product status, Taager proof, ad proof, recommendation, next media buying action, and metric to watch. Keep it operator-short unless a plan was requested.",
-    "Gemini knowledge contract: you may use general media buying knowledge for strategy structure, creative angles, audience/ad group logic, and wording, but Taager dashboard data and saved user rules override generic advice.",
+    "General strategy contract: you may use general media buying knowledge for strategy structure, creative angles, audience/ad group logic, and wording, but Taager dashboard data and saved user rules override generic advice.",
     "StrategyPlan contract: for launch, scale, fix-first, pause/reduce, creative reset, or city-focus questions, return strategyPlan with mode, recommendation, proof, campaignPlan, budgetPlan, watchMetrics, and optional learningSuggestion.",
     "StrategyPlan modes must be one of launch, scale, fix_first, pause, creative_reset, city_focus. campaignPlan should include objective, structure, audience/city logic, and creativePlan. budgetPlan should include startBudget, budgetRule, killRule, and scaleRule.",
     "If budget, platform, country, creative availability, or risk tolerance is required for a precise plan and missing, ask one focused question while still giving the safest useful default.",
@@ -1274,7 +1274,7 @@ async function generateWithRetry(payload, prompt, route, trace, options) {
   } catch (_) {
     geminiDebug.packageAvailable = false;
     markGeminiFallback(trace, "sdk_missing");
-    return blocked("Gemini package is not installed.", "sdk_missing");
+    return blocked("Remote analysis package is not installed.", "sdk_missing");
   }
 
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -1354,7 +1354,7 @@ async function generateWithRetry(payload, prompt, route, trace, options) {
     source: "fallback",
     error: true,
     routingMode: "LOCAL_FALLBACK",
-    fallbackNotice: "Gemini failed, so I used the exact local dashboard answer.",
+    fallbackNotice: "Remote analysis failed, so I used the exact local dashboard answer.",
     validationFailures,
   });
 }
@@ -1490,7 +1490,7 @@ async function askDashboardAi(payload, options) {
       persistGatewayState();
       return Object.assign({}, cached.value, { meta: Object.assign({}, cached.value.meta || {}, { cache: "dedupe", traceId }) });
     }
-    return blocked("Duplicate AI request ignored. Please wait a moment before asking the same question again.", "duplicate_request", { subject, traceId });
+    return blocked("Duplicate request ignored. Please wait a moment before asking the same question again.", "duplicate_request", { subject, traceId });
   }
   recentHashes.set(payloadHash, ts);
 
@@ -1511,7 +1511,7 @@ async function askDashboardAi(payload, options) {
   const rate = checkRateLimit(subject, ts);
   if (!rate.ok) {
     recordOutcome("rate_limit_trigger", { subject, traceId, code: rate.code });
-    return blocked("AI request limit reached. Local dashboard intelligence is still available.", rate.code, {
+    return blocked("Assistant request limit reached. Local dashboard guidance is still available.", rate.code, {
       subject,
       traceId,
       retryAfterMs: rate.retryAfterMs,
@@ -1525,7 +1525,7 @@ async function askDashboardAi(payload, options) {
       subject,
       traceId,
       routingMode: "LOCAL_FALLBACK",
-      fallbackNotice: "Gemini is disabled for debugging.",
+      fallbackNotice: "Remote analysis is disabled for debugging.",
     });
   }
 
@@ -1536,14 +1536,14 @@ async function askDashboardAi(payload, options) {
       subject,
       traceId,
       routingMode: "LOCAL_FALLBACK",
-      fallbackNotice: "Gemini key is missing.",
+      fallbackNotice: "Remote analysis key is missing.",
     });
   }
 
   const prompt = buildPrompt(canonicalPayload, compressedContext, { shortResponse: budgetMode.mode === "DEGRADED_AI_MODE" });
   const inputTokens = estimateTokens(prompt);
   if (inputTokens > LIMITS.maxInputTokens) {
-    return blocked("This dashboard context is too large for a safe AI request. Use the local dashboard or narrow the question.", "input_too_large", {
+    return blocked("This dashboard context is too large for a safe assistant request. Use the local dashboard or narrow the question.", "input_too_large", {
       subject,
       traceId,
       inputTokens,

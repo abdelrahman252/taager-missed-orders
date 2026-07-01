@@ -20,7 +20,7 @@ function toWesternDigits(value) {
     .replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d).toString());
 }
 
-function _normalizeCore(phone, country) {
+function _preparePhone(phone, country) {
   if (!phone) return null;
 
   const cc = normalizeTaagerCountry(country || DEFAULT_COUNTRY);
@@ -36,21 +36,36 @@ function _normalizeCore(phone, country) {
     digits = digits.slice(cfg.domesticPrefix.length);
   }
 
+  return { cc, cfg, digits };
+}
+
+function _hasValidStart(digits, cfg) {
+  return !cfg.startsWith.length || cfg.startsWith.some((prefix) => digits.startsWith(prefix));
+}
+
+function _isExactValid(digits, cfg) {
+  return digits.length === cfg.length && _hasValidStart(digits, cfg);
+}
+
+function _normalizeCore(phone, country) {
+  const prepared = _preparePhone(phone, country);
+  if (!prepared) return null;
+
+  const { cc, cfg } = prepared;
+  let digits = prepared.digits;
+
   if (cc === "sa" && digits.length === 10 && digits.endsWith("0")) {
     digits = digits.slice(0, 9);
   }
 
-  const validStart = !cfg.startsWith.length || cfg.startsWith.some((prefix) => digits.startsWith(prefix));
+  const validStart = _hasValidStart(digits, cfg);
   if (validStart && digits.length === cfg.length) return { digits, uncertain: false };
   if (cfg.rescueTrailingZero && validStart && digits.length === cfg.length - 1) {
     return { digits: digits + "0", uncertain: true };
   }
 
   if (cfg.startsWith.length) {
-    let raw = toWesternDigits(phone).replace(/\D/g, "");
-    if (raw.startsWith("00")) raw = raw.slice(2);
-    if (raw.startsWith(cfg.dialCode)) raw = raw.slice(cfg.dialCode.length);
-    if (cfg.domesticPrefix && raw.startsWith(cfg.domesticPrefix)) raw = raw.slice(cfg.domesticPrefix.length);
+    const raw = prepared.digits;
 
     for (let i = raw.length - cfg.length; i >= 0; i--) {
       const candidate = raw.slice(i, i + cfg.length);
@@ -81,6 +96,54 @@ function normalizePhoneWithMeta(phone, country) {
   return _normalizeCore(phone, country);
 }
 
+/**
+ * Return the small set of plausible phones used when creating new orders.
+ *
+ * Existing normalization deliberately remains single-valued. Candidate expansion
+ * is opt-in so historical Taager imports, dashboards, and account matching cannot
+ * suddenly duplicate records.
+ */
+function normalizePhoneCandidatesWithMeta(phone, country) {
+  const prepared = _preparePhone(phone, country);
+  const legacy = _normalizeCore(phone, country);
+  if (!prepared) return legacy ? [legacy] : [];
+
+  const { cfg, digits: raw } = prepared;
+  const excess = raw.length - cfg.length;
+  const candidates = [];
+  const seen = new Set();
+  const add = (digits, correction, uncertain = false) => {
+    if (!_isExactValid(digits, cfg) || seen.has(digits)) return;
+    seen.add(digits);
+    candidates.push({ digits, uncertain, correction });
+  };
+
+  // A common domestic-prefix correction typo:
+  //   intended 058... -> typed 5, inserted 0, then continued -> 50...
+  // Keep exactly two interpretations: remove that second 0, or trim the
+  // trailing extra digit(s). Explicit left trimming avoids the legacy
+  // right-to-left window search choosing an unintended Egypt/Oman window.
+  if ((excess === 1 || excess === 2) && raw[1] === "0") {
+    const withoutMisplacedZero = raw[0] + raw.slice(2);
+    add(withoutMisplacedZero.slice(0, cfg.length), "misplaced_domestic_zero");
+    add(raw.slice(0, cfg.length), "trailing_extra_digits");
+    if (candidates.length) return candidates;
+  }
+
+  // For prefix-constrained countries, an overlong value can contain more than
+  // one complete valid window. Preserve all distinct windows, capped naturally
+  // at three because only one or two excess digits are considered here.
+  if ((excess === 1 || excess === 2) && cfg.startsWith.length) {
+    for (let i = 0; i <= excess; i++) {
+      add(raw.slice(i, i + cfg.length), "valid_sliding_window");
+    }
+    if (candidates.length) return candidates;
+  }
+
+  if (legacy) add(legacy.digits, legacy.uncertain ? "trailing_zero_rescue" : "legacy", legacy.uncertain);
+  return candidates;
+}
+
 function formatPhone(phone, country) {
   const cc = normalizeTaagerCountry(country || DEFAULT_COUNTRY);
   const cfg = COUNTRY_CONFIG[cc];
@@ -93,4 +156,12 @@ function formatPhone966(phone) {
   return formatPhone(phone, "sa");
 }
 
-module.exports = { normalizePhone, normalizePhoneWithMeta, formatPhone, formatPhone966, COUNTRY_CONFIG, COUNTRY_PHONE_RULES };
+module.exports = {
+  normalizePhone,
+  normalizePhoneWithMeta,
+  normalizePhoneCandidatesWithMeta,
+  formatPhone,
+  formatPhone966,
+  COUNTRY_CONFIG,
+  COUNTRY_PHONE_RULES,
+};

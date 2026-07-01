@@ -293,15 +293,21 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       _runTableStyle.id = "run-preview-table-style";
       _runTableStyle.textContent = `
         .orders-preview-table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+        .run-orders-preview-table {
+          width: 100%;
+          min-width: 1310px;
+        }
         .orders-preview-table th,
         .orders-preview-table td {
-          padding: 7px 10px;
+          padding: 9px 14px;
           text-align: left;
           border-bottom: 1px solid var(--border);
           font-size: 12px;
+          line-height: 1.35;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          vertical-align: middle;
         }
         .orders-preview-table th {
           font-weight: 700;
@@ -316,6 +322,36 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
         }
         .orders-preview-table tbody tr:hover { background: rgba(79,142,247,0.05); }
         .orders-preview-table tbody tr:last-child td { border-bottom: none; }
+        .run-orders-preview-table .preview-index,
+        .run-orders-preview-table .preview-qty {
+          text-align: center;
+        }
+        .run-orders-preview-table .preview-product,
+        .run-orders-preview-table .preview-city,
+        .run-orders-preview-table .preview-name,
+        .run-orders-preview-table td:nth-child(2),
+        .run-orders-preview-table td:nth-child(6),
+        .run-orders-preview-table td:nth-child(7) {
+          direction: rtl;
+          text-align: right;
+        }
+        .run-orders-preview-table .preview-product,
+        .run-orders-preview-table td:nth-child(2) {
+          color: var(--text);
+          font-weight: 650;
+        }
+        .run-orders-preview-table .preview-date,
+        .run-orders-preview-table .preview-city,
+        .run-orders-preview-table td:nth-child(5),
+        .run-orders-preview-table td:nth-child(6) {
+          color: var(--text2);
+        }
+        .run-orders-preview-table .preview-phone,
+        .run-orders-preview-table td:nth-child(8) {
+          direction: ltr;
+          font-family: monospace;
+          font-size: 12.5px;
+        }
       `;
       document.head.appendChild(_runTableStyle);
     }
@@ -393,6 +429,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     });
 
     function appendLog(msg) {
+      msg = String(msg == null ? "" : msg);
       if (isInlineCountdownLog(msg)) {
         const cleanMsg = msg.trim();
         const lastQueueItem = _logQueue[_logQueue.length - 1];
@@ -519,26 +556,26 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
 
       function buildPreviewTableHTML(rows) {
         return `
-          <table class="orders-preview-table" style="width:100%;table-layout:fixed;border-collapse:collapse">
+          <table class="orders-preview-table run-orders-preview-table" style="width:100%;min-width:1310px;table-layout:fixed;border-collapse:collapse">
             <colgroup>
-              <col style="width:38px">
-              <col style="width:auto">
-              <col style="width:50px">
-              <col style="width:72px">
-              <col style="width:80px">
+              <col style="width:46px">
+              <col style="width:420px">
+              <col style="width:64px">
               <col style="width:90px">
-              <col style="width:110px">
-              <col style="width:120px">
+              <col style="width:150px">
+              <col style="width:190px">
+              <col style="width:190px">
+              <col style="width:160px">
             </colgroup>
             <thead>
-              <tr><th style="width:38px">#</th>${cols.map(c => `<th>${c}</th>`).join("")}</tr>
+              <tr><th>#</th>${cols.map(c => `<th>${c}</th>`).join("")}</tr>
             </thead>
             <tbody>
               ${rows.map((r, i) => `
                 <tr>
-                  <td style="color:var(--text2);text-align:center">${i + 1}</td>
+                  <td class="preview-index" style="color:var(--text2)">${i + 1}</td>
                   <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.productName||"").replace(/"/g,"")}">${r.productName || "—"}</td>
-                  <td style="font-weight:700;text-align:center">${r.qty}</td>
+                  <td class="preview-qty" style="font-weight:700">${r.qty}</td>
                   <td style="color:var(--success);font-weight:600">${r.subtotal || "—"}</td>
                   <td style="color:var(--text2)">${r.date || "—"}</td>
                   <td style="direction:rtl;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.city || "—"}</td>
@@ -1022,13 +1059,13 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
         if (!wrap) return;
         const colsL = window._t("run.preview_cols");
         wrap.innerHTML = `
-          <table class="orders-preview-table" style="width:100%;table-layout:fixed;border-collapse:collapse">
+          <table class="orders-preview-table run-orders-preview-table" style="width:100%;min-width:1310px;table-layout:fixed;border-collapse:collapse">
             <colgroup>
-              <col style="width:38px"><col style="width:auto"><col style="width:50px">
-              <col style="width:72px"><col style="width:80px"><col style="width:90px">
-              <col style="width:110px"><col style="width:120px">
+              <col style="width:46px"><col style="width:420px"><col style="width:64px">
+              <col style="width:90px"><col style="width:150px"><col style="width:190px">
+              <col style="width:190px"><col style="width:160px">
             </colgroup>
-            <thead><tr><th style="width:38px">#</th>${Array.isArray(colsL)?colsL.map(c=>`<th>${c}</th>`).join(""):""}</tr></thead>
+            <thead><tr><th>#</th>${Array.isArray(colsL)?colsL.map(c=>`<th>${c}</th>`).join(""):""}</tr></thead>
             <tbody>${filtered.map((r,i)=>`<tr>
               <td style="color:var(--text2);text-align:center">${i+1}</td>
               <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.productName||"").replace(/"/g,"")}">${r.productName||"—"}</td>
@@ -1052,13 +1089,13 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
           <input id="${searchId}" type="text" placeholder="${t('run.search_orders_placeholder')||'Search by name, phone or product...'}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 9px;font-size:12px;color:var(--text);outline:none" oninput="window._filterMultiPreview('${acc.id}',this.value)">
         </div>
         <div style="overflow:auto;max-height:300px" id="${tableId}">
-          <table class="orders-preview-table" style="width:100%;table-layout:fixed;border-collapse:collapse">
+          <table class="orders-preview-table run-orders-preview-table" style="width:100%;min-width:1310px;table-layout:fixed;border-collapse:collapse">
             <colgroup>
-              <col style="width:38px"><col style="width:auto"><col style="width:50px">
-              <col style="width:72px"><col style="width:80px"><col style="width:90px">
-              <col style="width:110px"><col style="width:120px">
+              <col style="width:46px"><col style="width:420px"><col style="width:64px">
+              <col style="width:90px"><col style="width:150px"><col style="width:190px">
+              <col style="width:190px"><col style="width:160px">
             </colgroup>
-            <thead><tr><th style="width:38px">#</th>${Array.isArray(cols)?cols.map(c=>`<th>${c}</th>`).join(""):""}</tr></thead>
+            <thead><tr><th>#</th>${Array.isArray(cols)?cols.map(c=>`<th>${c}</th>`).join(""):""}</tr></thead>
             <tbody>
               ${rows.map((r,i)=>`<tr>
                 <td style="color:var(--text2);text-align:center">${i+1}</td>
@@ -1129,6 +1166,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
 
   // ── Classify a log line ──
   function classifyLog(msg) {
+    msg = String(msg == null ? "" : msg);
     const ch = msg[0];
     if (ch === "✅" || msg.startsWith("📦") || msg.startsWith("📋")) return "log-ok";
     if (ch === "❌" || msg.startsWith("FATAL") || msg.startsWith("ERR:")) return "log-err";
@@ -1261,15 +1299,21 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     .mac-si-done { border-color: var(--success) !important; }
     .mac-si-failed { border-color: var(--danger) !important; }
     .orders-preview-table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+    .run-orders-preview-table {
+      width: 100%;
+      min-width: 1310px;
+    }
     .orders-preview-table th,
     .orders-preview-table td {
-      padding: 7px 10px;
+      padding: 9px 14px;
       text-align: left;
       border-bottom: 1px solid var(--border);
       font-size: 12px;
+      line-height: 1.35;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      vertical-align: middle;
     }
     .orders-preview-table th {
       font-weight: 700;
@@ -1284,6 +1328,27 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     }
     .orders-preview-table tbody tr:hover { background: rgba(79,142,247,0.05); }
     .orders-preview-table tbody tr:last-child td { border-bottom: none; }
+    .run-orders-preview-table td:nth-child(1),
+    .run-orders-preview-table td:nth-child(3) { text-align: center; }
+    .run-orders-preview-table td:nth-child(2),
+    .run-orders-preview-table td:nth-child(6),
+    .run-orders-preview-table td:nth-child(7) {
+      direction: rtl;
+      text-align: right;
+    }
+    .run-orders-preview-table td:nth-child(2) {
+      color: var(--text);
+      font-weight: 650;
+    }
+    .run-orders-preview-table td:nth-child(5),
+    .run-orders-preview-table td:nth-child(6) {
+      color: var(--text2);
+    }
+    .run-orders-preview-table td:nth-child(8) {
+      direction: ltr;
+      font-family: monospace;
+      font-size: 12.5px;
+    }
   `;
   document.head.appendChild(sidebarStyle);
 
@@ -1400,6 +1465,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
 
   // ── BOT LOG — route to correct account by [Label] prefix ──
   window.api.onBotLog((rawMsg) => {
+    rawMsg = String(rawMsg == null ? "" : rawMsg);
     // Check if it's a cooldown countdown
     const isCountdown = isInlineCountdownLog(rawMsg);
     if (isCountdown) {
