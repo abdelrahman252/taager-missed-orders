@@ -2125,6 +2125,7 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/dashboard/dashboard-aggregator-score.js",
     "pages/dashboard/dashboard-aggregator-geo.js",
     "pages/dashboard/dashboard-insight-engine.js",
+    "pages/dashboard/dashboard-best-ndr-cycle.js",
     "pages/dashboard/dashboard-filter-bus.js",
     "pages/dashboard/dashboard-query-runtime.js",
     "pages/dashboard/dashboard-shared.js",

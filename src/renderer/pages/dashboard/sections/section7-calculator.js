@@ -216,7 +216,19 @@ window.renderSection7 = function (mountEl, data, ctx) {
     (d && d.orderSources) ||
     (ctx && ctx.data && ctx.data.orderSources) ||
     null;
-  var orderNdrSourceKey = mountEl._s7OrderNdrSourceKey || "overall";
+  var bestNdrCycleResult = window.DashboardBestNdrCycle && typeof window.DashboardBestNdrCycle.analyze === "function"
+    ? window.DashboardBestNdrCycle.analyze((ctx && ctx.data) || {})
+    : null;
+  var preferredBestCycle = window.DashboardBestNdrCyclePreferred;
+  var preferredBestCycleActive = !!(
+    preferredBestCycle &&
+    bestNdrCycleResult &&
+    bestNdrCycleResult.status === "ready" &&
+    bestNdrCycleResult.best &&
+    preferredBestCycle.dateFrom === bestNdrCycleResult.best.dateFrom &&
+    preferredBestCycle.dateTo === bestNdrCycleResult.best.dateTo
+  );
+  var orderNdrSourceKey = mountEl._s7OrderNdrSourceKey || (preferredBestCycleActive ? "best_cycle" : "overall");
 
   function persistCalculatorSettings() {
     var storedManual = window.DashboardRoiState
@@ -268,6 +280,32 @@ window.renderSection7 = function (mountEl, data, ctx) {
     var label = String(source && (source.label || source.rawSource) || "").trim();
     return label || s7Txt("Unknown source", "\u0645\u0635\u062f\u0631 \u063a\u064a\u0631 \u0645\u0639\u0631\u0648\u0641");
   }
+  function s7ShortDate(value) {
+    var date = new Date(String(value || "").slice(0, 10) + "T00:00:00");
+    if (isNaN(date.getTime())) return String(value || "");
+    return date.toLocaleDateString(window.dashboardI18n ? window.dashboardI18n.locale() : "en-US", {
+      month: "short",
+      day: "numeric"
+    });
+  }
+  function bestCycleRangeLabel(best) {
+    return best && best.dateFrom && best.dateTo
+      ? s7ShortDate(best.dateFrom) + " - " + s7ShortDate(best.dateTo)
+      : "";
+  }
+  function bestCycleChoice() {
+    if (!bestNdrCycleResult || bestNdrCycleResult.status !== "ready" || !bestNdrCycleResult.best) return null;
+    var best = bestNdrCycleResult.best;
+    return {
+      key: "best_cycle",
+      label: s7Txt("Best NDR Cycle", "Best NDR Cycle") + " - " + bestCycleRangeLabel(best),
+      ndrPct: Number(best.ndrPct || 0),
+      netOrders: Number(best.netOrders || 0),
+      delivered: Number(best.delivered || 0),
+      lowSample: false,
+      bestCycle: best
+    };
+  }
   function orderNdrChoices() {
     var rows = orderSourcesModel && Array.isArray(orderSourcesModel.sources)
       ? orderSourcesModel.sources
@@ -280,6 +318,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
       netOrders: realTotalOrders,
       lowSample: false
     }];
+    var bestChoice = bestCycleChoice();
+    if (bestChoice) choices.push(bestChoice);
     rows.forEach(function (source, index) {
       choices.push({
         key: "source:" + index,
@@ -323,6 +363,23 @@ window.renderSection7 = function (mountEl, data, ctx) {
       }).join("") +
       '</select>' +
       '<p id="s7-order-ndr-note">' + s7Esc(s7Txt("Using ", "\u064a\u062a\u0645 \u0627\u0633\u062a\u062e\u062f\u0627\u0645 ") + active.label + " NDR: " + s7PctValue(active.ndrPct) + "%") + '</p>' +
+    '</div>';
+  }
+  function bestNdrCycleCardHtml() {
+    var choice = bestCycleChoice();
+    if (!choice || !choice.bestCycle) return "";
+    var best = choice.bestCycle;
+    var avg = bestNdrCycleResult.average || {};
+    var uplift = Math.round(Number(best.upliftPts || 0) * 10) / 10;
+    return '<div class="s7-best-ndr-cycle-card">' +
+      '<div class="s7-best-ndr-cycle-copy">' +
+        '<span>' + s7Txt("Best monthly NDR cycle", "Best monthly NDR cycle") + '</span>' +
+        '<strong>' + s7Esc(bestCycleRangeLabel(best)) + ' - ' + s7PctValue(best.ndrPct) + '%</strong>' +
+        '<em>' + s7Num(best.delivered) + ' / ' + s7Num(best.netOrders) + ' ' + s7Txt("orders", "orders") +
+          ' - ' + (uplift > 0 ? '+' : '') + uplift + ' pts ' + s7Txt("vs period avg", "vs period avg") +
+          (avg.ndrPct != null ? ' (' + s7PctValue(avg.ndrPct) + '%)' : '') + '</em>' +
+      '</div>' +
+      '<button type="button" id="s7-use-best-ndr-cycle">' + s7Txt("Use this cycle", "Use this cycle") + '</button>' +
     '</div>';
   }
   applyOrderNdrChoice(false);
@@ -3592,6 +3649,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       "<br>40%+</span>" +
       "</div>" +
       orderNdrSelectorHtml() +
+      bestNdrCycleCardHtml() +
       "</div>" +
       '<div class="sfe-control-row">' +
       '<label class="sfe-label">' +
@@ -3694,6 +3752,22 @@ window.renderSection7 = function (mountEl, data, ctx) {
         simState._ndrModified = false;
         var ndrInput = document.getElementById("sfe-ndr");
         if (ndrInput) ndrInput.value = s7RatioPctValue(simState.ndr);
+        updateSimModifiedFlag();
+        updateCalcUI();
+        updateSimUI();
+        scheduleCalcUI();
+      });
+    }
+    var useBestCycleBtn = document.getElementById("s7-use-best-ndr-cycle");
+    if (useBestCycleBtn) {
+      useBestCycleBtn.addEventListener("click", function () {
+        orderNdrSourceKey = "best_cycle";
+        mountEl._s7OrderNdrSourceKey = "best_cycle";
+        applyOrderNdrChoice(true);
+        simState._ndrModified = false;
+        var ndrInput = document.getElementById("sfe-ndr");
+        if (ndrInput) ndrInput.value = s7RatioPctValue(simState.ndr);
+        if (orderNdrSelect) orderNdrSelect.value = "best_cycle";
         updateSimModifiedFlag();
         updateCalcUI();
         updateSimUI();

@@ -38,6 +38,74 @@
   opacity: .78;
 }
 
+#page-dashboard .s7-best-ndr-cycle-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--dash-good) 32%, var(--dash-border-soft));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dash-good) 9%, var(--dash-surface));
+}
+
+#page-dashboard .s7-best-ndr-cycle-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+#page-dashboard .s7-best-ndr-cycle-copy span {
+  color: var(--dash-text-faint);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+#page-dashboard .s7-best-ndr-cycle-copy strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dash-text);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+#page-dashboard .s7-best-ndr-cycle-copy em {
+  color: var(--dash-text-muted);
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 750;
+}
+
+#page-dashboard .s7-best-ndr-cycle-card button {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--dash-good) 44%, var(--dash-border));
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: var(--dash-input-bg);
+  color: var(--dash-text);
+  font-size: 10.5px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+#page-dashboard .s7-best-ndr-cycle-card button:hover {
+  border-color: color-mix(in srgb, var(--dash-good) 66%, var(--dash-border));
+  background: color-mix(in srgb, var(--dash-good) 12%, var(--dash-input-bg));
+}
+
+#page-dashboard .dash-size-xs .s7-best-ndr-cycle-card {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+#page-dashboard .dash-size-xs .s7-best-ndr-cycle-card button {
+  width: 100%;
+}
+
 @media (max-width: 1399px) {
 
   /* ── S7 Calculator ── */

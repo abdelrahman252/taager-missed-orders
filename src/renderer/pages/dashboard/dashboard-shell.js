@@ -223,6 +223,16 @@
           '<span class="dashboard-date-sep">-</span>' +
           '<button type="button" id="dashboard-expected-ndr-date-to" class="dashboard-date-input"></button>' +
         '</div>' +
+        '<div class="dashboard-best-ndr-control">' +
+          '<button type="button" id="dashboard-best-ndr-btn" class="dashboard-best-ndr-btn" aria-expanded="false" aria-controls="dashboard-best-ndr-panel" disabled>' +
+            '<span class="dashboard-best-ndr-icon">' + icon('trendingUp', 'currentColor') + '</span>' +
+            '<span class="dashboard-best-ndr-copy">' +
+              '<span class="dashboard-best-ndr-label">Best NDR Cycle</span>' +
+              '<strong id="dashboard-best-ndr-summary">Scanning</strong>' +
+            '</span>' +
+          '</button>' +
+          '<div id="dashboard-best-ndr-panel" class="dashboard-best-ndr-panel" hidden></div>' +
+        '</div>' +
         '<div class="dashboard-rates-control">' +
           '<button type="button" id="dashboard-rates-btn" class="dash-rates-btn" title="' + tr('rates.label') + '" data-tooltip="' + tr('rates.label') + '">' +
             '<span>' + tr('rates.label') + '</span><strong id="dashboard-rates-note">defaults</strong>' +
@@ -1025,6 +1035,215 @@
     return false;
   }
 
+  function pctText(value) {
+    var n = Number(value || 0);
+    if (!Number.isFinite(n)) n = 0;
+    return (Math.round(n * 10) / 10).toLocaleString('en-US', { maximumFractionDigits: 1 }) + '%';
+  }
+
+  function signedPts(value) {
+    var n = Number(value || 0);
+    var rounded = Math.round(n * 10) / 10;
+    return (rounded > 0 ? '+' : '') + rounded.toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' pts';
+  }
+
+  function countText(value) {
+    return Math.round(Number(value || 0)).toLocaleString('en-US');
+  }
+
+  function rangeText(range) {
+    if (!range || !range.dateFrom || !range.dateTo) return '--';
+    return shortDate(range.dateFrom) + ' - ' + shortDate(range.dateTo);
+  }
+
+  function closeBestNdrPanel(shellEl) {
+    var panel = shellEl && shellEl.querySelector('#dashboard-best-ndr-panel');
+    var btn = shellEl && shellEl.querySelector('#dashboard-best-ndr-btn');
+    if (panel) panel.hidden = true;
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+    if (shellEl && shellEl._bestNdrOutsideHandler) {
+      document.removeEventListener('pointerdown', shellEl._bestNdrOutsideHandler);
+      shellEl._bestNdrOutsideHandler = null;
+    }
+  }
+
+  function metricBox(label, value, tone) {
+    return '<div class="dashboard-best-ndr-metric dashboard-best-ndr-metric-' + esc(tone || 'neutral') + '">' +
+      '<span>' + esc(label) + '</span>' +
+      '<strong>' + esc(value) + '</strong>' +
+    '</div>';
+  }
+
+  function entityLine(label, item) {
+    if (!item || !item.name) return '';
+    return '<div class="dashboard-best-ndr-driver">' +
+      '<span>' + esc(label) + '</span>' +
+      '<strong>' + esc(item.name) + '</strong>' +
+      '<em>' + esc(pctText(item.ndrPct)) + ' NDR - ' + esc(countText(item.netOrders)) + ' orders</em>' +
+    '</div>';
+  }
+
+  function renderBestNdrPanel(result) {
+    if (!result || result.status === 'empty') {
+      return '<div class="dashboard-best-ndr-empty">' +
+        '<strong>No Best NDR Cycle yet</strong>' +
+        '<span>Update the dashboard for a monthly period with order data to scan the strongest cycle.</span>' +
+      '</div>';
+    }
+    if (result.status === 'low_sample') {
+      return '<div class="dashboard-best-ndr-empty">' +
+        '<strong>No trustworthy cycle found</strong>' +
+        '<span>Every ' + esc(result.cycleDays || 7) + '-day cycle is below the ' + esc(result.minSample || 30) + ' net-order minimum sample.</span>' +
+      '</div>';
+    }
+    var best = result.best || {};
+    var avg = result.average || {};
+    var topCity = best.topCities && best.topCities[0];
+    var topProduct = best.topProducts && best.topProducts[0];
+    var failedCopy = best.failedDeltaPts < 0
+      ? 'Failure rate was ' + signedPts(best.failedDeltaPts) + ' below the period average.'
+      : 'Failure rate was ' + signedPts(best.failedDeltaPts) + ' versus the period average.';
+    return '<div class="dashboard-best-ndr-head">' +
+        '<span>Best cycle found in selected period</span>' +
+        '<strong>' + esc(rangeText(best)) + '</strong>' +
+      '</div>' +
+      '<div class="dashboard-best-ndr-hero">' +
+        '<div><span>NDR</span><strong>' + esc(pctText(best.ndrPct)) + '</strong></div>' +
+        '<p>' + esc(countText(best.delivered)) + ' delivered / ' + esc(countText(best.netOrders)) + ' net orders</p>' +
+      '</div>' +
+      '<div class="dashboard-best-ndr-metrics">' +
+        metricBox('Vs period avg', signedPts(best.upliftPts), best.upliftPts >= 0 ? 'good' : 'warn') +
+        metricBox('Period avg', pctText(avg.ndrPct), 'neutral') +
+        metricBox('Sample rule', countText(result.minSample) + '+ orders', 'info') +
+      '</div>' +
+      '<div class="dashboard-best-ndr-why">' +
+        '<span class="dashboard-best-ndr-section-label">Why this cycle won</span>' +
+        '<p>It had the strongest trustworthy NDR after scanning every ' + esc(result.cycleDays) + '-day cycle in the selected period.</p>' +
+        '<p>' + esc(failedCopy) + '</p>' +
+        entityLine('Top city', topCity) +
+        entityLine('Top product', topProduct) +
+      '</div>' +
+      '<div class="dashboard-best-ndr-actions">' +
+        '<button type="button" data-best-ndr-action="calculator">Use in Account Calc</button>' +
+        '<button type="button" data-best-ndr-action="expected">Apply as Expected NDR</button>' +
+        '<button type="button" data-best-ndr-action="orders">View Orders</button>' +
+      '</div>';
+  }
+
+  function toast(message, kind) {
+    if (window.TaagerUI && typeof window.TaagerUI.toast === 'function') {
+      window.TaagerUI.toast(message, { kind: kind || 'info' });
+    }
+  }
+
+  function handleBestNdrAction(shellEl, opts, action) {
+    var result = shellEl && shellEl._dashboardBestNdrResult;
+    var best = result && result.best;
+    if (!best) return;
+    if (action === 'expected') {
+      if (window.DashboardExpectedNdrRangeState && typeof window.DashboardExpectedNdrRangeState.setRange === 'function') {
+        window.DashboardExpectedNdrRangeState.setRange(best.dateFrom, best.dateTo);
+      }
+      if (window.DashboardDeliveredDateState && typeof window.DashboardDeliveredDateState.set === 'function') {
+        window.DashboardDeliveredDateState.set('expected');
+      }
+      shellEl._topbarDeliveredDateKey = null;
+      shellEl._topbarExpectedNdrRangeKey = null;
+      if (typeof opts.onDeliveredDateModeChange === 'function') opts.onDeliveredDateModeChange('expected');
+      closeBestNdrPanel(shellEl);
+      toast('Best NDR Cycle applied as the Expected NDR range.', 'success');
+      return;
+    }
+    if (action === 'calculator') {
+      window.DashboardBestNdrCyclePreferred = {
+        key: 'best_cycle',
+        dateFrom: best.dateFrom,
+        dateTo: best.dateTo,
+        ndrPct: best.ndrPct
+      };
+      closeBestNdrPanel(shellEl);
+      destroyDashboardPaneCache(shellEl);
+      var ctx = shellEl._dashboardCurrentCtx;
+      if (ctx && typeof ctx.onNavigate === 'function') ctx.onNavigate('calculator');
+      toast('Best NDR Cycle is ready in Account Calc.', 'success');
+      return;
+    }
+    if (action === 'orders') {
+      window.DashboardBestNdrCycleOrderRange = {
+        dateFrom: best.dateFrom,
+        dateTo: best.dateTo
+      };
+      closeBestNdrPanel(shellEl);
+      var navCtx = shellEl._dashboardCurrentCtx;
+      if (navCtx && typeof navCtx.onNavigate === 'function') navCtx.onNavigate('orders');
+      toast('Showing Orders. Best cycle range: ' + rangeText(best), 'info');
+    }
+  }
+
+  function bindBestNdrControl(shellEl, opts) {
+    var btn = shellEl.querySelector('#dashboard-best-ndr-btn');
+    var panel = shellEl.querySelector('#dashboard-best-ndr-panel');
+    if (!btn || !panel || btn._bestNdrReady) return;
+    btn._bestNdrReady = true;
+    btn.addEventListener('click', function () {
+      if (btn.disabled) return;
+      var nextOpen = panel.hidden;
+      panel.hidden = !nextOpen;
+      btn.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+      if (nextOpen) {
+        panel.innerHTML = renderBestNdrPanel(shellEl._dashboardBestNdrResult);
+        if (shellEl._bestNdrOutsideHandler) document.removeEventListener('pointerdown', shellEl._bestNdrOutsideHandler);
+        shellEl._bestNdrOutsideHandler = function (event) {
+          if (!shellEl.contains(event.target)) closeBestNdrPanel(shellEl);
+          else if (!panel.contains(event.target) && !btn.contains(event.target)) closeBestNdrPanel(shellEl);
+        };
+        setTimeout(function () { document.addEventListener('pointerdown', shellEl._bestNdrOutsideHandler); }, 0);
+      }
+    });
+    panel.addEventListener('click', function (event) {
+      var actionBtn = event.target.closest('[data-best-ndr-action]');
+      if (!actionBtn) return;
+      handleBestNdrAction(shellEl, opts || {}, actionBtn.getAttribute('data-best-ndr-action'));
+    });
+  }
+
+  function syncBestNdrCycle(shellEl, data, opts) {
+    var btn = shellEl.querySelector('#dashboard-best-ndr-btn');
+    var summary = shellEl.querySelector('#dashboard-best-ndr-summary');
+    var panel = shellEl.querySelector('#dashboard-best-ndr-panel');
+    if (!btn || !summary) return;
+    bindBestNdrControl(shellEl, opts || {});
+    var result = null;
+    if (data && data._loaded && !data._loading && window.DashboardBestNdrCycle && typeof window.DashboardBestNdrCycle.analyze === 'function') {
+      result = window.DashboardBestNdrCycle.analyze(data);
+    }
+    shellEl._dashboardBestNdrResult = result;
+    btn.classList.remove('is-ready', 'is-empty', 'is-low-sample');
+    if (!result) {
+      btn.disabled = true;
+      summary.textContent = 'Scanning';
+      closeBestNdrPanel(shellEl);
+      return;
+    }
+    btn.disabled = result.status === 'empty';
+    if (result.status === 'ready') {
+      btn.classList.add('is-ready');
+      summary.textContent = pctText(result.best.ndrPct) + ' - ' + rangeText(result.best);
+      btn.title = 'Best NDR Cycle: ' + summary.textContent;
+    } else if (result.status === 'low_sample') {
+      btn.classList.add('is-low-sample');
+      summary.textContent = 'Low sample';
+      btn.title = 'No trustworthy Best NDR Cycle found yet';
+      btn.disabled = false;
+    } else {
+      btn.classList.add('is-empty');
+      summary.textContent = 'No data';
+      btn.title = 'No Best NDR Cycle data yet';
+    }
+    btn.setAttribute('data-tooltip', btn.title || '');
+    if (panel && !panel.hidden) panel.innerHTML = renderBestNdrPanel(result);
+  }
+
   function syncCustomRangeControls(shellEl, period) {
     if (!shellEl || !period) return;
     var custom = shellEl.querySelector('#dashboard-custom-range');
@@ -1068,6 +1287,7 @@
     var periodWrap = shellEl.querySelector('#dashboard-period-select-wrap');
     var reportingCurrencyWrap = shellEl.querySelector('#dashboard-reporting-currency-wrap');
     var deliveredDateWrap = shellEl.querySelector('#dashboard-delivered-date-select-wrap');
+    syncBestNdrCycle(shellEl, data, opts);
     bindRatesControl(shellEl, opts);
     if (reportingCurrencyWrap && window.renderCustomSelect) {
       reportingCurrencyWrap.hidden = false;
@@ -1794,6 +2014,7 @@
       destroyDashboardPaneCache(mountEl);
       disconnectPaneThemeObservers(mountEl.querySelector('#dash-section-pane'));
       if (window.triggerDashboardUpdate) window.triggerDashboardUpdate = null;
+      closeBestNdrPanel(mountEl);
       window.removeEventListener('resize', _debouncedResize);
       clearTimeout(_resizeTimer);
       clearTimeout(mountEl._dashboardRangeAppliedTimer);
