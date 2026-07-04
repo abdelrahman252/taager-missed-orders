@@ -691,15 +691,10 @@ window.renderSection1 = function (mountEl, data, ctx) {
 
   /* ── Post-injection wiring ───────────────────────────────────────────────── */
 
-  /* 1. Animate h1 + subtitle (CSS transition, trigger by adding opacity) */
-  requestAnimationFrame(function () {
-    requestAnimationFrame(function () {
-      var h1 = document.getElementById('s1-h1');
-      var sub = document.getElementById('s1-subtitle');
-      if (h1)  { h1.style.opacity  = '1'; h1.style.transform  = 'translateY(0)'; }
-      if (sub) { sub.style.opacity = '1'; }
-    });
-  });
+  var h1 = document.getElementById('s1-h1');
+  var sub = document.getElementById('s1-subtitle');
+  if (h1)  { h1.style.opacity  = '1'; h1.style.transform  = 'translateY(0)'; }
+  if (sub) { sub.style.opacity = '1'; }
 
   /* 2. Animate KPI number counters */
   if (window.runKpiAnimations) {
@@ -870,24 +865,19 @@ window.renderSection1 = function (mountEl, data, ctx) {
   })();
 
   /* 3. Animate health bar segments (width: 0 → pct%) */
-  requestAnimationFrame(function () {
-    requestAnimationFrame(function () {
-      var track = document.getElementById('s1-bar-track');
-      if (track) {
-        var segs = track.querySelectorAll('.health-seg');
-        segs.forEach(function (seg) {
-          var pct = seg.getAttribute('data-pct');
-          seg.style.width = pct + '%';
-        });
-      }
-
-      /* 4. Pop the spark dots */
-      var dot1 = document.getElementById('s1-dot1');
-      var dot2 = document.getElementById('s1-dot2');
-      if (dot1) { dot1.style.opacity = '1'; dot1.style.transform = 'translate(-50%,-50%) scale(1)'; }
-      if (dot2) { dot2.style.opacity = '1'; dot2.style.transform = 'translate(-50%,-50%) scale(1)'; }
+  var track = document.getElementById('s1-bar-track');
+  if (track) {
+    var segs = track.querySelectorAll('.health-seg');
+    segs.forEach(function (seg) {
+      var pct = seg.getAttribute('data-pct');
+      seg.style.width = pct + '%';
     });
-  });
+  }
+
+  var dot1 = document.getElementById('s1-dot1');
+  var dot2 = document.getElementById('s1-dot2');
+  if (dot1) { dot1.style.opacity = '1'; dot1.style.transform = 'translate(-50%,-50%) scale(1)'; }
+  if (dot2) { dot2.style.opacity = '1'; dot2.style.transform = 'translate(-50%,-50%) scale(1)'; }
 
   if (window.DashboardMarketingState) {
     if (mountEl._s1MarketingListener) {

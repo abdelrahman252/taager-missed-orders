@@ -286,6 +286,9 @@ function makeRuns() {
 }
 
 async function mountDashboard(page) {
+  const qaOrders = process.env.TAAGER_QA_EMPTY_DASHBOARD === "1"
+    ? []
+    : Array.from({ length: 96 }, (_, i) => makeOrder(i));
   await page.waitForFunction(() => !!document.querySelector(".page.active"), null, { timeout: 15000 });
   await page.waitForTimeout(250);
   await page.evaluate(() => {
@@ -557,7 +560,7 @@ async function mountDashboard(page) {
     if (typeof window.applyLang === "function") window.applyLang("ar");
     if (typeof window.renderDashboard === "function") window.renderDashboard();
     if (typeof window.showPage === "function") window.showPage("page-dashboard");
-  }, { orders: Array.from({ length: 96 }, (_, i) => makeOrder(i)), runs: makeRuns() });
+  }, { orders: qaOrders, runs: makeRuns() });
   await page.waitForSelector("#db-shell-mount.dash-shell", { timeout: 15000 });
   await page.waitForFunction(() => document.querySelector(".page.active")?.id === "page-dashboard", null, { timeout: 15000 });
 }
@@ -1698,6 +1701,7 @@ async function captureDashboardSection(page, sectionId, size) {
 async function verifyVisualSystemCascade(page) {
   const result = await page.evaluate(async () => {
     if (window.taagerFontsReady) await window.taagerFontsReady;
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
     const stylesheets = Array.from(document.head.querySelectorAll('link[rel="stylesheet"]'));
     const visualSystem = document.querySelector('link[data-visual-system="true"]');
     const visibleTooSmall = Array.from(document.querySelectorAll("#page-dashboard *"))
@@ -1731,6 +1735,73 @@ async function verifyVisualSystemCascade(page) {
 async function diagnoseDashboardIdlePulse(page, durationMs) {
   await page.waitForTimeout(1800);
   return page.evaluate((duration) => new Promise((resolve) => {
+    const debugStart = window.TaagerDebug && Array.isArray(window.TaagerDebug.records)
+      ? window.TaagerDebug.records.length
+      : 0;
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    const nativeClearTimeout = window.clearTimeout.bind(window);
+    const nativeSetInterval = window.setInterval.bind(window);
+    const nativeClearInterval = window.clearInterval.bind(window);
+    const nativeRaf = window.requestAnimationFrame ? window.requestAnimationFrame.bind(window) : null;
+    const nativeCancelRaf = window.cancelAnimationFrame ? window.cancelAnimationFrame.bind(window) : null;
+    const asyncStats = {
+      timeoutsScheduled: 0,
+      timeoutsFired: 0,
+      intervalsScheduled: 0,
+      intervalTicks: 0,
+      animationFramesScheduled: 0,
+      animationFramesFired: 0,
+    };
+    const trackedTimeouts = new Set();
+    const trackedIntervals = new Set();
+    const trackedFrames = new Set();
+    window.setTimeout = function (callback, delay) {
+      asyncStats.timeoutsScheduled += 1;
+      let id = 0;
+      const args = Array.prototype.slice.call(arguments, 2);
+      id = nativeSetTimeout(function () {
+        trackedTimeouts.delete(id);
+        asyncStats.timeoutsFired += 1;
+        if (typeof callback === 'function') return callback.apply(this, args);
+      }, delay);
+      trackedTimeouts.add(id);
+      return id;
+    };
+    window.clearTimeout = function (id) {
+      trackedTimeouts.delete(id);
+      return nativeClearTimeout(id);
+    };
+    window.setInterval = function (callback, delay) {
+      asyncStats.intervalsScheduled += 1;
+      const args = Array.prototype.slice.call(arguments, 2);
+      const id = nativeSetInterval(function () {
+        asyncStats.intervalTicks += 1;
+        if (typeof callback === 'function') return callback.apply(this, args);
+      }, delay);
+      trackedIntervals.add(id);
+      return id;
+    };
+    window.clearInterval = function (id) {
+      trackedIntervals.delete(id);
+      return nativeClearInterval(id);
+    };
+    if (nativeRaf) {
+      window.requestAnimationFrame = function (callback) {
+        asyncStats.animationFramesScheduled += 1;
+        let id = 0;
+        id = nativeRaf(function (timestamp) {
+          trackedFrames.delete(id);
+          asyncStats.animationFramesFired += 1;
+          if (typeof callback === 'function') return callback(timestamp);
+        });
+        trackedFrames.add(id);
+        return id;
+      };
+      window.cancelAnimationFrame = function (id) {
+        trackedFrames.delete(id);
+        return nativeCancelRaf ? nativeCancelRaf(id) : undefined;
+      };
+    }
     const targets = [
       document.documentElement,
       document.getElementById('main-titlebar'),
@@ -1768,7 +1839,9 @@ async function diagnoseDashboardIdlePulse(page, durationMs) {
     const initialRects = targets.map((target) => target.getBoundingClientRect().toJSON());
     let rectChanges = 0;
     let frame = 0;
+    let samples = 0;
     const sample = () => {
+      samples += 1;
       targets.forEach((target, index) => {
         const current = target.getBoundingClientRect();
         const initial = initialRects[index];
@@ -1780,28 +1853,72 @@ async function diagnoseDashboardIdlePulse(page, durationMs) {
       frame = requestAnimationFrame(sample);
     };
     frame = requestAnimationFrame(sample);
-    setTimeout(() => {
+    nativeSetTimeout(() => {
       cancelAnimationFrame(frame);
       observer.disconnect();
       if (perfObserver) perfObserver.disconnect();
+      window.setTimeout = nativeSetTimeout;
+      window.clearTimeout = nativeClearTimeout;
+      window.setInterval = nativeSetInterval;
+      window.clearInterval = nativeClearInterval;
+      if (nativeRaf) window.requestAnimationFrame = nativeRaf;
+      if (nativeCancelRaf) window.cancelAnimationFrame = nativeCancelRaf;
+      const records = window.TaagerDebug && Array.isArray(window.TaagerDebug.records)
+        ? window.TaagerDebug.records.slice(debugStart)
+        : [];
+      const count = (scope, event) => records.filter((record) => record.scope === scope && record.event === event).length;
       resolve({
         duration,
         targets: names,
+        samples,
         rectChanges,
         layoutShiftCount: layoutShifts.length,
         layoutShiftValue: layoutShifts.reduce((sum, value) => sum + value, 0),
         mutationCount: mutations.length,
         mutations: mutations.slice(0, 40),
+        dashboardRenders: count('dashboard-data', 'renderDashboard:start'),
+        shellRefreshes: count('dashboard-shell', 'refreshDashboardShell:start'),
+        shellRebuilds: count('dashboard-shell', 'renderDashboardShell:start'),
+        sectionRenders: count('dashboard-shell', 'switch:render-fresh-pane'),
+        i18nObserverFlushes: count('dashboard-i18n', 'observer:flush'),
+        asyncStats,
+        trackedAsyncLeft: {
+          timeouts: trackedTimeouts.size,
+          intervals: trackedIntervals.size,
+          animationFrames: trackedFrames.size,
+        },
         activeAnimations: document.getAnimations().map((animation) => ({
           name: animation.animationName || '',
           target: animation.effect && animation.effect.target
             ? (animation.effect.target.id || animation.effect.target.className || animation.effect.target.tagName)
             : '',
           playState: animation.playState,
+          loading: !!(animation.effect && animation.effect.target && animation.effect.target.closest &&
+            animation.effect.target.closest('[data-dashboard-preloader="true"],.dashboard-update-overlay,[aria-busy="true"]')),
         })).filter((item) => item.playState === 'running'),
       });
     }, duration);
   }), durationMs || 5000);
+}
+
+async function verifyDashboardIdleStability(page, durationMs) {
+  const result = await diagnoseDashboardIdlePulse(page, durationMs || 60000);
+  const nonLoadingAnimations = result.activeAnimations.filter((animation) => !animation.loading);
+  const failures = [];
+  if (result.dashboardRenders) failures.push("dashboard renders=" + result.dashboardRenders);
+  if (result.shellRefreshes) failures.push("shell refreshes=" + result.shellRefreshes);
+  if (result.shellRebuilds) failures.push("shell rebuilds=" + result.shellRebuilds);
+  if (result.sectionRenders) failures.push("section renders=" + result.sectionRenders);
+  if (result.i18nObserverFlushes) failures.push("i18n observer flushes=" + result.i18nObserverFlushes);
+  if (result.mutationCount) failures.push("mutations=" + result.mutationCount);
+  if (result.rectChanges) failures.push("rect changes=" + result.rectChanges);
+  if (result.layoutShiftCount) failures.push("layout shifts=" + result.layoutShiftCount);
+  if (nonLoadingAnimations.length) failures.push("non-loading animations=" + JSON.stringify(nonLoadingAnimations.slice(0, 6)));
+  if (failures.length) {
+    throw new Error("Dashboard idle stability failed: " + failures.join(", ") + " :: " + JSON.stringify(result));
+  }
+  console.log("[qa] dashboard idle stability verified", JSON.stringify(result));
+  return result;
 }
 
 async function diagnoseAdminSyncLifecycle(page) {
@@ -1859,6 +1976,10 @@ async function diagnoseAdminSyncLifecycle(page) {
     await mountDashboard(page);
     console.log("[qa] dashboard mounted");
     await verifyVisualSystemCascade(page);
+    if (process.env.TAAGER_QA_IDLE_STABILITY === "1") {
+      await verifyDashboardIdleStability(page, Number(process.env.TAAGER_QA_IDLE_MS || 60000));
+      return;
+    }
     if (process.env.TAAGER_QA_IDLE_DIAGNOSTIC === "1") {
       console.log("[qa] dashboard idle diagnostic", JSON.stringify(await diagnoseDashboardIdlePulse(page, 5000)));
       return;

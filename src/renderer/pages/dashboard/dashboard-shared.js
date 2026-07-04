@@ -14,6 +14,34 @@
 (function () {
   'use strict';
 
+  if (typeof window.TaagerDashboardMotionDisabled === 'undefined') {
+    window.TaagerDashboardMotionDisabled = true;
+  }
+
+  function dashboardMotionDisabled() {
+    return window.TaagerDashboardMotionDisabled !== false;
+  }
+
+  window.disableDashboardChartMotion = function () {
+    if (!dashboardMotionDisabled() || !window.Chart || window.Chart.__taagerDashboardMotionDisabled) return;
+    window.Chart.__taagerDashboardMotionDisabled = true;
+    if (window.Chart.defaults) {
+      window.Chart.defaults.animation = false;
+      window.Chart.defaults.animations = false;
+      window.Chart.defaults.transitions = {
+        active: { animation: { duration: 0 } },
+        resize: { animation: { duration: 0 } },
+        show: { animation: { duration: 0 } },
+        hide: { animation: { duration: 0 } }
+      };
+      if (window.Chart.defaults.plugins && window.Chart.defaults.plugins.tooltip) {
+        window.Chart.defaults.plugins.tooltip.animation = false;
+        window.Chart.defaults.plugins.tooltip.animations = false;
+      }
+    }
+  };
+  window.disableDashboardChartMotion();
+
   /* ── Viewport utility ────────────────────────────────────────────────────── */
   window.dashViewport = function() {
     var w = window.innerWidth || document.documentElement.clientWidth;
@@ -589,10 +617,11 @@
         maximumFractionDigits: decimals
       });
     };
-    if (suppressMotion || reduceMotion || duration <= 16 || !document.body.contains(el)) {
+    if (dashboardMotionDisabled() || suppressMotion || reduceMotion || duration <= 16 || !document.body.contains(el)) {
       if (window.TaagerDebugLog) window.TaagerDebugLog('dashboard-animation', 'animateNumber:direct-set', {
         to: to,
         duration: duration,
+        dashboardMotionDisabled: dashboardMotionDisabled(),
         suppressMotion: suppressMotion,
         reduceMotion: reduceMotion,
         inDom: document.body.contains(el),

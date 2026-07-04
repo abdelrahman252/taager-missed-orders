@@ -4844,3 +4844,46 @@ button {
     box-shadow: 0 0 0 5px rgba(168, 85, 247, 0.22), 0 0 28px rgba(192, 132, 252, 0.7);
   }
 }
+
+/* Data dashboards should paint immediately and stay still. */
+#page-dashboard,
+#page-dashboard *,
+#page-dashboard *::before,
+#page-dashboard *::after,
+#s5-product-modal,
+#s5-product-modal *,
+#s5-product-modal *::before,
+#s5-product-modal *::after,
+#s5-compare-modal,
+#s5-compare-modal *,
+#s5-compare-modal *::before,
+#s5-compare-modal *::after,
+.campaign-ai-overlay,
+.campaign-ai-overlay *,
+.campaign-ai-overlay *::before,
+.campaign-ai-overlay *::after {
+  animation: none !important;
+  animation-delay: 0s !important;
+  animation-duration: 0s !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition: none !important;
+  transition-delay: 0s !important;
+  transition-duration: 0s !important;
+}
+
+#dashboard-live-preloader .dashboard-live-ring {
+  transition: --dashboard-loader-progress 280ms linear !important;
+}
+
+#dashboard-live-preloader .dashboard-live-ring::after {
+  animation: dashboardLoaderPulse 1.6s ease-in-out infinite !important;
+}
+
+#dashboard-live-preloader .dash-preloader-spinner {
+  animation: dashSpin .8s linear infinite !important;
+}
+
+#dashboard-live-preloader .dashboard-live-progress span {
+  transition: width .42s ease !important;
+}

@@ -138,16 +138,21 @@
     function updateMarketingPendingOverlay() {
       if (!shellMount || !shellMount.isConnected) return;
       var existing = shellMount.querySelector('.dashboard-marketing-pending-overlay');
-      if (existing) existing.remove();
       var sectionId = shellMount._dashboardActiveSection || 'master';
-      if (marketingUiSections.indexOf(sectionId) === -1) return;
+      if (marketingUiSections.indexOf(sectionId) === -1) {
+        if (existing) existing.remove();
+        return;
+      }
       var accountId = window.getActiveAccountId ? window.getActiveAccountId() : '__all__';
       var state = window.DashboardMarketingState && window.DashboardMarketingState.get
         ? window.DashboardMarketingState.get(accountId)
         : null;
       var pending = !!(state && state.loading && !state.manualOverride);
       var unavailable = !!(state && state.status === 'connected' && state.error && !state.manualOverride);
-      if (!pending && !unavailable) return;
+      if (!pending && !unavailable) {
+        if (existing) existing.remove();
+        return;
+      }
       var pane = shellMount._dashboardActivePane;
       if (!pane || !pane.isConnected) return;
       pane.style.position = 'relative';
@@ -165,6 +170,17 @@
       var body = unavailable
         ? pick('The connected spend could not be refreshed. Try again from Marketing connections.', 'تعذر تحديث الإنفاق المتصل. حاول مرة أخرى من اتصالات التسويق.')
         : pick('Order data is ready. Spend-dependent results will appear when the connected marketing sync finishes.', 'بيانات الطلبات جاهزة. ستظهر النتائج المعتمدة على الإنفاق عند اكتمال مزامنة التسويق المتصل.');
+      overlay.setAttribute('data-dashboard-marketing-overlay-key', [
+        pane.dataset.sectionId || sectionId,
+        pending ? 'pending' : 'unavailable',
+        title,
+        body
+      ].join('|'));
+      if (existing && existing.parentNode === pane &&
+          existing.getAttribute('data-dashboard-marketing-overlay-key') === overlay.getAttribute('data-dashboard-marketing-overlay-key')) {
+        return;
+      }
+      if (existing) existing.remove();
       overlay.innerHTML = '<div style="width:min(440px,100%);padding:24px;border-radius:var(--dash-radius-xl);border:1px solid rgba(96,165,250,.25);background:var(--dash-surface);box-shadow:0 18px 60px rgba(0,0,0,.4);text-align:center;">' +
         (pending && window.dashboardMarketingLoadingHtml ? window.dashboardMarketingLoadingHtml() : '') +
         '<div style="margin-top:12px;font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:#f8fafc;">' + title + '</div>' +
@@ -177,7 +193,14 @@
       if (window._dashboardMarketingUiListener) {
         window.DashboardMarketingState.unsubscribe(window._dashboardMarketingUiListener);
       }
-      window._dashboardMarketingUiListener = function (next) {
+      window._dashboardMarketingUiListener = function dashboardMarketingUiListener(next) {
+        if (!shellMount || !shellMount.isConnected) {
+          if (window.DashboardMarketingState && typeof window.DashboardMarketingState.unsubscribe === 'function') {
+            window.DashboardMarketingState.unsubscribe(window._dashboardMarketingUiListener);
+          }
+          if (window._dashboardMarketingUiListener === dashboardMarketingUiListener) window._dashboardMarketingUiListener = null;
+          return;
+        }
         if (!next || next.platform !== 'combined') return;
         var activeId = window.getActiveAccountId ? window.getActiveAccountId() : '__all__';
         if (String(next.accountId) !== String(activeId)) return;

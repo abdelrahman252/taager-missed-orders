@@ -1367,6 +1367,14 @@
     });
   }
 
+  function marketingStatusSignature(status) {
+    try {
+      return JSON.stringify(status || null);
+    } catch (e) {
+      return '';
+    }
+  }
+
   function marketingLogSummary(value) {
     value = value || {};
     return {
@@ -1445,6 +1453,9 @@
         clearMarketingAuthorizationCancelled(id, platform);
       }
       var next = normalizeMarketingStatus(value, id, platform);
+      if (marketingStatusSignature(previous) === marketingStatusSignature(next)) {
+        return next;
+      }
       bucket[platform] = next;
       var hydratedAccountIds = id === '__all__' ? hydrateMarketingAccountsFromAllStatus(next, platform) : [];
       notifyMarketing(next);

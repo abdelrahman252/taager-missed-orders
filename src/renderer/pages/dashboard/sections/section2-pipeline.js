@@ -618,18 +618,9 @@ window.renderSection2 = function (mountEl, data, ctx) {
         var decimals = parseInt(el.getAttribute('data-decimals') || '0', 10);
         var suffix = el.getAttribute('data-suffix') || '';
         if (suffix) {
-          (function (elem, target, dec, sfx) {
-            var start = performance.now();
-            function tick(now) {
-              var t = Math.min(1, (now - start) / 1400);
-              var eased = 1 - Math.pow(1 - t, 3);
-              elem.textContent = (target * eased).toFixed(dec).replace(/\.0$/, '') + sfx;
-              if (t < 1) requestAnimationFrame(tick);
-            }
-            requestAnimationFrame(tick);
-          }(el, to, decimals, suffix));
+          el.textContent = to.toFixed(decimals).replace(/\.0$/, '') + suffix;
         } else {
-          window.animateNumber(el, to, { duration: 1400 });
+          window.animateNumber(el, to, { duration: 0 });
         }
       });
 
@@ -638,18 +629,9 @@ window.renderSection2 = function (mountEl, data, ctx) {
         var decimals = parseInt(el.getAttribute('data-decimals') || '0', 10);
         var suffix   = el.getAttribute('data-suffix') || '';
         if (suffix) {
-          (function (elem, target, dec, sfx) {
-            var start = performance.now();
-            function tick(now) {
-              var t = Math.min(1, (now - start) / 1400);
-              var eased = 1 - Math.pow(1 - t, 3);
-              elem.textContent = (target * eased).toFixed(dec) + sfx;
-              if (t < 1) requestAnimationFrame(tick);
-            }
-            requestAnimationFrame(tick);
-          }(el, to, decimals, suffix));
+          el.textContent = to.toFixed(decimals) + suffix;
         } else {
-          window.animateNumber(el, to, { duration: 1400, decimals: decimals });
+          window.animateNumber(el, to, { duration: 0, decimals: decimals });
         }
       });
     });

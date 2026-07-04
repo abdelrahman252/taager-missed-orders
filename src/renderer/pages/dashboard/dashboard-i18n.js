@@ -10,6 +10,7 @@
   var pendingMutationCount = 0;
   var observerFlushCount = 0;
   var lastObserverFlushAt = 0;
+  var localizableTextPattern = /[\u0600-\u06FF]|[\u00c3\u00c2\u00d8\u00d9\u00d0\u00d1\u00f0\u00e2]/;
 
   function i18nDebug(event, detail) {
     if (window.TaagerDebugLog) window.TaagerDebugLog('dashboard-i18n', event, detail || {});
@@ -610,11 +611,43 @@
 
   var preserveSelector = '.taager-help,.s7-tip-badge,[data-preserve-question-mark],[data-i18n-preserve],[data-dashboard-data-text],[data-dashboard-product-name],.s5-product-title,.s5-product-data-text,.s9-product-cell';
 
+  function mightNeedLocalization(text) {
+    return localizableTextPattern.test(String(text == null ? '' : text)) || isQuestionMarkText(text);
+  }
+
+  function localizableRootFor(node, page) {
+    var root = node && node.nodeType === Node.ELEMENT_NODE ? node : (node && node.parentElement);
+    if (!root || !page.contains(root)) return null;
+    if (/^(SCRIPT|STYLE|TEXTAREA)$/i.test(root.tagName || '')) return null;
+    if (root.closest && root.closest(preserveSelector)) return null;
+    if (root.closest && root.closest('[data-dashboard-preloader="true"]')) return null;
+    var pane = root.closest && root.closest('.dash-section-cache-pane');
+    if (pane && pane.hidden) return null;
+    return root;
+  }
+
+  function nodeMightNeedLocalization(node, page) {
+    if (!node) return false;
+    if (node.nodeType === Node.TEXT_NODE) {
+      return !!localizableRootFor(node, page) && mightNeedLocalization(node.nodeValue);
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return false;
+    var root = localizableRootFor(node, page);
+    if (!root) return false;
+    if (root.matches && root.matches('[title],[aria-label],[placeholder],[value]')) {
+      var attrs = ['title', 'aria-label', 'placeholder', 'value'];
+      for (var i = 0; i < attrs.length; i += 1) {
+        if (root.hasAttribute(attrs[i]) && mightNeedLocalization(root.getAttribute(attrs[i]))) return true;
+      }
+    }
+    return mightNeedLocalization(root.textContent || '');
+  }
+
   function localizeTextNode(node) {
     if (!node || !node.nodeValue) return;
     var parent = node.parentElement;
     if (parent && parent.closest && parent.closest(preserveSelector)) return;
-    if (!/[\u0600-\u06FF]|[\u00c3\u00c2\u00d8\u00d9\u00d0\u00d1\u00f0\u00e2]/.test(node.nodeValue) && !isQuestionMarkText(node.nodeValue)) return;
+    if (!mightNeedLocalization(node.nodeValue)) return;
     var translated = cleanText(node.nodeValue);
     if (translated !== node.nodeValue) node.nodeValue = translated;
   }
@@ -624,7 +657,7 @@
     ['title', 'aria-label', 'placeholder', 'value'].forEach(function (attr) {
       if (!el.hasAttribute || !el.hasAttribute(attr)) return;
       var value = el.getAttribute(attr);
-      if (!/[\u0600-\u06FF]|[\u00c3\u00c2\u00d8\u00d9\u00d0\u00d1\u00f0\u00e2]/.test(value || '') && !isQuestionMarkText(value)) return;
+      if (!mightNeedLocalization(value || '')) return;
       var localized = cleanText(value);
       // Setting an observed attribute to the same value still queues a
       // MutationRecord in Chromium. That made the observer wake itself on
@@ -648,7 +681,7 @@
           var parent = node.parentElement;
           if (!parent || /^(SCRIPT|STYLE|TEXTAREA)$/i.test(parent.tagName)) return NodeFilter.FILTER_REJECT;
           if (parent.closest && parent.closest(preserveSelector)) return NodeFilter.FILTER_REJECT;
-          return (/[\u0600-\u06FF]|[\u00c3\u00c2\u00d8\u00d9\u00d0\u00d1\u00f0\u00e2]/.test(node.nodeValue || '') || isQuestionMarkText(node.nodeValue)) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+          return mightNeedLocalization(node.nodeValue || '') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
         }
       });
       var nodes = [];
@@ -656,6 +689,7 @@
       nodes.forEach(localizeTextNode);
       root.querySelectorAll('[title],[aria-label],[placeholder],[value]').forEach(localizeAttributes);
     } finally {
+      if (observer && typeof observer.takeRecords === 'function') observer.takeRecords();
       applying = false;
     }
   }
@@ -670,14 +704,8 @@
     var page = document.getElementById('page-dashboard');
     if (!page) return;
     function queueRoot(node) {
-      var root = node && node.nodeType === Node.ELEMENT_NODE ? node : (node && node.parentElement);
-      if (!root || !page.contains(root)) return;
-      // Dashboard preloaders already receive localized strings directly. Their
-      // live percentage/activity updates must not trigger a full translation
-      // tree walk on every progress sample.
-      if (root.closest && root.closest('[data-dashboard-preloader="true"]')) return;
-      var pane = root.closest && root.closest('.dash-section-cache-pane');
-      if (pane && pane.hidden) return;
+      var root = localizableRootFor(node, page);
+      if (!root) return;
       pendingRoots.forEach(function (queued) {
         if (root && queued !== root && queued.contains(root)) root = null;
         else if (root && root.contains(queued)) pendingRoots.delete(queued);
@@ -705,12 +733,27 @@
     }
     observer = new MutationObserver(function (mutations) {
       if (applying) return;
-      pendingMutationCount += mutations.length;
       mutations.forEach(function (mutation) {
         if (mutation.type === 'childList') {
-          Array.prototype.forEach.call(mutation.addedNodes || [], queueRoot);
+          Array.prototype.forEach.call(mutation.addedNodes || [], function (node) {
+            if (nodeMightNeedLocalization(node, page)) {
+              pendingMutationCount += 1;
+              queueRoot(node);
+            }
+          });
+        } else if (mutation.type === 'characterData') {
+          if (nodeMightNeedLocalization(mutation.target, page)) {
+            pendingMutationCount += 1;
+            queueRoot(mutation.target);
+          }
         } else {
-          queueRoot(mutation.target);
+          var value = mutation.target && mutation.target.getAttribute
+            ? mutation.target.getAttribute(mutation.attributeName)
+            : '';
+          if (mightNeedLocalization(value)) {
+            pendingMutationCount += 1;
+            queueRoot(mutation.target);
+          }
         }
       });
       if (pendingRoots.size && !pendingFrame) pendingFrame = requestAnimationFrame(flushRoots);

@@ -1812,20 +1812,16 @@ window.renderSection3 = function (mountEl, data, ctx) {
     if (window.requestAnimationFrame) requestAnimationFrame(hydrateDenseOrders);
     else setTimeout(hydrateDenseOrders, 0);
     
-    // Trigger entrance animations
+    // Show the final settled state immediately.
     animate();
   }
 
   /* ── Entrance animations ─────────────────────────────────────────────────── */
   function animate() {
-    requestAnimationFrame(function () {
-      requestAnimationFrame(function () {
-        var h1  = mountEl.querySelector('#s3-h1');
-        var sub = mountEl.querySelector('#s3-sub');
-        if (h1)  { h1.style.opacity = '1';  h1.style.transform  = 'translateY(0)'; }
-        if (sub) { sub.style.opacity = '1'; }
-      });
-    });
+    var h1  = mountEl.querySelector('#s3-h1');
+    var sub = mountEl.querySelector('#s3-sub');
+    if (h1)  { h1.style.opacity = '1';  h1.style.transform  = 'translateY(0)'; }
+    if (sub) { sub.style.opacity = '1'; }
   }
 
   /* ── Run ─────────────────────────────────────────────────────────────────────────── */

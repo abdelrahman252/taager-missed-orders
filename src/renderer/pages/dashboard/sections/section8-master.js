@@ -1557,23 +1557,16 @@ window.renderSection8 = function (mountEl, data, ctx) {
         '<div style="display:flex;flex-direction:column;gap:6px;padding:0 12px;">' + rows + '</div>' +
       '</div>';
 
-    /* Animate scaling bars */
-    requestAnimationFrame(function () {
-      mount.querySelectorAll('.s8-scale-bar').forEach(function (bar) {
-        var w = bar.getAttribute('data-width');
-        setTimeout(function () { bar.style.width = w; }, 100);
-      });
+    mount.querySelectorAll('.s8-scale-bar').forEach(function (bar) {
+      bar.style.width = bar.getAttribute('data-width');
     });
   })();
 
-  requestAnimationFrame(function () {
-    var cityRows = mountEl.querySelectorAll('.city-bar-row');
-    cityRows.forEach(function (row) {
-      var bar = row.querySelector('.city-bar-fill');
-      if (!bar) return;
-      var pct = row.getAttribute('data-pct');
-      setTimeout(function () { bar.style.width = pct + '%'; }, parseInt(row.getAttribute('data-delay') || 0, 10));
-    });
+  var cityRows = mountEl.querySelectorAll('.city-bar-row');
+  cityRows.forEach(function (row) {
+    var bar = row.querySelector('.city-bar-fill');
+    if (!bar) return;
+    bar.style.width = row.getAttribute('data-pct') + '%';
   });
 
   var pipelineBtn = mountEl.querySelector('#s8-btn-pipeline');
@@ -1727,7 +1720,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          animation: { duration: 260 },
+          animation: false,
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -1771,7 +1764,22 @@ window.renderSection8 = function (mountEl, data, ctx) {
     }
   };
 
-  mountEl._updateCommissionChart(s8CommissionType, true);
+  function updateCommissionChartWhenReady(type, isInitial) {
+    mountEl._updateCommissionChart(type, isInitial);
+    if (typeof Chart !== 'undefined' || typeof window.ensureFeatureScripts !== 'function' || !mountEl.querySelector('#s8-commission-chart')) return;
+    if (!mountEl._s8ChartLoadPromise) {
+      mountEl._s8ChartLoadPromise = window.ensureFeatureScripts('dashboardCharts').catch(function (err) {
+        s8Debug('chart:load-failed', { error: err && err.message ? err.message : String(err || '') }, 'warn');
+        throw err;
+      });
+    }
+    mountEl._s8ChartLoadPromise.then(function () {
+      if (!mountEl.isConnected || typeof Chart === 'undefined') return;
+      mountEl._updateCommissionChart(mountEl._s8CommissionType || type, true);
+    }).catch(function () {});
+  }
+
+  updateCommissionChartWhenReady(s8CommissionType, true);
 
   var dropdown = window.renderTaagerDropdown || window.renderCustomSelect;
   if (typeof dropdown === 'function') {
@@ -1783,7 +1791,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
         { value: 'lost', label: s8Txt('Lost Taager Profit After Tax', 'الربح المفقود بعد الضريبة') }
       ], s8CommissionType, function (value) {
         mountEl._s8CommissionType = value;
-        mountEl._updateCommissionChart(value, false);
+        updateCommissionChartWhenReady(value, false);
       }, { ariaLabel: 'Taager profit type' });
     }
   }

@@ -1948,6 +1948,12 @@ function afterNextPaint(callback) {
   raf(() => raf(callback));
 }
 window.TaagerAfterNextPaint = afterNextPaint;
+window.TaagerDashboardMotionDisabled = true;
+
+function taagerDashboardMotionDisabled() {
+  return window.TaagerDashboardMotionDisabled !== false;
+}
+window.TaagerDashboardMotionDisabledCheck = taagerDashboardMotionDisabled;
 
 function waitForStableUi(options) {
   const opts = options || {};
@@ -2360,13 +2366,18 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/dashboard/dashboard.js",
   ],
   dashboardMaster: [
-    "pages/analytics/chart.umd.min.js",
     "pages/dashboard/sections/section8-master.js",
+  ],
+  dashboardCharts: [
+    "pages/analytics/chart.umd.min.js",
   ],
   dashboardProducts: [
     "pages/smart-insights-core.js",
     "pages/dashboard/dashboard-financial-core.js",
     "pages/dashboard/sections/section5-products.js",
+  ],
+  dashboardProductsHydrated: [
+    "pages/dashboard/sections/section5-products-hydrated.js",
   ],
   dashboardCampaigns: [
     "pages/smart-insights-core.js",
@@ -2382,34 +2393,47 @@ const FEATURE_SCRIPT_GROUPS = {
   dashboardOrderSources: ["pages/dashboard/sections/section-order-sources.js"],
   dashboardOrdersExport: ["../../node_modules/xlsx/dist/xlsx.full.min.js"],
   dashboardCod: [
+    "pages/dashboard/sections/section4-cod.js",
+  ],
+  dashboardCodHydrated: [
     "pages/smart-insights-core.js",
     "pages/dashboard/dashboard-country-atlas.js",
     "pages/dashboard/sections/section-city-drawer.js",
-    "pages/dashboard/sections/section4-cod.js",
+    "pages/dashboard/sections/section4-cod-hydrated.js",
   ],
   dashboardCommission: [
-    "pages/analytics/chart.umd.min.js",
     "pages/dashboard/sections/section6-commission.js",
+  ],
+  dashboardCommissionHydrated: [
+    "pages/analytics/chart.umd.min.js",
+    "pages/dashboard/sections/section6-commission-hydrated.js",
   ],
   dashboardMarketing: ["pages/dashboard/sections/section-marketing-connections.js"],
   dashboardCalculator: [
+    "pages/dashboard/sections/section7-calculator.js",
+  ],
+  dashboardCalculatorHydrated: [
     "pages/analytics/chart.umd.min.js",
     "pages/smart-insights-core.js",
     "pages/dashboard/dashboard-financial-core.js",
-    "pages/dashboard/sections/section7-calculator.js",
+    "pages/dashboard/sections/section7-calculator-hydrated.js",
   ],
   dashboardGmvTarget: [
     "pages/dashboard/dashboard-financial-core.js",
     "pages/dashboard/sections/section-gmv-target.js",
   ],
   dashboardCities: [
+    "pages/dashboard/sections/section-cities.js",
+  ],
+  dashboardCitiesHydrated: [
     "pages/dashboard/dashboard-country-atlas.js",
     "pages/dashboard/sections/section-product-matrix.js",
     "pages/dashboard/sections/section-city-drawer.js",
-    "pages/dashboard/sections/section-cities.js",
+    "pages/dashboard/sections/section-cities-hydrated.js",
   ],
   dashboardPrepaid: ["pages/smart-insights-core.js", "pages/dashboard/sections/section-prepaid.js"],
-  dashboardForecast: ["pages/smart-insights-core.js", "pages/dashboard/dashboard-financial-core.js", "pages/dashboard/sections/section9-product-forecast.js"],
+  dashboardForecast: ["pages/dashboard/sections/section9-product-forecast.js"],
+  dashboardForecastHydrated: ["pages/smart-insights-core.js", "pages/dashboard/dashboard-financial-core.js", "pages/dashboard/sections/section9-product-forecast-hydrated.js"],
   dashboardStaticUpdate: [
     "../../node_modules/xlsx/dist/xlsx.full.min.js",
     "pages/dashboard/sections/section-static-update.js",
@@ -2507,6 +2531,9 @@ function loadScriptOnce(src) {
     script.src = src;
     script.onload = () => {
       _loadedFeatureScripts.add(src);
+      if (typeof window.disableDashboardChartMotion === "function") {
+        window.disableDashboardChartMotion();
+      }
       resolve();
     };
     script.onerror = () => {
@@ -2600,8 +2627,15 @@ window.ensureDashboardSection = function ensureDashboardSection(sectionId) {
   return ensureFeatureScripts(DASHBOARD_SECTION_FEATURES[sectionId] || "dashboard");
 };
 
+window.TaagerDashboardEagerPrewarm = false;
 let _dashboardSectionPrewarmStarted = false;
 window.prewarmDashboardSections = function prewarmDashboardSections() {
+  if (window.TaagerDashboardEagerPrewarm !== true) {
+    taagerDebugLog("dashboard-route", "section-prewarm:disabled", {
+      reason: "dashboard sections stay lazy until opened"
+    });
+    return;
+  }
   if (_dashboardSectionPrewarmStarted) return;
   _dashboardSectionPrewarmStarted = true;
   const queue = [
