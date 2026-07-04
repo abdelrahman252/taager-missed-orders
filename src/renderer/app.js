@@ -2380,16 +2380,20 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/dashboard/sections/section5-products-hydrated.js",
   ],
   dashboardCampaigns: [
+    "pages/dashboard/sections/section-campaigns.js",
+  ],
+  dashboardCampaignsHydrated: [
     "pages/smart-insights-core.js",
     "pages/dashboard/dashboard-financial-core.js",
     "pages/dashboard/dashboard-campaign-decision.js",
     "pages/dashboard/dashboard-campaign-query-core.js",
     "pages/dashboard/dashboard-campaign-intelligence.js",
-    "pages/dashboard/sections/section-campaigns.js",
+    "pages/dashboard/sections/section-campaigns-hydrated.js",
   ],
   dashboardOverview: ["pages/dashboard/sections/section1-overview.js"],
   dashboardPipeline: ["pages/dashboard/sections/section2-pipeline.js"],
   dashboardOrders: ["pages/dashboard/sections/section3-orders.js"],
+  dashboardOrdersHydrated: ["pages/dashboard/sections/section3-orders-hydrated.js"],
   dashboardOrderSources: ["pages/dashboard/sections/section-order-sources.js"],
   dashboardOrdersExport: ["../../node_modules/xlsx/dist/xlsx.full.min.js"],
   dashboardCod: [
@@ -2409,6 +2413,7 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/dashboard/sections/section6-commission-hydrated.js",
   ],
   dashboardMarketing: ["pages/dashboard/sections/section-marketing-connections.js"],
+  dashboardMarketingHydrated: ["pages/dashboard/sections/section-marketing-connections-hydrated.js"],
   dashboardCalculator: [
     "pages/dashboard/sections/section7-calculator.js",
   ],
@@ -2431,7 +2436,8 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/dashboard/sections/section-city-drawer.js",
     "pages/dashboard/sections/section-cities-hydrated.js",
   ],
-  dashboardPrepaid: ["pages/smart-insights-core.js", "pages/dashboard/sections/section-prepaid.js"],
+  dashboardPrepaid: ["pages/dashboard/sections/section-prepaid.js"],
+  dashboardPrepaidHydrated: ["pages/smart-insights-core.js", "pages/dashboard/sections/section-prepaid-hydrated.js"],
   dashboardForecast: ["pages/dashboard/sections/section9-product-forecast.js"],
   dashboardForecastHydrated: ["pages/smart-insights-core.js", "pages/dashboard/dashboard-financial-core.js", "pages/dashboard/sections/section9-product-forecast-hydrated.js"],
   dashboardStaticUpdate: [
