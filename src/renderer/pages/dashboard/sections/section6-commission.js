@@ -241,7 +241,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
       });
       return;
     }
-    wrap.innerHTML = '<select id="s6-currency-native" style="width:100%;height:24px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:#0b1120;color:#fff;font-size:10px;font-weight:800;font-family:inherit;padding:0 4px">' +
+    wrap.innerHTML = '<select id="s6-currency-native" style="width:100%;height:24px;border-radius:var(--dash-radius-sm);border:1px solid rgba(255,255,255,0.12);background:var(--dash-surface);color:#fff;font-size:var(--type-micro);font-weight:var(--weight-semibold);font-family:inherit;padding:0 4px">' +
       options.map(function (opt) {
         return '<option value="' + opt.value + '"' + (opt.value === activeCurrency ? " selected" : "") + '>' + opt.label + '</option>';
       }).join("") +
@@ -313,10 +313,10 @@ window.renderSection6 = function (mountEl, data, ctx) {
       CPA_PLATFORM_TABS.map(function (tab) {
         var active = tab.key === activeCpaPlatform;
         var color = tab.key === 'all' ? '#14b8a6' : platformColor(tab.key);
-        return '<button type="button" data-cpa-platform="' + tab.key + '" style="padding:5px 10px;border-radius:8px;border:' +
+        return '<button type="button" data-cpa-platform="' + tab.key + '" style="padding:5px 10px;border-radius:var(--dash-radius-sm);border:' +
           (active ? '1.5px solid ' + color : '1px solid rgba(255,255,255,0.11)') + ';background:' +
           (active ? color + '22' : 'rgba(255,255,255,0.035)') + ';color:' +
-          (active ? '#fff' : 'rgba(255,255,255,0.52)') + ';font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;">' +
+          (active ? '#fff' : 'rgba(255,255,255,0.52)') + ';font-size:var(--type-caption);font-weight:var(--weight-semibold);cursor:pointer;font-family:inherit;">' +
           escapeHtml(tab.label) + '</button>';
       }).join('') +
     '</div>';
@@ -552,45 +552,45 @@ window.renderSection6 = function (mountEl, data, ctx) {
       ? s6Txt('Daily CPA vs. Break-even CPA', 'تكلفة الطلب اليومية مقابل تكلفة التعادل (CPA)')
       : s6Txt('Daily Profit After Tax Trend', 'اتجاه الربح بعد الضريبة اليومي');
     return `
-      <style>.s6-status-chip span[style*="font-size:9px"]{display:none!important}</style>
+      <style>.s6-status-chip span[style*="font-size:var(--type-micro)"]{display:none!important}</style>
       <div class="s6-topbar" style="display:flex;align-items:center;justify-content:space-between;
         padding:0 28px;height:68px;border-bottom:1px solid rgba(255,255,255,0.05);
-        background:#080b12;position:sticky;top:0;z-index:10;flex-shrink:0;">
+        background:var(--dash-bg);position:sticky;top:0;z-index:10;flex-shrink:0;">
 
         <!-- right: dropdowns -->
         <div style="display:flex;gap:10px;">
-          <span class="s6-status-chip" aria-label="${s6Txt('Dashboard period', 'فترة لوحة التحكم')}" style="display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:10px;
+          <span class="s6-status-chip" aria-label="${s6Txt('Dashboard period', 'فترة لوحة التحكم')}" style="display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:var(--dash-radius-md);
             border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);
-            color:rgba(255,255,255,0.75);font-size:12px;font-weight:600;font-family:inherit;">
+            color:rgba(255,255,255,0.75);font-size:var(--type-label);font-weight:var(--weight-semibold);font-family:inherit;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
               <rect x="3" y="4" width="18" height="18" rx="3" stroke="rgba(255,255,255,0.5)" stroke-width="1.5"/>
               <path d="M8 2v4M16 2v4M3 10h18" stroke="rgba(255,255,255,0.5)" stroke-width="1.5" stroke-linecap="round"/>
             </svg>
             <span style="color:#f59e0b;">${_monthLabel}</span>
-            <span style="color:rgba(255,255,255,0.35);font-size:9px;">▾</span>
+            <span style="color:rgba(255,255,255,0.35);font-size:var(--type-micro);">▾</span>
           </span>
-          <span class="s6-status-chip" aria-label="${s6Txt('Dashboard account', 'حساب لوحة التحكم')}" style="display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:10px;
+          <span class="s6-status-chip" aria-label="${s6Txt('Dashboard account', 'حساب لوحة التحكم')}" style="display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:var(--dash-radius-md);
             border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);
-            color:rgba(255,255,255,0.75);font-size:12px;font-weight:600;font-family:inherit;">
+            color:rgba(255,255,255,0.75);font-size:var(--type-label);font-weight:var(--weight-semibold);font-family:inherit;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="8" r="4" stroke="rgba(255,255,255,0.5)" stroke-width="1.5"/>
               <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="rgba(255,255,255,0.5)" stroke-width="1.5" stroke-linecap="round"/>
             </svg>
             ${_accountLabel}
-            <span style="color:rgba(255,255,255,0.35);font-size:9px;">▾</span>
+            <span style="color:rgba(255,255,255,0.35);font-size:var(--type-micro);">▾</span>
           </span>
         </div>
 
         <!-- center: title -->
         <div style="text-align:center;flex:1;">
-          <div class="fade-up" style="font-size:20px;font-weight:900;color:#fff;
+          <div class="fade-up" style="font-size:var(--type-metric-sm);font-weight:var(--weight-bold);color:#fff;
             display:flex;align-items:center;justify-content:center;gap:8px;">
             ${titleText}
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
               <path d="M12 2l2.4 7.2H22l-6.2 4.5 2.4 7.2L12 17l-6.2 3.9 2.4-7.2L2 9.2h7.6z" fill="#f59e0b"/>
             </svg>
           </div>
-          <div class="fade-up" style="font-size:11px;color:rgba(255,255,255,0.38);margin-top:3px;animation-delay:100ms;">
+          <div class="fade-up" style="font-size:var(--type-caption);color:rgba(255,255,255,0.38);margin-top:3px;animation-delay:100ms;">
             ${averageSubtitle}
           </div>
         </div>
@@ -601,8 +601,8 @@ window.renderSection6 = function (mountEl, data, ctx) {
             <polyline points="0,10 8,10 12,3 16,17 20,10 26,10 30,5 34,14 38,10 44,10"
               stroke="#00e676" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          <span style="font-size:11px;color:rgba(255,255,255,0.4);">${s6Txt('Last update: Today', 'آخر تحديث: اليوم')}</span>
-          <span style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.75);">${_timeLabel}</span>
+          <span style="font-size:var(--type-caption);color:var(--dash-text-faint);">${s6Txt('Last update: Today', 'آخر تحديث: اليوم')}</span>
+          <span style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.75);">${_timeLabel}</span>
         </div>
       </div>
     `;
@@ -614,11 +614,11 @@ window.renderSection6 = function (mountEl, data, ctx) {
       return `<button
         id="s6-period-${p.key}"
         data-period="${p.key}"
-        style="padding:6px 16px;border-radius:8px;
+        style="padding:6px 16px;border-radius:var(--dash-radius-sm);
           border:${active ? '1.5px solid #14b8a6' : '1px solid rgba(255,255,255,0.12)'};
           background:${active ? 'rgba(20,184,166,0.15)' : 'rgba(255,255,255,0.04)'};
           color:${active ? '#14b8a6' : 'rgba(255,255,255,0.45)'};
-          font-size:12px;font-weight:${active ? 700 : 500};
+          font-size:var(--type-label);font-weight:${active ? 700 : 500};
           cursor:pointer;font-family:inherit;
           box-shadow:${active ? '0 0 12px rgba(20,184,166,0.3)' : 'none'};
           transition:all 0.15s;">
@@ -638,14 +638,14 @@ window.renderSection6 = function (mountEl, data, ctx) {
       
       rightSideHtml = `
         <div style="text-align:right;">
-          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px;">${s6Txt('commission.averageCpa', 'متوسط تكلفة الطلب (CPA)')}</div>
+          <div style="font-size:var(--type-caption);color:var(--dash-text-faint);margin-bottom:4px;">${s6Txt('commission.averageCpa', 'متوسط تكلفة الطلب (CPA)')}</div>
           <div style="display:flex;align-items:baseline;gap:10px;justify-content:flex-end;">
             <div id="s6-header-cpa-badge" style="display:inline-flex;align-items:center;gap:4px;
               background:${cColor}12;border:1px solid ${cColor}25;
-              border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;color:${cColor};">
+              border-radius:var(--dash-radius-sm);padding:3px 9px;font-size:var(--type-caption);font-weight:var(--weight-semibold);color:${cColor};">
               ${s6Txt('commission.breakEvenLine', 'تكلفة التعادل')}: ${moneyNumberMax(breakEvenCpa, 2)} ${activeCurrency}
             </div>
-            <span style="font-size:30px;font-weight:900;color:#fff;letter-spacing:-1px;">
+            <span style="font-size:var(--type-page-title);font-weight:var(--weight-bold);color:#fff;letter-spacing:-1px;">
               <span id="s6-total-countup">${moneyNumber(averageCpa, 1)}</span> ${activeCurrency}
             </span>
           </div>
@@ -654,14 +654,14 @@ window.renderSection6 = function (mountEl, data, ctx) {
     } else {
       rightSideHtml = `
         <div style="text-align:right;">
-          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px;">${s6Txt('Total Taager Profit After Tax', 'إجمالي ربح تاجر بعد الضريبة')}</div>
+          <div style="font-size:var(--type-caption);color:var(--dash-text-faint);margin-bottom:4px;">${s6Txt('Total Taager Profit After Tax', 'إجمالي ربح تاجر بعد الضريبة')}</div>
           <div style="display:flex;align-items:baseline;gap:10px;justify-content:flex-end;">
             <div style="display:inline-flex;align-items:center;gap:4px;
               background:rgba(0,230,118,0.12);border:1px solid rgba(0,230,118,0.25);
-              border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;color:#00e676;">
+              border-radius:var(--dash-radius-sm);padding:3px 9px;font-size:var(--type-caption);font-weight:var(--weight-semibold);color:#00e676;">
               ↑ ${totalDelta}٪
             </div>
-            <span style="font-size:30px;font-weight:900;color:#fff;letter-spacing:-1px;">
+            <span style="font-size:var(--type-page-title);font-weight:var(--weight-bold);color:#fff;letter-spacing:-1px;">
               <span id="s6-total-countup">0</span> ${activeCurrency}
             </span>
           </div>
@@ -670,11 +670,11 @@ window.renderSection6 = function (mountEl, data, ctx) {
     }
 
     var switcherHtml = `
-      <div class="s6-mode-tabs" style="display:flex;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:3px;gap:2px;">
-        <button id="s6-mode-profit" data-mode="profit" style="padding:6px 14px;border-radius:8px;border:none;background:${activeMode === 'profit' ? '#14b8a6' : 'transparent'};color:${activeMode === 'profit' ? '#fff' : 'rgba(255,255,255,0.5)'};font-size:12px;font-weight:700;cursor:pointer;transition:all 0.2s;font-family:inherit;">
+      <div class="s6-mode-tabs" style="display:flex;background:rgba(255,255,255,0.04);border:1px solid var(--dash-border-soft);border-radius:var(--dash-radius-md);padding:3px;gap:2px;">
+        <button id="s6-mode-profit" data-mode="profit" style="padding:6px 14px;border-radius:var(--dash-radius-sm);border:none;background:${activeMode === 'profit' ? '#14b8a6' : 'transparent'};color:${activeMode === 'profit' ? '#fff' : 'rgba(255,255,255,0.5)'};font-size:var(--type-label);font-weight:var(--weight-semibold);cursor:pointer;transition:all 0.2s;font-family:inherit;">
           ${s6Txt('commission.modeProfit', 'اتجاه الأرباح')}
         </button>
-        <button id="s6-mode-cpa" data-mode="cpa" style="padding:6px 14px;border-radius:8px;border:none;background:${activeMode === 'cpa' ? '#14b8a6' : 'transparent'};color:${activeMode === 'cpa' ? '#fff' : 'rgba(255,255,255,0.5)'};font-size:12px;font-weight:700;cursor:pointer;transition:all 0.2s;font-family:inherit;">
+        <button id="s6-mode-cpa" data-mode="cpa" style="padding:6px 14px;border-radius:var(--dash-radius-sm);border:none;background:${activeMode === 'cpa' ? '#14b8a6' : 'transparent'};color:${activeMode === 'cpa' ? '#fff' : 'rgba(255,255,255,0.5)'};font-size:var(--type-label);font-weight:var(--weight-semibold);cursor:pointer;transition:all 0.2s;font-family:inherit;">
           ${s6Txt('commission.modeCpa', 'تكلفة الطلب (CPA)')}
         </button>
       </div>
@@ -682,8 +682,8 @@ window.renderSection6 = function (mountEl, data, ctx) {
 
     return `
       <div style="display:flex;align-items:center;justify-content:space-between;
-        background:#0b1120;border:1px solid rgba(255,255,255,0.07);
-        border-radius:16px;padding:16px 22px;">
+        background:var(--dash-surface);border:1px solid rgba(255,255,255,0.07);
+        border-radius:var(--dash-radius-xl);padding:16px 22px;">
 
         <!-- left (visually): period tabs & mode switcher & currency selector -->
         <div style="display:flex;align-items:center;gap:16px;" id="s6-period-tabs-wrap">
@@ -707,25 +707,25 @@ window.renderSection6 = function (mountEl, data, ctx) {
       const titleAttr = isDisabled ? `title="${s6Txt('Ad spend synced from marketing platforms', 'الإنفاق متزامن من منصات التسويق')}"` : '';
       spendInputHtml = `
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:12px;color:rgba(255,255,255,0.5);">${s6Txt('commission.dailySpendInput', 'الإنفاق اليومي:')}</span>
+          <span style="font-size:var(--type-label);color:var(--dash-text-faint);">${s6Txt('commission.dailySpendInput', 'الإنفاق اليومي:')}</span>
           <div style="position:relative;display:flex;align-items:center;gap:4px;">
             <input type="number" id="s6-spend-input" value="${Math.round(dailyAdSpend * 100) / 100}" ${isDisabled ? 'disabled' : ''} ${titleAttr}
               style="width:74px;background:${isDisabled ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.05)'};
               border:1px solid ${isDisabled ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.15)'};
               color:${isDisabled ? 'rgba(255,255,255,0.4)' : '#fff'};
-              border-radius:8px;padding:5px 6px;font-size:12px;font-weight:700;
+              border-radius:var(--dash-radius-sm);padding:5px 6px;font-size:var(--type-label);font-weight:var(--weight-semibold);
               text-align:center;font-family:inherit;outline:none;cursor:${isDisabled ? 'not-allowed' : 'text'};" min="0" step="10">
-            <span style="font-size:10px;color:rgba(255,255,255,0.4);">${activeCurrency}</span>
+            <span style="font-size:var(--type-micro);color:var(--dash-text-faint);">${activeCurrency}</span>
           </div>
-          ${isDisabled ? `<span style="font-size:10px;color:#00e676;background:rgba(0,230,118,0.1);padding:2px 6px;border-radius:4px;border:1px solid rgba(0,230,118,0.2);font-weight:700;">${s6Txt('Synced', 'متزامن')}</span>` : ''}
+          ${isDisabled ? `<span style="font-size:var(--type-micro);color:#00e676;background:rgba(0,230,118,0.1);padding:2px 6px;border-radius:4px;border:1px solid rgba(0,230,118,0.2);font-weight:var(--weight-semibold);">${s6Txt('Synced', 'متزامن')}</span>` : ''}
         </div>
       `;
     }
     return `
-      <div style="background:#0b1120;border:1px solid rgba(255,255,255,0.07);
-        border-radius:16px;padding:18px 14px 10px;display:flex;flex-direction:column;gap:12px;">
+      <div style="background:var(--dash-surface);border:1px solid rgba(255,255,255,0.07);
+        border-radius:var(--dash-radius-xl);padding:18px 14px 10px;display:flex;flex-direction:column;gap:12px;">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:0 8px;">
-          <div style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.85);">
+          <div style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.85);">
             ${activeMode === 'cpa' ? s6Txt('CPA and Break-even Target curves', 'منحنى تكلفة الطلب (CPA) مقابل خط التعادل') : s6Txt('Daily profit trend curve', 'منحنى اتجاه الأرباح اليومية')}
           </div>
           ${cpaPlatformTabsHtml()}
@@ -753,26 +753,26 @@ window.renderSection6 = function (mountEl, data, ctx) {
           <div style="display:flex;align-items:center;gap:10px;min-width:0;">
             <div style="width:10px;height:32px;border-radius:4px;background:${row.color};box-shadow:0 0 16px ${row.color}55;"></div>
             <div style="min-width:0;">
-              <div style="font-size:13px;font-weight:900;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(row.label)}</div>
-              <div style="font-size:10px;color:rgba(255,255,255,0.38);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(metricText)}</div>
+              <div style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(row.label)}</div>
+              <div style="font-size:var(--type-micro);color:rgba(255,255,255,0.38);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(metricText)}</div>
             </div>
           </div>
           <div style="text-align:right;">
-            <div style="font-size:15px;font-weight:900;color:#fff;">${moneyNumber(row.spend, 2)}</div>
-            <div style="font-size:10px;color:rgba(255,255,255,0.38);">${activeCurrency}</div>
+            <div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:#fff;">${moneyNumber(row.spend, 2)}</div>
+            <div style="font-size:var(--type-micro);color:rgba(255,255,255,0.38);">${activeCurrency}</div>
           </div>
           <div style="text-align:right;">
-            <div style="font-size:15px;font-weight:900;color:${row.purchaseMetricAvailable || row.purchases > 0 ? '#facc15' : 'rgba(255,255,255,0.38)'};">${purchaseText}</div>
-            <div style="font-size:10px;color:rgba(255,255,255,0.38);">${s6Txt('Platform Purchases', 'مشتريات المنصة')}</div>
+            <div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:${row.purchaseMetricAvailable || row.purchases > 0 ? '#facc15' : 'rgba(255,255,255,0.38)'};">${purchaseText}</div>
+            <div style="font-size:var(--type-micro);color:rgba(255,255,255,0.38);">${s6Txt('Platform Purchases', 'مشتريات المنصة')}</div>
           </div>
           <div style="text-align:right;">
-            <div style="font-size:15px;font-weight:900;color:${row.cpa == null ? 'rgba(255,255,255,0.38)' : '#14b8a6'};">${cpaText}</div>
-            <div style="font-size:10px;color:rgba(255,255,255,0.38);">${s6Txt('Platform CPA', 'CPA المنصة')}</div>
+            <div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:${row.cpa == null ? 'rgba(255,255,255,0.38)' : '#14b8a6'};">${cpaText}</div>
+            <div style="font-size:var(--type-micro);color:rgba(255,255,255,0.38);">${s6Txt('Platform CPA', 'CPA المنصة')}</div>
           </div>
         </div>
       `;
     }).join('') : `
-      <div style="padding:18px 14px;border-top:1px solid rgba(255,255,255,0.06);font-size:12px;color:rgba(255,255,255,0.48);text-align:center;">
+      <div style="padding:18px 14px;border-top:1px solid rgba(255,255,255,0.06);font-size:var(--type-label);color:rgba(255,255,255,0.48);text-align:center;">
         ${syncedSpendActive
           ? s6Txt('Platform purchase data will appear after the next marketing sync.', 'ستظهر بيانات مشتريات المنصات بعد المزامنة التالية.')
           : s6Txt('Connect marketing platforms to see platform spend, purchases, and CPA.', 'اربط منصات التسويق لعرض الإنفاق والمشتريات وCPA لكل منصة.')}
@@ -784,33 +784,33 @@ window.renderSection6 = function (mountEl, data, ctx) {
     const accountSpendText = ACCOUNT_CPA ? moneyNumber(ACCOUNT_CPA.spend, 2) : '0.00';
 
     return `
-      <div style="background:#0b1120;border:1px solid rgba(255,255,255,0.07);border-radius:16px;overflow:hidden;">
+      <div style="background:var(--dash-surface);border:1px solid rgba(255,255,255,0.07);border-radius:var(--dash-radius-xl);overflow:hidden;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;border-bottom:1px solid rgba(255,255,255,0.06);">
           <div style="display:flex;align-items:center;gap:10px;">
-            <div style="width:34px;height:34px;border-radius:8px;background:rgba(20,184,166,0.14);border:1px solid rgba(20,184,166,0.28);display:flex;align-items:center;justify-content:center;">
+            <div style="width:34px;height:34px;border-radius:var(--dash-radius-sm);background:rgba(20,184,166,0.14);border:1px solid rgba(20,184,166,0.28);display:flex;align-items:center;justify-content:center;">
               ${iconBarsHtml('#14b8a6', 18)}
             </div>
             <div>
-              <div style="font-size:14px;font-weight:900;color:#fff;">${s6Txt('Platform CPA Breakdown', 'تفصيل CPA حسب المنصة')}</div>
-              <div style="font-size:11px;color:rgba(255,255,255,0.42);">${s6Txt('Platform CPA uses ad-platform reported purchases. Account CPA uses Taager orders.', 'CPA المنصة يعتمد على مشتريات المنصة، وCPA الحساب يعتمد على طلبات تاجر.')}</div>
+              <div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#fff;">${s6Txt('Platform CPA Breakdown', 'تفصيل CPA حسب المنصة')}</div>
+              <div style="font-size:var(--type-caption);color:rgba(255,255,255,0.42);">${s6Txt('Platform CPA uses ad-platform reported purchases. Account CPA uses Taager orders.', 'CPA المنصة يعتمد على مشتريات المنصة، وCPA الحساب يعتمد على طلبات تاجر.')}</div>
             </div>
           </div>
           <div style="display:grid;grid-template-columns:repeat(3,minmax(90px,1fr));gap:8px;min-width:340px;">
-            <div style="padding:9px 10px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);text-align:right;">
-              <div style="font-size:15px;font-weight:900;color:#fff;">${accountSpendText}</div>
-              <div style="font-size:10px;color:rgba(255,255,255,0.4);">${s6Txt('Total Spend', 'إجمالي الإنفاق')}</div>
+            <div style="padding:9px 10px;border-radius:var(--dash-radius-md);background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);text-align:right;">
+              <div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:#fff;">${accountSpendText}</div>
+              <div style="font-size:var(--type-micro);color:var(--dash-text-faint);">${s6Txt('Total Spend', 'إجمالي الإنفاق')}</div>
             </div>
-            <div style="padding:9px 10px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);text-align:right;">
-              <div style="font-size:15px;font-weight:900;color:#facc15;">${accountOrdersText}</div>
-              <div style="font-size:10px;color:rgba(255,255,255,0.4);">${s6Txt('Taager Orders', 'طلبات تاجر')}</div>
+            <div style="padding:9px 10px;border-radius:var(--dash-radius-md);background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);text-align:right;">
+              <div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:#facc15;">${accountOrdersText}</div>
+              <div style="font-size:var(--type-micro);color:var(--dash-text-faint);">${s6Txt('Taager Orders', 'طلبات تاجر')}</div>
             </div>
-            <div style="padding:9px 10px;border-radius:10px;background:rgba(20,184,166,0.08);border:1px solid rgba(20,184,166,0.18);text-align:right;">
-              <div style="font-size:15px;font-weight:900;color:#14b8a6;">${accountCpaText}</div>
-              <div style="font-size:10px;color:rgba(255,255,255,0.4);">${s6Txt('Account CPA', 'CPA الحساب')}</div>
+            <div style="padding:9px 10px;border-radius:var(--dash-radius-md);background:rgba(20,184,166,0.08);border:1px solid rgba(20,184,166,0.18);text-align:right;">
+              <div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:#14b8a6;">${accountCpaText}</div>
+              <div style="font-size:var(--type-micro);color:var(--dash-text-faint);">${s6Txt('Account CPA', 'CPA الحساب')}</div>
             </div>
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:minmax(130px,1.2fr) repeat(3,minmax(110px,1fr));gap:12px;padding:10px 14px;background:rgba(255,255,255,0.025);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.04em;color:rgba(255,255,255,0.38);">
+        <div style="display:grid;grid-template-columns:minmax(130px,1.2fr) repeat(3,minmax(110px,1fr));gap:12px;padding:10px 14px;background:rgba(255,255,255,0.025);font-size:var(--type-micro);font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:0.04em;color:rgba(255,255,255,0.38);">
           <div>${s6Txt('Platform', 'المنصة')}</div>
           <div style="text-align:right;">${s6Txt('Spend', 'الإنفاق')}</div>
           <div style="text-align:right;">${s6Txt('Purchases', 'المشتريات')}</div>
@@ -825,13 +825,13 @@ window.renderSection6 = function (mountEl, data, ctx) {
     const totalSAR = PERF_DATA.reduce((a, x) => a + x.sar, 0);
     const legendRows = PERF_DATA.map((d, i) => `
       <div class="fade-up" style="display:flex;align-items:center;justify-content:space-between;animation-delay:${400 + i * 80}ms;">
-        <span style="font-size:13px;font-weight:800;color:${d.color};">
+        <span style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:${d.color};">
           ${moneyNumber(d.sar, 2)} ${activeCurrency}
         </span>
         <div style="display:flex;align-items:center;gap:8px;">
           <div style="text-align:right;">
-            <div style="font-size:11px;color:rgba(255,255,255,0.65);font-weight:600;">${d.label}</div>
-            <div style="font-size:10px;color:rgba(255,255,255,0.35);">${d.days} ${s6Txt('days', 'أيام')} (${d.pct}٪)</div>
+            <div style="font-size:var(--type-caption);color:rgba(255,255,255,0.65);font-weight:var(--weight-semibold);">${d.label}</div>
+            <div style="font-size:var(--type-micro);color:rgba(255,255,255,0.35);">${d.days} ${s6Txt('days', 'أيام')} (${d.pct}٪)</div>
           </div>
           <div style="width:10px;height:10px;border-radius:3px;background:${d.color};box-shadow:0 0 6px ${d.color};"></div>
         </div>
@@ -846,7 +846,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
     ].map(t => `
       <div style="display:flex;align-items:center;gap:5px;">
         <div style="width:7px;height:7px;border-radius:2px;background:${t.color};"></div>
-        <span style="font-size:9px;color:rgba(255,255,255,0.4);">${t.label}</span>
+        <span style="font-size:var(--type-micro);color:var(--dash-text-faint);">${t.label}</span>
       </div>
     `).join('') : [
       { label: s6Txt('High', 'مرتفع'), range: (PERF_DATA.find(x => x.key === 'high') || {}).threshold || '', color: '#00e676' },
@@ -855,7 +855,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
     ].map(t => `
       <div style="display:flex;align-items:center;gap:5px;">
         <div style="width:7px;height:7px;border-radius:2px;background:${t.color};"></div>
-        <span style="font-size:10px;color:rgba(255,255,255,0.4);">${t.label} ${t.range}</span>
+        <span style="font-size:var(--type-micro);color:var(--dash-text-faint);">${t.label} ${t.range}</span>
       </div>
     `).join('');
 
@@ -868,11 +868,11 @@ window.renderSection6 = function (mountEl, data, ctx) {
       : s6Txt('Total Taager Profit After Tax', 'إجمالي ربح تاجر بعد الضريبة');
 
     return `
-      <div style="background:#0b1120;border:1px solid rgba(255,255,255,0.07);
-        border-radius:16px;padding:18px 20px;flex:1;">
+      <div style="background:var(--dash-surface);border:1px solid rgba(255,255,255,0.07);
+        border-radius:var(--dash-radius-xl);padding:18px 20px;flex:1;">
         <!-- title -->
         <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:14px;">
-          <div style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.8);text-align:right;">${cardTitle}</div>
+          <div style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.8);text-align:right;">${cardTitle}</div>
         </div>
 
         <!-- donut canvas wrapper -->
@@ -880,10 +880,10 @@ window.renderSection6 = function (mountEl, data, ctx) {
           <canvas id="s6-donut-chart" width="180" height="180" style="display:block;width:180px!important;height:180px!important;max-width:180px;max-height:180px;position:relative;z-index:2;"></canvas>
           <!-- center label -->
           <div style="position:absolute;z-index:3;text-align:center;pointer-events:none;">
-            <div style="font-size:20px;font-weight:900;color:#fff;" id="s6-donut-total">
+            <div style="font-size:var(--type-metric-sm);font-weight:var(--weight-bold);color:#fff;" id="s6-donut-total">
               ${moneyNumber(totalSAR, 2)}
             </div>
-            <div style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.5);">${centerLabel}</div>
+            <div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:var(--dash-text-faint);">${centerLabel}</div>
           </div>
         </div>
 
@@ -906,18 +906,18 @@ window.renderSection6 = function (mountEl, data, ctx) {
       <div class="fade-up" style="display:flex;align-items:center;justify-content:space-between;
         padding:10px 0;border-bottom:${i < METRICS_ROWS.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none'};
         animation-delay:${300 + i * 70}ms;">
-        <div style="font-size:16px;font-weight:800;color:${r.color};letter-spacing:-0.3px;">
-          ${r.value} <span style="font-size:11px;font-weight:600;">${r.unit}</span>
+        <div style="font-size:var(--type-subtitle);font-weight:var(--weight-semibold);color:${r.color};letter-spacing:-0.3px;">
+          ${r.value} <span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);">${r.unit}</span>
         </div>
-        <div style="font-size:12px;color:rgba(255,255,255,0.45);text-align:right;">${r.label}</div>
+        <div style="font-size:var(--type-label);color:rgba(255,255,255,0.45);text-align:right;">${r.label}</div>
       </div>
     `).join('');
 
     return `
-      <div style="background:#0b1120;border:1px solid rgba(255,255,255,0.07);
-        border-radius:16px;padding:18px 20px;flex:1;">
+      <div style="background:var(--dash-surface);border:1px solid rgba(255,255,255,0.07);
+        border-radius:var(--dash-radius-xl);padding:18px 20px;flex:1;">
         <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:14px;">
-          <div style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.8);
+          <div style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.8);
             display:flex;align-items:center;gap:7px;">
             ${s6Txt('Performance Metrics', 'مقاييس الأداء')}
           </div>
@@ -935,25 +935,25 @@ window.renderSection6 = function (mountEl, data, ctx) {
       <div class="fade-up" style="display:flex;align-items:flex-start;gap:12px;
         padding:10px 12px;
         background:${obs.iconBg}0d;border:1px solid ${obs.iconBg}22;
-        border-radius:10px;animation-delay:${300 + i * 100}ms;">
+        border-radius:var(--dash-radius-md);animation-delay:${300 + i * 100}ms;">
         <div style="width:36px;height:36px;border-radius:50%;
           background:${obs.iconBg}1a;border:1.5px solid ${obs.iconBg}45;
           display:flex;align-items:center;justify-content:center;flex-shrink:0;">
           ${obs.iconSvg}
         </div>
         <div style="text-align:right;flex:1;">
-          <div style="font-size:12px;font-weight:700;color:${obs.iconBg};margin-bottom:3px;">${obs.title}</div>
-          <div style="font-size:11px;color:rgba(255,255,255,0.65);line-height:1.5;">${obs.line1}</div>
-          ${obs.line2 ? `<div style="font-size:11px;font-weight:700;color:${obs.line2Color};margin-top:2px;">${obs.line2}</div>` : ''}
+          <div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:${obs.iconBg};margin-bottom:3px;">${obs.title}</div>
+          <div style="font-size:var(--type-caption);color:rgba(255,255,255,0.65);line-height:1.5;">${obs.line1}</div>
+          ${obs.line2 ? `<div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:${obs.line2Color};margin-top:2px;">${obs.line2}</div>` : ''}
         </div>
       </div>
     `).join('');
 
     return `
-      <div style="background:#0b1120;border:1px solid rgba(255,255,255,0.07);
-        border-radius:16px;padding:18px 20px;flex:1;">
+      <div style="background:var(--dash-surface);border:1px solid rgba(255,255,255,0.07);
+        border-radius:var(--dash-radius-xl);padding:18px 20px;flex:1;">
         <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:14px;">
-          <div style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.8);
+          <div style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.8);
             display:flex;align-items:center;gap:7px;">
             ${s6Txt('Key Highlights', 'أبرز الملاحظات')}
           </div>
@@ -969,18 +969,18 @@ window.renderSection6 = function (mountEl, data, ctx) {
   function recommendationsHtml() {
     const cards = RECS.map((r, i) => `
       <div class="fade-up" style="flex:1;background:${r.bg};border:1px solid ${r.border};
-        border-radius:14px;padding:16px 18px;direction:ltr;display:flex;align-items:center;gap:14px;
+        border-radius:var(--dash-radius-lg);padding:16px 18px;direction:ltr;display:flex;align-items:center;gap:14px;
         animation-delay:${500 + i * 100}ms;">
         <div style="width:46px;height:46px;border-radius:50%;
           background:${r.glow}20;border:1.5px solid ${r.glow}40;
           box-shadow:0 0 14px ${r.glow}35;
-          display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">
+          display:flex;align-items:center;justify-content:center;font-size:var(--type-metric-sm);flex-shrink:0;">
           ${r.emoji}
         </div>
         <div style="text-align:right; flex:1;">
-            <div style="font-size:12px;font-weight:800;color:#fff;margin-bottom:4px;">${r.title}</div>
-            <div style="font-size:11px;color:rgba(255,255,255,0.55);line-height:1.5;">${r.body}</div>
-            <div style="font-size:11px;font-weight:700;color:${r.glow};margin-top:3px;">${r.cta}</div>
+            <div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:#fff;margin-bottom:4px;">${r.title}</div>
+            <div style="font-size:var(--type-caption);color:rgba(255,255,255,0.55);line-height:1.5;">${r.body}</div>
+            <div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:${r.glow};margin-top:3px;">${r.cta}</div>
           </div>
         </div>
       `).join('');
@@ -988,10 +988,10 @@ window.renderSection6 = function (mountEl, data, ctx) {
       return `
         <div>
           <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:12px;">
-            <span style="font-size:14px;font-weight:800;color:rgba(255,255,255,0.8);">${s6Txt('Recommendations to Improve Performance', 'توصيات لتحسين الأداء')}</span>
-            <div style="width:28px;height:28px;border-radius:8px;
+            <span style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.8);">${s6Txt('Recommendations to Improve Performance', 'توصيات لتحسين الأداء')}</span>
+            <div style="width:28px;height:28px;border-radius:var(--dash-radius-sm);
               background:rgba(245,158,11,0.18);border:1px solid rgba(245,158,11,0.35);
-              display:flex;align-items:center;justify-content:center;font-size:15px;">💡</div>
+              display:flex;align-items:center;justify-content:center;font-size:var(--type-component-title);">💡</div>
           </div>
           <div class="s6-recs-row" style="display:flex;gap:14px;">
             ${cards}
@@ -1323,7 +1323,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
     }
 
     mountEl.innerHTML = `
-      <div class="dash-scroll" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;background:#080b12; font-family:inherit;">
+      <div class="dash-scroll" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;background:var(--dash-bg); font-family:inherit;">
 
         ${topBarHtml()}
 
@@ -1622,7 +1622,7 @@ window.renderSection6 = function (mountEl, data, ctx) {
           moneyNumberMax(breakEvenCpa, 2) + ' ' + activeCurrency;
 
         ctx.save();
-        ctx.font = '800 10px ' + fontFamily;
+        ctx.font = '700 10px ' + fontFamily;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
 

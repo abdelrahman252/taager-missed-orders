@@ -121,7 +121,7 @@ function statusBucket(row) {
 }
 
 function isFailedBucket(bucket) {
-  return ["failed", "return_verified", "customer_refused_confirmation", "on_hold", "out_of_stock", "after_sales_done"].includes(bucket);
+  return ["failed", "return_verified", "customer_refused_confirmation", "out_of_stock", "after_sales_done"].includes(bucket);
 }
 
 const CONFIRMED_BUCKETS = new Set([
@@ -142,7 +142,7 @@ function isConfirmedBucket(bucket) {
 }
 
 function isIncomingBucket(bucket) {
-  return ["shipping", "delivery_suspended", "after_sales_progress", "confirmed", "processing", "waiting", "pending", "received"].includes(bucket);
+  return ["shipping", "delivery_suspended", "after_sales_progress", "confirmed", "processing", "waiting", "on_hold", "pending", "received"].includes(bucket);
 }
 
 const PRODUCT_CONFIRMATION_BUCKETS = new Set([
@@ -236,6 +236,53 @@ function rowProfit(row) {
 
 function rowSku(row) {
   return text(row.sku || row.skuNumber);
+}
+
+function splitList(value) {
+  return text(value)
+    .split(/\r?\n|\s*,\s*|\s*\|\s*/)
+    .map((item) => text(item))
+    .filter(Boolean);
+}
+
+function uniqueList(items) {
+  const seen = new Set();
+  const out = [];
+  (items || []).forEach((item) => {
+    const value = text(item);
+    const key = lower(value);
+    if (!value || seen.has(key)) return;
+    seen.add(key);
+    out.push(value);
+  });
+  return out;
+}
+
+function resolvedRowProductName(row, overrides) {
+  const skuItems = uniqueList([
+    ...splitList(row && row.sku),
+    ...splitList(row && row.skuNumber),
+    ...splitList(row && row.itemSkus),
+    ...splitList(row && row.skus),
+  ]);
+  const productItems = uniqueList([
+    ...splitList(row && row.productName),
+    ...splitList(row && row.product),
+    ...splitList(row && row.products),
+  ]);
+
+  if (skuItems.length) {
+    return uniqueList(skuItems.map((sku, index) => {
+      const rawAtIndex = productItems[index] || "";
+      return productNameOverride(sku, rawAtIndex || sku, overrides);
+    })).join(", ");
+  }
+
+  if (productItems.length) {
+    return uniqueList(productItems.map((item) => productNameOverride(item, item, overrides))).join(", ");
+  }
+
+  return "Unknown Product";
 }
 
 function rowCity(row) {
@@ -777,6 +824,7 @@ function createDashboardQueryService(options) {
   function orderRows(input) {
     return cached("orders", input, () => {
       const { rows, scope, accounts } = scopedRows(input);
+      const productNameOverrides = sanitizeProductNameOverrides(input && input.productNameOverrides);
       const grouped = new Map();
       rows.forEach((row, index) => {
         const key = orderKey(row, index);
@@ -803,7 +851,8 @@ function createDashboardQueryService(options) {
         order.dashboardTotalPrice += rowTotal(row);
         order.totalPrice = order.dashboardTotalPrice;
         order.itemCount += 1;
-        if (rowProduct(row)) order.products.push(rowProduct(row));
+        const displayProduct = resolvedRowProductName(row, productNameOverrides);
+        if (displayProduct) order.products.push(displayProduct);
         if (rowSku(row)) order.skus.push(rowSku(row));
       });
       let orders = Array.from(grouped.values()).map((row) => ({
@@ -823,6 +872,7 @@ function createDashboardQueryService(options) {
         const bucket = statusBucket(row);
         if (filters.stageId) {
           const stageId = text(filters.stageId);
+          if (stageId === "confirmation") return isConfirmedBucket(bucket);
           const exactBucket = stageId.indexOf("status:") === 0 ? stageId.slice(7) : stageId;
           if (bucket !== exactBucket) return false;
         }

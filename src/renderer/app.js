@@ -72,6 +72,17 @@ const _STRINGS = {
     "setup.title":        "Welcome to Taager Bot",
     "setup.subtitle":     "Enter your credentials once — they're stored securely on this device.",
     "setup.easy_section": "📦 Easy-Orders Account",
+    "setup.cms_section": "CMS Account",
+    "setup.cms_label": "CMS / Order Source",
+    "setup.cms_easyorders": "EasyOrders",
+    "setup.cms_lightfunnels": "LightFunnels",
+    "setup.lightfunnels_account_label": "Account Name",
+    "setup.lightfunnels_account_ph": "e.g. trendatsaudi",
+    "setup.lightfunnels_login_method": "LightFunnels Login Method",
+    "setup.lightfunnels_login_email": "Email + Password",
+    "setup.lightfunnels_login_google": "Google",
+    "setup.lightfunnels_google_hint": "Google login will open Chrome during the LightFunnels login phase.",
+    "setup.lightfunnels_required_hint": "LightFunnels account name, email, and password are required for this account.",
     "setup.taager_section": "🛒 Taager Account",
     "setup.country_label": "Country",
     "setup.country_sa": "🇸🇦 Saudi Arabia (SA)",
@@ -103,8 +114,10 @@ const _STRINGS = {
     "setup.dashboard_enrichment_label":        "Dashboard Data Source",
     "setup.dashboard_enrichment_taager":        "Taager Only",
     "setup.dashboard_enrichment_easyorders":    "Taager + EasyOrders",
+    "setup.dashboard_enrichment_lightfunnels":  "Taager + LightFunnels",
     "setup.dashboard_enrichment_hint_taager":   "Your dashboard will use Taager as the only data source for orders, profits, and product info. Simple and fast — recommended if you don't use EasyOrders.",
     "setup.dashboard_enrichment_hint_easyorders": "Your dashboard will pull orders and profits from Taager, and also connect to EasyOrders to enrich product names and payment data. Best choice if you use both platforms.",
+    "setup.dashboard_enrichment_hint_lightfunnels": "This account is wired as a LightFunnels CMS account. Dashboard automation will use this provider in the next phase.",
     "setup.err_missing":  "<strong>Missing fields</strong> — All required fields must be filled.",
     "setup.err_locked":   "<strong>Account Locked</strong> — This license is already linked to different accounts. Contact support to change them.",
     "welcome.app_title":      "Taager Bot",
@@ -250,7 +263,7 @@ const _STRINGS = {
     "setup.static_name":        "Account name",
     "setup.static_name_placeholder": "Example: Jake",
     "setup.static_name_required": "Account name is required.",
-    "setup.static_hint":        "This account uses Excel Static Update and does not connect to Taager or EasyOrders.",
+    "setup.static_hint":        "This account uses Excel Static Update and does not connect to Taager, EasyOrders, or LightFunnels.",
     "setup.next_btn":           "Next: Run Setup →",
     "setup.continue_date":      "Continue to date",
     "setup.run_title":          "Run Execution",
@@ -529,9 +542,13 @@ const _STRINGS = {
     "expired.btn_checking":       "Checking license…",
     "expired.btn_verified":       "✅ Verified — Resuming…",
     "expired.meta_license_id":    "License ID",
+    "expired.meta_merchant_name": "Merchant Name",
     "expired.meta_last_valid":    "Last Validated",
     "expired.meta_remaining":     "Remaining Access",
     "expired.meta_expired":       "Expired",
+    "expired.copy_license":       "Copy license ID",
+    "expired.copied":             "License ID copied!",
+    "expired.err_copy":           "Could not copy the license ID.",
     "expired.err_still":          (r) => r || "License is still expired. Please contact your administrator.",
     "expired.err_network":        "Could not reach the license server. Check your internet connection.",
     // License expiry warning
@@ -609,6 +626,17 @@ const _STRINGS = {
     "setup.title":        "أهلاً بك في Taager Bot",
     "setup.subtitle":     "أدخل بيانات الدخول مرة واحدة — يتم حفظها بشكل آمن على هذا الجهاز.",
     "setup.easy_section": "📦 حساب Easy-Orders",
+    "setup.cms_section": "حساب CMS",
+    "setup.cms_label": "CMS / مصدر الطلبات",
+    "setup.cms_easyorders": "EasyOrders",
+    "setup.cms_lightfunnels": "LightFunnels",
+    "setup.lightfunnels_account_label": "اسم الحساب",
+    "setup.lightfunnels_account_ph": "مثال: trendatsaudi",
+    "setup.lightfunnels_login_method": "طريقة دخول LightFunnels",
+    "setup.lightfunnels_login_email": "البريد وكلمة المرور",
+    "setup.lightfunnels_login_google": "Google",
+    "setup.lightfunnels_google_hint": "دخول Google سيفتح Chrome في مرحلة ربط LightFunnels.",
+    "setup.lightfunnels_required_hint": "اسم حساب LightFunnels والبريد وكلمة المرور مطلوبة لهذا الحساب.",
     "setup.taager_section": "🛒 حساب تاجر",
     "setup.country_label": "الدولة",
     "setup.country_sa": "🇸🇦 السعودية (SA)",
@@ -631,8 +659,10 @@ const _STRINGS = {
     "setup.dashboard_enrichment_label":        "مصدر بيانات لوحة التحكم",
     "setup.dashboard_enrichment_taager":        "Taager فقط",
     "setup.dashboard_enrichment_easyorders":    "Taager + EasyOrders",
+    "setup.dashboard_enrichment_lightfunnels":  "Taager + LightFunnels",
     "setup.dashboard_enrichment_hint_taager":   "ستعتمد لوحة التحكم على Taager كمصدر وحيد للطلبات والأرباح وبيانات المنتجات. خيار بسيط وسريع — مناسب إذا لم تكن تستخدم EasyOrders.",
     "setup.dashboard_enrichment_hint_easyorders": "ستجلب لوحة التحكم الطلبات والأرباح من Taager، وتتصل أيضاً بـ EasyOrders لتحسين أسماء المنتجات وبيانات الدفع. الخيار الأمثل إذا كنت تستخدم المنصتين معاً.",
+    "setup.dashboard_enrichment_hint_lightfunnels": "تم ربط هذا الحساب كمصدر LightFunnels. سيتم استخدامه في أتمتة لوحة التحكم في المرحلة التالية.",
     "setup.err_missing":  "<strong>حقول مفقودة</strong> — يجب ملء جميع الحقول المطلوبة.",
     "setup.err_locked":   "<strong>حساب مقفل</strong> — هذا الترخيص مرتبط بحسابات مختلفة. تواصل مع الدعم.",
     "welcome.app_title":      "Taager Bot",
@@ -779,7 +809,7 @@ const _STRINGS = {
     "setup.static_name":        "\u0627\u0633\u0645 \u0627\u0644\u062d\u0633\u0627\u0628",
     "setup.static_name_placeholder": "\u0645\u062b\u0627\u0644: Jake",
     "setup.static_name_required": "\u0627\u0633\u0645 \u0627\u0644\u062d\u0633\u0627\u0628 \u0645\u0637\u0644\u0648\u0628.",
-    "setup.static_hint":        "\u064a\u0633\u062a\u062e\u062f\u0645 \u0647\u0630\u0627 \u0627\u0644\u062d\u0633\u0627\u0628 \u0627\u0644\u062a\u062d\u062f\u064a\u062b \u0627\u0644\u062b\u0627\u0628\u062a \u0628\u0645\u0644\u0641 Excel \u0648\u0644\u0627 \u064a\u062a\u0635\u0644 \u0628\u062a\u0627\u062c\u0631 \u0623\u0648 EasyOrders.",
+    "setup.static_hint":        "\u064a\u0633\u062a\u062e\u062f\u0645 \u0647\u0630\u0627 \u0627\u0644\u062d\u0633\u0627\u0628 \u0627\u0644\u062a\u062d\u062f\u064a\u062b \u0627\u0644\u062b\u0627\u0628\u062a \u0628\u0645\u0644\u0641 Excel \u0648\u0644\u0627 \u064a\u062a\u0635\u0644 \u0628\u062a\u0627\u062c\u0631 \u0623\u0648 EasyOrders \u0623\u0648 LightFunnels.",
     "setup.continue_date":      "\u0627\u0644\u0645\u062a\u0627\u0628\u0639\u0629 \u0644\u0627\u062e\u062a\u064a\u0627\u0631 \u0627\u0644\u062a\u0627\u0631\u064a\u062e",
     "setup.run_title":          "تنفيذ التشغيل",
     "setup.run_sub":            "اختر المستخدمين وحدد التاريخ ثم ابدأ.",
@@ -1054,9 +1084,13 @@ const _STRINGS = {
     "expired.btn_checking":       "جارٍ التحقق من الترخيص…",
     "expired.btn_verified":       "✅ تم التحقق — جارٍ الاستئناف…",
     "expired.meta_license_id":    "معرّف الترخيص",
+    "expired.meta_merchant_name": "اسم التاجر",
     "expired.meta_last_valid":    "آخر تحقق",
     "expired.meta_remaining":     "المدة المتبقية",
     "expired.meta_expired":       "منتهي",
+    "expired.copy_license":       "نسخ معرّف الترخيص",
+    "expired.copied":             "تم نسخ معرّف الترخيص!",
+    "expired.err_copy":           "تعذّر نسخ معرّف الترخيص.",
     "expired.err_still":          (r) => r || "الترخيص لا يزال منتهياً. يرجى التواصل مع المشرف.",
     "expired.err_network":        "تعذّر الوصول إلى خادم الترخيص. تحقق من الاتصال بالإنترنت.",
     // License expiry warning
@@ -1843,9 +1877,190 @@ window.TaagerGeo = (() => {
 })();
 
 // ── Theme & Lang helpers ──
+const TaagerDebug = window.TaagerDebug || {
+  enabled: true,
+  seq: 0,
+  startedAt: Date.now(),
+  records: []
+};
+
+function debugDomSnapshot() {
+  const activePage = document.querySelector(".page.active");
+  const dashboardMount = document.getElementById("db-shell-mount");
+  const dashboardLoader = document.getElementById("dashboard-live-preloader");
+  const preloader = document.getElementById("preloader");
+  return {
+    activePage: activePage ? activePage.id : null,
+    preloader: !!preloader,
+    preloaderOpacity: preloader ? preloader.style.opacity || "" : "",
+    dashboardInitialReady: !!window._dashboardInitialReady,
+    dashboardMounted: !!(window.TaagerPageLifecycle && window.TaagerPageLifecycle.snapshot && window.TaagerPageLifecycle.snapshot()["page-dashboard"]?.mounted),
+    dashboardInvalid: !!(window.TaagerPageLifecycle && window.TaagerPageLifecycle.snapshot && window.TaagerPageLifecycle.snapshot()["page-dashboard"]?.invalid),
+    dashboardShell: !!dashboardMount,
+    dashboardShellClass: dashboardMount ? dashboardMount.className : "",
+    dashboardActiveSection: dashboardMount ? dashboardMount._dashboardActiveSection || null : null,
+    dashboardLoader: !!dashboardLoader,
+    stabilizing: document.documentElement.classList.contains("taager-ui-stabilizing")
+  };
+}
+
+function taagerDebugLog(scope, event, detail, level) {
+  if (!TaagerDebug.enabled) return;
+  const seq = ++TaagerDebug.seq;
+  const record = {
+    seq,
+    at: new Date().toISOString(),
+    elapsedMs: Date.now() - TaagerDebug.startedAt,
+    scope,
+    event,
+    detail: detail || {},
+    dom: debugDomSnapshot()
+  };
+  TaagerDebug.records.push(record);
+  if (TaagerDebug.records.length > 600) TaagerDebug.records.shift();
+  const method = level || "log";
+  const consoleMethod = console[method] || console.log;
+  consoleMethod.call(console, `[TaagerDebug #${seq} +${record.elapsedMs}ms][${scope}] ${event}`, {
+    detail: record.detail,
+    dom: record.dom
+  });
+}
+
+TaagerDebug.dump = function () {
+  console.table(TaagerDebug.records.map((item) => ({
+    seq: item.seq,
+    elapsedMs: item.elapsedMs,
+    scope: item.scope,
+    event: item.event,
+    activePage: item.dom && item.dom.activePage,
+    section: item.dom && item.dom.dashboardActiveSection,
+    preloader: item.dom && item.dom.preloader,
+    loader: item.dom && item.dom.dashboardLoader,
+    stabilizing: item.dom && item.dom.stabilizing
+  })));
+  return TaagerDebug.records.slice();
+};
+window.TaagerDebug = TaagerDebug;
+window.TaagerDebugLog = taagerDebugLog;
+
+function afterNextPaint(callback) {
+  const raf = window.requestAnimationFrame || ((fn) => window.setTimeout(fn, 0));
+  raf(() => raf(callback));
+}
+window.TaagerAfterNextPaint = afterNextPaint;
+
+function waitForStableUi(options) {
+  const opts = options || {};
+  const quietMs = Number(opts.quietMs || 90);
+  const maxWaitMs = Number(opts.maxWaitMs || 1400);
+  const startedAt = Date.now();
+  taagerDebugLog("ui", "waitForStableUi:start", { quietMs, maxWaitMs });
+  const fontsReady = window.taagerFontsReady && typeof window.taagerFontsReady.then === "function"
+    ? window.taagerFontsReady.catch(() => false)
+    : Promise.resolve(false);
+  const frame = () => new Promise((resolve) => afterNextPaint(resolve));
+  return fontsReady.then(() => frame())
+    .then(() => frame())
+    .then(() => new Promise((resolve) => {
+      const finish = () => frame().then(resolve);
+      const remaining = Math.max(0, maxWaitMs - (Date.now() - startedAt));
+      window.setTimeout(finish, Math.min(quietMs, remaining || quietMs));
+    }))
+    .then((value) => {
+      taagerDebugLog("ui", "waitForStableUi:done", { elapsedMs: Date.now() - startedAt });
+      return value;
+    });
+}
+window.TaagerWaitForStableUi = waitForStableUi;
+
+let _routeCurtainToken = 0;
+const _uiStabilizationLocks = new Set();
+const _routeCurtainLocks = new Map();
+
+function beginUiStabilization(label) {
+  const lock = Symbol(label || "ui-stabilization");
+  _uiStabilizationLocks.add(lock);
+  document.documentElement.classList.add("taager-ui-stabilizing");
+  taagerDebugLog("ui", "stabilization:begin", { label: label || "", locks: _uiStabilizationLocks.size });
+  return lock;
+}
+
+function endUiStabilization(lock) {
+  if (lock) _uiStabilizationLocks.delete(lock);
+  if (!_uiStabilizationLocks.size) document.documentElement.classList.remove("taager-ui-stabilizing");
+  taagerDebugLog("ui", "stabilization:end", { locks: _uiStabilizationLocks.size });
+}
+
+window.TaagerIsUiStabilizing = function () {
+  return _uiStabilizationLocks.size > 0 || document.documentElement.classList.contains("taager-ui-stabilizing");
+};
+
+function showRouteCurtain(title, body) {
+  const token = ++_routeCurtainToken;
+  _routeCurtainLocks.set(token, beginUiStabilization("route-curtain"));
+  taagerDebugLog("route-curtain", "show", { token, title, body, blockedByPreloader: !!document.getElementById("preloader") });
+  if (document.getElementById("preloader")) return token;
+  let curtain = document.getElementById("taager-route-curtain");
+  if (!curtain) {
+    curtain = document.createElement("div");
+    curtain.id = "taager-route-curtain";
+    curtain.className = "taager-route-curtain";
+    curtain.setAttribute("role", "status");
+    curtain.setAttribute("aria-live", "polite");
+    document.body.appendChild(curtain);
+  }
+  const esc = window.TaagerUI && window.TaagerUI.esc
+    ? window.TaagerUI.esc
+    : (value) => String(value == null ? "" : value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+  curtain.innerHTML = featureLoadingShell(title || "Loading", body || "Preparing view...");
+  curtain.hidden = false;
+  curtain.classList.add("is-visible");
+  return token;
+}
+
+function hideRouteCurtainWhenStable(token) {
+  taagerDebugLog("route-curtain", "hideWhenStable:start", { token, currentToken: _routeCurtainToken });
+  return waitForStableUi().then(() => {
+    const stabilizationLock = _routeCurtainLocks.get(token);
+    if (token && token !== _routeCurtainToken) {
+      taagerDebugLog("route-curtain", "hideWhenStable:stale", { token, currentToken: _routeCurtainToken });
+      _routeCurtainLocks.delete(token);
+      endUiStabilization(stabilizationLock);
+      return;
+    }
+    const curtain = document.getElementById("taager-route-curtain");
+    if (!curtain) {
+      taagerDebugLog("route-curtain", "hideWhenStable:no-curtain", { token });
+      _routeCurtainLocks.delete(token);
+      endUiStabilization(stabilizationLock);
+      return;
+    }
+    curtain.classList.remove("is-visible");
+    window.setTimeout(() => {
+      if (token && token !== _routeCurtainToken) {
+        taagerDebugLog("route-curtain", "hideWhenStable:timer-stale", { token, currentToken: _routeCurtainToken });
+        _routeCurtainLocks.delete(token);
+        endUiStabilization(stabilizationLock);
+        return;
+      }
+      curtain.hidden = true;
+      _routeCurtainLocks.delete(token);
+      endUiStabilization(stabilizationLock);
+      taagerDebugLog("route-curtain", "hideWhenStable:done", { token });
+    }, 180);
+  });
+}
+
+window.TaagerRouteCurtain = {
+  show: showRouteCurtain,
+  hideWhenStable: hideRouteCurtainWhenStable
+};
+
 function applyTheme(theme) {
   window._kbotTheme = theme;
+  document.documentElement.classList.add("theme-switching");
   document.documentElement.setAttribute("data-theme", theme);
+  afterNextPaint(() => document.documentElement.classList.remove("theme-switching"));
   const cb = document.getElementById("toggle-theme");
   if (cb) cb.checked = (theme === "light");
   try { localStorage.setItem("kbot-theme", theme); } catch(e) {}
@@ -1858,23 +2073,33 @@ function applyTheme(theme) {
   }
 }
 
-function applyLang(lang) {
+let _langSwitchToken = 0;
+function applyLang(lang, options) {
+  const opts = options || {};
   window._kbotLang = lang;
-  document.documentElement.classList.add("lang-switching");
   document.documentElement.setAttribute("dir",  lang === "ar" ? "rtl" : "ltr");
   document.documentElement.setAttribute("lang", lang);
   const cb = document.getElementById("toggle-lang");
   if (cb) cb.checked = (lang === "ar");
   updateTopBarText();
   try { localStorage.setItem("kbot-lang", lang); } catch(e) {}
-  window.dispatchEvent(new CustomEvent("taager-lang-change", { detail: { lang } }));
-  if (window.TaagerPreloader && typeof window.TaagerPreloader.dashboardRefresh === "function") {
-    window.TaagerPreloader.dashboardRefresh();
-  }
-  if (typeof invalidatePage === "function") {
-    invalidatePage("page-dashboard", "language");
-    invalidatePage("page-analytics", "language");
-    invalidatePage("page-operations", "language");
+  const notifyLanguageChange = () => {
+    window.dispatchEvent(new CustomEvent("taager-lang-change", { detail: { lang } }));
+    if (typeof invalidatePage === "function") {
+      invalidatePage("page-dashboard", "language");
+      invalidatePage("page-analytics", "language");
+      invalidatePage("page-operations", "language");
+    }
+  };
+  if (opts.deferWork) {
+    const token = ++_langSwitchToken;
+    afterNextPaint(() => {
+      if (token !== _langSwitchToken) return;
+      notifyLanguageChange();
+      Promise.resolve(reRenderCurrentPage()).catch(() => {});
+    });
+  } else {
+    notifyLanguageChange();
   }
   if (window.TaagerMonitoring) {
     window.TaagerMonitoring.setUiContext({
@@ -1883,7 +2108,6 @@ function applyLang(lang) {
       theme: window._kbotTheme || "",
     });
   }
-  window.setTimeout(() => document.documentElement.classList.remove("lang-switching"), 180);
 }
 
 // Cache DOM refs — avoids getElementById on every topbar update
@@ -2221,6 +2445,13 @@ const _featureStylePromises = new Map();
 const _featureRouteTokens = new Map();
 let _featurePrewarmStarted = false;
 
+function keepVisualSystemLast() {
+  const visualSystem = document.querySelector('link[data-visual-system="true"]');
+  if (visualSystem && visualSystem !== document.head.lastElementChild) {
+    document.head.appendChild(visualSystem);
+  }
+}
+
 const FEATURE_STYLE_GROUPS = {
   analytics: ["styles/analytics.css"],
   operations: ["styles/operations.css"],
@@ -2258,6 +2489,7 @@ function loadStylesheetOnce(href) {
     link.href = href;
     link.onload = () => {
       _loadedFeatureStyles.add(href);
+      keepVisualSystemLast();
       resolve();
     };
     link.onerror = () => reject(new Error("Failed to load " + href));
@@ -2334,6 +2566,7 @@ async function ensureFeatureScripts(feature) {
       await loadScriptOnce(src);
     }
     await stylePromise;
+    keepVisualSystemLast();
     TaagerPerf.end(perfTimer, { ok: true });
   } catch (err) {
     TaagerPerf.end(perfTimer, { ok: false, error: err && err.message ? err.message : String(err || "") });
@@ -2905,13 +3138,29 @@ window.renderOperations = async function lazyRenderOperations() {
 // is no black-screen gap between loader exit and content appearing.
 let _preloaderDismissed = false;
 function dismissPreloader() {
-  if (_preloaderDismissed) return;
+  if (_preloaderDismissed) {
+    taagerDebugLog("preloader", "dismiss:skip-already-dismissed");
+    return;
+  }
   _preloaderDismissed = true;
-  const preloader = document.getElementById("preloader");
-  if (!preloader) return;
-  preloader.style.transition = "opacity 0.25s ease";
-  preloader.style.opacity = "0";
-  setTimeout(() => { if (preloader.parentNode) preloader.remove(); }, 260);
+  taagerDebugLog("preloader", "dismiss:start");
+  const stabilizationLock = beginUiStabilization("preloader-dismiss");
+  waitForStableUi({ quietMs: 120, maxWaitMs: 1800 }).then(() => {
+    const preloader = document.getElementById("preloader");
+    if (!preloader) {
+      taagerDebugLog("preloader", "dismiss:no-dom-node");
+      endUiStabilization(stabilizationLock);
+      return;
+    }
+    taagerDebugLog("preloader", "dismiss:fade-out");
+    preloader.style.transition = "opacity 0.25s ease";
+    preloader.style.opacity = "0";
+    setTimeout(() => {
+      if (preloader.parentNode) preloader.remove();
+      endUiStabilization(stabilizationLock);
+      taagerDebugLog("preloader", "dismiss:removed");
+    }, 260);
+  });
 }
 
 function setPreloaderCopy(title, body) {
@@ -3022,7 +3271,9 @@ function dashboardStagePercent(stage, index, activeIndex, totalPercent) {
 
 function updateDashboardPreloaderDom() {
   const root = dashboardPreloaderRoot();
-  if (!root) return;
+  // The section loader is intentionally removed once dashboard content mounts.
+  // Later data updates may still report stages, but they must remain state-only.
+  if (!root) return false;
   const percent = Math.max(0, Math.min(100, Math.round(_dashboardPreloaderState.percent)));
   const stage = dashboardPreloaderStage(_dashboardPreloaderState.stageId);
   const percentEl = root.querySelector("[data-dashboard-loader-percent]");
@@ -3032,27 +3283,51 @@ function updateDashboardPreloaderDom() {
   const titleEl = root.querySelector("[data-dashboard-loader-title]");
   const bodyEl = root.querySelector("[data-dashboard-loader-body]");
   const panelEl = root.querySelector("[data-dashboard-loader-stages]");
-  root.setAttribute("data-dashboard-loader-stage", stage.id);
-  if (percentEl) percentEl.textContent = String(percent);
-  if (fillEl) fillEl.style.width = percent + "%";
-  if (ringEl) ringEl.style.setProperty("--dashboard-loader-progress", (percent * 3.6) + "deg");
+  if (root.getAttribute("data-dashboard-loader-stage") !== stage.id) {
+    root.setAttribute("data-dashboard-loader-stage", stage.id);
+  }
+  if (percentEl && percentEl.textContent !== String(percent)) percentEl.textContent = String(percent);
+  if (fillEl && fillEl.style.width !== percent + "%") fillEl.style.width = percent + "%";
+  if (ringEl) {
+    const ringProgress = (percent * 3.6) + "deg";
+    if (ringEl.style.getPropertyValue("--dashboard-loader-progress") !== ringProgress) {
+      ringEl.style.setProperty("--dashboard-loader-progress", ringProgress);
+    }
+  }
   const stageBody = dashboardPreloaderStageBody(stage);
-  if (activityEl) activityEl.textContent = dashboardPreloaderActivityText(_dashboardPreloaderState.activity, stageBody);
-  if (titleEl) titleEl.textContent = dashboardPreloaderStageLabel(stage);
-  if (bodyEl) bodyEl.textContent = stageBody;
-  if (!panelEl) return;
+  const activityText = dashboardPreloaderActivityText(_dashboardPreloaderState.activity, stageBody);
+  const stageLabel = dashboardPreloaderStageLabel(stage);
+  if (activityEl && activityEl.textContent !== activityText) activityEl.textContent = activityText;
+  if (titleEl && titleEl.textContent !== stageLabel) titleEl.textContent = stageLabel;
+  if (bodyEl && bodyEl.textContent !== stageBody) bodyEl.textContent = stageBody;
+  if (!panelEl) return true;
   const activeIndex = dashboardPreloaderStageIndex(stage.id);
-  panelEl.innerHTML = DASHBOARD_PRELOADER_STAGES.map((item, index) => {
+  if (panelEl.children.length !== DASHBOARD_PRELOADER_STAGES.length) {
+    panelEl.innerHTML = DASHBOARD_PRELOADER_STAGES.map((item) => {
+      return '<div class="dashboard-loader-step">' +
+        '<span class="dashboard-loader-step-dot" aria-hidden="true"></span>' +
+        '<span class="dashboard-loader-step-label"></span>' +
+        '<span class="dashboard-loader-step-percent"></span>' +
+        '</div>';
+    }).join("");
+  }
+  DASHBOARD_PRELOADER_STAGES.forEach((item, index) => {
     const stepPercent = dashboardStagePercent(item, index, activeIndex, percent);
     const cls = index < activeIndex || _dashboardPreloaderState.complete
       ? "is-done"
       : (index === activeIndex ? "is-active" : "");
-    return '<div class="dashboard-loader-step ' + cls + '">' +
-      '<span class="dashboard-loader-step-dot" aria-hidden="true"></span>' +
-      '<span class="dashboard-loader-step-label">' + preloaderEscape(dashboardPreloaderStageLabel(item)) + '</span>' +
-      '<span class="dashboard-loader-step-percent">' + stepPercent + '%</span>' +
-      '</div>';
-  }).join("");
+    const stepEl = panelEl.children[index];
+    if (!stepEl) return;
+    const className = "dashboard-loader-step" + (cls ? " " + cls : "");
+    if (stepEl.className !== className) stepEl.className = className;
+    const labelEl = stepEl.querySelector(".dashboard-loader-step-label");
+    const stepPercentEl = stepEl.querySelector(".dashboard-loader-step-percent");
+    const label = dashboardPreloaderStageLabel(item);
+    const percentText = stepPercent + "%";
+    if (labelEl && labelEl.textContent !== label) labelEl.textContent = label;
+    if (stepPercentEl && stepPercentEl.textContent !== percentText) stepPercentEl.textContent = percentText;
+  });
+  return true;
 }
 
 function clearDashboardSmoothCompletion() {
@@ -3067,6 +3342,7 @@ function clearDashboardSmoothCompletion() {
 
 function resetDashboardPreloader(options) {
   const opts = options || {};
+  taagerDebugLog("preloader", "dashboard-reset", opts);
   clearDashboardSmoothCompletion();
   _dashboardPreloaderState.percent = 6;
   _dashboardPreloaderState.target = 6;
@@ -3079,6 +3355,15 @@ function resetDashboardPreloader(options) {
 
 function applyDashboardPreloaderComplete(options) {
   const opts = options || {};
+  taagerDebugLog("preloader", "dashboard-complete-apply", opts);
+  if (_dashboardPreloaderState.motionTimer) {
+    clearInterval(_dashboardPreloaderState.motionTimer);
+    _dashboardPreloaderState.motionTimer = null;
+    taagerDebugLog("preloader", "motion:stop-complete", {
+      percent: 100,
+      target: 100
+    });
+  }
   _dashboardPreloaderState.stageId = "rendering";
   _dashboardPreloaderState.complete = true;
   _dashboardPreloaderState.target = 100;
@@ -3089,6 +3374,7 @@ function applyDashboardPreloaderComplete(options) {
 
 function smoothCompleteDashboardPreloader(options) {
   const opts = options || {};
+  taagerDebugLog("preloader", "dashboard-smooth-complete:start", opts);
   clearDashboardSmoothCompletion();
   const checkpoints = [
     { stage: "snapshot", percent: 30, activity: "Reading saved dashboard snapshots" },
@@ -3104,6 +3390,7 @@ function smoothCompleteDashboardPreloader(options) {
   return new Promise((resolve) => {
     _dashboardSmoothResolve = resolve;
     function finish() {
+      taagerDebugLog("preloader", "dashboard-smooth-complete:finish", opts);
       applyDashboardPreloaderComplete(opts);
       const timer = setTimeout(() => {
         if (_dashboardSmoothResolve === resolve) _dashboardSmoothResolve = null;
@@ -3118,6 +3405,7 @@ function smoothCompleteDashboardPreloader(options) {
       }
       const checkpoint = checkpoints[index];
       const timer = setTimeout(() => {
+        taagerDebugLog("preloader", "dashboard-smooth-complete:checkpoint", checkpoint);
         const stage = dashboardPreloaderStage(checkpoint.stage);
         _dashboardPreloaderState.stageId = stage.id;
         _dashboardPreloaderState.complete = false;
@@ -3134,8 +3422,35 @@ function smoothCompleteDashboardPreloader(options) {
 }
 
 function startDashboardPreloaderMotion() {
-  if (_dashboardPreloaderState.motionTimer) return;
+  if (!dashboardPreloaderRoot()) {
+    if (_dashboardPreloaderState.motionTimer) {
+      clearInterval(_dashboardPreloaderState.motionTimer);
+      _dashboardPreloaderState.motionTimer = null;
+    }
+    return;
+  }
+  if (_dashboardPreloaderState.motionTimer) {
+    taagerDebugLog("preloader", "motion:already-running", {
+      stageId: _dashboardPreloaderState.stageId,
+      percent: _dashboardPreloaderState.percent,
+      target: _dashboardPreloaderState.target
+    });
+    return;
+  }
+  taagerDebugLog("preloader", "motion:start", {
+    stageId: _dashboardPreloaderState.stageId,
+    percent: _dashboardPreloaderState.percent,
+    target: _dashboardPreloaderState.target
+  });
+  var lastMotionLogAt = 0;
+  var lastMotionLogPercent = -1;
   _dashboardPreloaderState.motionTimer = setInterval(() => {
+    if (!dashboardPreloaderRoot()) {
+      clearInterval(_dashboardPreloaderState.motionTimer);
+      _dashboardPreloaderState.motionTimer = null;
+      taagerDebugLog("preloader", "motion:stop-no-dom", {});
+      return;
+    }
     if (!_dashboardPreloaderState.complete && _dashboardPreloaderState.target < 92) {
       _dashboardPreloaderState.target = Math.min(92, _dashboardPreloaderState.target + 0.22);
     }
@@ -3144,9 +3459,24 @@ function startDashboardPreloaderMotion() {
       _dashboardPreloaderState.percent += Math.max(0.18, Math.abs(delta) * 0.14) * Math.sign(delta);
     }
     updateDashboardPreloaderDom();
+    var roundedPercent = Math.round(_dashboardPreloaderState.percent);
+    if (Date.now() - lastMotionLogAt > 1400 || Math.abs(roundedPercent - lastMotionLogPercent) >= 10) {
+      lastMotionLogAt = Date.now();
+      lastMotionLogPercent = roundedPercent;
+      taagerDebugLog("preloader", "motion:tick", {
+        stageId: _dashboardPreloaderState.stageId,
+        percent: _dashboardPreloaderState.percent,
+        target: _dashboardPreloaderState.target,
+        complete: _dashboardPreloaderState.complete
+      });
+    }
     if (_dashboardPreloaderState.complete) {
       clearInterval(_dashboardPreloaderState.motionTimer);
       _dashboardPreloaderState.motionTimer = null;
+      taagerDebugLog("preloader", "motion:stop-complete", {
+        percent: _dashboardPreloaderState.percent,
+        target: _dashboardPreloaderState.target
+      });
     }
   }, 280);
 }
@@ -3154,6 +3484,17 @@ function startDashboardPreloaderMotion() {
 function setDashboardPreloaderStage(stageId, options) {
   const stage = dashboardPreloaderStage(stageId);
   const opts = options || {};
+  taagerDebugLog("preloader", "dashboard-stage", {
+    requestedStageId: stageId,
+    resolvedStageId: stage.id,
+    options: opts,
+    before: {
+      stageId: _dashboardPreloaderState.stageId,
+      percent: _dashboardPreloaderState.percent,
+      target: _dashboardPreloaderState.target,
+      complete: _dashboardPreloaderState.complete
+    }
+  });
   _dashboardPreloaderState.stageId = stage.id;
   _dashboardPreloaderState.complete = false;
   _dashboardPreloaderState.target = Math.max(_dashboardPreloaderState.target, Number(opts.percent || stage.target || 10));
@@ -3164,6 +3505,7 @@ function setDashboardPreloaderStage(stageId, options) {
 
 function completeDashboardPreloader(options) {
   const opts = options || {};
+  taagerDebugLog("preloader", "dashboard-complete", opts);
   if (opts.smooth) return smoothCompleteDashboardPreloader(opts);
   clearDashboardSmoothCompletion();
   applyDashboardPreloaderComplete(opts);
@@ -3173,38 +3515,94 @@ function completeDashboardPreloader(options) {
 window.TaagerPreloader = {
   dashboardStage: setDashboardPreloaderStage,
   dashboardActivity: function (activity, percent) {
+    taagerDebugLog("preloader", "dashboard-activity", { activity, percent });
     if (activity) _dashboardPreloaderState.activity = String(activity);
     if (percent != null) _dashboardPreloaderState.target = Math.max(_dashboardPreloaderState.target, Number(percent) || _dashboardPreloaderState.target);
     updateDashboardPreloaderDom();
     startDashboardPreloaderMotion();
   },
   dashboardRefresh: function (options) {
+    taagerDebugLog("preloader", "dashboard-refresh", options || {});
     if (options && options.smooth) resetDashboardPreloader(options);
     else updateDashboardPreloaderDom();
   },
   dashboardComplete: completeDashboardPreloader
 };
 function dismissPreloaderWhenReady(pageId) {
+  taagerDebugLog("preloader", "dismissWhenReady:check", { pageId, dismissed: _preloaderDismissed });
   if (_preloaderDismissed) return;
 
   if (pageId === "page-dashboard") {
+    const dashboardReady = window._dashboardInitialReady;
+    if (dashboardReady && typeof dashboardReady.then === "function") {
+      taagerDebugLog("preloader", "dismissWhenReady:waiting-dashboard-ready");
+      const watchdog = setTimeout(() => {
+        if (!_preloaderDismissed) {
+          taagerDebugLog("preloader", "dismissWhenReady:dashboard-ready-watchdog", {
+            dashboardPreloaderState: Object.assign({}, _dashboardPreloaderState),
+            hasInitialReady: !!window._dashboardInitialReady
+          }, "warn");
+        }
+      }, 7000);
+      dashboardReady.then((value) => {
+        clearTimeout(watchdog);
+        taagerDebugLog("preloader", "dismissWhenReady:dashboard-ready-resolved", {
+          loaded: !!(value && value._loaded),
+          loading: !!(value && value._loading),
+          version: value && value._version,
+          hasData: !!(value && value.meta && value.meta.hasData)
+        });
+        dismissPreloader();
+      }).catch((err) => {
+        clearTimeout(watchdog);
+        taagerDebugLog("preloader", "dismissWhenReady:dashboard-ready-rejected", {
+          error: err && err.message ? err.message : String(err || "")
+        }, "error");
+        dismissPreloader();
+      });
+      return;
+    }
+    if (!pageLifecycle("page-dashboard").mounted) {
+      taagerDebugLog("preloader", "dismissWhenReady:dashboard-not-mounted-yet");
+      return;
+    }
+    taagerDebugLog("preloader", "dismissWhenReady:dashboard-mounted-no-promise");
     dismissPreloader();
+    return;
+  }
+
+  if (["page-analytics", "page-operations", "page-ai-intelligence"].includes(pageId) && !pageLifecycle(pageId).mounted) {
+    taagerDebugLog("preloader", "dismissWhenReady:feature-not-mounted-yet", { pageId });
     return;
   }
 
   if (pageId === "page-setup") {
     const setupReady = window._setupInitialReady;
     if (setupReady && typeof setupReady.then === "function") {
-      setupReady.then(() => dismissPreloader()).catch(() => dismissPreloader());
+      taagerDebugLog("preloader", "dismissWhenReady:waiting-setup-ready");
+      setupReady.then(() => {
+        taagerDebugLog("preloader", "dismissWhenReady:setup-ready-resolved");
+        dismissPreloader();
+      }).catch((err) => {
+        taagerDebugLog("preloader", "dismissWhenReady:setup-ready-rejected", {
+          error: err && err.message ? err.message : String(err || "")
+        }, "error");
+        dismissPreloader();
+      });
     }
     return;
   }
 
+  taagerDebugLog("preloader", "dismissWhenReady:generic-dismiss", { pageId });
   dismissPreloader();
 }
 
 let _activePageId = null;
 function showPage(id) {
+  taagerDebugLog("route", "showPage:start", {
+    id,
+    activeBefore: Array.from(document.querySelectorAll(".page.active")).map((page) => page.id)
+  });
   perfMark("route:" + id + ":visible");
   TaagerPerf.measure("route:" + id + ":click-to-visible", "route:" + id + ":click", "route:" + id + ":visible", { pageId: id });
   const activePreview = document.querySelector(".premium-preview-overlay");
@@ -3232,16 +3630,33 @@ function showPage(id) {
   }
   // Dismiss preloader once the first page is ready.
   dismissPreloaderWhenReady(id);
+  taagerDebugLog("route", "showPage:end", {
+    id,
+    lifecycle: window.TaagerPageLifecycle && window.TaagerPageLifecycle.snapshot ? window.TaagerPageLifecycle.snapshot()[id] : null
+  });
 }
 
 // ── Periodic license & credentials sync every 60 seconds ──
 let licenseCheckInterval = null;
+let licenseCheckInFlight = false;
+let licenseCheckTick = 0;
 function startPeriodicLicenseCheck() {
   if (licenseCheckInterval) clearInterval(licenseCheckInterval);
   licenseCheckInterval = setInterval(async () => {
     if (window.isExpiredOverlayVisible && window.isExpiredOverlayVisible()) return;
     // Skip sync if the bot is currently running to prevent UI updates mid-run
     if (window._botIsRunning) return;
+    if (licenseCheckInFlight) {
+      taagerDebugLog("periodic-sync", "tick:skip-overlap", { tick: licenseCheckTick });
+      return;
+    }
+
+    licenseCheckInFlight = true;
+    const tick = ++licenseCheckTick;
+    const tickStartedAt = Date.now();
+    let topbarUpdated = false;
+    let pageRerendered = false;
+    taagerDebugLog("periodic-sync", "tick:start", { tick });
 
     try {
       // Use checkLicenseNocache to bypass cache and query fresh database state
@@ -3261,14 +3676,27 @@ function startPeriodicLicenseCheck() {
         return;
       }
 
-      // Sync user metadata
+      // Sync user metadata, but do not touch the DOM when the values are
+      // identical. Reassigning the same top-bar text causes a visible paint on
+      // some Windows/Electron renderers even though no data changed.
+      const previousUser = window._kbotUser || {};
+      const nextCustomerName = lr.customerName || previousUser.customerName || null;
+      const nextDaysLeft = lr.daysLeft;
+      const nextLicenseKey = lr.key || previousUser.licenseKey || "";
+      const userMetadataChanged =
+        previousUser.customerName !== nextCustomerName ||
+        previousUser.daysLeft !== nextDaysLeft ||
+        previousUser.licenseKey !== nextLicenseKey;
       window._kbotUser = {
-        ...(window._kbotUser || {}),
-        customerName: lr.customerName || (window._kbotUser || {}).customerName || null,
-        daysLeft:     lr.daysLeft,
-        licenseKey:   lr.key || (window._kbotUser || {}).licenseKey || "",
+        ...previousUser,
+        customerName: nextCustomerName,
+        daysLeft:     nextDaysLeft,
+        licenseKey:   nextLicenseKey,
       };
-      updateTopBarText();
+      if (userMetadataChanged) {
+        updateTopBarText();
+        topbarUpdated = true;
+      }
       handleAdminNotification(lr.adminNotification);
 
       // Fetch fresh accounts & features state
@@ -3290,6 +3718,15 @@ function startPeriodicLicenseCheck() {
         window._dashboardEnabled !== (creds.dashboardEnabled === true) ||
         window._teamLeaderEnabled !== (creds.teamLeaderEnabled === true);
 
+      taagerDebugLog("periodic-sync", "tick:diff", {
+        tick,
+        userMetadataChanged,
+        maxAccountsChanged,
+        accountsCountChanged,
+        locksChanged,
+        featureFlagsChanged
+      });
+
       if (maxAccountsChanged || accountsCountChanged || locksChanged || featureFlagsChanged) {
         window._maxAccounts = creds.maxAccounts || 1;
         window._kbotAccounts = creds.accounts || [];
@@ -3305,34 +3742,50 @@ function startPeriodicLicenseCheck() {
         invalidatePage("page-operations", "periodic-sync");
 
         updateTopBarText();
+        topbarUpdated = true;
         const activeId = document.querySelector(".page.active")?.id;
         if (window._teamLeaderEnabled && ["page-run", "page-results", "page-analytics", "page-operations"].includes(activeId)) {
           goToDashboard();
         } else {
           reRenderCurrentPage();
         }
+        pageRerendered = true;
       }
     } catch (err) {
       console.warn("[PeriodicSync] Background sync failed:", err?.message || err);
+      taagerDebugLog("periodic-sync", "tick:error", {
+        tick,
+        error: err?.message || String(err || "")
+      }, "warn");
+    } finally {
+      licenseCheckInFlight = false;
+      taagerDebugLog("periodic-sync", "tick:complete", {
+        tick,
+        elapsedMs: Date.now() - tickStartedAt,
+        topbarUpdated,
+        pageRerendered
+      });
     }
   }, 60 * 1000); // 60 seconds (1 minute)
 }
 
 function _triggerExpiredOverlay(reason) {
-  try { window.api.killBot(); } catch (_) {}
+  try { Promise.resolve(window.api.killBot()).catch(() => {}); } catch (_) {}
   if (window.hideLicenseExpiryWarning) window.hideLicenseExpiryWarning();
   const licKey = (window._kbotUser || {}).licenseKey || '';
   window.showExpiredOverlay({
     licenseKey: licKey,
+    customerName: (window._kbotUser || {}).customerName || '',
     reason:     reason || '',
     onResume: (freshResult) => {
-      if (freshResult && freshResult.daysLeft != null) {
+      if (freshResult) {
         window._kbotUser = {
           ...(window._kbotUser || {}),
-          daysLeft:     freshResult.daysLeft,
+          daysLeft:     freshResult.daysLeft ?? null,
           customerName: freshResult.customerName || (window._kbotUser || {}).customerName,
           licenseKey:   freshResult.key || (window._kbotUser || {}).licenseKey || '',
         };
+        window._kbotAllowReset = freshResult.allowReset === true;
         updateTopBarText();
       }
       handleAdminNotification(freshResult && freshResult.adminNotification);
@@ -3343,16 +3796,28 @@ function _triggerExpiredOverlay(reason) {
 
 function shouldReturnToLicensePage(result) {
   const reason = String((result && result.reason) || "").toLowerCase();
+  const hasKnownKey = !!(((window._kbotUser || {}).licenseKey) || (result && result.key));
   return !result || (!result.valid && (
-    !((window._kbotUser || {}).licenseKey) ||
+    !hasKnownKey ||
     reason.includes("not found") ||
     reason.includes("no license key")
   ));
 }
 
+function rememberInvalidLicenseContext(result) {
+  result = result || {};
+  window._kbotUser = {
+    ...(window._kbotUser || {}),
+    customerName: result.customerName || (window._kbotUser || {}).customerName || null,
+    daysLeft: null,
+    licenseKey: result.key || (window._kbotUser || {}).licenseKey || "",
+  };
+  updateTopBarText();
+}
+
 function returnToLicensePage() {
   clearInterval(licenseCheckInterval);
-  try { window.api.killBot(); } catch (_) {}
+  try { Promise.resolve(window.api.killBot()).catch(() => {}); } catch (_) {}
   if (window.hideExpiredOverlay) window.hideExpiredOverlay();
   window._kbotUser = {
     ...(window._kbotUser || {}),
@@ -3404,12 +3869,15 @@ async function runAutoRunTick(dateFrom, dateTo) {
 // What it refreshes:
 //   1. License validity, expiry, max_accounts (busts the 60-second cache)
 //   2. Per-account unlock status from license_accounts table (busts 15-second cred cache)
-//   3. Reloads the renderer and restores the current page/section
+//   3. Refreshes the current page in place without recreating the startup preloader
 async function adminRefresh() {
   const btn = document.getElementById("btn-admin-refresh");
   if (!btn || btn.classList.contains("refreshing")) return;
 
   btn.classList.add("refreshing");
+  taagerDebugLog("admin-sync", "start", {
+    activePage: document.querySelector(".page.active")?.id || null
+  });
 
   try {
     // 1. Re-check license (nocache = busts the 60-second in-memory cache)
@@ -3456,15 +3924,26 @@ async function adminRefresh() {
     // 4. Refresh topbar text (expiry days, accounts badge)
     updateTopBarText();
 
-    // 5. Hard-refresh the renderer, matching Ctrl+R, while restoring the current route.
-    //    — setup page picks up new unlock state, new account slots, etc.
-    reloadAppPreservingRoute("admin-refresh");
+    // 5. Refresh the active route once, in place. A full renderer reload recreates
+    //    index.html and its startup preloader, making one Sync click look like
+    //    several separate refreshes.
+    const activePage = document.querySelector(".page.active");
+    const activePageId = activePage && activePage.id;
+    taagerDebugLog("admin-sync", "refresh-route", { activePageId });
+    if (activePageId === "page-dashboard" ||
+        (window._teamLeaderEnabled && ["page-run", "page-results", "page-analytics", "page-operations"].includes(activePageId))) {
+      await goToDashboard();
+    } else {
+      await reRenderCurrentPage();
+    }
   } catch (err) {
     console.warn("[AdminRefresh] Sync failed:", err?.message || err);
     if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(err, { operation: "adminRefresh" });
   } finally {
-    // Let the spin animation finish before re-enabling
-    setTimeout(() => btn.classList.remove("refreshing"), 700);
+    btn.classList.remove("refreshing");
+    taagerDebugLog("admin-sync", "complete", {
+      activePage: document.querySelector(".page.active")?.id || null
+    });
   }
 }
 
@@ -3524,8 +4003,7 @@ async function init() {
   });
   document.getElementById("toggle-lang").addEventListener("change", (e) => {
     const next = e.target.checked ? "ar" : "en";
-    applyLang(next);
-    reRenderCurrentPage();
+    applyLang(next, { deferWork: true });
     // Persist in background — don't await so UI is never blocked
     window.api.saveSettings({ lang: next }).catch(() => {});
   });
@@ -3538,6 +4016,13 @@ async function init() {
   }
 
   if (!licenseResult.valid) {
+    if (!shouldReturnToLicensePage(licenseResult)) {
+      rememberInvalidLicenseContext(licenseResult);
+      renderLicense(() => afterLicense());
+      showPage("page-license");
+      _triggerExpiredOverlay(licenseResult.reason || "");
+      return;
+    }
     renderLicense(() => afterLicense());
     showPage("page-license");
     return;
@@ -3567,7 +4052,7 @@ async function init() {
   window.api.removeAllListeners("force-flush");
   window.api.on("force-flush", () => {
     clearInterval(licenseCheckInterval);
-    try { window.api.killBot(); } catch (_) {}
+    try { Promise.resolve(window.api.killBot()).catch(() => {}); } catch (_) {}
     if (window.hideExpiredOverlay) window.hideExpiredOverlay();
     afterLicense(true);
   });
@@ -3605,7 +4090,12 @@ async function refreshStartupStateFromServer() {
     ]);
     if (!freshLicense || !freshLicense.valid) {
       clearInterval(licenseCheckInterval);
-      _triggerExpiredOverlay();
+      if (shouldReturnToLicensePage(freshLicense)) {
+        returnToLicensePage();
+        return;
+      }
+      rememberInvalidLicenseContext(freshLicense);
+      _triggerExpiredOverlay(freshLicense.reason || "");
       return;
     }
     window._kbotUser = {
@@ -3641,7 +4131,7 @@ async function afterLicense(isFlush = false) {
   window.api.removeAllListeners("force-flush");
   window.api.on("force-flush", () => {
     clearInterval(licenseCheckInterval);
-    try { window.api.killBot(); } catch (_) {}
+    try { Promise.resolve(window.api.killBot()).catch(() => {}); } catch (_) {}
     if (window.hideExpiredOverlay) window.hideExpiredOverlay();
     afterLicense(true);
   });
@@ -3726,8 +4216,8 @@ async function _saveAnalyticsFromResult(data, selectedAccountIds) {
     const accountId = result?.accountId || fallbackId || "__single__";
     const account = accounts.find(a => a.id === accountId) || null;
     const label = result?.accountLabel || result?._accountLabel || result?.accountEmail || "";
-    const email = account?.easyEmail || result?.accountEmail || (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(label) ? label : "");
-    const friendlyLabel = account?.label || account?.easyStore || account?.storeName || account?.name || label || email || "";
+    const email = account?.lightfunnelsEmail || account?.easyEmail || result?.accountEmail || (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(label) ? label : "");
+    const friendlyLabel = account?.memberName || account?.lightfunnelsAccountName || account?.label || account?.easyStore || account?.storeName || account?.name || label || email || "";
     return {
       accountId,
       accountEmail: email || label || "",
@@ -3842,9 +4332,9 @@ function _renderLockedPage(pageId, featureNameEn, featureNameAr) {
       height:100%; min-height:400px; gap:16px; padding:40px;
       color:var(--text2); text-align:center;
     ">
-      <div style="font-size:48px; opacity:.4">🔒</div>
-      <div style="font-size:18px; font-weight:700; color:var(--text)">${title}</div>
-      <div style="font-size:14px; max-width:360px; line-height:1.6">${sub}</div>
+      <div style="font-size:var(--type-hero-lg); opacity:.4">🔒</div>
+      <div style="font-size:var(--type-section-title); font-weight:var(--weight-bold); color:var(--text)">${title}</div>
+      <div style="font-size:var(--type-body); max-width:360px; line-height:1.6">${sub}</div>
       <button class="btn btn-primary" id="${pageId}-support-btn" type="button">${supportLabel}</button>
     </div>`;
   document.getElementById(`${pageId}-support-btn`)?.addEventListener("click", () => {
@@ -3863,24 +4353,27 @@ async function goToAnalytics() {
     showPage("page-analytics");
     return;
   }
-  showFeatureLoadingPage(
-    "page-analytics",
-    window._t ? window._t("topbar.analytics") : "Analytics",
-    "Loading analytics..."
-  );
-  showPage("page-analytics");
   try {
     await ensureFeatureScripts("analytics");
-    if (!isLatestFeatureRoute("analytics", token) || !isActivePage("page-analytics")) return;
+    if (!isLatestFeatureRoute("analytics", token)) return;
+    let renderResult = null;
     if (typeof renderAnalytics === "function") {
-      await renderAnalytics(() => goToSetup("run"));
+      // renderAnalytics mounts its page-shaped skeleton synchronously before
+      // its first await. Show that real skeleton instead of a global curtain.
+      renderResult = renderAnalytics(() => goToSetup("run"));
     }
+    if (isLatestFeatureRoute("analytics", token)) showPage("page-analytics");
+    if (renderResult && typeof renderResult.then === "function") await renderResult;
+    if (!isLatestFeatureRoute("analytics", token)) return;
     markPageMounted("page-analytics");
     perfMark("route:page-analytics:data-ready");
     if (isLatestFeatureRoute("analytics", token) && isActivePage("page-analytics")) showPage("page-analytics");
   } catch (err) {
     if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(err, { operation: "analytics.render" });
-    if (isLatestFeatureRoute("analytics", token) && isActivePage("page-analytics")) showFeatureError("page-analytics", "Analytics failed to load", err);
+    if (isLatestFeatureRoute("analytics", token)) {
+      showPage("page-analytics");
+      showFeatureError("page-analytics", "Analytics failed to load", err);
+    }
   }
 }
 
@@ -3895,24 +4388,27 @@ async function goToOperations() {
     showPage("page-operations");
     return;
   }
-  showFeatureLoadingPage(
-    "page-operations",
-    window._t ? window._t("topbar.operations") : "Operations",
-    "Loading operations..."
-  );
-  showPage("page-operations");
   try {
     await ensureFeatureScripts("operations");
-    if (!isLatestFeatureRoute("operations", token) || !isActivePage("page-operations")) return;
+    if (!isLatestFeatureRoute("operations", token)) return;
+    let renderResult = null;
     if (typeof renderOperations === "function") {
-      await renderOperations(() => goToSetup("run"));
+      // renderOperations also mounts its own page-shaped skeleton before
+      // loading data; activate it immediately and keep navigation responsive.
+      renderResult = renderOperations(() => goToSetup("run"));
     }
+    if (isLatestFeatureRoute("operations", token)) showPage("page-operations");
+    if (renderResult && typeof renderResult.then === "function") await renderResult;
+    if (!isLatestFeatureRoute("operations", token)) return;
     markPageMounted("page-operations");
     perfMark("route:page-operations:data-ready");
     if (isLatestFeatureRoute("operations", token) && isActivePage("page-operations")) showPage("page-operations");
   } catch (err) {
     if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(err, { operation: "operations.render" });
-    if (isLatestFeatureRoute("operations", token) && isActivePage("page-operations")) showFeatureError("page-operations", "Operations failed to load", err);
+    if (isLatestFeatureRoute("operations", token)) {
+      showPage("page-operations");
+      showFeatureError("page-operations", "Operations failed to load", err);
+    }
   }
 }
 
@@ -3920,61 +4416,119 @@ async function goToDashboard() {
   const token = nextFeatureRouteToken("dashboard");
   perfMark("route:page-dashboard:click");
   const dashboardState = pageLifecycle("page-dashboard");
+  taagerDebugLog("dashboard-route", "goToDashboard:start", {
+    token,
+    mounted: dashboardState.mounted,
+    invalid: dashboardState.invalid,
+    hasInitialReady: !!window._dashboardInitialReady
+  });
   if (dashboardState.mounted) {
+    taagerDebugLog("dashboard-route", "already-mounted:show", {
+      invalid: dashboardState.invalid
+    });
     showPage("page-dashboard");
     if (!dashboardState.invalid) {
       if (typeof window.syncDashboardMarketingOnOpen === "function") {
+        taagerDebugLog("dashboard-route", "already-mounted:sync-start");
         const syncResult = window.syncDashboardMarketingOnOpen();
         if (syncResult && typeof syncResult.then === "function") {
           syncResult.then(() => {
+            taagerDebugLog("dashboard-route", "already-mounted:sync-resolved");
             perfMark("route:page-dashboard:data-ready");
             TaagerPerf.measure("route:page-dashboard:click-to-data-ready", "route:page-dashboard:click", "route:page-dashboard:data-ready", { pageId: "page-dashboard", remount: false });
           }).catch((err) => {
+            taagerDebugLog("dashboard-route", "already-mounted:sync-rejected", {
+              error: err && err.message ? err.message : String(err || "")
+            }, "error");
             if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(err, { operation: "dashboard.reopenMarketingSync" });
           });
         }
       }
       if (window.prewarmDashboardSections) window.prewarmDashboardSections();
+      taagerDebugLog("dashboard-route", "already-mounted:return");
       return;
     }
   }
-  if (!dashboardState.mounted) {
-    showFeatureLoadingPage(
-      "page-dashboard",
-      window._t ? window._t("topbar.dashboard") : "Dashboard",
-      "Loading dashboard..."
-    );
-    showPage("page-dashboard");
-  }
+  // Dashboard owns a richer progress preloader inside its shell. Showing the
+  // generic feature loader or route curtain here creates a visible two-loader
+  // handoff during cold starts and invalidated-dashboard refreshes.
+  taagerDebugLog("dashboard-route", "use-dashboard-preloader", {
+    mounted: dashboardState.mounted,
+    invalid: dashboardState.invalid
+  });
+  const dashboardStabilizationLock = beginUiStabilization("dashboard-route");
+  const releaseDashboardStabilization = () => {
+    taagerDebugLog("dashboard-route", "release-stabilization:scheduled");
+    waitForStableUi({ quietMs: 160, maxWaitMs: 1200 })
+      .catch(() => {})
+      .then(() => {
+        taagerDebugLog("dashboard-route", "release-stabilization:now");
+        endUiStabilization(dashboardStabilizationLock);
+      });
+  };
   try {
+    taagerDebugLog("dashboard-route", "ensure-dashboard:start");
     setDashboardPreloaderStage("engine", { activity: "Loading dashboard engine" });
     await ensureFeatureScripts("dashboard");
+    taagerDebugLog("dashboard-route", "ensure-dashboard:done");
+    const dashboardMount = document.getElementById("db-shell-mount");
+    const initialDashboardSection = (dashboardMount && dashboardMount._dashboardActiveSection) || window._dashboardInitialSection || "master";
+    taagerDebugLog("dashboard-route", "ensure-section:start", { initialDashboardSection });
+    await window.ensureDashboardSection(initialDashboardSection);
+    taagerDebugLog("dashboard-route", "ensure-section:done", { initialDashboardSection });
     setDashboardPreloaderStage("snapshot", { activity: "Dashboard engine loaded" });
-    if (!isLatestFeatureRoute("dashboard", token) || !isActivePage("page-dashboard")) return;
+    if (!isLatestFeatureRoute("dashboard", token)) {
+      taagerDebugLog("dashboard-route", "stale-route-token:return", { token });
+      releaseDashboardStabilization();
+      return;
+    }
     let renderResult = null;
     if (typeof renderDashboard === "function") {
+      taagerDebugLog("dashboard-route", "renderDashboard:call");
       renderResult = renderDashboard(() => goToSetup("run"));
+      taagerDebugLog("dashboard-route", "renderDashboard:returned", {
+        isPromise: !!(renderResult && typeof renderResult.then === "function")
+      });
     }
     markPageMounted("page-dashboard");
+    taagerDebugLog("dashboard-route", "mark-mounted");
     if (window.prewarmDashboardSections) window.prewarmDashboardSections();
-    if (isLatestFeatureRoute("dashboard", token) && isActivePage("page-dashboard")) showPage("page-dashboard");
+    // renderDashboard() mounts the real dashboard progress preloader
+    // synchronously before returning. Activate it now even when navigation
+    // started from Setup or another page; requiring it to already be active
+    // left the first dashboard click mounted offscreen.
+    if (isLatestFeatureRoute("dashboard", token)) showPage("page-dashboard");
     const finishReady = () => {
+      taagerDebugLog("dashboard-route", "initial-ready:finish");
       perfMark("route:page-dashboard:data-ready");
       TaagerPerf.measure("route:page-dashboard:click-to-data-ready", "route:page-dashboard:click", "route:page-dashboard:data-ready", { pageId: "page-dashboard" });
     };
     if (renderResult && typeof renderResult.then === "function") {
       renderResult.then(finishReady).catch((err) => {
+        taagerDebugLog("dashboard-route", "initial-ready:rejected", {
+          error: err && err.message ? err.message : String(err || "")
+        }, "error");
         if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(err, { operation: "dashboard.initialReady" });
         if (isLatestFeatureRoute("dashboard", token) && isActivePage("page-dashboard")) {
           console.warn("[Dashboard] Initial data readiness failed:", err?.message || err);
         }
       });
+      renderResult.then(releaseDashboardStabilization, releaseDashboardStabilization);
     } else {
       finishReady();
+      releaseDashboardStabilization();
     }
   } catch (err) {
+    taagerDebugLog("dashboard-route", "goToDashboard:error", {
+      error: err && err.message ? err.message : String(err || ""),
+      stack: err && err.stack ? err.stack : ""
+    }, "error");
+    releaseDashboardStabilization();
     if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(err, { operation: "dashboard.render" });
-    if (isLatestFeatureRoute("dashboard", token) && isActivePage("page-dashboard")) showFeatureError("page-dashboard", "Dashboard failed to load", err);
+    if (isLatestFeatureRoute("dashboard", token)) {
+      showPage("page-dashboard");
+      showFeatureError("page-dashboard", "Dashboard failed to load", err);
+    }
   }
 }
 
@@ -3987,21 +4541,28 @@ async function goToAiIntelligence() {
   const token = nextFeatureRouteToken("ai-intelligence");
   perfMark("route:page-ai-intelligence:click");
   showFeatureLoadingPage("page-ai-intelligence", "Taager AI", "Loading AI intelligence...");
-  showPage("page-ai-intelligence");
+  const curtainToken = showRouteCurtain("Taager AI", "Loading AI intelligence...");
   try {
     await ensureFeatureScripts("dashboard");
     await ensureFeatureScripts("dashboardAi");
     await ensureFeatureScripts("ai");
-    if (!isLatestFeatureRoute("ai-intelligence", token) || !isActivePage("page-ai-intelligence")) return;
+    if (!isLatestFeatureRoute("ai-intelligence", token)) return;
+    showPage("page-ai-intelligence");
     if (typeof renderAiIntelligence === "function") {
       await renderAiIntelligence(() => goToSetup("run"));
     }
+    markPageMounted("page-ai-intelligence");
     perfMark("route:page-ai-intelligence:data-ready");
     TaagerPerf.measure("route:page-ai-intelligence:click-to-data-ready", "route:page-ai-intelligence:click", "route:page-ai-intelligence:data-ready", { pageId: "page-ai-intelligence" });
     if (isLatestFeatureRoute("ai-intelligence", token) && isActivePage("page-ai-intelligence")) showPage("page-ai-intelligence");
+    hideRouteCurtainWhenStable(curtainToken);
   } catch (err) {
     if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(err, { operation: "aiIntelligence.render" });
-    if (isLatestFeatureRoute("ai-intelligence", token) && isActivePage("page-ai-intelligence")) showFeatureError("page-ai-intelligence", "Taager AI failed to load", err);
+    if (isLatestFeatureRoute("ai-intelligence", token)) {
+      showPage("page-ai-intelligence");
+      showFeatureError("page-ai-intelligence", "Taager AI failed to load", err);
+      hideRouteCurtainWhenStable(curtainToken);
+    }
   }
 }
 
@@ -4108,7 +4669,7 @@ function _setDashboardFetchUi(state) {
       <div>
         <strong>${TaagerUI.esc(state.title || TaagerUI.t("dashboard.fetching_title", "Updating dashboard..."))}</strong>
         <span>${TaagerUI.esc(state.body || TaagerUI.t("dashboard.fetching_body", "Fetching orders, refreshing product data, and matching ad spend across accounts. This can take a few minutes; keep the app open."))}</span>
-        ${detail ? `<span style="display:block;margin-top:6px;color:var(--text3);font-size:12px;direction:ltr;text-align:left;unicode-bidi:plaintext;">${TaagerUI.esc(detail)}</span>` : ""}
+        ${detail ? `<span style="display:block;margin-top:6px;color:var(--text3);font-size:var(--type-label);direction:ltr;text-align:left;unicode-bidi:plaintext;">${TaagerUI.esc(detail)}</span>` : ""}
       </div>
     `;
     return;
@@ -4190,7 +4751,7 @@ async function _runDashboardUpdate(selectedAccountIds, period, options) {
   }
   const accountLabels = new Map((window._kbotAccounts || window.dashboardAccountsList || []).map((acc) => [
     acc.id || acc.value,
-    acc.memberName || acc.easyEmail || acc.email || acc.taagerEmail || acc.easyStore || acc.storeName || acc.label || acc.name || acc.id || acc.value
+    acc.memberName || acc.lightfunnelsAccountName || acc.easyStore || acc.storeName || acc.label || acc.name || acc.lightfunnelsEmail || acc.easyEmail || acc.email || acc.taagerEmail || acc.id || acc.value
   ]));
   window._dashboardFetchLastChildLog = "";
   let dashboardFetchLastActivityAt = Date.now();
@@ -4449,7 +5010,7 @@ async function _onUpdateUploadedOrdersForAnalytics(options) {
 
   const accountLabels = new Map((window._kbotAccounts || window.dashboardAccountsList || []).map((acc) => [
     acc.id || acc.value,
-    acc.memberName || acc.easyEmail || acc.email || acc.taagerEmail || acc.easyStore || acc.storeName || acc.label || acc.name || acc.id || acc.value
+    acc.memberName || acc.lightfunnelsAccountName || acc.easyStore || acc.storeName || acc.label || acc.name || acc.lightfunnelsEmail || acc.easyEmail || acc.email || acc.taagerEmail || acc.id || acc.value
   ]));
   window._dashboardFetchLastChildLog = "";
 
@@ -4620,10 +5181,19 @@ async function reRenderCurrentPage() {
     // Re-render license page in place so labels switch language
     if (typeof window._renderLicenseInPlace === "function") window._renderLicenseInPlace();
   } else if (id === "page-dashboard") {
-    invalidatePage("page-dashboard", "language");
-    await ensureFeatureScripts("dashboard");
-    if (typeof renderDashboard === "function") await renderDashboard();
-    markPageMounted("page-dashboard");
+    // Language changes do not alter dashboard data. Reuse the current snapshot
+    // and rebuild only the cached UI panes instead of restarting aggregation.
+    const shellMount = document.getElementById("db-shell-mount");
+    if (shellMount && shellMount._dashboardCurrentData && typeof window.refreshDashboardShell === "function") {
+      shellMount._dashboardPaneDataVersion = null;
+      shellMount._dashboardPaneScopeKey = null;
+      window.refreshDashboardShell(shellMount, shellMount._dashboardCurrentData);
+      markPageMounted("page-dashboard");
+    } else {
+      await ensureFeatureScripts("dashboard");
+      if (typeof renderDashboard === "function") await renderDashboard();
+      markPageMounted("page-dashboard");
+    }
   } else if (id === "page-ai-intelligence") {
     await ensureFeatureScripts("dashboard");
     if (typeof renderAiIntelligence === "function") await renderAiIntelligence();

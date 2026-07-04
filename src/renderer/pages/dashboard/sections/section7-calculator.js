@@ -52,7 +52,15 @@ window.renderSection7 = function (mountEl, data, ctx) {
   var observer = new MutationObserver(function (mutations) {
     mutations.forEach(function (mutation) {
       if (mutation.attributeName === "data-theme") {
-        window.renderSection7(mountEl, data, ctx);
+        if (!mountEl.isConnected || mountEl.hidden) {
+          mountEl._dashboardNeedsRefresh = true;
+          return;
+        }
+        var refresh = function () {
+          if (mountEl.isConnected && !mountEl.hidden) window.renderSection7(mountEl, data, ctx);
+        };
+        if (window.TaagerAfterNextPaint) window.TaagerAfterNextPaint(refresh);
+        else setTimeout(refresh, 0);
       }
     });
   });
@@ -345,40 +353,31 @@ window.renderSection7 = function (mountEl, data, ctx) {
     }
     return choice;
   }
-  function orderNdrSelectorHtml() {
-    var choices = orderNdrChoices();
-    if (choices.length <= 1) return "";
-    var active = activeOrderNdrChoice();
-    return '<div class="s7-order-ndr-box">' +
-      '<label for="s7-order-ndr-source">' + s7Txt("Simulator NDR assumption", "\u0627\u0641\u062a\u0631\u0627\u0636 NDR") + '</label>' +
-      '<select id="s7-order-ndr-source">' +
-      choices.map(function (choice) {
-        var label = choice.label + " - " + s7PctValue(choice.ndrPct) + "%" +
-          (choice.key !== "overall" ? " (" + s7Num(choice.netOrders) + ")" : "") +
-          (choice.lowSample ? " - " + s7Txt("Low sample", "\u0639\u064a\u0646\u0629 \u0642\u0644\u064a\u0644\u0629") : "");
-        return '<option value="' + s7Esc(choice.key) + '"' + (choice.key === active.key ? " selected" : "") + '>' + s7Esc(label) + '</option>';
-      }).join("") +
-      '</select>' +
-      '<p id="s7-order-ndr-note">' + s7Esc(s7Txt("Using ", "\u064a\u062a\u0645 \u0627\u0633\u062a\u062e\u062f\u0627\u0645 ") + active.label + " NDR: " + s7PctValue(active.ndrPct) + "%") + '</p>' +
-    '</div>';
-  }
   function bestNdrCycleCardHtml() {
     var choice = bestCycleChoice();
     if (!choice || !choice.bestCycle) return "";
     var best = choice.bestCycle;
     var avg = bestNdrCycleResult.average || {};
     var uplift = Math.round(Number(best.upliftPts || 0) * 10) / 10;
+    var upliftLabel = avg.ndrPct != null
+      ? ((uplift > 0 ? "+" : "") + uplift + " " + s7Txt("pts vs avg", "pts vs avg"))
+      : "";
     return '<div class="s7-best-ndr-cycle-card">' +
       '<div class="s7-best-ndr-cycle-copy">' +
-        '<span>' + s7Txt("Best trustworthy NDR cycle", "Best trustworthy NDR cycle") + '</span>' +
-        '<strong>' + s7Esc(bestCycleRangeLabel(best)) + ' - ' + s7PctValue(best.ndrPct) + '%</strong>' +
-        '<em>' + s7Num(best.delivered) + ' ' + s7Txt("delivered", "delivered") + ' / ' + s7Num(best.netOrders) + ' ' + s7Txt("net orders", "net orders") +
-          ' - ' + (uplift > 0 ? '+' : '') + uplift + ' ' + s7Txt("percentage points vs whole-period NDR", "percentage points vs whole-period NDR") +
-          (avg.ndrPct != null ? ' (' + s7PctValue(avg.ndrPct) + '%)' : '') + '</em>' +
+        '<span class="s7-best-ndr-cycle-eyebrow">' + s7Txt("Best trustworthy cycle", "Best trustworthy cycle") + '</span>' +
+        '<div class="s7-best-ndr-cycle-summary">' +
+          '<strong>' + s7PctValue(best.ndrPct) + '% NDR</strong>' +
+          '<em>' + s7Esc(bestCycleRangeLabel(best)) + '</em>' +
+        '</div>' +
+        '<div class="s7-best-ndr-cycle-meta">' +
+          '<span><b>' + s7Num(best.delivered) + '</b> ' + s7Txt("delivered", "delivered") + '</span>' +
+          '<span><b>' + s7Num(best.netOrders) + '</b> ' + s7Txt("net orders", "net orders") + '</span>' +
+          (upliftLabel ? '<span class="s7-best-ndr-cycle-uplift">' + s7Esc(upliftLabel) + '</span>' : '') +
+        '</div>' +
       '</div>' +
       '<div class="s7-best-ndr-cycle-actions">' +
-        '<button type="button" id="s7-use-best-ndr-cycle">' + s7Txt("Use in simulator", "Use in simulator") + '</button>' +
-        '<button type="button" id="s7-use-actual-ndr-cycle">' + s7Txt("Use actual NDR", "Use actual NDR") + '</button>' +
+        '<button type="button" class="s7-best-ndr-cycle-primary" id="s7-use-best-ndr-cycle">' + s7Txt("Use best", "Use best") + '</button>' +
+        '<button type="button" id="s7-use-actual-ndr-cycle">' + s7Txt("Reset", "Reset") + '</button>' +
       '</div>' +
     '</div>';
   }
@@ -405,7 +404,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       return '<div class="' + className + ' ' +
         (currentCurrency === currency ? activeClass : "") +
         '" ' + dataAttr + '="' + currency + '">' +
-        '<span style="font-size:9px;font-weight:700;letter-spacing:.04em;opacity:.75">' + currencyBadgeCode(currency) + '</span>' +
+        '<span style="font-size:var(--type-micro);font-weight:var(--weight-semibold);letter-spacing:.04em;opacity:.75">' + currencyBadgeCode(currency) + '</span>' +
         '<span>' + currency + '</span>' +
       '</div>';
     }).join("");
@@ -887,7 +886,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "s7-currency-badge " + cls + " s7-currency-badge-animate";
       existingBadge.dataset.curr = currency;
       existingBadge.innerHTML =
-        '<span style="font-size:8.5px;font-weight:800;letter-spacing:.02em;opacity:.75;margin-left:4px">' +
+        '<span style="font-size:var(--type-micro);font-weight:var(--weight-semibold);letter-spacing:.02em;opacity:.75;margin-left:4px">' +
         label +
         "</span><span>" +
         currency +
@@ -903,7 +902,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         ' s7-currency-badge-animate" data-curr="' +
         currency +
         '">' +
-        '<span style="font-size:8.5px;font-weight:800;letter-spacing:.02em;opacity:.75;margin-left:4px">' +
+        '<span style="font-size:var(--type-micro);font-weight:var(--weight-semibold);letter-spacing:.02em;opacity:.75;margin-left:4px">' +
         label +
         "</span><span>" +
         currency +
@@ -1193,7 +1192,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
           lbl.anchor +
           '" dominant-baseline="middle" fill="' +
           labelFill +
-          '" font-size="11" font-weight="700" font-family="Cairo,sans-serif" direction="ltr">' +
+          '" font-size="11" font-weight="700" font-family="Inter, IBM Plex Sans Arabic, sans-serif" direction="ltr">' +
           lbl.text +
           "</text>"
         );
@@ -1240,7 +1239,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (cy + 25) +
       '" text-anchor="middle" fill="' +
       roiColor +
-      '" font-size="42" font-weight="900" font-family="Cairo,sans-serif" direction="ltr">' +
+      '" font-size="42" font-weight="700" font-family="Inter, IBM Plex Sans Arabic, sans-serif" direction="ltr">' +
       formattedRoi +
       "</text>" +
       '<text x="' +
@@ -1249,7 +1248,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (cy + 62) +
       '" text-anchor="middle" fill="' +
       roiColor +
-      '" font-size="13" font-weight="800" font-family="Cairo,sans-serif">' +
+      '" font-size="13" font-weight="700" font-family="Inter, IBM Plex Sans Arabic, sans-serif">' +
       (roi < 0
         ? s7Txt("Losing", "خاسر")
         : roi < 50
@@ -1372,8 +1371,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
               window.dashboardI18n && window.dashboardI18n.isRtl()
                 ? "rtl"
                 : "ltr",
-            titleFont: { family: "Cairo" },
-            bodyFont: { family: "Cairo" },
+            titleFont: { family: "Inter, 'IBM Plex Sans Arabic', sans-serif" },
+            bodyFont: { family: "Inter, 'IBM Plex Sans Arabic', sans-serif" },
             callbacks: {
               title: function (items) {
                 var idx = items && items.length ? items[0].dataIndex : 0;
@@ -1395,9 +1394,9 @@ window.renderSection7 = function (mountEl, data, ctx) {
               display: true,
               text: s7Txt("Budget multiplier vs current spend", "مضاعف الميزانية مقابل الإنفاق الحالي"),
               color: theme.muted,
-              font: { size: 11, family: "Cairo", weight: "700" },
+              font: { size: 11, family: "Inter, 'IBM Plex Sans Arabic', sans-serif", weight: "700" },
             },
-            ticks: { color: theme.label, font: { size: 10, family: "Cairo", weight: "700" } },
+            ticks: { color: theme.label, font: { size: 10, family: "Inter, 'IBM Plex Sans Arabic', sans-serif", weight: "700" } },
           },
           yNet: {
             position: "left",
@@ -1406,11 +1405,11 @@ window.renderSection7 = function (mountEl, data, ctx) {
               display: true,
               text: s7Txt("Net result", "صافي النتيجة"),
               color: netColor,
-              font: { size: 11, family: "Cairo", weight: "700" },
+              font: { size: 11, family: "Inter, 'IBM Plex Sans Arabic', sans-serif", weight: "700" },
             },
             ticks: {
               color: netColor,
-              font: { size: 10, family: "Cairo" },
+              font: { size: 10, family: "Inter, 'IBM Plex Sans Arabic', sans-serif" },
               callback: function (value) {
                 return fmt(Number(value) || 0, 0);
               },
@@ -1423,11 +1422,11 @@ window.renderSection7 = function (mountEl, data, ctx) {
               display: true,
               text: s7Txt("Orders", "الطلبات"),
               color: "#3b82f6",
-              font: { size: 11, family: "Cairo", weight: "700" },
+              font: { size: 11, family: "Inter, 'IBM Plex Sans Arabic', sans-serif", weight: "700" },
             },
             ticks: {
               color: "#3b82f6",
-              font: { size: 10, family: "Cairo" },
+              font: { size: 10, family: "Inter, 'IBM Plex Sans Arabic', sans-serif" },
               callback: function (value) {
                 return fmt(Number(value) || 0, 0);
               },
@@ -1443,7 +1442,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     if (!list) return;
     if (baseSpendSAR <= 0) {
       list.innerHTML =
-        '<div style="text-align:center;color:rgba(255,255,255,0.4);padding:10px">' +
+        '<div style="text-align:center;color:var(--dash-text-faint);padding:10px">' +
         s7Txt("Please enter a valid budget", "يرجى إدخال ميزانية صحيحة") +
         "</div>";
       return;
@@ -1485,7 +1484,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       var roiColor = r >= 50 ? greenColor : r >= 0 ? "#f59e0b" : "#ef4444";
       var bg = isActive ? "rgba(59,130,246,0.08)" : "transparent";
       var border = isActive
-        ? "border:1px solid rgba(59,130,246,0.25);border-radius:8px;"
+        ? "border:1px solid rgba(59,130,246,0.25);border-radius:var(--dash-radius-sm);"
         : "border-bottom:1px solid " +
           (isLight ? "#cbd5e1" : "rgba(255,255,255,0.04)") +
           ";";
@@ -1505,32 +1504,32 @@ window.renderSection7 = function (mountEl, data, ctx) {
         sc.color +
         "20;color:" +
         sc.color +
-        ";padding:3px 10px;border-radius:6px;font-weight:800;border:1px solid " +
+        ";padding:3px 10px;border-radius:var(--dash-radius-sm);font-weight:var(--weight-semibold);border:1px solid " +
         sc.color +
-        '40;font-size:10px">' +
+        '40;font-size:var(--type-micro)">' +
         sc.name +
         "</span></div>" +
         '<div style="color:' +
         textVal1 +
-        ';font-weight:700">' +
+        ';font-weight:var(--weight-semibold)">' +
         fmt(budVal, 0) +
-        ' <span style="font-size:9px;color:' +
+        ' <span style="font-size:var(--type-micro);color:' +
         textMuted +
         '">' +
         state.currency +
         "</span></div>" +
         '<div style="color:' +
         textVal2 +
-        ';font-weight:700" dir="ltr">' +
+        ';font-weight:var(--weight-semibold)" dir="ltr">' +
         fmt(netVal, 0) +
-        ' <span style="font-size:9px;color:' +
+        ' <span style="font-size:var(--type-micro);color:' +
         textMuted +
         '">' +
         state.currency +
         "</span></div>" +
         '<div style="color:' +
         roiColor +
-        ';font-weight:800" dir="ltr">' +
+        ';font-weight:var(--weight-semibold)" dir="ltr">' +
         (r > 0 ? "+" : "") +
         r.toFixed(0) +
         "%</div>" +
@@ -2324,6 +2323,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
     var c = computeSim();
     var delivEl = document.getElementById("sfe-delivered-orders");
     if (delivEl && document.activeElement !== delivEl) delivEl.value = Math.round(c.deliveredOrders);
+    var ndrEl = document.getElementById("sfe-ndr");
+    if (ndrEl && document.activeElement !== ndrEl) ndrEl.value = s7RatioPctValue(simState.ndr);
     var ndrHint = document.getElementById("sfe-ndr-hint");
     var commHint = document.getElementById("sfe-comm-hint");
     var adSpendCurr = document.getElementById("sfe-lbl-adspend-curr");
@@ -2351,13 +2352,6 @@ window.renderSection7 = function (mountEl, data, ctx) {
     }
     syncSimFinancialsFromRealData(false);
     refreshSimInputValues();
-    var activeOrderNdr = activeOrderNdrChoice();
-    var orderNdrSelect = document.getElementById("s7-order-ndr-source");
-    if (orderNdrSelect && orderNdrSelect.value !== activeOrderNdr.key) orderNdrSelect.value = activeOrderNdr.key;
-    var orderNdrNote = document.getElementById("s7-order-ndr-note");
-    if (orderNdrNote) {
-      orderNdrNote.textContent = s7Txt("Using ", "\u064a\u062a\u0645 \u0627\u0633\u062a\u062e\u062f\u0627\u0645 ") + activeOrderNdr.label + " NDR: " + s7PctValue(activeOrderNdr.ndrPct) + "%";
-    }
     var realDeliveredEl = document.getElementById("s7-real-delivered-orders");
     if (realDeliveredEl) realDeliveredEl.textContent = s7Num(realExpectedDvl);
     var realNdrEl = document.getElementById("s7-real-ndr-pct");
@@ -2562,24 +2556,24 @@ window.renderSection7 = function (mountEl, data, ctx) {
     mountEl.innerHTML =
       "<style>" +
       // Calculator styles
-      ".s7-input-wrap{background:linear-gradient(135deg,rgba(17,24,39,0.7) 0%,rgba(15,23,42,0.8) 100%);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px 18px;transition:all 0.3s cubic-bezier(0.4,0,0.2,1);display:flex;flex-direction:column;gap:6px;position:relative;box-shadow:inset 0 2px 4px rgba(0,0,0,0.4),0 4px 20px rgba(0,0,0,0.15)}" +
+      ".s7-input-wrap{background:linear-gradient(135deg,rgba(17,24,39,0.7) 0%,rgba(15,23,42,0.8) 100%);border:1px solid var(--dash-border-soft);border-radius:var(--dash-radius-lg);padding:14px 18px;transition:all 0.3s cubic-bezier(0.4,0,0.2,1);display:flex;flex-direction:column;gap:6px;position:relative;box-shadow:inset 0 2px 4px rgba(0,0,0,0.4),0 4px 20px rgba(0,0,0,0.15)}" +
       ".s7-input-wrap:hover{border-color:rgba(255,255,255,0.15);transform:translateY(-1px);box-shadow:inset 0 2px 4px rgba(0,0,0,0.4),0 6px 24px rgba(0,0,0,0.25)}" +
       ".s7-input-wrap:focus-within{border-color:#3b82f6;background:rgba(10,15,30,0.95);box-shadow:0 0 0 3px rgba(59,130,246,0.25),inset 0 2px 4px rgba(0,0,0,0.5);transform:scale(1.01) translateY(-1px)}" +
-      ".s7-lbl{font-size:11.5px;color:rgba(156,163,175,0.8);font-weight:700;letter-spacing:0.03em;text-transform:uppercase;transition:color 0.3s}" +
+      ".s7-lbl{font-size:var(--type-caption);color:rgba(156,163,175,0.8);font-weight:var(--weight-semibold);letter-spacing:0.03em;text-transform:uppercase;transition:color 0.3s}" +
       ".s7-input-wrap:focus-within .s7-lbl{color:#60a5fa}" +
-      ".s7-input-num{background:transparent;border:none;color:#fff;font-family:Cairo,sans-serif;font-size:20px;font-weight:800;width:100%;outline:none;padding:0;margin:0;box-shadow:none;line-height:1.2;letter-spacing:0.02em}" +
+      ".s7-input-num{background:transparent;border:none;color:#fff;font-family:var(--font-ui);font-size:var(--type-metric-sm);font-weight:var(--weight-bold);width:100%;outline:none;padding:0;margin:0;box-shadow:none;line-height:1.2;letter-spacing:0.02em}" +
       ".s7-input-num::-webkit-inner-spin-button,.s7-input-num::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}" +
       ".s7-input-num{-moz-appearance:textfield}" +
-      ".s7-input-num::placeholder{color:rgba(255,255,255,0.25);font-weight:500;font-style:italic;font-size:15px;font-family:Cairo,sans-serif}" +
-      ".s7-rate-note,.sfe-global-rate-note{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.18);border-radius:12px;padding:11px 13px;display:flex;flex-direction:column;gap:4px;color:rgba(255,255,255,.68);font-size:11px;font-weight:700;line-height:1.55}" +
-      ".s7-rate-note strong,.sfe-global-rate-note strong{color:#93c5fd;font-size:12px;font-weight:900}" +
-      ".s7-currency-badge{display:inline-flex;align-items:center;justify-content:center;padding:6px 12px;border-radius:9999px;font-size:12px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;transition:all 0.4s cubic-bezier(0.34,1.56,0.64,1);border:1px solid rgba(255,255,255,0.1);box-shadow:0 4px 12px rgba(0,0,0,0.3),inset 0 1px 1px rgba(255,255,255,0.1);white-space:nowrap;cursor:default;user-select:none}" +
+      ".s7-input-num::placeholder{color:rgba(255,255,255,0.25);font-weight:var(--weight-medium);font-style:italic;font-size:var(--type-component-title);font-family:var(--font-ui)}" +
+      ".s7-rate-note,.sfe-global-rate-note{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.18);border-radius:var(--dash-radius-md);padding:11px 13px;display:flex;flex-direction:column;gap:4px;color:rgba(255,255,255,.68);font-size:var(--type-caption);font-weight:var(--weight-semibold);line-height:1.55}" +
+      ".s7-rate-note strong,.sfe-global-rate-note strong{color:#93c5fd;font-size:var(--type-label);font-weight:var(--weight-semibold)}" +
+      ".s7-currency-badge{display:inline-flex;align-items:center;justify-content:center;padding:6px 12px;border-radius:var(--radius-pill);font-size:var(--type-label);font-weight:var(--weight-semibold);letter-spacing:0.05em;text-transform:uppercase;transition:all 0.4s cubic-bezier(0.34,1.56,0.64,1);border:1px solid rgba(255,255,255,0.1);box-shadow:0 4px 12px rgba(0,0,0,0.3),inset 0 1px 1px rgba(255,255,255,0.1);white-space:nowrap;cursor:default;user-select:none}" +
       ".s7-currency-badge.sar{background:linear-gradient(135deg,rgba(16,185,129,0.25) 0%,rgba(5,150,105,0.15) 100%);color:#34d399;border-color:rgba(52,211,153,0.35);box-shadow:0 4px 12px rgba(52,211,153,0.15),inset 0 1px 1px rgba(255,255,255,0.15)}" +
       ".s7-currency-badge.usd{background:linear-gradient(135deg,rgba(59,130,246,0.25) 0%,rgba(29,78,216,0.15) 100%);color:#60a5fa;border-color:rgba(96,165,250,0.35);box-shadow:0 4px 12px rgba(96,165,250,0.15),inset 0 1px 1px rgba(255,255,255,0.15)}" +
       ".s7-currency-badge.egp{background:linear-gradient(135deg,rgba(245,158,11,0.25) 0%,rgba(217,119,6,0.15) 100%);color:#fbbf24;border-color:rgba(251,191,36,0.35);box-shadow:0 4px 12px rgba(251,191,36,0.15),inset 0 1px 1px rgba(255,255,255,0.15)}" +
       "@keyframes badgeChange{0%{transform:scale(0.85);opacity:0.5}100%{transform:scale(1);opacity:1}}" +
       ".s7-currency-badge-animate{animation:badgeChange 0.35s cubic-bezier(0.34,1.56,0.64,1)}" +
-      ".s7-card{background:linear-gradient(145deg,rgba(30,41,59,0.4),rgba(15,23,42,0.6));border:1px solid rgba(59,130,246,0.16);border-radius:14px;padding:20px 16px;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;position:relative;overflow:hidden;transition:.2s;min-width:0;text-align:center}" +
+      ".s7-card{background:linear-gradient(145deg,rgba(30,41,59,0.4),rgba(15,23,42,0.6));border:1px solid rgba(59,130,246,0.16);border-radius:var(--dash-radius-lg);padding:20px 16px;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;position:relative;overflow:hidden;transition:.2s;min-width:0;text-align:center}" +
       ".s7-card>div{min-width:0}" +
       ".s7-card:hover{border-color:rgba(255,255,255,0.15);transform:translateY(-2px)}" +
       ".s7-source-breakdown{margin:24px 30px 0;background:" +
@@ -2590,28 +2584,28 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(45,212,191,.2)") +
-      ";border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:15px}" +
+      ";border-radius:var(--dash-radius-xl);padding:20px;display:flex;flex-direction:column;gap:15px}" +
       ".s7-source-head{display:flex;align-items:center;justify-content:space-between;gap:18px}" +
-      ".s7-source-head h3{margin:0 0 4px;font-size:15px;font-weight:900;color:" +
+      ".s7-source-head h3{margin:0 0 4px;font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#1e293b"
         : "#fff") +
       "}" +
-      ".s7-source-head p{margin:0;font-size:11px;color:" +
+      ".s7-source-head p{margin:0;font-size:var(--type-caption);color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,.52)") +
-      ";font-weight:600}" +
-      ".s7-source-total{background:rgba(45,212,191,.12);border:1px solid rgba(45,212,191,.24);border-radius:12px;padding:9px 13px;display:flex;flex-direction:column;gap:3px;align-items:flex-end;white-space:nowrap}" +
-      ".s7-source-total span{color:rgba(255,255,255,.52);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.08em}" +
-      ".s7-source-total strong{color:#2dd4bf;font-size:16px;font-weight:900}" +
+      ";font-weight:var(--weight-semibold)}" +
+      ".s7-source-total{background:rgba(45,212,191,.12);border:1px solid rgba(45,212,191,.24);border-radius:var(--dash-radius-md);padding:9px 13px;display:flex;flex-direction:column;gap:3px;align-items:flex-end;white-space:nowrap}" +
+      ".s7-source-total span{color:rgba(255,255,255,.52);font-size:var(--type-micro);font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.08em}" +
+      ".s7-source-total strong{color:#2dd4bf;font-size:var(--type-subtitle);font-weight:var(--weight-semibold)}" +
       ".s7-source-meta{margin-left:auto;display:flex;flex-direction:column;gap:3px;align-items:flex-end;min-width:150px}" +
-      ".s7-source-meta span{font-size:10px;color:" +
+      ".s7-source-meta span{font-size:var(--type-micro);color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,.45)") +
-      ";font-weight:800;text-transform:uppercase;letter-spacing:.08em}" +
-      ".s7-source-meta strong{font-size:12px;color:" +
+      ";font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.08em}" +
+      ".s7-source-meta strong{font-size:var(--type-label);color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#1e293b"
         : "#f3f4f6") +
@@ -2620,7 +2614,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#7c3aed"
         : "#f8fafc") +
-      ";border-radius:10px;padding:10px 13px;font-size:11px;font-weight:900;cursor:pointer;font-family:Cairo,sans-serif;white-space:nowrap}" +
+      ";border-radius:var(--dash-radius-md);padding:10px 13px;font-size:var(--type-caption);font-weight:var(--weight-semibold);cursor:pointer;font-family:var(--font-ui);white-space:nowrap}" +
       ".s7-source-sync:disabled{opacity:.55;cursor:not-allowed}" +
       ".s7-source-rows{display:flex;flex-direction:column;gap:8px}" +
       ".s7-source-row{display:grid;grid-template-columns:minmax(210px,1fr) 180px 180px;gap:12px;align-items:center;background:" +
@@ -2631,22 +2625,22 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#e2e8f0"
         : "rgba(255,255,255,.06)") +
-      ";border-radius:12px;padding:12px 14px}" +
+      ";border-radius:var(--dash-radius-md);padding:12px 14px}" +
       ".s7-source-row div{display:flex;flex-direction:column;gap:3px}" +
-      ".s7-source-row span,.s7-source-account small{font-size:10px;color:" +
+      ".s7-source-row span,.s7-source-account small{font-size:var(--type-micro);color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,.48)") +
-      ";font-weight:700}" +
-      ".s7-source-row strong{font-size:13px;color:" +
+      ";font-weight:var(--weight-semibold)}" +
+      ".s7-source-row strong{font-size:var(--type-control);color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#1e293b"
         : "#f3f4f6") +
       ";overflow-wrap:anywhere}" +
       ".s7-source-row .s7-source-converted{color:#2dd4bf}" +
       "@media(max-width:980px){.s7-source-row{grid-template-columns:1fr}.s7-source-head{align-items:flex-start;flex-direction:column}}" +
-      ".s7-scen-row{display:grid;grid-template-columns:1.3fr 1fr 1fr 0.7fr;text-align:center;padding:10px 0;font-size:12px;align-items:center;transition:.2s}" +
-      ".s7-tab{display:flex;align-items:center;gap:6px;padding:8px 18px;border-radius:20px;font-size:13px;font-weight:800;cursor:pointer;transition:all 0.25s cubic-bezier(0.4,0,0.2,1);border:1px solid transparent;background:transparent;color:" +
+      ".s7-scen-row{display:grid;grid-template-columns:1.3fr 1fr 1fr 0.7fr;text-align:center;padding:10px 0;font-size:var(--type-label);align-items:center;transition:.2s}" +
+      ".s7-tab{display:flex;align-items:center;gap:6px;padding:8px 18px;border-radius:var(--dash-radius-xl);font-size:var(--type-control);font-weight:var(--weight-semibold);cursor:pointer;transition:all 0.25s cubic-bezier(0.4,0,0.2,1);border:1px solid transparent;background:transparent;color:" +
       (document.documentElement.getAttribute("data-theme") === "light" ? "#64748b" : "rgba(240,241,243,0.4)") +
       ";user-select:none}" +
       ".s7-tab.active{background:" +
@@ -2665,7 +2659,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       ";border-color:" +
       (document.documentElement.getAttribute("data-theme") === "light" ? "rgba(124,58,237,0.20)" : "rgba(255,255,255,0.05)") +
       "}" +
-      ".sfe-curr-tab{display:flex;align-items:center;gap:6px;padding:8px 18px;border-radius:20px;font-size:13px;font-weight:800;cursor:pointer;transition:all 0.25s cubic-bezier(0.4,0,0.2,1);border:1px solid transparent;background:transparent;color:" +
+      ".sfe-curr-tab{display:flex;align-items:center;gap:6px;padding:8px 18px;border-radius:var(--dash-radius-xl);font-size:var(--type-control);font-weight:var(--weight-semibold);cursor:pointer;transition:all 0.25s cubic-bezier(0.4,0,0.2,1);border:1px solid transparent;background:transparent;color:" +
       (document.documentElement.getAttribute("data-theme") === "light" ? "#64748b" : "rgba(240,241,243,0.4)") +
       ";user-select:none}" +
       ".sfe-curr-tab.sfe-curr-active{background:" +
@@ -2685,10 +2679,10 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light" ? "rgba(124,58,237,0.20)" : "rgba(255,255,255,0.05)") +
       "}" +
       ".s7-sync-period{display:flex;flex-direction:column;gap:7px}" +
-      ".s7-sync-period-range{font-size:11px;color:#f59e0b;font-weight:700;padding:8px 10px;background:rgba(245,158,11,0.08);border-radius:6px;border:1px solid rgba(245,158,11,0.15)}" +
-      ".s7-sync-period-note{font-size:10px;color:" +
+      ".s7-sync-period-range{font-size:var(--type-caption);color:#f59e0b;font-weight:var(--weight-semibold);padding:8px 10px;background:rgba(245,158,11,0.08);border-radius:var(--dash-radius-sm);border:1px solid rgba(245,158,11,0.15)}" +
+      ".s7-sync-period-note{font-size:var(--type-micro);color:" +
       (document.documentElement.getAttribute("data-theme") === "light" ? "#7c3aed" : "rgba(240,241,243,0.85)") +
-      " ;line-height:1.65;padding:9px 10px;background:rgba(59,130,246,0.08);border-radius:8px;border:1px solid rgba(59,130,246,0.14)}" +
+      " ;line-height:1.65;padding:9px 10px;background:rgba(59,130,246,0.08);border-radius:var(--dash-radius-sm);border:1px solid rgba(59,130,246,0.14)}" +
       // SFE (Smart Forecasting Engine) styles
       ".sfe-wrapper{background:" +
       (document.documentElement.getAttribute("data-theme") === "light"
@@ -2708,19 +2702,19 @@ window.renderSection7 = function (mountEl, data, ctx) {
         ? "#cbd5e1"
         : "rgba(255,255,255,0.07)") +
       "}" +
-      ".sfe-header-badge{font-size:10px;font-weight:600;letter-spacing:.14em;color:#00e5a0;background:rgba(0,229,160,0.08);border:1px solid rgba(0,229,160,0.2);border-radius:4px;padding:3px 8px;display:inline-block;margin-bottom:8px}" +
-      ".sfe-header-title{font-size:20px;font-weight:700;color:" +
+      ".sfe-header-badge{font-size:var(--type-micro);font-weight:var(--weight-semibold);letter-spacing:.14em;color:#00e5a0;background:rgba(0,229,160,0.08);border:1px solid rgba(0,229,160,0.2);border-radius:4px;padding:3px 8px;display:inline-block;margin-bottom:8px}" +
+      ".sfe-header-title{font-size:var(--type-metric-sm);font-weight:var(--weight-bold);color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#1e293b"
         : "#f0f1f3") +
       ";letter-spacing:-.02em;line-height:1.2}" +
-      ".sfe-header-sub{font-size:12px;color:" +
+      ".sfe-header-sub{font-size:var(--type-label);color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "#8b8fa8") +
       ";margin-top:6px}" +
       ".sfe-header-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px}" +
-      ".sfe-sim-badge{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:500;letter-spacing:.1em;color:#f5a623;background:rgba(245,166,35,0.08);border:1px solid rgba(245,166,35,0.2);border-radius:4px;padding:4px 10px}" +
+      ".sfe-sim-badge{display:flex;align-items:center;gap:6px;font-size:var(--type-micro);font-weight:var(--weight-medium);letter-spacing:.1em;color:#f5a623;background:rgba(245,166,35,0.08);border:1px solid rgba(245,166,35,0.2);border-radius:4px;padding:4px 10px}" +
       ".sfe-sim-dot{width:6px;height:6px;border-radius:50%;background:#f5a623;box-shadow:0 0 8px #f5a623;animation:sfePulse 2s ease-in-out infinite}" +
       "@keyframes sfePulse{0%,100%{opacity:1}50%{opacity:.4}}" +
       ".sfe-reset-btn{background:transparent;border:1px solid " +
@@ -2731,7 +2725,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "#8b8fa8") +
-      ";font-size:12px;font-weight:500;padding:6px 14px;border-radius:8px;cursor:pointer;transition:.2s;font-family:inherit}" +
+      ";font-size:var(--type-label);font-weight:var(--weight-medium);padding:6px 14px;border-radius:var(--dash-radius-sm);cursor:pointer;transition:.2s;font-family:inherit}" +
       ".sfe-reset-btn:hover{background:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#f1f5f9"
@@ -2750,18 +2744,18 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(255,255,255,0.07)") +
-      ";border-radius:10px;padding:14px;position:relative;overflow:hidden}" +
-      '.sfe-metric-card::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:var(--sfe-accent-bar,transparent);border-radius:10px 10px 0 0}' +
+      ";border-radius:var(--dash-radius-md);padding:14px;position:relative;overflow:hidden}" +
+      '.sfe-metric-card::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:var(--sfe-accent-bar,transparent);border-radius:var(--dash-radius-md) 10px 0 0}' +
       ".sfe-metric-card.sfe-positive{--sfe-accent-bar:#00e5a0;border-color:rgba(0,229,160,.15)}" +
       ".sfe-metric-card.sfe-negative{--sfe-accent-bar:#ff3b5c;border-color:rgba(255,59,92,.15)}" +
       ".sfe-metric-card.sfe-neutral{--sfe-accent-bar:#4da6ff;border-color:rgba(77,166,255,.12)}" +
-      ".sfe-metric-label{font-size:10px;font-weight:600;letter-spacing:.1em;color:#4d5066;text-transform:uppercase;margin-bottom:8px}" +
-      ".sfe-metric-val{font-size:18px;font-weight:700;color:" +
+      ".sfe-metric-label{font-size:var(--type-micro);font-weight:var(--weight-semibold);letter-spacing:.1em;color:#4d5066;text-transform:uppercase;margin-bottom:8px}" +
+      ".sfe-metric-val{font-size:var(--type-section-title);font-weight:var(--weight-bold);color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#1e293b"
         : "#f0f1f3") +
       ";letter-spacing:-.03em;line-height:1;transition:color .3s}" +
-      ".sfe-metric-sub{font-size:11px;color:#4d5066;margin-top:5px}" +
+      ".sfe-metric-sub{font-size:var(--type-caption);color:#4d5066;margin-top:5px}" +
       ".sfe-body-grid{display:grid;grid-template-columns:320px 1fr;gap:16px;margin-bottom:24px}" +
       ".sfe-panel{background:" +
       (document.documentElement.getAttribute("data-theme") === "light"
@@ -2771,8 +2765,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(255,255,255,0.07)") +
-      ";border-radius:12px;padding:20px}" +
-      ".sfe-panel-label{font-size:10px;font-weight:700;letter-spacing:.13em;color:#4d5066;text-transform:uppercase;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid " +
+      ";border-radius:var(--dash-radius-md);padding:20px}" +
+      ".sfe-panel-label{font-size:var(--type-micro);font-weight:var(--weight-semibold);letter-spacing:.13em;color:#4d5066;text-transform:uppercase;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid " +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(255,255,255,0.07)") +
@@ -2780,12 +2774,12 @@ window.renderSection7 = function (mountEl, data, ctx) {
       ".sfe-control-group{display:flex;flex-direction:column;gap:16px}" +
       ".sfe-control-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}" +
       ".sfe-control-row{display:flex;flex-direction:column;gap:6px}" +
-      ".sfe-label{font-size:12px;font-weight:500;color:" +
+      ".sfe-label{font-size:var(--type-label);font-weight:var(--weight-medium);color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "#8b8fa8") +
       ";display:flex;align-items:center;gap:6px}" +
-      ".sfe-label-hint{font-weight:700;color:#00e5a0;font-size:12px}" +
+      ".sfe-label-hint{font-weight:var(--weight-semibold);color:#00e5a0;font-size:var(--type-label)}" +
       ".sfe-input-wrap2{display:flex;align-items:center;background:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#ffffff"
@@ -2794,15 +2788,15 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(255,255,255,0.12)") +
-      ";border-radius:8px;overflow:hidden;transition:border-color .2s}" +
+      ";border-radius:var(--dash-radius-sm);overflow:hidden;transition:border-color .2s}" +
       ".sfe-input-wrap2:focus-within{border-color:rgba(0,229,160,.4)}" +
       ".sfe-input2{background:transparent;border:none;outline:none;color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#1e293b"
         : "#f0f1f3") +
-      ";font-size:15px;font-weight:600;padding:9px 12px;width:100%;-moz-appearance:textfield}" +
+      ";font-size:var(--type-component-title);font-weight:var(--weight-semibold);padding:9px 12px;width:100%;-moz-appearance:textfield}" +
       ".sfe-input2::-webkit-inner-spin-button,.sfe-input2::-webkit-outer-spin-button{-webkit-appearance:none}" +
-      ".sfe-input-unit2{padding:0 12px;font-size:11px;font-weight:600;color:" +
+      ".sfe-input-unit2{padding:0 12px;font-size:var(--type-caption);font-weight:var(--weight-semibold);color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "#4d5066") +
@@ -2811,7 +2805,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         ? "#cbd5e1"
         : "rgba(255,255,255,0.07)") +
       "}" +
-      ".sfe-health-scale{height:5px;border-radius:999px;background:linear-gradient(90deg,#ff3b5c 0%,#ff3b5c 20%,#f5a623 20%,#f5a623 30%,#00e5a0 30%,#00e5a0 40%,#22d3ee 40%,#22d3ee 100%);opacity:.75;margin-top:4px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.08)}" +
+      ".sfe-health-scale{height:5px;border-radius:var(--radius-pill);background:linear-gradient(90deg,#ff3b5c 0%,#ff3b5c 20%,#f5a623 20%,#f5a623 30%,#00e5a0 30%,#00e5a0 40%,#22d3ee 40%,#22d3ee 100%);opacity:.75;margin-top:4px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.08)}" +
       ".sfe-slider{-webkit-appearance:none;width:100%;height:4px;border-radius:4px;background:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#e2e8f0"
@@ -2824,35 +2818,35 @@ window.renderSection7 = function (mountEl, data, ctx) {
       ".sfe-slider::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#f0f1f3;border:2px solid #0b0c0f;box-shadow:0 0 0 2px #00e5a0;cursor:pointer;transition:box-shadow .2s}" +
       ".sfe-slider-thumb:hover{box-shadow:0 0 0 4px rgba(0,229,160,0.25)}" +
       ".sfe-slider-markers{display:flex;justify-content:space-between;margin-top:4px}" +
-      ".sfe-marker{font-size:9px;font-weight:700;text-align:center;line-height:1.3}" +
+      ".sfe-marker{font-size:var(--type-micro);font-weight:var(--weight-semibold);text-align:center;line-height:1.3}" +
       ".sfe-marker--danger{color:#ff3b5c}.sfe-marker--mid{color:#f5a623}.sfe-marker--safe{color:#22d3ee}" +
-      ".sfe-derived-row{background:rgba(77,166,255,0.04);border:1px solid rgba(77,166,255,.1);border-radius:8px;padding:10px 12px}" +
-      ".sfe-derived-value{font-size:22px;font-weight:700;color:#4da6ff;letter-spacing:-.03em}" +
-      ".sfe-derived-note{font-size:10px;color:#4d5066;margin-top:2px}" +
+      ".sfe-derived-row{background:rgba(77,166,255,0.04);border:1px solid rgba(77,166,255,.1);border-radius:var(--dash-radius-sm);padding:10px 12px}" +
+      ".sfe-derived-value{font-size:var(--type-metric-sm);font-weight:var(--weight-bold);color:#4da6ff;letter-spacing:-.03em}" +
+      ".sfe-derived-note{font-size:var(--type-micro);color:#4d5066;margin-top:2px}" +
       "@media (max-width:720px){.sfe-control-pair{grid-template-columns:1fr}}" +
       ".sfe-score-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}" +
       ".sfe-score-block{background:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#ffffff"
         : "#161921") +
-      ";border-radius:10px;border:1px solid " +
+      ";border-radius:var(--dash-radius-md);border:1px solid " +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(255,255,255,0.07)") +
       ";padding:14px 16px}" +
-      ".sfe-score-title{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#4d5066;margin-bottom:10px}" +
+      ".sfe-score-title{font-size:var(--type-micro);font-weight:var(--weight-semibold);letter-spacing:.12em;text-transform:uppercase;color:#4d5066;margin-bottom:10px}" +
       ".sfe-score-gauge{display:flex;align-items:center;gap:10px}" +
       ".sfe-gauge-bar-wrap{flex:1;height:6px;background:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(255,255,255,.06)") +
-      ";border-radius:6px;overflow:hidden}" +
-      ".sfe-gauge-bar{height:100%;border-radius:6px;transition:width .5s cubic-bezier(.4,0,.2,1),background .4s}" +
-      ".sfe-score-num{font-size:22px;font-weight:700;min-width:36px;text-align:right;transition:color .3s}" +
-      ".sfe-score-label{font-size:11px;font-weight:500;margin-top:6px}" +
-      ".sfe-breakeven-panel{background:rgba(0,229,160,0.03);border:1px solid rgba(0,229,160,.12);border-radius:10px;padding:16px;margin-bottom:14px}" +
-      ".sfe-be-title{font-size:12px;font-weight:700;letter-spacing:.1em;color:#00e5a0;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:6px}" +
-      ".sfe-be-subtitle{font-size:12px;color:" +
+      ";border-radius:var(--dash-radius-sm);overflow:hidden}" +
+      ".sfe-gauge-bar{height:100%;border-radius:var(--dash-radius-sm);transition:width .5s cubic-bezier(.4,0,.2,1),background .4s}" +
+      ".sfe-score-num{font-size:var(--type-metric-sm);font-weight:var(--weight-bold);min-width:36px;text-align:right;transition:color .3s}" +
+      ".sfe-score-label{font-size:var(--type-caption);font-weight:var(--weight-medium);margin-top:6px}" +
+      ".sfe-breakeven-panel{background:rgba(0,229,160,0.03);border:1px solid rgba(0,229,160,.12);border-radius:var(--dash-radius-md);padding:16px;margin-bottom:14px}" +
+      ".sfe-be-title{font-size:var(--type-label);font-weight:var(--weight-semibold);letter-spacing:.1em;color:#00e5a0;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:6px}" +
+      ".sfe-be-subtitle{font-size:var(--type-label);color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "#8b8fa8") +
@@ -2862,35 +2856,35 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#f8fafc"
         : "#111318") +
-      ";border-radius:8px;border:1px solid " +
+      ";border-radius:var(--dash-radius-sm);border:1px solid " +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(255,255,255,0.07)") +
       "}" +
-      ".sfe-be-kpi{font-size:11px;font-weight:600;color:" +
+      ".sfe-be-kpi{font-size:var(--type-caption);font-weight:var(--weight-semibold);color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "#8b8fa8") +
       ";letter-spacing:.05em;min-width:120px;text-transform:uppercase}" +
-      ".sfe-be-from{font-size:13px;font-weight:600;color:#ff3b5c;min-width:60px}" +
-      ".sfe-be-arrow{font-size:14px;color:" +
+      ".sfe-be-from{font-size:var(--type-control);font-weight:var(--weight-semibold);color:#ff3b5c;min-width:60px}" +
+      ".sfe-be-arrow{font-size:var(--type-body);color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#94a3b8"
         : "#4d5066") +
       "}" +
-      ".sfe-be-to{font-size:13px;font-weight:700;color:#00e5a0}" +
-      ".sfe-be-delta{margin-left:auto;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:rgba(0,229,160,.1);color:#00e5a0;letter-spacing:.06em}" +
+      ".sfe-be-to{font-size:var(--type-control);font-weight:var(--weight-semibold);color:#00e5a0}" +
+      ".sfe-be-delta{margin-left:auto;font-size:var(--type-micro);font-weight:var(--weight-semibold);padding:2px 7px;border-radius:4px;background:rgba(0,229,160,.1);color:#00e5a0;letter-spacing:.06em}" +
       ".sfe-insights-feed{display:flex;flex-direction:column;gap:8px}" +
-      ".sfe-insight{display:flex;gap:10px;padding:11px 13px;border-radius:9px;border:1px solid transparent;animation:sfeIn .3s ease}" +
+      ".sfe-insight{display:flex;gap:10px;padding:11px 13px;border-radius:var(--dash-radius-sm);border:1px solid transparent;animation:sfeIn .3s ease}" +
       "@keyframes sfeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}" +
       ".sfe-insight--positive{background:rgba(0,229,160,.05);border-color:rgba(0,229,160,.15)}" +
       ".sfe-insight--negative{background:rgba(255,59,92,.05);border-color:rgba(255,59,92,.15)}" +
       ".sfe-insight--warning{background:rgba(245,166,35,.05);border-color:rgba(245,166,35,.15)}" +
       ".sfe-insight--info{background:rgba(77,166,255,.05);border-color:rgba(77,166,255,.12)}" +
       ".sfe-insight--critical{background:rgba(255,59,92,.08);border-color:rgba(255,59,92,.3)}" +
-      ".sfe-insight-icon{font-size:14px;flex-shrink:0;margin-top:1px}" +
-      ".sfe-insight-category{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#4d5066;margin-bottom:3px}" +
-      ".sfe-insight-text{font-size:12px;color:" +
+      ".sfe-insight-icon{font-size:var(--type-body);flex-shrink:0;margin-top:1px}" +
+      ".sfe-insight-category{font-size:var(--type-micro);font-weight:var(--weight-semibold);letter-spacing:.12em;text-transform:uppercase;color:#4d5066;margin-bottom:3px}" +
+      ".sfe-insight-text{font-size:var(--type-label);color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "#8b8fa8") +
@@ -2899,20 +2893,20 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#1e293b"
         : "#f0f1f3") +
-      ";font-weight:600}" +
+      ";font-weight:var(--weight-semibold)}" +
       ".sfe-insight-text .hi-green{color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#10b981"
         : "#00e5a0") +
-      ";font-weight:600}" +
-      ".sfe-insight-text .hi-red{color:#ff3b5c;font-weight:600}" +
-      ".sfe-insight-text .hi-cyan{color:#22d3ee;font-weight:600}" +
-      ".sfe-insight-text .hi-yellow{color:#f5a623;font-weight:600}" +
+      ";font-weight:var(--weight-semibold)}" +
+      ".sfe-insight-text .hi-red{color:#ff3b5c;font-weight:var(--weight-semibold)}" +
+      ".sfe-insight-text .hi-cyan{color:#22d3ee;font-weight:var(--weight-semibold)}" +
+      ".sfe-insight-text .hi-yellow{color:#f5a623;font-weight:var(--weight-semibold)}" +
       ".sfe-insight-text .hi-blue{color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#2563eb"
         : "#4da6ff") +
-      ";font-weight:600}" +
+      ";font-weight:var(--weight-semibold)}" +
       ".sfe-scenario-section{background:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#ffffff"
@@ -2921,9 +2915,9 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(255,255,255,0.07)") +
-      ";border-radius:12px;padding:20px}" +
-      ".sfe-table{width:100%;border-collapse:collapse;font-size:12px}" +
-      ".sfe-table th{font-size:10px;font-weight:700;letter-spacing:.1em;color:" +
+      ";border-radius:var(--dash-radius-md);padding:20px}" +
+      ".sfe-table{width:100%;border-collapse:collapse;font-size:var(--type-label)}" +
+      ".sfe-table th{font-size:var(--type-micro);font-weight:var(--weight-semibold);letter-spacing:.1em;color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "#4d5066") +
@@ -2941,7 +2935,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(255,255,255,0.03)") +
-      ";font-size:12px;font-weight:500}" +
+      ";font-size:var(--type-label);font-weight:var(--weight-medium)}" +
       ".sfe-table td:first-child{text-align:left;color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#1e293b"
@@ -2956,7 +2950,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#0f766e"
         : "#00e5a0") +
-      ";font-weight:600}" +
+      ";font-weight:var(--weight-semibold)}" +
       ".sfe-table .col-positive{color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#10b981"
@@ -2967,8 +2961,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "rgba(40, 79, 143, 0.28)"
         : "rgba(255,255,255,0.06)") +
-      ";border:1px solid rgba(96,165,250,0.55);color:#93c5fd;font-size:0;font-weight:900;display:inline-flex;align-items:center;justify-content:center;cursor:help;transition:background .18s,border-color .18s,color .18s;font-family:system-ui,sans-serif;flex-shrink:0;vertical-align:middle;line-height:1;user-select:none}" +
-      ".s7-tip-badge::before{content:'?';display:block;color:currentColor;font-size:11px;font-weight:900;line-height:1}" +
+      ";border:1px solid rgba(96,165,250,0.55);color:#93c5fd;font-size:0;font-weight:var(--weight-bold);display:inline-flex;align-items:center;justify-content:center;cursor:help;transition:background .18s,border-color .18s,color .18s;font-family:var(--font-ui);flex-shrink:0;vertical-align:middle;line-height:1;user-select:none}" +
+      ".s7-tip-badge::before{content:'?';display:block;color:currentColor;font-size:var(--type-caption);font-weight:var(--weight-semibold);line-height:1}" +
       ".s7-tip-badge:hover{background:rgba(59,130,246,0.28);border-color:rgba(59,130,246,0.7);color:#93c5fd}" +
       // -- Light Theme Overrides ----------------------------------------------
       '[data-theme="light"] .s7-source-breakdown{background:#ffffff !important;border-color:#cbd5e1 !important}' +
@@ -3005,7 +2999,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       '[data-theme="light"] .sfe-table td{color:#1e293b !important;border-bottom-color:#cbd5e1 !important}' +
       '[data-theme="light"] .sfe-table td:first-child{color:#1e293b !important}' +
       '[data-theme="light"] .sfe-table tr.sfe-row-current td{background:rgba(124,58,237,0.06) !important;color:#7c3aed !important}' +
-      '[data-theme="light"] .sfe-table tr.sfe-row-current td:first-child{color:#7c3aed !important;font-weight:600 !important}' +
+      '[data-theme="light"] .sfe-table tr.sfe-row-current td:first-child{color:#7c3aed !important;font-weight:var(--weight-semibold) !important}' +
       '[data-theme="light"] .sfe-insight-text{color:#64748b !important}' +
       '[data-theme="light"] .sfe-insight-text strong{color:#1e293b !important}' +
       '[data-theme="light"] .sfe-slider{background:#cbd5e1 !important;border-color:#cbd5e1 !important}' +
@@ -3019,7 +3013,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         : "#030712") +
       ";direction:" +
       (isAr ? "rtl" : "ltr") +
-      ";font-family:Cairo,sans-serif;color:" +
+      ";font-family:var(--font-ui);color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "var(--text)"
         : "#fff") +
@@ -3038,8 +3032,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(255,255,255,0.06)") +
-      ';border-radius:16px;padding:24px">' +
-      '<h3 style="margin:0 0 20px;font-size:15px;font-weight:900;text-align:center;display:flex;align-items:center;justify-content:center;gap:8px">' +
+      ';border-radius:var(--dash-radius-xl);padding:24px">' +
+      '<h3 style="margin:0 0 20px;font-size:var(--type-component-title);font-weight:var(--weight-semibold);text-align:center;display:flex;align-items:center;justify-content:center;gap:8px">' +
       s7Txt("Enter your campaign data", "أدخل بيانات حملتك") +
       ' <span aria-hidden="true">+</span></h3>' +
       '<div style="display:flex;flex-direction:column;gap:14px">' +
@@ -3052,7 +3046,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       '<input type="text" inputmode="numeric" id="s7-in-budget" class="s7-input-num" placeholder="' +
       s7Txt("Enter campaign budget", "أدخل ميزانية الحملة") +
       '" />' +
-      '<span id="s7-budget-curr-label" style="font-size:13px;font-weight:800;color:' +
+      '<span id="s7-budget-curr-label" style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.4)") +
@@ -3098,8 +3092,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(255,255,255,0.06)") +
-      ';border-radius:16px;padding:24px">' +
-      '<div style="font-size:13px;font-weight:900;display:flex;align-items:center;gap:8px;margin-bottom:16px"><span style="color:#f59e0b">?</span> ' +
+      ';border-radius:var(--dash-radius-xl);padding:24px">' +
+      '<div style="font-size:var(--type-control);font-weight:var(--weight-semibold);display:flex;align-items:center;gap:8px;margin-bottom:16px"><span style="color:#f59e0b">?</span> ' +
       s7Txt("Real Bot Indicators", "مؤشرات البوت الحقيقية") +
       "</div>" +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
@@ -3206,19 +3200,19 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(255,255,255,0.06)") +
-      ';border-radius:16px;padding:20px">' +
-      '<div style="font-size:13px;font-weight:900;margin-bottom:14px;display:flex;align-items:center;gap:8px"><span style="color:#3b82f6">??</span> ' +
+      ';border-radius:var(--dash-radius-xl);padding:20px">' +
+      '<div style="font-size:var(--type-control);font-weight:var(--weight-semibold);margin-bottom:14px;display:flex;align-items:center;gap:8px"><span style="color:#3b82f6">??</span> ' +
       s7Txt("Quick Budget Scenarios", "سيناريوهات ميزانية سريعة") +
       "</div>" +
       '<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr 0.7fr;text-align:center;padding-bottom:10px;border-bottom:1px solid ' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(255,255,255,0.08)") +
-      ";font-size:11px;color:" +
+      ";font-size:var(--type-caption);color:" +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.4)") +
-      ';font-weight:800">' +
+      ';font-weight:var(--weight-bold)">' +
       "<span>" +
       s7Txt("Scenario", "السيناريو") +
       "</span><span>" +
@@ -3237,13 +3231,13 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#ffffff"
         : "#0b1120") +
-      ";padding:14px 22px;border-radius:16px;border:1px solid " +
+      ";padding:14px 22px;border-radius:var(--dash-radius-xl);border:1px solid " +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(255,255,255,0.07)") +
       '">' +
-      '<div style="display:flex;align-items:center;gap:9px;font-size:15px;font-weight:900;letter-spacing:-.01em">' +
-      '<span style="color:#f5a623;font-size:15px">?</span>' +
+      '<div style="display:flex;align-items:center;gap:9px;font-size:var(--type-component-title);font-weight:var(--weight-semibold);letter-spacing:-.01em">' +
+      '<span style="color:#f5a623;font-size:var(--type-component-title)">?</span>' +
       '<span style="color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#1e293b"
@@ -3258,11 +3252,11 @@ window.renderSection7 = function (mountEl, data, ctx) {
       "</div>" +
       // Top KPI cards
       '<div class="s7-kpi-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px">' +
-      '<div class="s7-card"><div style="font-size:12px;color:' +
+      '<div class="s7-card"><div style="font-size:var(--type-label);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.5)") +
-      ';font-weight:700;display:flex;align-items:center;gap:5px">' +
+      ';font-weight:var(--weight-bold);display:flex;align-items:center;gap:5px">' +
       s7Txt("Total Spend", "إجمالي الإنفاق") +
       " " +
       _tip(
@@ -3274,7 +3268,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         ),
         "calculatorSpend = convert(spend, sourceCurrency -> calculatorCurrency)",
       ) +
-      '</div><div style="display:flex;align-items:center;gap:8px;font-size:22px;font-weight:900"><span>??</span><span id="s7-out-spend">--</span></div><div class="s7-curr-lbl" style="font-size:10px;color:' +
+      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold)"><span>??</span><span id="s7-out-spend">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.5)") +
@@ -3282,10 +3276,10 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#f1f5f9"
         : "rgba(255,255,255,0.08)") +
-      ';padding:3px 10px;border-radius:12px">' +
+      ';padding:3px 10px;border-radius:var(--dash-radius-md)">' +
       state.viewCurrency +
       "</div></div>" +
-      '<div class="s7-card"><div style="font-size:12px;color:#a855f7;font-weight:700;display:flex;align-items:center;gap:5px">' +
+      '<div class="s7-card"><div style="font-size:var(--type-label);color:#a855f7;font-weight:var(--weight-semibold);display:flex;align-items:center;gap:5px">' +
       s7Txt("Cost per Order CPA", "تكلفة الطلب CPA") +
       " " +
       _tip(
@@ -3297,7 +3291,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         ),
         "CPA = adSpend / netOrders",
       ) +
-      '</div><div style="display:flex;align-items:center;gap:8px;font-size:22px;font-weight:900"><span style="color:#a855f7">??</span><span id="s7-out-cpa">--</span></div><div class="s7-curr-lbl" style="font-size:10px;color:' +
+      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold)"><span style="color:#a855f7">??</span><span id="s7-out-cpa">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.5)") +
@@ -3305,10 +3299,10 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#f1f5f9"
         : "rgba(255,255,255,0.08)") +
-      ';padding:3px 10px;border-radius:12px">' +
+      ';padding:3px 10px;border-radius:var(--dash-radius-md)">' +
       state.viewCurrency +
       "</div></div>" +
-      '<div class="s7-card"><div style="font-size:12px;color:#f59e0b;font-weight:700;display:flex;align-items:center;gap:5px">' +
+      '<div class="s7-card"><div style="font-size:var(--type-label);color:#f59e0b;font-weight:var(--weight-semibold);display:flex;align-items:center;gap:5px">' +
       s7Txt("Break-even CPA", "تكلفة التعادل") +
       " " +
       _tip(
@@ -3320,7 +3314,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         ),
         "Break-even CPA = taagerProfitPerDeliveredOrder * NDR",
       ) +
-      '</div><div style="display:flex;align-items:center;gap:8px;font-size:22px;font-weight:900"><span style="color:#f59e0b">??</span><span id="s7-out-breakeven-cpa">--</span></div><div class="s7-curr-lbl" style="font-size:10px;color:' +
+      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold)"><span style="color:#f59e0b">??</span><span id="s7-out-breakeven-cpa">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.5)") +
@@ -3328,10 +3322,10 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#f1f5f9"
         : "rgba(255,255,255,0.08)") +
-      ';padding:3px 10px;border-radius:12px">' +
+      ';padding:3px 10px;border-radius:var(--dash-radius-md)">' +
       state.viewCurrency +
       "</div></div>" +
-      '<div class="s7-card"><div style="font-size:12px;color:#3b82f6;font-weight:700;display:flex;align-items:center;gap:5px">' +
+      '<div class="s7-card"><div style="font-size:var(--type-label);color:#3b82f6;font-weight:var(--weight-semibold);display:flex;align-items:center;gap:5px">' +
       s7Txt("Total Profit Before Ad Spend", "إجمالي الربح قبل الإنفاق الإعلاني") +
       " " +
       _tip(
@@ -3347,7 +3341,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
           ? "totalProfitBeforeAdSpend = expectedDeliveriesExact * averageProfitPerDeliveredOrder"
           : "totalProfitBeforeAdSpend = actualEarnedProfitAfterTax",
       ) +
-      '</div><div style="display:flex;align-items:center;gap:8px;font-size:22px;font-weight:900"><span style="color:#3b82f6">??</span><span id="s7-out-revenue">--</span></div><div class="s7-curr-lbl" style="font-size:10px;color:' +
+      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold)"><span style="color:#3b82f6">??</span><span id="s7-out-revenue">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.5)") +
@@ -3355,10 +3349,10 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#f1f5f9"
         : "rgba(255,255,255,0.08)") +
-      ';padding:3px 10px;border-radius:12px">' +
+      ';padding:3px 10px;border-radius:var(--dash-radius-md)">' +
       state.viewCurrency +
       "</div></div>" +
-      '<div class="s7-card"><div style="font-size:12px;color:#00e676;font-weight:700;display:flex;align-items:center;gap:5px">' +
+      '<div class="s7-card"><div style="font-size:var(--type-label);color:#00e676;font-weight:var(--weight-semibold);display:flex;align-items:center;gap:5px">' +
       s7Txt("Account Net Profit", "صافي ربح الحساب") +
       " " +
       _tip(
@@ -3370,7 +3364,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         ),
         "netProfit = revenue - adSpend",
       ) +
-      '</div><div style="display:flex;align-items:center;gap:8px;font-size:22px;font-weight:900"><span style="color:#00e676">??</span><span id="s7-out-net" dir="ltr">--</span></div><div class="s7-curr-lbl" style="font-size:10px;color:' +
+      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold)"><span style="color:#00e676">??</span><span id="s7-out-net" dir="ltr">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.5)") +
@@ -3378,10 +3372,10 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#f1f5f9"
         : "rgba(255,255,255,0.08)") +
-      ';padding:3px 10px;border-radius:12px">' +
+      ';padding:3px 10px;border-radius:var(--dash-radius-md)">' +
       state.viewCurrency +
       "</div></div>" +
-      '<div class="s7-card"><div style="font-size:12px;color:#10b981;font-weight:700;display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap">' +
+      '<div class="s7-card"><div style="font-size:var(--type-label);color:#10b981;font-weight:var(--weight-semibold);display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap">' +
       s7Txt("Net Total Delivered Sales", "صافي مبيعات الطلبات المسلمة") +
       " " +
       _tip(
@@ -3393,7 +3387,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         ),
         "netDeliveredSales = sum(delivered net order sales)",
       ) +
-      '</div><div style="display:flex;align-items:center;gap:8px;font-size:20px;font-weight:900;min-width:0"><span style="color:#10b981">??</span><span id="s7-out-delivered-sales" dir="ltr">--</span></div><div class="s7-curr-lbl" style="font-size:10px;color:' +
+      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold);min-width:0"><span style="color:#10b981">??</span><span id="s7-out-delivered-sales" dir="ltr">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.5)") +
@@ -3401,10 +3395,10 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#f1f5f9"
         : "rgba(255,255,255,0.08)") +
-      ';padding:3px 10px;border-radius:12px">' +
+      ';padding:3px 10px;border-radius:var(--dash-radius-md)">' +
       state.viewCurrency +
       "</div></div>" +
-      '<div class="s7-card"><div style="font-size:12px;color:#38bdf8;font-weight:700;display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap">' +
+      '<div class="s7-card"><div style="font-size:var(--type-label);color:#38bdf8;font-weight:var(--weight-semibold);display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap">' +
       s7Txt("Average Order Value (Delivered)", "متوسط قيمة الطلب المسلم") +
       " " +
       _tip(
@@ -3416,7 +3410,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
         ),
         "deliveredAOV = netDeliveredSales / deliveredOrders",
       ) +
-      '</div><div style="display:flex;align-items:center;gap:8px;font-size:20px;font-weight:900;min-width:0"><span style="color:#38bdf8">??</span><span id="s7-out-delivered-aov" dir="ltr">--</span></div><div class="s7-curr-lbl" style="font-size:10px;color:' +
+      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold);min-width:0"><span style="color:#38bdf8">??</span><span id="s7-out-delivered-aov" dir="ltr">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.5)") +
@@ -3424,7 +3418,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#f1f5f9"
         : "rgba(255,255,255,0.08)") +
-      ';padding:3px 10px;border-radius:12px">' +
+      ';padding:3px 10px;border-radius:var(--dash-radius-md)">' +
       state.viewCurrency +
       "</div></div>" +
       "</div>" +
@@ -3437,9 +3431,9 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(255,255,255,0.06)") +
-      ';border-radius:16px;overflow:hidden">' +
+      ';border-radius:var(--dash-radius-xl);overflow:hidden">' +
       '<div style="flex:1;padding:24px;display:flex;flex-direction:column;align-items:center;position:relative">' +
-      '<div style="font-size:15px;font-weight:900;margin-bottom:12px;display:flex;align-items:center;gap:8px">' +
+      '<div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);margin-bottom:12px;display:flex;align-items:center;gap:8px">' +
       s7Txt("Return on Investment (ROI)", "العائد على الاستثمار (ROI)") +
       " " +
       _tip(
@@ -3460,11 +3454,11 @@ window.renderSection7 = function (mountEl, data, ctx) {
         : "rgba(255,255,255,0.06)") +
       ';display:flex;flex-direction:column;justify-content:center;gap:12px">' +
       '<div style="display:flex;flex-direction:column">' +
-      '<div style="font-size:12px;color:' +
+      '<div style="font-size:var(--type-label);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.6)") +
-      ';font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:5px" id="s7-roas-text">' +
+      ';font-weight:var(--weight-bold);margin-bottom:6px;display:flex;align-items:center;gap:5px" id="s7-roas-text">' +
       s7Txt("For each 1 ", "لكل 1 ") + state.currency + s7Txt(" spent", " يتم إنفاقه") +
       " " +
       _tip(
@@ -3477,8 +3471,8 @@ window.renderSection7 = function (mountEl, data, ctx) {
         "ROAS = revenue / adSpend",
       ) +
       "</div>" +
-      '<div style="font-size:20px;font-weight:900;color:#00e676" id="s7-out-return">--</div>' +
-      '<div style="font-size:13px;font-weight:900;color:#22d3ee;margin-top:6px;display:flex;align-items:center;gap:5px" id="s7-net-roas-row"><span id="s7-out-net-roas">--</span> ' +
+      '<div style="font-size:var(--type-metric-sm);font-weight:var(--weight-bold);color:#00e676" id="s7-out-return">--</div>' +
+      '<div style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:#22d3ee;margin-top:6px;display:flex;align-items:center;gap:5px" id="s7-net-roas-row"><span id="s7-out-net-roas">--</span> ' +
       _tip(
         "??",
         s7Txt("Net ROAS", "العائد الصافي على الإعلان"),
@@ -3490,13 +3484,13 @@ window.renderSection7 = function (mountEl, data, ctx) {
       ) +
       "</div>" +
       "</div>" +
-      '<div id="s7-smart-tip-wrap" style="background:linear-gradient(135deg,rgba(0,230,118,0.1),transparent);border:1px solid rgba(0,230,118,0.2);border-radius:12px;padding:14px;display:flex;gap:12px;align-items:flex-start">' +
-      '<div style="font-size:20px;margin-top:2px">??</div>' +
+      '<div id="s7-smart-tip-wrap" style="background:linear-gradient(135deg,rgba(0,230,118,0.1),transparent);border:1px solid rgba(0,230,118,0.2);border-radius:var(--dash-radius-md);padding:14px;display:flex;gap:12px;align-items:flex-start">' +
+      '<div style="font-size:var(--type-metric-sm);margin-top:2px">??</div>' +
       "<div>" +
-      '<div style="font-size:12px;font-weight:900;color:#00e676;margin-bottom:4px">' +
+      '<div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:#00e676;margin-bottom:4px">' +
       s7Txt("Campaign Status", "حالة الحملة") +
       "</div>" +
-      '<div style="font-size:11px;color:' +
+      '<div style="font-size:var(--type-caption);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.7)") +
@@ -3514,19 +3508,19 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(255,255,255,0.06)") +
-      ';border-radius:16px;padding:24px">' +
+      ';border-radius:var(--dash-radius-xl);padding:24px">' +
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:16px;flex-wrap:wrap">' +
-      '<div><div style="font-size:15px;font-weight:900;display:flex;align-items:center;gap:8px"><span style="color:#00e676">??</span> ' +
+      '<div><div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);display:flex;align-items:center;gap:8px"><span style="color:#00e676">??</span> ' +
       s7Txt("Budget Scenario Forecast", "توقع سيناريو الميزانية") +
       "</div>" +
-      '<div style="font-size:11px;color:' +
+      '<div style="font-size:var(--type-caption);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.48)") +
       ';margin-top:4px">' +
       s7Txt("X-axis shows budget multiples. Hover any point to see the exact budget.", "المحور الأفقي يعرض مضاعفات الميزانية. مرر على أي نقطة لرؤية الميزانية الدقيقة.") +
       "</div></div>" +
-      '<div style="display:flex;gap:16px;font-size:11px;font-weight:700;min-height:22px;align-items:center">' +
+      '<div style="display:flex;gap:16px;font-size:var(--type-caption);font-weight:var(--weight-semibold);min-height:22px;align-items:center">' +
       '<div style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;background:linear-gradient(135deg,#ef4444,#00e676);border-radius:3px;box-shadow:0 0 8px rgba(0,230,118,.35);display:inline-block"></span>' +
       s7Txt("Net Result", "صافي النتيجة") +
       "</div>" +
@@ -3547,13 +3541,13 @@ window.renderSection7 = function (mountEl, data, ctx) {
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#f1f5f9"
         : "rgba(255,255,255,0.03)") +
-      ";padding:14px 22px;border-radius:14px;border:1px solid " +
+      ";padding:14px 22px;border-radius:var(--dash-radius-lg);border:1px solid " +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#cbd5e1"
         : "rgba(255,255,255,0.07)") +
       ';margin-bottom:20px">' +
-      '<div style="display:flex;align-items:center;gap:9px;font-size:15px;font-weight:900;letter-spacing:-.01em">' +
-      '<span style="color:#f5a623;font-size:15px">?</span>' +
+      '<div style="display:flex;align-items:center;gap:9px;font-size:var(--type-component-title);font-weight:var(--weight-semibold);letter-spacing:-.01em">' +
+      '<span style="color:#f5a623;font-size:var(--type-component-title)">?</span>' +
       '<span style="color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#1e293b"
@@ -3622,7 +3616,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
       '<div class="sfe-control-row">' +
       '<label class="sfe-label">' +
       s7Txt("Ad Spend", "الإنفاق الإعلاني") +
-      ' <span class="sfe-label-hint" style="font-size:10px;color:#8b8fa8">' +
+      ' <span class="sfe-label-hint" style="font-size:var(--type-micro);color:#8b8fa8">' +
       s7Txt("used for CPA & ROI", "يستخدم في CPA و ROI") +
       "</span></label>" +
       '<div class="sfe-input-wrap2"><input type="number" id="sfe-adspend" class="sfe-input2" min="0" step="500"><span class="sfe-input-unit2" id="sfe-lbl-adspend-curr">' +
@@ -3646,7 +3640,6 @@ window.renderSection7 = function (mountEl, data, ctx) {
       s7Txt("SAFE", "آمن") +
       "<br>40%+</span>" +
       "</div>" +
-      orderNdrSelectorHtml() +
       bestNdrCycleCardHtml() +
       "</div>" +
       '<div class="sfe-control-row">' +
@@ -3743,21 +3736,6 @@ window.renderSection7 = function (mountEl, data, ctx) {
         });
       });
     }
-    var orderNdrSelect = document.getElementById("s7-order-ndr-source");
-    if (orderNdrSelect) {
-      orderNdrSelect.addEventListener("change", function () {
-        orderNdrSourceKey = orderNdrSelect.value || "overall";
-        if (orderNdrSourceKey !== "best_cycle") window.DashboardBestNdrCyclePreferred = null;
-        applyOrderNdrChoice(true);
-        simState._ndrModified = false;
-        var ndrInput = document.getElementById("sfe-ndr");
-        if (ndrInput) ndrInput.value = s7RatioPctValue(simState.ndr);
-        updateSimModifiedFlag();
-        updateCalcUI();
-        updateSimUI();
-        scheduleCalcUI();
-      });
-    }
     var useBestCycleBtn = document.getElementById("s7-use-best-ndr-cycle");
     if (useBestCycleBtn) {
       useBestCycleBtn.addEventListener("click", function () {
@@ -3767,7 +3745,6 @@ window.renderSection7 = function (mountEl, data, ctx) {
         simState._ndrModified = false;
         var ndrInput = document.getElementById("sfe-ndr");
         if (ndrInput) ndrInput.value = s7RatioPctValue(simState.ndr);
-        if (orderNdrSelect) orderNdrSelect.value = "best_cycle";
         updateSimModifiedFlag();
         updateCalcUI();
         updateSimUI();
@@ -3784,7 +3761,6 @@ window.renderSection7 = function (mountEl, data, ctx) {
         simState._ndrModified = false;
         var ndrInput = document.getElementById("sfe-ndr");
         if (ndrInput) ndrInput.value = s7RatioPctValue(simState.ndr);
-        if (orderNdrSelect) orderNdrSelect.value = "overall";
         updateSimModifiedFlag();
         updateCalcUI();
         updateSimUI();
@@ -3810,13 +3786,13 @@ window.renderSection7 = function (mountEl, data, ctx) {
       bg +
       ";border:1px solid " +
       border +
-      ';border-radius:12px;padding:14px;text-align:center">' +
-      '<div style="font-size:11px;color:' +
+      ';border-radius:var(--dash-radius-md);padding:14px;text-align:center">' +
+      '<div style="font-size:var(--type-caption);color:' +
       labelColor +
       ';margin-bottom:6px">' +
       label +
       "</div>" +
-      '<div style="font-size:17px;font-weight:900;color:' +
+      '<div style="font-size:var(--type-section-title);font-weight:var(--weight-semibold);color:' +
       color +
       '">' +
       val +
@@ -3836,15 +3812,15 @@ window.renderSection7 = function (mountEl, data, ctx) {
       bg +
       ";border:1px solid " +
       border +
-      ';border-radius:12px;padding:14px;text-align:center;position:relative">' +
-      '<div style="font-size:11px;color:' +
+      ';border-radius:var(--dash-radius-md);padding:14px;text-align:center;position:relative">' +
+      '<div style="font-size:var(--type-caption);color:' +
       labelColor +
       ';margin-bottom:6px;display:flex;align-items:center;justify-content:center;gap:5px">' +
       label +
       " " +
       _tip(icon, tipTitle, tipDesc, tipFormula) +
       "</div>" +
-      '<div style="font-size:17px;font-weight:900;color:' +
+      '<div style="font-size:var(--type-section-title);font-weight:var(--weight-semibold);color:' +
       color +
       '">' +
       val +
@@ -3915,15 +3891,15 @@ window.renderSection7 = function (mountEl, data, ctx) {
       '<div id="s7-tip-inner" style="' +
       "background:rgba(8,12,24,0.98);" +
       "border:1px solid rgba(59,130,246,0.45);" +
-      "border-radius:13px;" +
+      "border-radius:var(--dash-radius-lg);" +
       "padding:14px 16px;" +
       "box-shadow:0 12px 40px rgba(0,0,0,0.8),0 0 0 1px rgba(255,255,255,0.05) inset;" +
-      "font-family:Cairo,sans-serif" +
+      "font-family:var(--font-ui);" +
       '">' +
-      '<div id="s7-tip-title" style="font-size:11px;font-weight:800;letter-spacing:.05em;color:#93c5fd;margin-bottom:7px;display:flex;align-items:center;gap:5px;direction:rtl"></div>' +
-      '<div id="s7-tip-desc"  style="font-size:12px;color:rgba(255,255,255,0.75);line-height:1.65; margin-bottom:0"></div>' +
-      '<div id="s7-tip-flbl"  style="display:none;font-size:9px;font-weight:700;letter-spacing:.12em;color:rgba(255,255,255,0.25);text-transform:uppercase;margin-top:9px;margin-bottom:4px;direction:rtl"></div>' +
-      '<div id="s7-tip-fbox"  style="display:none;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.25);border-radius:7px;padding:7px 10px;font-size:11px;color:#60a5fa;font-family:Courier New,monospace;direction:ltr;line-height:1.5;word-break:break-all"></div>' +
+      '<div id="s7-tip-title" style="font-size:var(--type-caption);font-weight:var(--weight-semibold);letter-spacing:.05em;color:#93c5fd;margin-bottom:7px;display:flex;align-items:center;gap:5px;direction:rtl"></div>' +
+      '<div id="s7-tip-desc"  style="font-size:var(--type-label);color:rgba(255,255,255,0.75);line-height:1.65; margin-bottom:0"></div>' +
+      '<div id="s7-tip-flbl"  style="display:none;font-size:var(--type-micro);font-weight:var(--weight-semibold);letter-spacing:.12em;color:rgba(255,255,255,0.25);text-transform:uppercase;margin-top:9px;margin-bottom:4px;direction:rtl"></div>' +
+      '<div id="s7-tip-fbox"  style="display:none;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.25);border-radius:var(--dash-radius-sm);padding:7px 10px;font-size:var(--type-caption);color:#60a5fa;font-family:var(--font-mono);direction:ltr;line-height:1.5;word-break:break-all"></div>' +
       "</div>" +
       '<div id="s7-tip-arrow" style="' +
       "position:absolute;" +
@@ -4088,7 +4064,7 @@ window.renderSection7 = function (mountEl, data, ctx) {
     if (!wrap || typeof renderCustomSelect !== "function") {
       // Fallback: native select
       wrap.innerHTML =
-        '<select id="s7-sel-currency" style="width:100%;background:#0b1120;border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:#fff;padding:10px;font-size:13px;font-weight:700;font-family:Cairo,sans-serif">' +
+        '<select id="s7-sel-currency" style="width:100%;background:var(--dash-surface);border:1px solid var(--dash-border-soft);border-radius:var(--dash-radius-sm);color:#fff;padding:10px;font-size:var(--type-control);font-weight:var(--weight-semibold);font-family:var(--font-ui)">' +
         supportedCurrencies().map(function (currency) {
           return '<option value="' + currency + '" ' +
             (state.currency === currency ? "selected" : "") +

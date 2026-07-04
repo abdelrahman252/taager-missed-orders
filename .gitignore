@@ -7,6 +7,8 @@ scripts/*
 scripts/perf/fixtures/
 !scripts/qa-dashboard-responsive.js
 !scripts/regenerate-transparent-icons.ps1
+!scripts/audit-typography.js
+!scripts/verify-visual-system.js
 !scripts/verify-actual-mode-financials.js
 !scripts/verify-monthly-data-cleanup.js
 !scripts/verify-admin-notifications.js

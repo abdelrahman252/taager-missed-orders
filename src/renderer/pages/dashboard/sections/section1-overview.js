@@ -17,6 +17,20 @@
 window.renderSection1 = function (mountEl, data, ctx) {
   'use strict';
 
+  function s1Debug(event, detail, level) {
+    if (window.TaagerDebugLog) window.TaagerDebugLog('dashboard-section1', event, detail || {}, level);
+    else (console[level || 'log'] || console.log).call(console, '[DashboardSection1] ' + event, detail || {});
+  }
+
+  s1Debug('render:start', {
+    connected: !!(mountEl && mountEl.isConnected),
+    hidden: !!(mountEl && mountEl.hidden),
+    dataLoaded: !!(ctx && ctx.data && ctx.data._loaded),
+    dataLoading: !!(ctx && ctx.data && ctx.data._loading),
+    version: ctx && ctx.data && ctx.data._version,
+    activeAccountId: ctx && ctx.data && ctx.data.meta && ctx.data.meta.activeAccountId
+  });
+
   /* ── i18n helpers — must be defined before any label/card arrays ─────────── */
   var tr = window.dashboardI18n;
   var isAr = tr ? tr.isRtl() : true;
@@ -85,6 +99,8 @@ window.renderSection1 = function (mountEl, data, ctx) {
   var activeAccId = (window.getActiveAccountId ? window.getActiveAccountId() : '__all__') || '__all__';
   var roiLiveRaw = (window.DashboardRoiState && window.DashboardRoiState.get(activeAccId)) || {};
   var marketingState = window.DashboardMarketingState ? window.DashboardMarketingState.get(activeAccId) : null;
+  var marketingSpendPending = !!(marketingState && marketingState.loading && !marketingState.manualOverride);
+  var marketingSpendUnavailable = !!(marketingState && marketingState.status === 'connected' && marketingState.error && !marketingState.manualOverride && !marketingSpendPending);
   var syncedSpendActive = !!(
     marketingState &&
     marketingState.status === "connected" &&
@@ -146,7 +162,7 @@ window.renderSection1 = function (mountEl, data, ctx) {
     { label: s1Txt('Confirmation Rate', 'نسبة التأكيد'), value: d.confirmationRate ? d.confirmationRate.value : (((window.dashboardGeoData || {}).pipeline || {}).metrics || {}).confirmationRate || 0, unit: '%', delta: d.confirmationRate ? d.confirmationRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.confirmationRate.tooltip', 'Confirmation Rate = progressed statuses / all orders. Confirmation + cancel + pending = 100%.') },
     { label: s1Txt('DR Rate', 'نسبة DR'), value: d.drRate ? d.drRate.value : (((window.dashboardGeoData || {}).pipeline || {}).metrics || {}).drPct || 0, unit: '%', delta: d.drRate ? d.drRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.drRate.tooltip', 'DR = delivered orders / confirmed orders.') },
     { label: s1Txt('NDR Rate', 'نسبة NDR'), value: d.ndrRate ? d.ndrRate.value : (((window.dashboardGeoData || {}).pipeline || {}).metrics || {}).deliveryRate || 0, unit: '%', delta: d.ndrRate ? d.ndrRate.delta : 0, color: 'orange', spark: [], iconType: 'orange', tooltip: tx('kpi.ndrRate.tooltip', 'NDR = delivered orders / net placed orders.') },
-    { label: s1Txt('Net ROAS', 'العائد الصافي على الإعلان'), value: netRoasUnavailable ? 0 : netRoas.toFixed(2), displayValue: netRoasUnavailable ? '—' : netRoas.toFixed(2), unit: 'x', delta: netRoasDelta, hideDelta: netRoasUnavailable, color: 'purple', spark: [], iconType: 'purple', tooltip: tx('kpi.netRoas.tooltip', s1Txt('Net ROAS = delivered sales divided by ad spend. It uses only successfully delivered order revenue, so pending, canceled, and returned orders do not inflate ad performance.', 'العائد الصافي على الإعلان = مبيعات الطلبات المسلمة مقسومة على الإنفاق الإعلاني. يستخدم مبيعات الطلبات المسلمة فقط حتى لا ترفع الطلبات المعلقة أو الملغاة أو المرتجعة نتيجة الإعلان.')) }
+    { label: s1Txt('Net ROAS', 'العائد الصافي على الإعلان'), value: netRoasUnavailable ? 0 : netRoas.toFixed(2), displayValue: netRoasUnavailable ? '—' : netRoas.toFixed(2), loading: marketingSpendPending, unavailable: marketingSpendUnavailable, unit: 'x', delta: netRoasDelta, hideDelta: netRoasUnavailable, color: 'purple', spark: [], iconType: 'purple', tooltip: tx('kpi.netRoas.tooltip', s1Txt('Net ROAS = delivered sales divided by ad spend. It uses only successfully delivered order revenue, so pending, canceled, and returned orders do not inflate ad performance.', 'العائد الصافي على الإعلان = مبيعات الطلبات المسلمة مقسومة على الإنفاق الإعلاني. يستخدم مبيعات الطلبات المسلمة فقط حتى لا ترفع الطلبات المعلقة أو الملغاة أو المرتجعة نتيجة الإعلان.')) }
   ];
 
   /* ── Health bar data ─────────────────────────────────────────────────────── */
@@ -205,7 +221,7 @@ window.renderSection1 = function (mountEl, data, ctx) {
       return idx === pts.length - 1 || idx === Math.floor((pts.length - 1) / 2) || idx === Math.floor((pts.length - 1) * 0.75);
     }).map(function (p) {
       return '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="5" fill="#fff" stroke="#3b82f6" stroke-width="2" style="filter:drop-shadow(0 0 6px #3b82f6)"/>';
-    }).join('') || '<div style="font-size:13px;color:rgba(255,255,255,0.55);font-weight:600;line-height:1.6;">' + s1Txt('No city performance data is available for this range.', 'لا توجد بيانات أداء للمدن في هذه الفترة.') + '</div>';
+    }).join('') || '<div style="font-size:var(--type-control);color:rgba(255,255,255,0.55);font-weight:var(--weight-semibold);line-height:1.6;">' + s1Txt('No city performance data is available for this range.', 'لا توجد بيانات أداء للمدن في هذه الفترة.') + '</div>';
     return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:140px;display:block;margin-top:20px;overflow:visible;">' +
       '<defs><linearGradient id="trendGradS1" x1="0" y1="0" x2="0" y2="1">' +
         '<stop offset="0%" stop-color="#3b82f6" stop-opacity="0.25"/>' +
@@ -312,13 +328,13 @@ window.renderSection1 = function (mountEl, data, ctx) {
   /* ── Build KPI card row HTML ─────────────────────────────────────────────── */
   var cardsHtml = cards.map(function (c, i) {
     return '<div class="fade-up" style="flex:1 1 calc((100% - 70px) / 6);min-width:170px;animation-delay:' + (i * 100) + 'ms;">' +
-      window.kpiCard({ label: c.label, value: c.value, displayValue: c.displayValue, staticDisplay: c.staticDisplay, unit: c.unit, delta: c.delta, hideDelta: c.hideDelta, color: c.color, sparklineData: c.spark, iconType: c.iconType, tooltip: c.tooltip }) +
+      window.kpiCard({ label: c.label, value: c.value, displayValue: c.displayValue, staticDisplay: c.staticDisplay, loading: c.loading, unavailable: c.unavailable, unit: c.unit, delta: c.delta, hideDelta: c.hideDelta, color: c.color, sparklineData: c.spark, iconType: c.iconType, tooltip: c.tooltip }) +
       '</div>';
   }).join('');
 
   var newCardsHtml = newCards.map(function (c, i) {
     return '<div class="fade-up" style="flex:1 1 calc((100% - 70px) / 6);min-width:170px;animation-delay:' + ((i + 6) * 100) + 'ms;">' +
-      window.kpiCard({ label: c.label, value: c.value, displayValue: c.displayValue, staticDisplay: c.staticDisplay, unit: c.unit, delta: c.delta, hideDelta: c.hideDelta, color: c.color, sparklineData: c.spark, iconType: c.iconType, tooltip: c.tooltip }) +
+      window.kpiCard({ label: c.label, value: c.value, displayValue: c.displayValue, staticDisplay: c.staticDisplay, loading: c.loading, unavailable: c.unavailable, unit: c.unit, delta: c.delta, hideDelta: c.hideDelta, color: c.color, sparklineData: c.spark, iconType: c.iconType, tooltip: c.tooltip }) +
       '</div>';
   }).join('');
 
@@ -334,16 +350,16 @@ window.renderSection1 = function (mountEl, data, ctx) {
 
   var pctLabelsHtml = barSegments.map(function (s) {
     return '<div style="width:' + s.pct + '%;text-align:center;white-space:nowrap;display:flex;justify-content:center;">' +
-      '<span style="font-size:13px;font-weight:800;color:' + s.color + ';font-family:\'DM Mono\', monospace;white-space:nowrap;">' + s.pct + '%</span>' +
+      '<span style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:' + s.color + ';font-family:var(--font-mono);white-space:nowrap;">' + s.pct + '%</span>' +
     '</div>';
   }).join('');
 
   var sarLabelsHtml = barSegments.map(function (s) {
     return '<div style="width:' + s.pct + '%;text-align:center;white-space:nowrap;display:flex;flex-direction:column;align-items:center;">' +
-      '<div style="font-size:17px;font-weight:800;color:' + s.color + ';line-height:1.2;font-family:\'DM Mono\', monospace;white-space:nowrap;">' +
+      '<div style="font-size:var(--type-section-title);font-weight:var(--weight-semibold);color:' + s.color + ';line-height:1.2;font-family:var(--font-mono);white-space:nowrap;">' +
         fmt(s.sar) +
       '</div>' +
-      '<div style="font-size:12px;color:rgba(255,255,255,0.42);margin-top:5px;font-weight:500; font-family:\'Tajawal\', sans-serif;white-space:nowrap;">' +
+      '<div style="font-size:var(--type-label);color:rgba(255,255,255,0.42);margin-top:5px;font-weight:var(--weight-medium); font-family:var(--font-ui);white-space:nowrap;">' +
         s.label +
       '</div>' +
     '</div>';
@@ -390,9 +406,9 @@ window.renderSection1 = function (mountEl, data, ctx) {
   /* ── Interactive Trend Chart ──────────────────────────────────────────────── */
   var trendSvg = trendSvgFor(trendPeriod);
 
-  var trendWidgetHtml = '<div style="background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:24px;display:flex;flex-direction:column;flex:1;">' +
+  var trendWidgetHtml = '<div style="background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:var(--dash-radius-xl);padding:24px;display:flex;flex-direction:column;flex:1;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
-      '<div style="font-size:16px;font-weight:800;color:#fff;">' + s1Txt('Profits & Orders Trend', 'اتجاه الأرباح والطلبات') + '</div>' +
+      '<div style="font-size:var(--type-subtitle);font-weight:var(--weight-semibold);color:#fff;">' + s1Txt('Profits & Orders Trend', 'اتجاه الأرباح والطلبات') + '</div>' +
       '<div id="s1-trend-select" class="s1-select-wrap" style="width:138px;"></div>' +
     '</div>' +
     '<div id="s1-trend-chart">' + trendSvg + '</div>' +
@@ -400,17 +416,17 @@ window.renderSection1 = function (mountEl, data, ctx) {
 
   /* ── AI Insights ─────────────────────────────────────────────────────────── */
   var insightText = overviewInsight();
-  var insightsHtml = '<div style="background:linear-gradient(145deg, rgba(59,130,246,0.1), rgba(168,85,247,0.05));border:1px solid rgba(59,130,246,0.2);border-radius:16px;padding:20px;position:relative;overflow:hidden;flex:1;display:flex;flex-direction:column;">' +
+  var insightsHtml = '<div style="background:linear-gradient(145deg, rgba(59,130,246,0.1), rgba(168,85,247,0.05));border:1px solid rgba(59,130,246,0.2);border-radius:var(--dash-radius-xl);padding:20px;position:relative;overflow:hidden;flex:1;display:flex;flex-direction:column;">' +
     '<div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;background:#3b82f6;filter:blur(50px);opacity:0.25;border-radius:50%;"></div>' +
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;z-index:2;direction:ltr;">' +
-      '<span style="color:#a855f7;font-size:20px;filter:drop-shadow(0 0 6px rgba(168,85,247,0.5));">✦</span>' +
-      '<span style="font-size:16px;font-weight:800;color:#fff;">' + s1Txt('AI Insights', 'رؤى الذكاء') + '</span>' +
+      '<span style="color:#a855f7;font-size:var(--type-metric-sm);filter:drop-shadow(0 0 6px rgba(168,85,247,0.5));">✦</span>' +
+      '<span style="font-size:var(--type-subtitle);font-weight:var(--weight-semibold);color:#fff;">' + s1Txt('AI Insights', 'رؤى الذكاء') + '</span>' +
     '</div>' +
-    '<div style="font-size:13px;color:rgba(255,255,255,0.75);line-height:1.7;z-index:2;flex:1;font-weight:500;direction:ltr;">' +
+    '<div style="font-size:var(--type-control);color:rgba(255,255,255,0.75);line-height:1.7;z-index:2;flex:1;font-weight:var(--weight-medium);direction:ltr;">' +
       insightText +
     '</div>' +
     '<div style="margin-top:16px;z-index:2;direction:ltr;">' +
-      '<button id="s1-ask-ai-btn" type="button" style="background:rgba(59,130,246,0.15);color:#3b82f6;border:1px solid rgba(59,130,246,0.3);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;transition:all 0.2s ease;height:30px;min-height:30px;" onmouseover="this.style.background=\'rgba(59,130,246,0.25)\'" onmouseout="this.style.background=\'rgba(59,130,246,0.15)\'">' + s1Txt('Ask AI', 'اسأل الذكاء') + '</button>' +
+      '<button id="s1-ask-ai-btn" type="button" style="background:rgba(59,130,246,0.15);color:#3b82f6;border:1px solid rgba(59,130,246,0.3);border-radius:var(--dash-radius-sm);padding:6px 12px;font-size:var(--type-caption);font-weight:var(--weight-semibold);cursor:pointer;transition:all 0.2s ease;height:30px;min-height:30px;" onmouseover="this.style.background=\'rgba(59,130,246,0.25)\'" onmouseout="this.style.background=\'rgba(59,130,246,0.15)\'">' + s1Txt('Ask AI', 'اسأل الذكاء') + '</button>' +
     '</div>' +
   '</div>';
 
@@ -428,21 +444,21 @@ window.renderSection1 = function (mountEl, data, ctx) {
     return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">' +
       '<div style="display:flex;align-items:center;gap:10px;">' +
         '<div style="width:10px;height:10px;border-radius:50%;background:' + item.color + ';box-shadow:0 0 8px ' + item.color + '88;"></div>' +
-        '<div style="font-size:13px;color:rgba(255,255,255,0.75);font-weight:500;">' + item.label + '</div>' +
+        '<div style="font-size:var(--type-control);color:rgba(255,255,255,0.75);font-weight:var(--weight-medium);">' + item.label + '</div>' +
       '</div>' +
-      '<div style="font-size:14px;font-weight:800;color:#fff;">' + item.pct + '%</div>' +
+      '<div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#fff;">' + item.pct + '%</div>' +
     '</div>';
-  }).join('') : '<div style="font-size:13px;color:rgba(255,255,255,0.55);font-weight:600;line-height:1.6;">' + s1Txt('No lost-profit breakdown is available for this range.', 'لا يوجد تحليل للربح الضائع في هذه الفترة.') + '</div>';
+  }).join('') : '<div style="font-size:var(--type-control);color:rgba(255,255,255,0.55);font-weight:var(--weight-semibold);line-height:1.6;">' + s1Txt('No lost-profit breakdown is available for this range.', 'لا يوجد تحليل للربح الضائع في هذه الفترة.') + '</div>';
 
-  var lostWidgetHtml = '<div style="background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:24px;display:flex;align-items:center;gap:32px;height:100%;direction:ltr;">' +
+  var lostWidgetHtml = '<div style="background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:var(--dash-radius-xl);padding:24px;display:flex;align-items:center;gap:32px;height:100%;direction:ltr;">' +
     '<div style="position:relative;flex-shrink:0;">' +
       donutSvg +
       '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;">' +
-        '<div style="font-size:11px;color:rgba(255,255,255,0.4);font-weight:600;">' + s1Txt('Lost', 'ضائع') + '</div>' +
+        '<div style="font-size:var(--type-caption);color:var(--dash-text-faint);font-weight:var(--weight-semibold);">' + s1Txt('Lost', 'ضائع') + '</div>' +
       '</div>' +
     '</div>' +
     '<div style="flex:1;">' +
-      '<div style="font-size:16px;font-weight:800;color:#fff;margin-bottom:16px;">' + s1Txt('Lost Profit Analysis', 'تحليل الربح الضائع') + '</div>' +
+      '<div style="font-size:var(--type-subtitle);font-weight:var(--weight-semibold);color:#fff;margin-bottom:16px;">' + s1Txt('Lost Profit Analysis', 'تحليل الربح الضائع') + '</div>' +
       breakdownListHtml +
     '</div>' +
   '</div>';
@@ -452,18 +468,18 @@ window.renderSection1 = function (mountEl, data, ctx) {
   var topListHtml = topArr.length ? topArr.map(function(item, index) {
     var colors = ['#00e676', '#f59e0b', '#3b82f6'];
     var c = colors[index] || '#fff';
-    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:rgba(255,255,255,0.02);border-radius:10px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.02);">' +
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:rgba(255,255,255,0.02);border-radius:var(--dash-radius-md);margin-bottom:10px;border:1px solid rgba(255,255,255,0.02);">' +
       '<div style="display:flex;align-items:center;gap:12px;">' +
-        '<div style="width:26px;height:26px;border-radius:50%;background:' + c + '22;color:' + c + ';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;">' + (index + 1) + '</div>' +
-        '<div style="font-size:14px;font-weight:700;color:#fff;">' + item.name + '</div>' +
+        '<div style="width:26px;height:26px;border-radius:50%;background:' + c + '22;color:' + c + ';display:flex;align-items:center;justify-content:center;font-size:var(--type-label);font-weight:var(--weight-semibold);">' + (index + 1) + '</div>' +
+        '<div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#fff;">' + item.name + '</div>' +
       '</div>' +
-      '<div style="font-size:14px;font-weight:800;color:' + c + ';font-family:\'DM Mono\', monospace;">' + fmt(item.value) + ' <span style="font-size:11px;font-weight:700;">' + item.unit + '</span></div>' +
+      '<div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:' + c + ';font-family:var(--font-mono);">' + fmt(item.value) + ' <span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);">' + item.unit + '</span></div>' +
     '</div>';
-  }).join('') : '<div style="font-size:13px;color:rgba(255,255,255,0.55);font-weight:600;line-height:1.6;">' + s1Txt('No city performance data is available for this range.', 'لا توجد بيانات أداء للمدن في هذه الفترة.') + '</div>';
+  }).join('') : '<div style="font-size:var(--type-control);color:rgba(255,255,255,0.55);font-weight:var(--weight-semibold);line-height:1.6;">' + s1Txt('No city performance data is available for this range.', 'لا توجد بيانات أداء للمدن في هذه الفترة.') + '</div>';
 
-  var topWidgetHtml = '<div style="background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:24px;height:100%;direction:ltr;">' +
+  var topWidgetHtml = '<div style="background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:var(--dash-radius-xl);padding:24px;height:100%;direction:ltr;">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">' +
-      '<div style="font-size:16px;font-weight:800;color:#fff;">' + s1Txt('Top Performing Cities', 'أفضل المدن أداءً') + '</div>' +
+      '<div style="font-size:var(--type-subtitle);font-weight:var(--weight-semibold);color:#fff;">' + s1Txt('Top Performing Cities', 'أفضل المدن أداءً') + '</div>' +
       '<div id="s1-city-select" class="s1-select-wrap" style="width:132px;"></div>' +
     '</div>' +
     '<div id="s1-city-list">' + topListHtml + '</div>' +
@@ -497,26 +513,26 @@ window.renderSection1 = function (mountEl, data, ctx) {
     '<circle id="s1-goal-circle" cx="50" cy="50" r="40" fill="none" stroke="#00e676" stroke-width="8" stroke-dasharray="251" stroke-dashoffset="' + dashOffset + '" stroke-linecap="round" style="filter:drop-shadow(0 0 8px rgba(0,230,118,0.5)); transition:stroke-dashoffset 1s ease-out;"/>' +
   '</svg>';
 
-  var goalWidgetHtml = '<div style="background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:20px 24px;display:flex;align-items:center;gap:24px;flex:1;direction:ltr;">' +
+  var goalWidgetHtml = '<div style="background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:var(--dash-radius-xl);padding:20px 24px;display:flex;align-items:center;gap:24px;flex:1;direction:ltr;">' +
     '<div style="position:relative;flex-shrink:0;">' +
       goalSvg +
       '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">' +
-        '<div id="s1-goal-pct" style="font-size:17px;font-weight:900;color:#fff;font-family:\'DM Mono\', monospace;">' + goalPct + '%</div>' +
+        '<div id="s1-goal-pct" style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff;font-family:var(--font-mono);">' + goalPct + '%</div>' +
       '</div>' +
     '</div>' +
     '<div style="flex:1;">' +
-      '<div style="font-size:15px;font-weight:800;color:#fff;margin-bottom:6px;">' + s1Txt('Monthly Taager Profit Goal', 'هدف ربح تاجر الشهري') + '</div>' +
-      '<div style="font-size:13px;color:rgba(255,255,255,0.5);font-weight:500;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+      '<div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:#fff;margin-bottom:6px;">' + s1Txt('Monthly Taager Profit Goal', 'هدف ربح تاجر الشهري') + '</div>' +
+      '<div style="font-size:var(--type-control);color:var(--dash-text-faint);font-weight:var(--weight-medium);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
         '<span>' + s1Txt('Target:', 'الهدف:') + '</span>' +
-        '<span id="s1-goal-target" style="color:#fff;font-weight:800;font-family:\'DM Mono\', monospace;cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.4);padding-bottom:1px;transition:color 0.2s;" onmouseover="this.style.color=\'#00e676\'" onmouseout="this.style.color=\'#fff\'" title="' + s1Txt('Click to edit goal', 'انقر لتعديل الهدف') + '">' + fmt(goalObj.target) + '</span>' +
-        '<span style="color:rgba(255,255,255,0.3);font-size:11px;direction:ltr;">(Remaining: <span style="color:#00e676;font-weight:800;" id="s1-goal-remaining">' + fmt(Math.max(0, goalObj.target - goalObj.current)) + '</span>)</span>' +
+        '<span id="s1-goal-target" style="color:#fff;font-weight:var(--weight-bold);font-family:var(--font-mono);cursor:pointer;border-bottom:1px dashed rgba(255,255,255,0.4);padding-bottom:1px;transition:color 0.2s;" onmouseover="this.style.color=\'#00e676\'" onmouseout="this.style.color=\'#fff\'" title="' + s1Txt('Click to edit goal', 'انقر لتعديل الهدف') + '">' + fmt(goalObj.target) + '</span>' +
+        '<span style="color:rgba(255,255,255,0.3);font-size:var(--type-caption);direction:ltr;">(Remaining: <span style="color:#00e676;font-weight:var(--weight-semibold);" id="s1-goal-remaining">' + fmt(Math.max(0, goalObj.target - goalObj.current)) + '</span>)</span>' +
       '</div>' +
     '</div>' +
   '</div>';
 
   /* ── Full section HTML ───────────────────────────────────────────────────── */
   var html =
-    '<div class="dash-scroll" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;background:#080b12; " id="s1-root">' +
+    '<div class="dash-scroll" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;background:var(--dash-bg); " id="s1-root">' +
 
       /* Body */
       '<div class="s1-body" style="padding:20px 22px;flex:1;">' +
@@ -526,19 +542,19 @@ window.renderSection1 = function (mountEl, data, ctx) {
 
           /* Title block (visual right in RTL = first child) */
           '<div id="s1-title-block">' +
-            '<h1 id="s1-h1" style="font-size:clamp(20px,2.5vw,28px);font-weight:900;color:#fff;margin:0;line-height:1.15;opacity:0;transform:translateY(-8px);transition:opacity 0.4s ease,transform 0.4s ease;">' +
+            '<h1 id="s1-h1" style="font-size:clamp(20px,2.5vw,28px);font-weight:var(--weight-bold);color:#fff;margin:0;line-height:1.15;opacity:0;transform:translateY(-8px);transition:opacity 0.4s ease,transform 0.4s ease;">' +
               s1Txt('Performance Overview', 'نظرة عامة على الأداء') +
             '</h1>' +
-            '<p id="s1-subtitle" style="font-size:13px;color:rgba(255,255,255,0.4);margin:7px 0 0;display:flex;align-items:center;gap:6px;opacity:0;transition:opacity 0.4s ease 0.12s;">' +
+            '<p id="s1-subtitle" style="font-size:var(--type-control);color:var(--dash-text-faint);margin:7px 0 0;display:flex;align-items:center;gap:6px;opacity:0;transition:opacity 0.4s ease 0.12s;">' +
               s1Txt('Comprehensive overview of your store performance on Taager platform', 'ملخص شامل لأداء متجرك على منصة تاجر') +
-              '<span style="color:#3b82f6;font-size:15px;margin-right:6px;filter:drop-shadow(0 0 4px rgba(59,130,246,0.5));">✦</span>' +
+              '<span style="color:#3b82f6;font-size:var(--type-component-title);margin-right:6px;filter:drop-shadow(0 0 4px rgba(59,130,246,0.5));">✦</span>' +
             '</p>' +
           '</div>' +
 
           /* Compare status chip (visual left = last child) */
-          '<span class="s1-compare-chip" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;' +
+          '<span class="s1-compare-chip" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--dash-radius-sm);' +
             'border:1px solid rgba(255,255,255,0.13);background:rgba(255,255,255,0.05);' +
-            'color:rgba(255,255,255,0.65);font-size:11px;font-weight:600;font-family:inherit;height:30px;min-height:30px;align-self:flex-start;">' +
+            'color:rgba(255,255,255,0.65);font-size:var(--type-caption);font-weight:var(--weight-semibold);font-family:inherit;height:30px;min-height:30px;align-self:flex-start;">' +
             '<svg width="12" height="8" viewBox="0 0 20 12" fill="none" style="flex-shrink:0;">' +
               '<polyline points="1,11 5,5 9,9 13,2 17,6 19,4" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>' +
             '</svg>' +
@@ -563,7 +579,7 @@ window.renderSection1 = function (mountEl, data, ctx) {
           /* Row 1: Taager Profit Health Index & AI Insights side-by-side (stacks on small screens) */
           '<div style="display:flex;flex-wrap:wrap;gap:18px;">' +
             '<div style="flex:2;min-width:280px;display:flex;">' +
-              '<div class="s1-health-row" style="background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:24px 28px;direction:ltr;display:flex;flex-wrap:wrap;align-items:center;gap:32px;width:100%;">' +
+              '<div class="s1-health-row" style="background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:var(--dash-radius-xl);padding:24px 28px;direction:ltr;display:flex;flex-wrap:wrap;align-items:center;gap:32px;width:100%;">' +
 
                 /* Main area */
                 '<div style="flex:2;min-width:280px;">' +
@@ -573,19 +589,19 @@ window.renderSection1 = function (mountEl, data, ctx) {
                     '<svg width="26" height="16" viewBox="0 0 28 16" fill="none">' +
                       '<polyline points="1,8 4,2 8,14 12,4 16,12 20,2 24,10 27,7" stroke="#3b82f6" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' +
                     '</svg>' +
-                    '<span style="font-size:18px;font-weight:800;color:#fff;">' + s1Txt('Taager Profit Health Index', 'مؤشر صحة ربح تاجر') + '</span>' +
+                    '<span style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff;">' + s1Txt('Taager Profit Health Index', 'مؤشر صحة ربح تاجر') + '</span>' +
                   '</div>' +
 
                   /* Subtitle */
-                  '<div class="health-subtitle" style="font-size:13px;color:rgba(255,255,255,0.45);margin-bottom:18px;">' +
+                  '<div class="health-subtitle" style="font-size:var(--type-control);color:rgba(255,255,255,0.45);margin-bottom:18px;">' +
                     s1Txt('Distribution of Taager profit between earned, incoming, and lost', 'توزيع ربح تاجر بين المحقق والقادم والضائع') +
                   '</div>' +
 
                   /* Bar */
-                  '<div style="position:relative;height:22px;border-radius:11px;overflow:visible;margin-bottom:18px;">' +
+                  '<div style="position:relative;height:22px;border-radius:var(--dash-radius-md);overflow:visible;margin-bottom:18px;">' +
 
                     /* Clipped segments container */
-                    '<div id="s1-bar-track" style="position:absolute;inset:0;border-radius:11px;overflow:hidden;display:flex;">' +
+                    '<div id="s1-bar-track" style="position:absolute;inset:0;border-radius:var(--dash-radius-md);overflow:hidden;display:flex;">' +
                       segmentsHtml +
                     '</div>' +
 
@@ -611,10 +627,10 @@ window.renderSection1 = function (mountEl, data, ctx) {
                       return '<div class="health-legend-item" style="display:flex;align-items:center;gap:8px;min-width:112px;flex:1;">' +
                         '<div style="width:12px;height:12px;border-radius:3px;background:' + s.color + ';box-shadow:0 0 6px ' + s.color + '88;flex-shrink:0;"></div>' +
                         '<div style="display:flex;flex-direction:column;">' +
-                          '<span class="health-legend-label" style="font-size:12px;color:rgba(255,255,255,0.5);font-weight:500;">' + s.label + '</span>' +
-                          '<span class="health-legend-value" style="font-size:11px;font-weight:700;color:#fff;font-family:\'DM Mono\', monospace;margin-top:2px;white-space:nowrap;line-height:1.2;">' +
+                          '<span class="health-legend-label" style="font-size:var(--type-label);color:var(--dash-text-faint);font-weight:var(--weight-medium);">' + s.label + '</span>' +
+                          '<span class="health-legend-value" style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:#fff;font-family:var(--font-mono);margin-top:2px;white-space:nowrap;line-height:1.2;">' +
                             fmt(s.sar) +
-                            ' <span class="health-legend-pct" style="font-size:9.5px;font-weight:700;color:' + s.color + ';margin-left:4px;">(' + s.pct + '%)</span>' +
+                            ' <span class="health-legend-pct" style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:' + s.color + ';margin-left:4px;">(' + s.pct + '%)</span>' +
                           '</span>' +
                         '</div>' +
                       '</div>';
@@ -625,11 +641,11 @@ window.renderSection1 = function (mountEl, data, ctx) {
 
                 /* Badge — Dynamic Performance */
                 '<div style="flex:1;min-width:140px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;">' +
-                  '<div style="width:62px;height:62px;border-radius:14px;background:' + perfColor + '1f;border:1.5px solid ' + perfColor + '59;box-shadow:0 0 22px 7px ' + perfColor + '4d;display:flex;align-items:center;justify-content:center;">' +
+                  '<div style="width:62px;height:62px;border-radius:var(--dash-radius-lg);background:' + perfColor + '1f;border:1.5px solid ' + perfColor + '59;box-shadow:0 0 22px 7px ' + perfColor + '4d;display:flex;align-items:center;justify-content:center;">' +
                     perfIcon +
                   '</div>' +
-                  '<div style="font-size:15px;font-weight:800;color:' + perfColor + ';text-align:center; white-space:nowrap;">' + perfTitle + '</div>' +
-                  '<div style="font-size:11px;color:rgba(255,255,255,0.42);text-align:center;line-height:1.5; white-space:nowrap;">' + perfSub + '</div>' +
+                  '<div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:' + perfColor + ';text-align:center; white-space:nowrap;">' + perfTitle + '</div>' +
+                  '<div style="font-size:var(--type-caption);color:rgba(255,255,255,0.42);text-align:center;line-height:1.5; white-space:nowrap;">' + perfSub + '</div>' +
                 '</div>' +
 
               '</div>' +
@@ -658,7 +674,7 @@ window.renderSection1 = function (mountEl, data, ctx) {
         '</div>' +
 
         /* Footnote */
-        '<p style="text-align:center;font-size:11px;color:rgba(255,255,255,0.35);margin-top:22px;display:flex;align-items:center;justify-content:center;gap:6px; ">' +
+        '<p style="text-align:center;font-size:var(--type-caption);color:rgba(255,255,255,0.35);margin-top:22px;display:flex;align-items:center;justify-content:center;gap:6px; ">' +
           s1Txt('Earned Taager profit is calculated from delivered orders only', 'يحسب ربح تاجر المحقق من الطلبات التي تم تسليمها فقط') +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px;">' +
             '<circle cx="12" cy="12" r="10"/>' +
@@ -694,12 +710,12 @@ window.renderSection1 = function (mountEl, data, ctx) {
     return topCities(metric).map(function(item, index) {
       var colors = ['#00e676', '#f59e0b', '#3b82f6'];
       var c = colors[index] || '#fff';
-      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:rgba(255,255,255,0.02);border-radius:10px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.02);">' +
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:rgba(255,255,255,0.02);border-radius:var(--dash-radius-md);margin-bottom:10px;border:1px solid rgba(255,255,255,0.02);">' +
         '<div style="display:flex;align-items:center;gap:12px;">' +
-          '<div style="width:26px;height:26px;border-radius:50%;background:' + c + '22;color:' + c + ';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;">' + (index + 1) + '</div>' +
-          '<div style="font-size:14px;font-weight:700;color:#fff;">' + esc(item.name) + '</div>' +
+          '<div style="width:26px;height:26px;border-radius:50%;background:' + c + '22;color:' + c + ';display:flex;align-items:center;justify-content:center;font-size:var(--type-label);font-weight:var(--weight-semibold);">' + (index + 1) + '</div>' +
+          '<div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#fff;">' + esc(item.name) + '</div>' +
         '</div>' +
-        '<div style="font-size:14px;font-weight:800;color:' + c + ';font-family:\'DM Mono\', monospace;">' + fmt(item.value) + ' <span style="font-size:11px;font-weight:700;">' + esc(item.unit) + '</span></div>' +
+        '<div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:' + c + ';font-family:var(--font-mono);">' + fmt(item.value) + ' <span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);">' + esc(item.unit) + '</span></div>' +
       '</div>';
     }).join('');
   }
@@ -872,4 +888,35 @@ window.renderSection1 = function (mountEl, data, ctx) {
       if (dot2) { dot2.style.opacity = '1'; dot2.style.transform = 'translate(-50%,-50%) scale(1)'; }
     });
   });
+
+  if (window.DashboardMarketingState) {
+    if (mountEl._s1MarketingListener) {
+      window.DashboardMarketingState.unsubscribe(mountEl._s1MarketingListener);
+    }
+    mountEl._s1MarketingListener = function (next) {
+      if (!next || next.platform !== 'combined' || String(next.accountId) !== String(activeAccId)) return;
+      s1Debug('listener:marketing', {
+        accountId: next.accountId,
+        platform: next.platform,
+        status: next.status,
+        loading: !!next.loading,
+        hidden: !!mountEl.hidden,
+        connected: !!mountEl.isConnected
+      });
+      if (!mountEl.isConnected || mountEl.hidden) {
+        mountEl._dashboardNeedsRefresh = true;
+        return;
+      }
+      s1Debug('listener:marketing-rerender');
+      window.renderSection1(mountEl, data, ctx);
+    };
+    window.DashboardMarketingState.subscribe(mountEl._s1MarketingListener);
+    mountEl._dashboardSectionCleanup = function () {
+      s1Debug('cleanup');
+      if (mountEl._s1MarketingListener) {
+        window.DashboardMarketingState.unsubscribe(mountEl._s1MarketingListener);
+        mountEl._s1MarketingListener = null;
+      }
+    };
+  }
 };

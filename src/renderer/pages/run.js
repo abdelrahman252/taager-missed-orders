@@ -106,22 +106,22 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
         <!-- Header -->
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
           <div>
-            <div class="page-title" style="font-size:20px" data-i18n="run.title">${t("run.title")}</div>
+            <div class="page-title" style="font-size:var(--type-metric-sm)" data-i18n="run.title">${t("run.title")}</div>
             <div class="text-muted text-sm">📅 ${dateDisplay}</div>
           </div>
           <div style="display:flex;align-items:center;gap:8px">
             <div class="badge badge-accent" id="run-status-badge">${t("run.starting")}</div>
-            <button class="btn btn-danger" id="btn-stop" style="font-size:12px;padding:6px 14px">${t("run.stop")}</button>
-            <button class="btn btn-ghost" id="btn-home-run" style="font-size:12px;padding:6px 14px;opacity:0.35;cursor:not-allowed" disabled>${t("run.home")}</button>
+            <button class="btn btn-danger" id="btn-stop" style="font-size:var(--type-label);padding:6px 14px">${t("run.stop")}</button>
+            <button class="btn btn-ghost" id="btn-home-run" style="font-size:var(--type-label);padding:6px 14px;opacity:0.35;cursor:not-allowed" disabled>${t("run.home")}</button>
           </div>
         </div>
 
         <!-- Cooldown bar -->
         <div id="global-cooldown-bar" style="display:none;background:rgba(124,106,247,0.1);border:1px solid #7c6af7;border-radius:var(--radius);padding:10px 16px;align-items:center;gap:12px">
-          <span style="font-size:16px">⏳</span>
+          <span style="font-size:var(--type-subtitle)">⏳</span>
           <div style="flex:1">
-            <div style="font-size:12px;font-weight:700;color:#a89cf7">${t("run.cooldown_label")}</div>
-            <div style="font-size:11px;color:var(--text2)">${t("run.cooldown_next")} <strong id="cooldown-timer" style="color:#a89cf7">6:00</strong></div>
+            <div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:#a89cf7">${t("run.cooldown_label")}</div>
+            <div style="font-size:var(--type-caption);color:var(--text2)">${t("run.cooldown_next")} <strong id="cooldown-timer" style="color:#a89cf7">6:00</strong></div>
           </div>
           <div style="width:120px;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
             <div id="cooldown-bar-fill" style="height:100%;background:#7c6af7;width:100%;transition:width 1s linear"></div>
@@ -146,13 +146,13 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
 
             <!-- Phase status -->
             <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px">
-              <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">${t("run.phases_header")}</div>
+              <div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">${t("run.phases_header")}</div>
               <div style="display:flex;flex-direction:column;gap:6px" id="phases-grid">
                 ${phaseNames.map((name, i) => `
                   <div class="status-row" id="phase-${i}" style="margin-bottom:0;padding:10px 12px">
                     <div class="status-dot" id="dot-${i}"></div>
                     <div style="flex:1">
-                      <div style="font-size:12px;font-weight:600">${name}</div>
+                      <div style="font-size:var(--type-label);font-weight:var(--weight-semibold)">${name}</div>
                       <div class="text-sm text-muted" id="phase-label-${i}">${t("run.waiting")}</div>
                     </div>
                   </div>
@@ -175,7 +175,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
               <div class="notice-text">
                 <strong>Google Login Required</strong>
                 <span id="notice-google-login-text">Chrome opened with this bot profile. Log in with Google, then close Chrome. The app will auto-check; Done is backup.</span>
-                <button class="btn-primary" id="btn-google-login-done" type="button" style="margin-top:8px;width:max-content;padding:8px 12px;font-size:12px">I finished Google login</button>
+                <button class="btn-primary" id="btn-google-login-done" type="button" style="margin-top:8px;width:max-content;padding:8px 12px;font-size:var(--type-label)">I finished Google login</button>
               </div>
             </div>
 
@@ -193,13 +193,13 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
               <span class="notice-icon">🔄</span>
               <div class="notice-text" style="flex:1">
                 <strong>${t("run.restart_title")}</strong>
-                <div id="taager-restart-reason" style="font-size:11px;color:var(--text2);margin-top:3px"></div>
+                <div id="taager-restart-reason" style="font-size:var(--type-caption);color:var(--text2);margin-top:3px"></div>
                 <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
-                  <div style="font-size:13px;color:#ff6b35;font-weight:700">${t("run.restart_wait")} <span id="taager-restart-timer" style="font-family:monospace">6:00</span></div>
+                  <div style="font-size:var(--type-control);color:#ff6b35;font-weight:var(--weight-semibold)">${t("run.restart_wait")} <span id="taager-restart-timer" style="font-family:var(--font-mono)">6:00</span></div>
                   <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
                     <div id="taager-restart-bar" style="height:100%;background:#ff6b35;width:100%;transition:width 1s linear;border-radius:2px"></div>
                   </div>
-                  <div id="taager-restart-attempt" style="font-size:10px;color:var(--text2)"></div>
+                  <div id="taager-restart-attempt" style="font-size:var(--type-micro);color:var(--text2)"></div>
                 </div>
               </div>
             </div>
@@ -223,13 +223,13 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
               <div class="upl-header">
                 <div>
                   <div class="upl-title">${t("run.creating")}</div>
-                  <div class="upl-count"><span id="upload-ok">0</span> <span style="font-size:16px;color:var(--text2);font-weight:400">/ <span id="upload-total">0</span></span></div>
+                  <div class="upl-count"><span id="upload-ok">0</span> <span style="font-size:var(--type-subtitle);color:var(--text2);font-weight:var(--weight-regular)">/ <span id="upload-total">0</span></span></div>
                 </div>
                 <div style="text-align:right">
-                  <div style="font-size:11px;color:var(--text2);margin-bottom:4px">${t("run.acc_status_col")}</div>
+                  <div style="font-size:var(--type-caption);color:var(--text2);margin-bottom:4px">${t("run.acc_status_col")}</div>
                   <div style="display:flex;gap:14px;align-items:center">
-                    <span style="color:var(--success);font-weight:700;font-size:14px">✅ <span id="upload-success-count">0</span></span>
-                    <span style="color:var(--danger);font-weight:700;font-size:14px">❌ <span id="upload-fail-count">0</span></span>
+                    <span style="color:var(--success);font-weight:var(--weight-semibold);font-size:var(--type-body)">✅ <span id="upload-success-count">0</span></span>
+                    <span style="color:var(--danger);font-weight:var(--weight-semibold);font-size:var(--type-body)">❌ <span id="upload-fail-count">0</span></span>
                   </div>
                 </div>
               </div>
@@ -238,21 +238,21 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
               </div>
               <div class="upl-stats">
                 <div class="upl-last" id="upload-last-order">${t("run.progress_start")}</div>
-                <div id="upload-counter" style="color:var(--text2);font-size:11px;flex-shrink:0">0 / 0</div>
+                <div id="upload-counter" style="color:var(--text2);font-size:var(--type-caption);flex-shrink:0">0 / 0</div>
               </div>
             </div>
 
             <!-- Orders preview table — appears once we have preview data, copyable -->
             <div id="preview-panel" style="display:none;background:var(--bg2);border:1px solid var(--accent);border-radius:var(--radius);overflow:hidden">
               <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)">
-                <div style="font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em" id="preview-header-label">${t("run.orders_ready")}</div>
+                <div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:var(--accent);text-transform:uppercase;letter-spacing:.06em" id="preview-header-label">${t("run.orders_ready")}</div>
                 <div style="display:flex;gap:8px;align-items:center">
-                  <span style="font-size:11px;color:var(--text2)">${t("run.click_to_copy")}</span>
-                  <button id="btn-preview-download" class="btn btn-primary" style="font-size:11px;padding:5px 12px">${t("run.download")}</button>
+                  <span style="font-size:var(--type-caption);color:var(--text2)">${t("run.click_to_copy")}</span>
+                  <button id="btn-preview-download" class="btn btn-primary" style="font-size:var(--type-caption);padding:5px 12px">${t("run.download")}</button>
                 </div>
               </div>
               <div style="padding:8px 12px;border-bottom:1px solid var(--border);background:rgba(0,0,0,0.05)">
-                <input id="preview-search" type="text" placeholder="${t('run.search_orders_placeholder') || 'Search by name, phone or product...'}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font-size:12px;color:var(--text);outline:none" oninput="window._filterPreviewTable(this.value)">
+                <input id="preview-search" type="text" placeholder="${t('run.search_orders_placeholder') || 'Search by name, phone or product...'}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font-size:var(--type-label);color:var(--text);outline:none" oninput="window._filterPreviewTable(this.value)">
               </div>
               <div style="overflow:auto;max-height:340px" id="preview-table-wrap"></div>
             </div>
@@ -260,17 +260,17 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
             <!-- Placeholder when no data yet -->
             <div id="run-idle-placeholder" style="flex:1;display:flex;align-items:center;justify-content:center;min-height:200px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius)">
               <div style="text-align:center;color:var(--text2)">
-                <div style="font-size:36px;margin-bottom:10px;opacity:0.4">📦</div>
-                <div style="font-size:13px;font-weight:600">${t("run.waiting_upload")}</div>
-                <div style="font-size:12px;margin-top:4px;opacity:0.7">${t("run.upload_placeholder")}</div>
+                <div style="font-size:var(--type-display);margin-bottom:10px;opacity:0.4">📦</div>
+                <div style="font-size:var(--type-control);font-weight:var(--weight-semibold)">${t("run.waiting_upload")}</div>
+                <div style="font-size:var(--type-label);margin-top:4px;opacity:0.7">${t("run.upload_placeholder")}</div>
               </div>
             </div>
 
             <!-- Zero orders result panel — shown when bot finishes with 0 new orders -->
             <div id="zero-orders-panel" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:28px 24px;text-align:center">
-              <div style="font-size:40px;margin-bottom:12px">🔍</div>
-              <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px">${t("run.no_new_orders_found")}</div>
-              <div style="font-size:13px;color:var(--text2);margin-bottom:20px">${t("run.orders_all_in_taager")}</div>
+              <div style="font-size:var(--type-hero);margin-bottom:12px">🔍</div>
+              <div style="font-size:var(--type-subtitle);font-weight:var(--weight-semibold);color:var(--text);margin-bottom:6px">${t("run.no_new_orders_found")}</div>
+              <div style="font-size:var(--type-control);color:var(--text2);margin-bottom:20px">${t("run.orders_all_in_taager")}</div>
               <div id="zero-orders-stats" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:8px"></div>
             </div>
 
@@ -302,7 +302,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
           padding: 9px 14px;
           text-align: left;
           border-bottom: 1px solid var(--border);
-          font-size: 12px;
+          font-size:var(--type-label);
           line-height: 1.35;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -310,8 +310,8 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
           vertical-align: middle;
         }
         .orders-preview-table th {
-          font-weight: 700;
-          font-size: 11px;
+          font-weight:var(--weight-semibold);
+          font-size:var(--type-caption);
           text-transform: uppercase;
           letter-spacing: .04em;
           color: var(--text2);
@@ -338,7 +338,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
         .run-orders-preview-table .preview-product,
         .run-orders-preview-table td:nth-child(2) {
           color: var(--text);
-          font-weight: 650;
+          font-weight:var(--weight-bold);
         }
         .run-orders-preview-table .preview-date,
         .run-orders-preview-table .preview-city,
@@ -349,8 +349,8 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
         .run-orders-preview-table .preview-phone,
         .run-orders-preview-table td:nth-child(8) {
           direction: ltr;
-          font-family: monospace;
-          font-size: 12.5px;
+          font-family:var(--font-mono);
+          font-size:var(--type-control);
         }
       `;
       document.head.appendChild(_runTableStyle);
@@ -376,6 +376,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     const logEl  = document.getElementById("log-output");
     const badge  = document.getElementById("run-status-badge");
     let botDone  = false;
+    let stopRequested = false;
 
     function isInlineCountdownLog(text) {
       return String(text || "").includes("[تجنب حد التصدير]") ||
@@ -413,19 +414,21 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     document.getElementById("btn-home-run").addEventListener("click", () => { cleanup(); onHome(); });
 
     document.getElementById("btn-stop").addEventListener("click", async () => {
-      if (botDone) return;
+      if (botDone || stopRequested) return;
       const confirmed = await showRunConfirm(t("run.stop_title"), t("run.stop_msg"));
       if (!confirmed) return;
+      stopRequested = true;
+      const stopBtn = document.getElementById("btn-stop");
+      if (stopBtn) stopBtn.disabled = true;
       window._botIsRunning = false;
-      window.api.killBot();
+      await window.api.killBot();
       window.api.botFinished();
+      botDone = true;
+      cleanup();
       appendLog("\n" + t("run.bot_stopped_user"));
       badge.textContent = t("run.badge_stopped");
-      document.getElementById("btn-stop").style.display = "none";
-      const homeBtn = document.getElementById("btn-home-run");
-      if (homeBtn) { homeBtn.disabled = false; homeBtn.style.opacity = "1"; homeBtn.style.cursor = "pointer"; }
-      startGlobalCooldown();
-      showCooldownBar();
+      if (stopBtn) stopBtn.style.display = "none";
+      onHome();
     });
 
     function appendLog(msg) {
@@ -552,7 +555,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       // Build selectable, copyable table
       const allRows = data.rows; // show ALL rows
       window._previewAllRows = allRows;
-      const more = data.total > allRows.length ? `<div style="padding:8px 16px;font-size:11px;color:var(--text2)">+ ${data.total - allRows.length} more rows not shown</div>` : "";
+      const more = data.total > allRows.length ? `<div style="padding:8px 16px;font-size:var(--type-caption);color:var(--text2)">+ ${data.total - allRows.length} more rows not shown</div>` : "";
 
       function buildPreviewTableHTML(rows) {
         return `
@@ -575,12 +578,12 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
                 <tr>
                   <td class="preview-index" style="color:var(--text2)">${i + 1}</td>
                   <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.productName||"").replace(/"/g,"")}">${r.productName || "—"}</td>
-                  <td class="preview-qty" style="font-weight:700">${r.qty}</td>
-                  <td style="color:var(--success);font-weight:600">${r.subtotal || "—"}</td>
+                  <td class="preview-qty" style="font-weight:var(--weight-bold)">${r.qty}</td>
+                  <td style="color:var(--success);font-weight:var(--weight-semibold)">${r.subtotal || "—"}</td>
                   <td style="color:var(--text2)">${r.date || "—"}</td>
                   <td style="direction:rtl;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.city || "—"}</td>
                   <td style="direction:rtl;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name || "—"}</td>
-                  <td style="font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.phone}</td>
+                  <td style="font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.phone}</td>
                 </tr>
               `).join("")}
             </tbody>
@@ -601,7 +604,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
           : (window._previewAllRows || []);
         tableWrap.innerHTML = buildPreviewTableHTML(filtered);
         if (filtered.length === 0) {
-          tableWrap.innerHTML += `<div style="padding:16px;text-align:center;font-size:12px;color:var(--text2)">No orders match your search</div>`;
+          tableWrap.innerHTML += `<div style="padding:16px;text-align:center;font-size:var(--type-label);color:var(--text2)">No orders match your search</div>`;
         }
       };
 
@@ -786,6 +789,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     if (typeof wireSharedSidebar === "function") wireSharedSidebar(el);
 
     window.api.runBot({ dateFrom, dateTo, accountIds: selectedAccountIds || [] }).then((result) => {
+      if (stopRequested) return;
       botDone = true;
       window._botIsRunning = false;
       window.api.botFinished();
@@ -817,17 +821,20 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
           if (zeroPanel)       zeroPanel.style.display = "block";
           if (statsEl && result.data.stats) {
             const s = result.data.stats;
+            const alreadyInTaager = Number.isFinite(Number(s.taagerOrderCount))
+              ? Number(s.taagerOrderCount)
+              : (s.realInTaager || 0) + (s.missedInTaager || 0);
             const statItems = [
               { icon: "📥", label: t("run.stat_real_scanned"),     val: (s.realValid   || 0) + (s.realInTaager   || 0) + (s.realDupe   || 0) },
               { icon: "📋", label: t("run.stat_missed_scanned"),   val: (s.missedValid || 0) + (s.missedInTaager || 0) + (s.missedDupe || 0) },
-              { icon: "🔁", label: t("run.stat_already_taager"),     val: (s.realInTaager || 0) + (s.missedInTaager || 0) },
+              { icon: "🔁", label: t("run.stat_already_taager"),     val: alreadyInTaager },
               { icon: "📦", label: t("run.stat_duplicate_phones"), val: (s.realDupe     || 0) + (s.missedDupe     || 0) },
             ];
             statsEl.innerHTML = statItems.map(item => `
-              <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px 18px;min-width:120px">
-                <div style="font-size:20px;margin-bottom:4px">${item.icon}</div>
-                <div style="font-size:20px;font-weight:800;color:var(--text)">${item.val}</div>
-                <div style="font-size:11px;color:var(--text2);margin-top:2px">${item.label}</div>
+              <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 18px;min-width:120px">
+                <div style="font-size:var(--type-metric-sm);margin-bottom:4px">${item.icon}</div>
+                <div style="font-size:var(--type-metric-sm);font-weight:var(--weight-bold);color:var(--text)">${item.val}</div>
+                <div style="font-size:var(--type-caption);color:var(--text2);margin-top:2px">${item.label}</div>
               </div>`).join("");
           }
           // Still navigate to results after a delay so the user sees this
@@ -887,6 +894,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
   // Active pane: "__all__" or an accountId
   let selectedPane = "__all__";
   let allBotsDone  = false;
+  let stopRequested = false;
 
   // ── Status icon helper ──
   function statusIcon(s) {
@@ -921,7 +929,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       const lbl = ph.state === "active" ? t("run.phase_running") : ph.state === "done" ? t("run.phase_complete") : t("run.waiting");
       return `<div class="status-row" style="${i === 4 ? "grid-column:1/-1" : ""}">
         <div class="${dotCls}"></div>
-        <div><div style="font-size:13px;font-weight:600">${name}</div><div class="text-sm text-muted">${lbl}</div></div>
+        <div><div style="font-size:var(--type-control);font-weight:var(--weight-semibold)">${name}</div><div class="text-sm text-muted">${lbl}</div></div>
       </div>`;
     }).join("");
   }
@@ -936,13 +944,13 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     const lastColor = p.lastOrder?.error ? "var(--danger)" : "var(--text2)";
     return `<div id="acc-prog-${accId}" style="background:var(--bg2);border:1px solid var(--accent);border-radius:var(--radius);padding:14px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em">${t("run.creating")}</div>
-        <div style="font-size:12px;color:var(--text2)">${p.current} / ${p.total}</div>
+        <div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:var(--accent);text-transform:uppercase;letter-spacing:.06em">${t("run.creating")}</div>
+        <div style="font-size:var(--type-label);color:var(--text2)">${p.current} / ${p.total}</div>
       </div>
       <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;margin-bottom:8px">
         <div style="height:100%;background:var(--accent);width:${pct}%;transition:width 0.4s ease;border-radius:4px"></div>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:11px">
+      <div style="display:flex;justify-content:space-between;font-size:var(--type-caption)">
         <div style="color:${lastColor}">${lastTxt}</div>
         <div style="display:flex;gap:12px">
           <span style="color:var(--success)">✅ ${p.success}</span>
@@ -983,14 +991,14 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
             return `
             <div style="background:var(--bg2);border:1px solid ${statusColor};border-radius:var(--radius);padding:14px;cursor:pointer" onclick="window._runMultiSelect('${acc.id}')">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-                <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%">${accountDisplayName(acc)}</div>
-                <div style="font-size:12px;font-weight:700;color:${statusColor}">${statusText}</div>
+                <div style="font-size:var(--type-control);font-weight:var(--weight-semibold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%">${accountDisplayName(acc)}</div>
+                <div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:${statusColor}">${statusText}</div>
               </div>
-              <div style="font-size:11px;color:var(--text2);margin-bottom:6px">${currentPhaseLabel}</div>
+              <div style="font-size:var(--type-caption);color:var(--text2);margin-bottom:6px">${currentPhaseLabel}</div>
               <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:8px">
                 <div style="height:100%;width:${pct}%;background:${statusColor};transition:width 0.5s ease;border-radius:2px"></div>
               </div>
-              ${prog ? `<div style="font-size:11px;color:var(--text2)">${typeof uploadDetailFn === "function" ? uploadDetailFn(prog.current, prog.total, prog.success, prog.failed) : uploadDetailFn}</div>` : acc.preview ? `<div style="font-size:11px;color:var(--success);font-weight:600">${(()=>{const fn=t("run.preview_header");return typeof fn==="function"?fn(acc.preview.total):fn;})()}</div>` : ""}
+              ${prog ? `<div style="font-size:var(--type-caption);color:var(--text2)">${typeof uploadDetailFn === "function" ? uploadDetailFn(prog.current, prog.total, prog.success, prog.failed) : uploadDetailFn}</div>` : acc.preview ? `<div style="font-size:var(--type-caption);color:var(--success);font-weight:var(--weight-semibold)">${(()=>{const fn=t("run.preview_header");return typeof fn==="function"?fn(acc.preview.total):fn;})()}</div>` : ""}
             </div>`;
           }).join("")}
         </div>
@@ -1006,7 +1014,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
 
     const phaseNames = [t("run.phase0"),t("run.phase1"),t("run.phase2"),t("run.phase3"),t("run.phase4")];
     const doneBanner = acc.status !== "running"
-      ? `<div style="background:${acc.status==="done"?"rgba(0,214,143,0.1)":"rgba(255,77,109,0.1)"};border:1px solid ${acc.status==="done"?"var(--success)":"var(--danger)"};border-radius:var(--radius);padding:10px 16px;font-size:13px;font-weight:700;color:${acc.status==="done"?"var(--success)":"var(--danger)"}">
+      ? `<div style="background:${acc.status==="done"?"rgba(0,214,143,0.1)":"rgba(255,77,109,0.1)"};border:1px solid ${acc.status==="done"?"var(--success)":"var(--danger)"};border-radius:var(--radius);padding:10px 16px;font-size:var(--type-control);font-weight:var(--weight-semibold);color:${acc.status==="done"?"var(--success)":"var(--danger)"}">
           ${acc.status==="done" ? (()=>{const fn=t("run.acc_done_banner");const n=accountDisplayName(acc);return typeof fn==="function"?fn(n):fn;})() : (()=>{const fn=t("run.acc_failed_banner");const n=accountDisplayName(acc);return typeof fn==="function"?fn(n):fn;})()}
         </div>` : "";
 
@@ -1017,13 +1025,13 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
         <div class="upl-header">
           <div>
             <div class="upl-title">${t("run.creating")}</div>
-            <div class="upl-count">${prog.current} <span style="font-size:16px;color:var(--text2);font-weight:400">/ ${prog.total}</span></div>
+            <div class="upl-count">${prog.current} <span style="font-size:var(--type-subtitle);color:var(--text2);font-weight:var(--weight-regular)">/ ${prog.total}</span></div>
           </div>
           <div style="text-align:right">
-            <div style="font-size:11px;color:var(--text2);margin-bottom:4px">${t("run.acc_status_col")}</div>
+            <div style="font-size:var(--type-caption);color:var(--text2);margin-bottom:4px">${t("run.acc_status_col")}</div>
             <div style="display:flex;gap:14px">
-              <span style="color:var(--success);font-weight:700;font-size:14px">✅ ${prog.success}</span>
-              <span style="color:var(--danger);font-weight:700;font-size:14px">❌ ${prog.failed}</span>
+              <span style="color:var(--success);font-weight:var(--weight-semibold);font-size:var(--type-body)">✅ ${prog.success}</span>
+              <span style="color:var(--danger);font-weight:var(--weight-semibold);font-size:var(--type-body)">❌ ${prog.failed}</span>
             </div>
           </div>
         </div>
@@ -1032,7 +1040,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
         </div>
         <div class="upl-stats">
           <div class="upl-last">${prog.lastOrder?.error ? `❌ ${prog.lastOrder.product} — ${prog.lastOrder.error}` : `↳ ${prog.lastOrder?.product || ""}`}</div>
-          <div style="color:var(--text2);font-size:11px">${prog.current} / ${prog.total}</div>
+          <div style="color:var(--text2);font-size:var(--type-caption)">${prog.current} / ${prog.total}</div>
         </div>
       </div>` : "";
 
@@ -1069,24 +1077,24 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
             <tbody>${filtered.map((r,i)=>`<tr>
               <td style="color:var(--text2);text-align:center">${i+1}</td>
               <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.productName||"").replace(/"/g,"")}">${r.productName||"—"}</td>
-              <td style="font-weight:700;text-align:center">${r.qty||1}</td>
-              <td style="color:var(--success);font-weight:600">${r.subtotal||"—"}</td>
+              <td style="font-weight:var(--weight-bold);text-align:center">${r.qty||1}</td>
+              <td style="color:var(--success);font-weight:var(--weight-semibold)">${r.subtotal||"—"}</td>
               <td style="color:var(--text2)">${r.date||"—"}</td>
               <td style="direction:rtl;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.city||"—"}</td>
               <td style="direction:rtl;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name||"—"}</td>
-              <td style="font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.phone||"—"}</td>
+              <td style="font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.phone||"—"}</td>
             </tr>`).join("")}
-            ${filtered.length===0?`<tr><td colspan="8" style="text-align:center;padding:14px;color:var(--text2);font-size:12px">No orders match your search</td></tr>`:""}</tbody>
+            ${filtered.length===0?`<tr><td colspan="8" style="text-align:center;padding:14px;color:var(--text2);font-size:var(--type-label)">No orders match your search</td></tr>`:""}</tbody>
           </table>`;
       };
       return `
       <div style="background:var(--bg2);border:1px solid var(--accent);border-radius:var(--radius);overflow:hidden">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border)">
-          <div style="font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em">${headerLabel}</div>
-          ${prevData.buffer ? `<button class="btn btn-primary" style="font-size:11px;padding:5px 12px" onclick="window._multiDownloadPreview('${acc.id}')">${t("run.download")}</button>` : ""}
+          <div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:var(--accent);text-transform:uppercase;letter-spacing:.06em">${headerLabel}</div>
+          ${prevData.buffer ? `<button class="btn btn-primary" style="font-size:var(--type-caption);padding:5px 12px" onclick="window._multiDownloadPreview('${acc.id}')">${t("run.download")}</button>` : ""}
         </div>
         <div style="padding:7px 10px;border-bottom:1px solid var(--border);background:rgba(0,0,0,0.05)">
-          <input id="${searchId}" type="text" placeholder="${t('run.search_orders_placeholder')||'Search by name, phone or product...'}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 9px;font-size:12px;color:var(--text);outline:none" oninput="window._filterMultiPreview('${acc.id}',this.value)">
+          <input id="${searchId}" type="text" placeholder="${t('run.search_orders_placeholder')||'Search by name, phone or product...'}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 9px;font-size:var(--type-label);color:var(--text);outline:none" oninput="window._filterMultiPreview('${acc.id}',this.value)">
         </div>
         <div style="overflow:auto;max-height:300px" id="${tableId}">
           <table class="orders-preview-table run-orders-preview-table" style="width:100%;min-width:1310px;table-layout:fixed;border-collapse:collapse">
@@ -1100,12 +1108,12 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
               ${rows.map((r,i)=>`<tr>
                 <td style="color:var(--text2);text-align:center">${i+1}</td>
                 <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.productName||"").replace(/"/g,"")}">${r.productName||"—"}</td>
-                <td style="font-weight:700;text-align:center">${r.qty||1}</td>
-                <td style="color:var(--success);font-weight:600">${r.subtotal||"—"}</td>
+                <td style="font-weight:var(--weight-bold);text-align:center">${r.qty||1}</td>
+                <td style="color:var(--success);font-weight:var(--weight-semibold)">${r.subtotal||"—"}</td>
                 <td style="color:var(--text2)">${r.date||"—"}</td>
                 <td style="direction:rtl;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.city||"—"}</td>
                 <td style="direction:rtl;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name||"—"}</td>
-                <td style="font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.phone||"—"}</td>
+                <td style="font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.phone||"—"}</td>
               </tr>`).join("")}
             </tbody>
           </table>
@@ -1118,7 +1126,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       <div style="display:grid;grid-template-columns:240px 1fr;gap:12px">
         <!-- Phases -->
         <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px">
-          <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">${t("run.phases_header")}</div>
+          <div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">${t("run.phases_header")}</div>
           <div style="display:flex;flex-direction:column;gap:6px" id="phases-wrap-${acc.id}">
             ${buildPhasesHTML(acc.id)}
           </div>
@@ -1132,9 +1140,9 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
           </div>
           ${!prog && !prevData ? `
           <div style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center;color:var(--text2)">
-            <div style="font-size:28px;margin-bottom:8px;opacity:0.4">📦</div>
-            <div style="font-size:12px;font-weight:600">${t("run.waiting_upload")}</div>
-            <div style="font-size:11px;margin-top:4px;opacity:0.7">${t("run.switch_live_log")}</div>
+            <div style="font-size:var(--type-page-title);margin-bottom:8px;opacity:0.4">📦</div>
+            <div style="font-size:var(--type-label);font-weight:var(--weight-semibold)">${t("run.waiting_upload")}</div>
+            <div style="font-size:var(--type-caption);margin-top:4px;opacity:0.7">${t("run.switch_live_log")}</div>
           </div>` : ""}
         </div>
       </div>`;
@@ -1217,22 +1225,22 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
         <div>
-          <div class="page-title" style="font-size:20px">${t("run.title")}</div>
+          <div class="page-title" style="font-size:var(--type-metric-sm)">${t("run.title")}</div>
           <div class="text-muted text-sm">${(()=>{const fn=t("run.accounts_subtitle");return typeof fn==="function"?fn(selectedAccountIds.length, dateDisplay):fn;})()}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <div class="badge badge-accent" id="run-status-badge">${t("run.starting")}</div>
-          <button class="btn btn-danger" id="btn-stop" style="font-size:12px;padding:6px 14px">${t("run.stop")}</button>
-          <button class="btn btn-ghost" id="btn-home-run" style="font-size:12px;padding:6px 14px;opacity:0.35;cursor:not-allowed" disabled>${t("run.home")}</button>
+          <button class="btn btn-danger" id="btn-stop" style="font-size:var(--type-label);padding:6px 14px">${t("run.stop")}</button>
+          <button class="btn btn-ghost" id="btn-home-run" style="font-size:var(--type-label);padding:6px 14px;opacity:0.35;cursor:not-allowed" disabled>${t("run.home")}</button>
         </div>
       </div>
 
       <!-- Cooldown bar -->
       <div id="global-cooldown-bar" style="display:none;background:rgba(124,106,247,0.1);border:1px solid #7c6af7;border-radius:var(--radius);padding:10px 16px;align-items:center;gap:12px">
-        <span style="font-size:16px">⏳</span>
+        <span style="font-size:var(--type-subtitle)">⏳</span>
         <div style="flex:1">
-          <div style="font-size:12px;font-weight:700;color:#a89cf7">${t("run.cooldown_label")}</div>
-          <div style="font-size:11px;color:var(--text2)">${t("run.cooldown_next")} <strong id="cooldown-timer" style="color:#a89cf7">6:00</strong></div>
+          <div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:#a89cf7">${t("run.cooldown_label")}</div>
+          <div style="font-size:var(--type-caption);color:var(--text2)">${t("run.cooldown_next")} <strong id="cooldown-timer" style="color:#a89cf7">6:00</strong></div>
         </div>
         <div style="width:120px;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
           <div id="cooldown-bar-fill" style="height:100%;background:#7c6af7;width:100%;transition:width 1s linear"></div>
@@ -1256,13 +1264,13 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
         <div style="display:flex;flex-direction:column;gap:6px;overflow-y:auto" id="mac-sidebar">
           <!-- "All" row -->
           <div class="mac-sidebar-item mac-sidebar-active" id="mac-si-__all__" data-pane="__all__" onclick="window._runMultiSelect('__all__')">
-            <div style="font-size:13px;font-weight:700">${t("run.all_accounts_label")}</div>
-            <div style="font-size:11px;color:var(--text2)">${(()=>{const fn=t("run.n_running");return typeof fn==="function"?fn(selectedAccountIds.length):fn;})()}</div>
+            <div style="font-size:var(--type-control);font-weight:var(--weight-semibold)">${t("run.all_accounts_label")}</div>
+            <div style="font-size:var(--type-caption);color:var(--text2)">${(()=>{const fn=t("run.n_running");return typeof fn==="function"?fn(selectedAccountIds.length):fn;})()}</div>
           </div>
           ${accountStates.map(acc => `
             <div class="mac-sidebar-item" id="mac-si-${acc.id}" data-pane="${acc.id}" onclick="window._runMultiSelect('${acc.id}')">
-              <div style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${accountDisplayName(acc)}">${accountDisplayName(acc)}</div>
-              <div style="font-size:10px;color:var(--text2)" id="mac-si-status-${acc.id}">${t("run.phase_status_active")}</div>
+              <div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${accountDisplayName(acc)}">${accountDisplayName(acc)}</div>
+              <div style="font-size:var(--type-micro);color:var(--text2)" id="mac-si-status-${acc.id}">${t("run.phase_status_active")}</div>
             </div>
           `).join("")}
         </div>
@@ -1273,7 +1281,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
 
       <!-- TAB 2: Live Log -->
       <div id="run-tab-log" style="display:none;flex:1;flex-direction:column;min-height:0">
-        <div style="font-size:11px;color:var(--text2);margin-bottom:6px">${t("run.showing_label")} <span id="log-pane-label">${t("run.all_accounts_label")}</span></div>
+        <div style="font-size:var(--type-caption);color:var(--text2);margin-bottom:6px">${t("run.showing_label")} <span id="log-pane-label">${t("run.all_accounts_label")}</span></div>
         <div class="log-terminal" id="log-output" style="flex:1;height:0;min-height:400px"></div>
       </div>
 
@@ -1308,7 +1316,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       padding: 9px 14px;
       text-align: left;
       border-bottom: 1px solid var(--border);
-      font-size: 12px;
+      font-size:var(--type-label);
       line-height: 1.35;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -1316,8 +1324,8 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       vertical-align: middle;
     }
     .orders-preview-table th {
-      font-weight: 700;
-      font-size: 11px;
+      font-weight:var(--weight-semibold);
+      font-size:var(--type-caption);
       text-transform: uppercase;
       letter-spacing: .04em;
       color: var(--text2);
@@ -1338,7 +1346,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     }
     .run-orders-preview-table td:nth-child(2) {
       color: var(--text);
-      font-weight: 650;
+      font-weight:var(--weight-bold);
     }
     .run-orders-preview-table td:nth-child(5),
     .run-orders-preview-table td:nth-child(6) {
@@ -1346,8 +1354,8 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     }
     .run-orders-preview-table td:nth-child(8) {
       direction: ltr;
-      font-family: monospace;
-      font-size: 12.5px;
+      font-family:var(--font-mono);
+      font-size:var(--type-control);
     }
   `;
   document.head.appendChild(sidebarStyle);
@@ -1401,11 +1409,14 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
   // ── Buttons ──
   document.getElementById("btn-home-run").addEventListener("click", () => { cleanup(); onHome(); });
   document.getElementById("btn-stop").addEventListener("click", async () => {
-    if (allBotsDone) return;
+    if (allBotsDone || stopRequested) return;
     const confirmed = await showRunConfirm(t("run.stop_title"), t("run.stop_msg"));
     if (!confirmed) return;
+    stopRequested = true;
+    const stopBtn = document.getElementById("btn-stop");
+    if (stopBtn) stopBtn.disabled = true;
     window._botIsRunning = false;
-    window.api.killBot();
+    await window.api.killBot();
     window.api.botFinished();
     allBotsDone = true;
     for (const acc of accountStates) {
@@ -1415,13 +1426,9 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     badge.textContent = t("run.badge_stopped");
     badge.style.background = "rgba(255,77,109,0.15)";
     badge.style.color = "var(--danger)";
-    document.getElementById("btn-stop").style.display = "none";
-    const homeBtn = document.getElementById("btn-home-run");
-    if (homeBtn) { homeBtn.disabled = false; homeBtn.style.opacity = "1"; homeBtn.style.cursor = "pointer"; }
-    startGlobalCooldown();
-    showCooldownBar();
-    refreshSidebar();
-    renderPane();
+    if (stopBtn) stopBtn.style.display = "none";
+    cleanup();
+    onHome();
   });
 
   // ── Cooldown bar ──
@@ -1756,6 +1763,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
 
   // ── RUN BOT + handle multi-account result (Task 4) ──
   window.api.runBot({ dateFrom, dateTo, accountIds: selectedAccountIds || [] }).then((result) => {
+    if (stopRequested) return;
     allBotsDone = true;
     window._botIsRunning = false;
     window.api.botFinished();
@@ -1829,8 +1837,8 @@ function showRunConfirm(title, message) {
     overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:9999;";
     overlay.innerHTML = `
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:28px;width:360px;text-align:center">
-        <div style="font-size:18px;font-weight:700;margin-bottom:8px">${title}</div>
-        <div style="font-size:13px;color:var(--text2);margin-bottom:24px;line-height:1.5">${message}</div>
+        <div style="font-size:var(--type-section-title);font-weight:var(--weight-bold);margin-bottom:8px">${title}</div>
+        <div style="font-size:var(--type-control);color:var(--text2);margin-bottom:24px;line-height:1.5">${message}</div>
         <div style="display:flex;gap:10px;justify-content:center">
           <button id="rc-cancel" class="btn btn-ghost">${t("run.stop_cancel")}</button>
           <button id="rc-confirm" class="btn btn-danger">${t("run.stop_confirm")}</button>

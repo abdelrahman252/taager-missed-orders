@@ -29,18 +29,18 @@ async function renderOperations(onBack) {
     <div id="ops-skeleton" class="page-skeleton-overlay" style="background:var(--bg);padding:20px;gap:16px;">
       <!-- Row 1: order details + live monitor -->
       <div style="display:grid;grid-template-columns:1fr 1fr 320px;gap:16px;flex-shrink:0;">
-        <div class="sk" style="height:260px;border-radius:12px;grid-column:span 2;"></div>
-        <div class="sk" style="height:260px;border-radius:12px;"></div>
+        <div class="sk" style="height:260px;border-radius:var(--radius-sm);grid-column:span 2;"></div>
+        <div class="sk" style="height:260px;border-radius:var(--radius-sm);"></div>
       </div>
       <!-- Row 2: account perf + insights + run history -->
       <div style="display:grid;grid-template-columns:1fr 1fr 320px;gap:16px;flex-shrink:0;">
-        <div class="sk" style="height:180px;border-radius:12px;"></div>
-        <div class="sk" style="height:180px;border-radius:12px;"></div>
-        <div class="sk" style="height:180px;border-radius:12px;"></div>
+        <div class="sk" style="height:180px;border-radius:var(--radius-sm);"></div>
+        <div class="sk" style="height:180px;border-radius:var(--radius-sm);"></div>
+        <div class="sk" style="height:180px;border-radius:var(--radius-sm);"></div>
       </div>
       <!-- Row 3: product table full width -->
       <div style="flex-shrink:0;">
-        <div class="sk" style="height:220px;border-radius:12px;"></div>
+        <div class="sk" style="height:220px;border-radius:var(--radius-sm);"></div>
       </div>
     </div>
 
@@ -60,7 +60,7 @@ async function renderOperations(onBack) {
           </div>
           <div class="analytics-date-custom-inline" id="ops-date-custom-inline" style="display:none">
             <input type="date" class="date-input-inline" id="ops-custom-from">
-            <span style="color:#64748b; font-size:11px;">${window.t_anl('dateCustom.to')}</span>
+            <span style="color:#64748b; font-size:var(--type-caption);">${window.t_anl('dateCustom.to')}</span>
             <input type="date" class="date-input-inline" id="ops-custom-to">
             <button class="btn-apply-inline" id="ops-custom-apply-btn">${window.t_anl('dateCustom.apply')}</button>
           </div>
@@ -72,12 +72,12 @@ async function renderOperations(onBack) {
           </button>
         </div>
       </div>
-      <div class="ops-first-run-guidance" id="ops-first-run-guidance" style="display:none;margin:0 0 14px;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--bg2);align-items:center;justify-content:space-between;gap:14px;box-shadow:0 10px 28px rgba(0,0,0,.10);">
+      <div class="ops-first-run-guidance" id="ops-first-run-guidance" style="display:none;margin:0 0 14px;padding:14px 16px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg2);align-items:center;justify-content:space-between;gap:14px;box-shadow:0 10px 28px rgba(0,0,0,.10);">
         <div style="min-width:0;">
-          <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:3px;">${window.t_ops('emptyGuidance.title', { default: 'Operations is ready' })}</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.5;">${window.t_ops('emptyGuidance.body', { default: 'Run the bot once to populate each operations section with run history, order details, account performance, product performance, and live activity.' })}</div>
+          <div style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:var(--text);margin-bottom:3px;">${window.t_ops('emptyGuidance.title', { default: 'Operations is ready' })}</div>
+          <div style="font-size:var(--type-label);color:var(--text2);line-height:1.5;">${window.t_ops('emptyGuidance.body', { default: 'Run the bot once to populate each operations section with run history, order details, account performance, product performance, and live activity.' })}</div>
         </div>
-        <button type="button" class="btn btn-primary" id="ops-first-run-btn" style="white-space:nowrap;font-size:12px;padding:8px 12px;">${window.t_ops('emptyGuidance.action', { default: 'Go to Run' })}</button>
+        <button type="button" class="btn btn-primary" id="ops-first-run-btn" style="white-space:nowrap;font-size:var(--type-label);padding:8px 12px;">${window.t_ops('emptyGuidance.action', { default: 'Go to Run' })}</button>
       </div>
       <div class="ops-account-tabs" id="ops-account-tabs"></div>
       <div class="ops-grid" id="ops-main-grid">
@@ -552,7 +552,7 @@ async function renderOperations(onBack) {
             </div>
             <div class="ops-od-meta-block">
               <div class="ops-od-meta-label">${window.t_ops('orderDetails.orderDate')}</div>
-              <div class="ops-od-meta-val" style="font-size:11px">${fmtOrderCreatedAt(orderCreatedAt)}</div>
+              <div class="ops-od-meta-val" style="font-size:var(--type-caption)">${fmtOrderCreatedAt(orderCreatedAt)}</div>
             </div>
             <div class="ops-od-meta-block">
               <div class="ops-od-meta-label">${window.t_ops('orderDetails.city')}</div>
@@ -689,11 +689,11 @@ async function renderOperations(onBack) {
             </div>
             <div class="ops-od-meta-block">
               <div class="ops-od-meta-label">${window.t_ops('orderDetails.fields.runTime')}</div>
-              <div class="ops-od-meta-val" style="font-size:11px">${ts ? fmtTs(ts) : "—"}</div>
+              <div class="ops-od-meta-val" style="font-size:var(--type-caption)">${ts ? fmtTs(ts) : "—"}</div>
             </div>
             <div class="ops-od-meta-block">
               <div class="ops-od-meta-label">${window.t_ops('orderDetails.fields.runId')}</div>
-              <div class="ops-od-meta-val" style="font-size:11px">${run.runId || "—"}</div>
+              <div class="ops-od-meta-val" style="font-size:var(--type-caption)">${run.runId || "—"}</div>
             </div>
           </div>
           <div id="ops-od-tab-body">
@@ -759,7 +759,7 @@ async function renderOperations(onBack) {
   function _opsOdHistoryHTML(run) {
     const ts = run.runTimestamp ? new Date(run.runTimestamp) : null;
     return `<div class="ops-od-overview">
-      <div class="ops-od-field-row"><span class="ops-od-field-icon">🔑</span><div class="ops-od-field-label">${window.t_ops('orderDetails.fields.runId')}</div><div class="ops-od-field-val" style="font-size:11px;color:var(--text3)">${run.runId || "—"}</div></div>
+      <div class="ops-od-field-row"><span class="ops-od-field-icon">🔑</span><div class="ops-od-field-label">${window.t_ops('orderDetails.fields.runId')}</div><div class="ops-od-field-val" style="font-size:var(--type-caption);color:var(--text3)">${run.runId || "—"}</div></div>
       <div class="ops-od-field-row"><span class="ops-od-field-icon">🕒</span><div class="ops-od-field-label">${window.t_ops('orderDetails.fields.runTime')}</div><div class="ops-od-field-val">${ts ? ts.toLocaleString() : "—"}</div></div>
       <div class="ops-od-field-row"><span class="ops-od-field-icon">💼</span><div class="ops-od-field-label">${window.t_ops('orderDetails.fields.account').replace(' (Data Entry)', '')}</div><div class="ops-od-field-val">${_opsAccountDisplay(run)}</div></div>
       <div class="ops-od-field-row"><span class="ops-od-field-icon">✓</span><div class="ops-od-field-label">${window.t_ops('orderDetails.fields.submitted')}</div><div class="ops-od-field-val">${(run.ordersSubmitted || 0).toLocaleString()}</div></div>

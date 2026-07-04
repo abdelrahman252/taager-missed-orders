@@ -36,46 +36,46 @@ async function renderAnalytics(onBack) {
       <!-- Header -->
       <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.04);flex-shrink:0;">
         <div style="display:flex;flex-direction:column;gap:8px;">
-          <div class="sk" style="width:140px;height:22px;border-radius:6px;"></div>
+          <div class="sk" style="width:140px;height:22px;border-radius:var(--radius-xs);"></div>
           <div class="sk" style="width:210px;height:13px;border-radius:4px;"></div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
-          <div class="sk" style="width:345px;height:34px;border-radius:20px;"></div>
-          <div class="sk" style="width:34px;height:34px;border-radius:8px;"></div>
+          <div class="sk" style="width:345px;height:34px;border-radius:var(--radius-lg);"></div>
+          <div class="sk" style="width:34px;height:34px;border-radius:var(--radius-xs);"></div>
         </div>
       </div>
       <!-- 6 KPI cards -->
       <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;flex-shrink:0;">
-        <div class="sk" style="height:96px;border-radius:12px;"></div>
-        <div class="sk" style="height:96px;border-radius:12px;"></div>
-        <div class="sk" style="height:96px;border-radius:12px;"></div>
-        <div class="sk" style="height:96px;border-radius:12px;"></div>
-        <div class="sk" style="height:96px;border-radius:12px;"></div>
-        <div class="sk" style="height:96px;border-radius:12px;"></div>
+        <div class="sk" style="height:96px;border-radius:var(--radius-sm);"></div>
+        <div class="sk" style="height:96px;border-radius:var(--radius-sm);"></div>
+        <div class="sk" style="height:96px;border-radius:var(--radius-sm);"></div>
+        <div class="sk" style="height:96px;border-radius:var(--radius-sm);"></div>
+        <div class="sk" style="height:96px;border-radius:var(--radius-sm);"></div>
+        <div class="sk" style="height:96px;border-radius:var(--radius-sm);"></div>
       </div>
       <!-- Charts + sidebar -->
       <div style="display:grid;grid-template-columns:1fr 284px;gap:16px;flex:1;min-height:0;">
         <div style="display:flex;flex-direction:column;gap:12px;">
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
-            <div class="sk" style="height:205px;border-radius:12px;"></div>
-            <div class="sk" style="height:205px;border-radius:12px;"></div>
-            <div class="sk" style="height:205px;border-radius:12px;"></div>
+            <div class="sk" style="height:205px;border-radius:var(--radius-sm);"></div>
+            <div class="sk" style="height:205px;border-radius:var(--radius-sm);"></div>
+            <div class="sk" style="height:205px;border-radius:var(--radius-sm);"></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;">
-            <div class="sk" style="height:200px;border-radius:12px;"></div>
-            <div class="sk" style="height:200px;border-radius:12px;"></div>
-            <div class="sk" style="height:200px;border-radius:12px;"></div>
-            <div class="sk" style="height:200px;border-radius:12px;"></div>
+            <div class="sk" style="height:200px;border-radius:var(--radius-sm);"></div>
+            <div class="sk" style="height:200px;border-radius:var(--radius-sm);"></div>
+            <div class="sk" style="height:200px;border-radius:var(--radius-sm);"></div>
+            <div class="sk" style="height:200px;border-radius:var(--radius-sm);"></div>
           </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px;">
-          <div class="sk" style="height:230px;border-radius:12px;"></div>
-          <div class="sk" style="height:190px;border-radius:12px;"></div>
-          <div class="sk" style="height:150px;border-radius:12px;"></div>
+          <div class="sk" style="height:230px;border-radius:var(--radius-sm);"></div>
+          <div class="sk" style="height:190px;border-radius:var(--radius-sm);"></div>
+          <div class="sk" style="height:150px;border-radius:var(--radius-sm);"></div>
         </div>
       </div>
       <!-- Orders table -->
-      <div class="sk" style="height:300px;border-radius:12px;flex-shrink:0;"></div>
+      <div class="sk" style="height:300px;border-radius:var(--radius-sm);flex-shrink:0;"></div>
     </div>
 
     <div class="analytics-page" id="analytics-page">
@@ -100,7 +100,7 @@ async function renderAnalytics(onBack) {
           <!-- Inline Custom Date inputs (dynamically displayed when Custom is active) -->
           <div class="analytics-date-custom-inline" id="date-custom-inputs-inline" style="display:none">
             <input type="date" class="date-input-inline" id="custom-from-inline">
-            <span style="color:#64748b; font-size:11px;">${window.t_anl('dateCustom.to')}</span>
+            <span style="color:#64748b; font-size:var(--type-caption);">${window.t_anl('dateCustom.to')}</span>
             <input type="date" class="date-input-inline" id="custom-to-inline">
             <button class="btn-apply-inline" id="custom-apply-btn-inline">${window.t_anl('dateCustom.apply')}</button>
           </div>
@@ -124,18 +124,18 @@ async function renderAnalytics(onBack) {
       <!-- Account selector (rendered dynamically) -->
       <div class="analytics-account-tabs" id="analytics-account-tabs"></div>
 
-      <div class="analytics-first-run-guidance" id="analytics-first-run-guidance" style="display:none;margin:0 20px 14px;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--bg2);align-items:center;justify-content:space-between;gap:14px;box-shadow:0 10px 28px rgba(0,0,0,.10);">
+      <div class="analytics-first-run-guidance" id="analytics-first-run-guidance" style="display:none;margin:0 20px 14px;padding:14px 16px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg2);align-items:center;justify-content:space-between;gap:14px;box-shadow:0 10px 28px rgba(0,0,0,.10);">
         <div style="min-width:0;">
-          <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:3px;">${window.t_anl('empty.bannerTitle', { default: 'Analytics is ready' })}</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.5;">${window.t_anl('empty.bannerDesc', { default: 'Run the bot once to start filling these sections with real orders, revenue, COD, delivery, and failure data.' })}</div>
+          <div style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:var(--text);margin-bottom:3px;">${window.t_anl('empty.bannerTitle', { default: 'Analytics is ready' })}</div>
+          <div style="font-size:var(--type-label);color:var(--text2);line-height:1.5;">${window.t_anl('empty.bannerDesc', { default: 'Run the bot once to start filling these sections with real orders, revenue, COD, delivery, and failure data.' })}</div>
         </div>
-        <button type="button" class="btn btn-primary" id="analytics-first-run-btn" style="white-space:nowrap;font-size:12px;padding:8px 12px;">${window.t_anl('empty.runAction', { default: 'Go to Run' })}</button>
+        <button type="button" class="btn btn-primary" id="analytics-first-run-btn" style="white-space:nowrap;font-size:var(--type-label);padding:8px 12px;">${window.t_anl('empty.runAction', { default: 'Go to Run' })}</button>
       </div>
 
       <!-- Isolated run banner -->
       <div class="analytics-run-banner" id="analytics-run-banner" style="display:none">
         <span id="run-banner-label">${window.t_anl('runBanner.singleRun')}</span>
-        <button class="btn btn-ghost" id="run-banner-clear" style="font-size:11px;padding:4px 10px">${window.t_anl('runBanner.showAll')}</button>
+        <button class="btn btn-ghost" id="run-banner-clear" style="font-size:var(--type-caption);padding:4px 10px">${window.t_anl('runBanner.showAll')}</button>
       </div>
 
       <!-- KPI row (6 cards, single row — matches reference) -->
@@ -163,9 +163,9 @@ async function renderAnalytics(onBack) {
 
       <!-- Empty state -->
       <div class="analytics-empty" id="analytics-empty" style="display:none">
-        <div style="font-size:48px;margin-bottom:12px">📭</div>
-        <div style="font-size:18px;font-weight:600;margin-bottom:6px">${window.t_anl('empty.title')}</div>
-        <div style="color:var(--text3);font-size:13px;max-width:320px;text-align:center;line-height:1.6;">
+        <div style="font-size:var(--type-hero-lg);margin-bottom:12px">📭</div>
+        <div style="font-size:var(--type-section-title);font-weight:var(--weight-semibold);margin-bottom:6px">${window.t_anl('empty.title')}</div>
+        <div style="color:var(--text3);font-size:var(--type-control);max-width:320px;text-align:center;line-height:1.6;">
           ${window.t_anl('empty.desc')}
         </div>
       </div>
@@ -717,7 +717,7 @@ async function renderAnalytics(onBack) {
         <div class="status-breakdown-header">📊 ${window.t_anl('charts.statusTitle')}</div>
         <div class="status-breakdown-list">
           ${entries.length === 0
-            ? `<div style="color:var(--text3);font-size:13px;padding:12px">${window.t_anl('insights.noData')}</div>`
+            ? `<div style="color:var(--text3);font-size:var(--type-control);padding:12px">${window.t_anl('insights.noData')}</div>`
             : entries.map(([bucket, count]) => {
                 const sc  = getStatusColor(bucket);
                 const statusLabel = typeof analyticsStatusLabel === "function" ? analyticsStatusLabel(bucket) : bucket;
@@ -728,7 +728,7 @@ async function renderAnalytics(onBack) {
                     <div class="status-breakdown-bar-wrap">
                       <div class="status-breakdown-bar" style="width:${pct}%;background:${sc.bg}"></div>
                     </div>
-                    <span class="status-breakdown-count">${count.toLocaleString("en-US")} <span style="color:var(--text3);font-size:10px">(${pct}%)</span></span>
+                    <span class="status-breakdown-count">${count.toLocaleString("en-US")} <span style="color:var(--text3);font-size:var(--type-micro)">(${pct}%)</span></span>
                   </div>`;
               }).join("")}
         </div>

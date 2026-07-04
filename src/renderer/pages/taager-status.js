@@ -178,7 +178,7 @@
     { bucket: "failed", order: 90, group: "lost", businessGroup: "lost" },
     { bucket: "return_verified", order: 100, group: "lost", businessGroup: "lost" },
     { bucket: "out_of_stock", order: 110, group: "lost", businessGroup: "lost" },
-    { bucket: "on_hold", order: 120, group: "lost", businessGroup: "lost" },
+    { bucket: "on_hold", order: 120, group: "incoming", businessGroup: "incoming" },
     { bucket: "after_sales_done", order: 130, group: "lost", businessGroup: "lost" },
     { bucket: "canceled_by_you", order: 140, group: "excluded", businessGroup: "excluded" }
   ].map(function (entry) {

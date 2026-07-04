@@ -280,8 +280,8 @@ async function tryAutomatedGooglePopupLogin(page, email, log) {
 function waitForManualGoogleLogin({ config, country, chromePath, timeoutMs, log }) {
   const requestId = createGoogleLoginRequestId();
   const profilePath = config.profilePath || "";
-  const loginUrl = taagerUrl(normalizeTaagerCountry(country || "sa"), "/auth/login");
-  const accountLabel = config.label || config.accountLabel || config.easyEmail || config.taagerEmail || "Taager account";
+  const loginUrl = config.googleLoginUrl || config.loginUrl || taagerUrl(normalizeTaagerCountry(country || "sa"), "/auth/login");
+  const accountLabel = config.label || config.accountLabel || config.lightfunnelsAccountName || config.easyEmail || config.taagerEmail || "Taager account";
   const accountId = config.id || config.accountId || "__single__";
 
   if (!process.send) throw new Error("Google login requires app IPC, but process.send is unavailable");

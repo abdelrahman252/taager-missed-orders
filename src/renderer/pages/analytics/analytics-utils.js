@@ -365,7 +365,7 @@ function renderCustomSelect(container, options, currentValue, onChange, config) 
       : (document.documentElement.getAttribute('dir') || 'rtl');
     searchHtml = `
       <div class="custom-select-search-wrap" style="padding: 8px; position: sticky; top: 0; background: #0b1120; z-index: 2; border-bottom: 1px solid rgba(255,255,255,0.06);">
-        <input type="text" class="custom-select-search-input" placeholder="${escapeSelectHtml(searchPlaceholder)}" style="width: 100%; padding: 6px 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #fff; font-size: 12px; direction: ${searchDir}; text-align: start;" onclick="event.stopPropagation()" />
+        <input type="text" class="custom-select-search-input" placeholder="${escapeSelectHtml(searchPlaceholder)}" style="width: 100%; padding: 6px 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius:var(--radius-xs); color: #fff; font-size:var(--type-label); direction: ${searchDir}; text-align: start;" onclick="event.stopPropagation()" />
       </div>
     `;
   }
@@ -643,12 +643,12 @@ function renderSharedSidebar(activeNav) {
       '</div>' +
 
       '<div class="' + itemClass('accounts') + '" id="nav-accounts" data-step="accounts">' +
-        '<div class="sv3-step-num" style="font-size:14px">👤</div>' +
+        '<div class="sv3-step-num" style="font-size:var(--type-body)">👤</div>' +
         lbl(t('setup.nav_accounts') || 'Accounts') +
       '</div>' +
 
       '<div class="' + itemClass('run') + '" id="nav-run" data-step="run">' +
-        '<div class="sv3-step-num" style="font-size:14px">🚀</div>' +
+        '<div class="sv3-step-num" style="font-size:var(--type-body)">🚀</div>' +
         lbl(t('setup.nav_run') || 'Run') +
       '</div>' +
 
@@ -676,7 +676,7 @@ function renderSharedSidebar(activeNav) {
           '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>' +
           '<span id="sv3-update-btn-label">' + (t('setup.check_updates_btn') || 'Check for Updates') + '</span>' +
         '</button>' +
-        '<div id="sv3-app-version-label" style="font-size:11px;color:var(--text2);margin-top:4px;text-align:center;width:100%">' +
+        '<div id="sv3-app-version-label" style="font-size:var(--type-caption);color:var(--text2);margin-top:4px;text-align:center;width:100%">' +
           (() => {
             const v = window._appVersion || "";
             if (!v) return "";

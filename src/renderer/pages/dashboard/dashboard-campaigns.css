@@ -109,6 +109,25 @@
   white-space: nowrap !important;
 }
 
+#page-dashboard .campaign-table[aria-busy="true"] tbody {
+  opacity: 0.52;
+}
+
+#page-dashboard .campaign-table[aria-busy="true"] tbody tr {
+  animation: campaignTableBusyPulse 1.1s ease-in-out infinite;
+}
+
+@keyframes campaignTableBusyPulse {
+  0%, 100% { opacity: 0.58; }
+  50% { opacity: 0.88; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #page-dashboard .campaign-table[aria-busy="true"] tbody tr {
+    animation: none;
+  }
+}
+
 /* Campaigns section: theme-aware tables, filters, and pagers. */
 #page-dashboard .campaign-section {
   --campaign-bg: var(--dash-bg, #070b12);
@@ -204,7 +223,7 @@
   align-items: center;
   gap: 8px;
   border: 1px solid var(--campaign-border);
-  border-radius: 8px;
+  border-radius:var(--dash-radius-sm);
   min-height: 38px;
   padding: 0 12px;
   background: transparent !important;
@@ -236,8 +255,8 @@
 }
 
 #page-dashboard .campaign-field span {
-  font-size: 11px;
-  font-weight: 700;
+  font-size:var(--type-caption);
+  font-weight:var(--weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--campaign-muted) !important;
@@ -246,7 +265,7 @@
 #page-dashboard .campaign-field select {
   width: 100%;
   border: 1px solid var(--campaign-border);
-  border-radius: 8px;
+  border-radius:var(--dash-radius-sm);
   min-height: 38px;
   outline: 0;
   padding: 0 12px;
@@ -297,7 +316,7 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-weight: 800;
+  font-weight:var(--weight-bold);
   gap: 6px;
   justify-content: flex-start;
   padding: 0;
@@ -325,7 +344,7 @@
 #page-dashboard .campaign-page-btn {
   align-items: center;
   border: 1px solid var(--campaign-border);
-  border-radius: 8px;
+  border-radius:var(--dash-radius-sm);
   cursor: pointer;
   display: inline-flex;
   height: 32px;
@@ -404,21 +423,21 @@
 
 .campaign-head p {
   color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
+  font-size:var(--type-label);
+  font-weight:var(--weight-semibold);
   letter-spacing: .08em;
   text-transform: uppercase;
 }
 
 .campaign-head h2 {
-  font-size: 24px;
+  font-size:var(--type-metric);
   line-height: 1.15;
 }
 
 .campaign-head span,
 .campaign-note {
   color: #64748b;
-  font-size: 13px;
+  font-size:var(--type-control);
 }
 
 .campaign-tabs {
@@ -432,12 +451,12 @@
   align-items: center;
   background: #fff;
   border: 1px solid #d8dee8;
-  border-radius: 8px;
+  border-radius:var(--dash-radius-sm);
   color: #334155;
   cursor: pointer;
   display: inline-flex;
-  font-size: 13px;
-  font-weight: 700;
+  font-size:var(--type-control);
+  font-weight:var(--weight-semibold);
   gap: 6px;
   min-height: 34px;
   padding: 0 12px;
@@ -459,7 +478,7 @@
 .campaign-panel {
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius:var(--dash-radius-sm);
   box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
 }
 
@@ -476,12 +495,12 @@
 .campaign-table small,
 .campaign-panel-title span {
   color: #64748b;
-  font-size: 12px;
+  font-size:var(--type-label);
   font-style: normal;
 }
 
 .campaign-kpi strong {
-  font-size: 22px;
+  font-size:var(--type-metric-sm);
   line-height: 1.1;
 }
 
@@ -501,7 +520,7 @@
 }
 
 .campaign-panel h3 {
-  font-size: 15px;
+  font-size:var(--type-component-title);
   margin: 0 0 12px;
 }
 
@@ -533,7 +552,7 @@
 
 .campaign-table {
   border-collapse: collapse;
-  font-size: 13px;
+  font-size:var(--type-control);
   width: 100%;
 }
 
@@ -548,8 +567,8 @@
 .campaign-table th {
   background: #f8fafc;
   color: #475569;
-  font-size: 12px;
-  font-weight: 800;
+  font-size:var(--type-label);
+  font-weight:var(--weight-semibold);
 }
 
 .campaign-table strong,
@@ -558,12 +577,12 @@
 }
 
 .campaign-decision {
-  border-radius: 6px;
+  border-radius:var(--dash-radius-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
+  font-size:var(--type-caption);
+  font-weight:var(--weight-semibold);
   padding: 5px 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -588,7 +607,7 @@
 
 .campaign-empty {
   color: #64748b;
-  font-size: 13px;
+  font-size:var(--type-control);
   padding: 12px;
 }
 
@@ -633,7 +652,7 @@
   --campaign-border: color-mix(in srgb, var(--dash-border, rgba(255,255,255,.1)) 78%, #38bdf8 22%);
   color: var(--dash-text, #f8fafc);
   padding: 24px;
-  border-radius: 8px;
+  border-radius:var(--dash-radius-sm);
   background:
     linear-gradient(180deg, rgba(8,15,27,.98), rgba(5,10,19,.99)),
     var(--campaign-surface);
@@ -645,7 +664,7 @@
   min-height: 118px;
   padding: 22px 24px;
   border: 1px solid var(--campaign-border);
-  border-radius: 8px;
+  border-radius:var(--dash-radius-sm);
   background:
     linear-gradient(120deg, rgba(34,211,238,.08), transparent 38%),
     linear-gradient(180deg, rgba(15,23,42,.95), rgba(7,13,24,.98));
@@ -661,22 +680,22 @@
 
 #page-dashboard .campaign-head h2 {
   margin: 5px 0 6px;
-  font-size: 29px;
+  font-size:var(--type-page-title);
   line-height: 1.08;
   letter-spacing: 0;
 }
 
 #page-dashboard .campaign-head p {
   color: #5eead4;
-  font-size: 11px;
-  font-weight: 900;
+  font-size:var(--type-caption);
+  font-weight:var(--weight-semibold);
   letter-spacing: .12em;
 }
 
 #page-dashboard .campaign-head span,
 #page-dashboard .campaign-sync-time {
   color: rgba(226,232,240,.62);
-  font-size: 11px;
+  font-size:var(--type-caption);
   font-style: normal;
 }
 
@@ -691,7 +710,7 @@
 
 #page-dashboard .campaign-tab {
   min-height: 38px;
-  border-radius: 7px;
+  border-radius:var(--dash-radius-sm);
   border-color: rgba(148,163,184,.16);
   background: rgba(15,23,42,.72);
 }
@@ -715,7 +734,7 @@
   min-height: 104px;
   padding: 15px 16px;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius:var(--dash-radius-sm);
   border: 1px solid color-mix(in srgb, var(--campaign-kpi-accent) 32%, rgba(148,163,184,.14));
   background:
     radial-gradient(circle at 92% 8%, color-mix(in srgb, var(--campaign-kpi-accent) 18%, transparent), transparent 44%),
@@ -758,8 +777,8 @@
 
 #page-dashboard .campaign-kpi-top > span:last-child {
   color: rgba(203,213,225,.62);
-  font-size: 10px;
-  font-weight: 900;
+  font-size:var(--type-micro);
+  font-weight:var(--weight-semibold);
   text-transform: uppercase;
 }
 
@@ -767,7 +786,7 @@
   display: block;
   margin-top: 11px;
   color: #f8fafc;
-  font-size: 20px;
+  font-size:var(--type-metric-sm);
   line-height: 1.05;
 }
 
@@ -775,7 +794,7 @@
   display: block;
   margin-top: 6px;
   color: rgba(148,163,184,.7);
-  font-size: 9px;
+  font-size:var(--type-micro);
   font-style: normal;
 }
 
@@ -793,7 +812,7 @@
 #page-dashboard .campaign-kpi.campaign-value-state-neutral { --campaign-kpi-accent: #94a3b8; }
 
 #page-dashboard .campaign-panel {
-  border-radius: 8px;
+  border-radius:var(--dash-radius-sm);
   border: 1px solid rgba(148,163,184,.14);
   background: linear-gradient(180deg, rgba(11,18,32,.97), rgba(6,12,22,.99));
   box-shadow: inset 0 1px rgba(255,255,255,.025), 0 14px 40px rgba(0,0,0,.2);
@@ -801,7 +820,7 @@
 
 #page-dashboard .campaign-panel > h3,
 #page-dashboard .campaign-panel-title h3 {
-  font-size: 15px;
+  font-size:var(--type-component-title);
   letter-spacing: 0;
 }
 
@@ -820,7 +839,7 @@
 
 #page-dashboard .campaign-health-top strong {
   color: #5eead4;
-  font-size: 23px;
+  font-size:var(--type-metric);
 }
 
 #page-dashboard .campaign-match-bar {
@@ -842,7 +861,7 @@
 #page-dashboard .campaign-health-legend {
   justify-content: flex-start;
   color: rgba(203,213,225,.65);
-  font-size: 10px;
+  font-size:var(--type-micro);
 }
 
 #page-dashboard .campaign-health-legend span {
@@ -973,7 +992,7 @@
 .campaign-decision-tooltip {
   color: var(--text);
   background: color-mix(in srgb, var(--bg2) 96%, transparent);
-  font-size: 12px;
+  font-size:var(--type-label);
   line-height: 1.45;
 }
 
@@ -985,15 +1004,15 @@
 }
 
 .campaign-decision-tip-head span {
-  font-size: 11px;
-  font-weight: 900;
+  font-size:var(--type-caption);
+  font-weight:var(--weight-semibold);
   letter-spacing: .06em;
   text-transform: uppercase;
 }
 
 .campaign-decision-tip-head strong {
   color: var(--text);
-  font-size: 13px;
+  font-size:var(--type-control);
 }
 
 .campaign-decision-tip-head.scale span { color: #34d399; }
@@ -1008,8 +1027,8 @@
   gap: 10px;
   padding: 8px 14px;
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 700;
+  font-size:var(--type-micro);
+  font-weight:var(--weight-semibold);
 }
 
 .campaign-decision-tip-group {
@@ -1019,7 +1038,7 @@
 
 .campaign-decision-tip-group h5 {
   margin: 0 0 6px;
-  font-size: 10px;
+  font-size:var(--type-micro);
   letter-spacing: .05em;
   text-transform: uppercase;
 }
@@ -1055,15 +1074,15 @@
   gap: 4px;
   margin: 10px 14px;
   padding: 10px;
-  border-radius: 7px;
+  border-radius:var(--dash-radius-sm);
   background: color-mix(in srgb, #38bdf8 9%, transparent);
   border: 1px solid color-mix(in srgb, #38bdf8 22%, var(--border));
 }
 
 .campaign-decision-tip-next span {
   color: #38bdf8;
-  font-size: 10px;
-  font-weight: 900;
+  font-size:var(--type-micro);
+  font-weight:var(--weight-semibold);
   letter-spacing: .05em;
   text-transform: uppercase;
 }
@@ -1144,14 +1163,14 @@
 
 .campaign-ai-drawer-head span {
   color: #5eead4;
-  font-size: 10px;
-  font-weight: 900;
+  font-size:var(--type-micro);
+  font-weight:var(--weight-semibold);
   text-transform: uppercase;
 }
 
 .campaign-ai-drawer-head h3 {
   margin: 5px 0 0;
-  font-size: 24px;
+  font-size:var(--type-metric);
   letter-spacing: 0;
 }
 
@@ -1162,14 +1181,14 @@
   border-radius: 50%;
   color: #cbd5e1;
   background: rgba(15,23,42,.74);
-  font-size: 22px;
+  font-size:var(--type-metric-sm);
   cursor: pointer;
 }
 
 .campaign-ai-intro {
   margin: 16px 0;
   color: rgba(203,213,225,.68);
-  font-size: 12px;
+  font-size:var(--type-label);
   line-height: 1.6;
 }
 
@@ -1185,12 +1204,12 @@
   min-height: 42px;
   padding: 9px 12px;
   border: 1px solid rgba(56,189,248,.25);
-  border-radius: 7px;
+  border-radius:var(--dash-radius-sm);
   color: #e0f2fe;
   background: rgba(14,116,144,.13);
   font: inherit;
-  font-size: 11px;
-  font-weight: 800;
+  font-size:var(--type-caption);
+  font-weight:var(--weight-semibold);
   cursor: pointer;
 }
 
@@ -1216,12 +1235,12 @@
   min-height: 72px;
   padding: 14px;
   border: 1px solid rgba(34,211,238,.2);
-  border-radius: 8px;
+  border-radius:var(--dash-radius-sm);
   background: rgba(8,15,27,.82);
 }
 
 .campaign-ai-loader strong {
-  font-size: 12px;
+  font-size:var(--type-label);
   animation: campaignAiPulse 1.8s ease-in-out infinite;
 }
 
@@ -1245,20 +1264,20 @@
 .campaign-ai-answer {
   padding: 16px;
   border: 1px solid rgba(52,211,153,.22);
-  border-radius: 8px;
+  border-radius:var(--dash-radius-sm);
   background: rgba(6,78,59,.1);
 }
 
 .campaign-ai-answer h4 {
   margin: 0 0 12px;
-  font-size: 14px;
+  font-size:var(--type-body);
 }
 
 .campaign-ai-answer pre {
   margin: 0;
   color: rgba(226,232,240,.86);
   font: inherit;
-  font-size: 12px;
+  font-size:var(--type-label);
   line-height: 1.7;
   white-space: pre-wrap;
 }
@@ -1266,7 +1285,7 @@
 .campaign-ai-error {
   padding: 14px;
   border: 1px solid rgba(251,113,133,.25);
-  border-radius: 8px;
+  border-radius:var(--dash-radius-sm);
   color: #fecdd3;
   background: rgba(127,29,29,.14);
 }
@@ -1299,7 +1318,7 @@
   }
 
   #page-dashboard .campaign-head h2 {
-    font-size: 23px;
+    font-size:var(--type-metric);
   }
 
   #page-dashboard .campaign-kpis,

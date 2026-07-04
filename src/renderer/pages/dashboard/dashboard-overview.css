@@ -38,24 +38,24 @@
 #dash-taager-text,
 .s1-health-row span,
 #dash-branding-area div {
-  font-family: 'Syne', 'Tajawal', sans-serif !important;
+  font-family:var(--font-brand);
 }
 
 #page-dashboard .s1-health-row .health-legend-value,
 #page-dashboard .s1-health-row .health-legend-pct {
-  font-family: 'DM Mono', monospace !important;
+  font-family:var(--font-mono);
   letter-spacing: 0 !important;
 }
 
 #page-dashboard .s1-health-row .health-legend-value {
-  font-size: 11px !important;
-  font-weight: 700 !important;
+  font-size:var(--type-caption) !important;
+  font-weight:var(--weight-semibold) !important;
   line-height: 1.2 !important;
 }
 
 #page-dashboard .s1-health-row .health-legend-pct {
-  font-size: 9.5px !important;
-  font-weight: 700 !important;
+  font-size:var(--type-micro) !important;
+  font-weight:var(--weight-semibold) !important;
 }
 
 @media (max-width: 1399px) {
@@ -82,8 +82,8 @@
   /* ── S1 Overview ── */
   .s1-body { padding: 14px 14px !important; }
   .s1-kpi-row > .kpi-card { flex: 1 1 100% !important; min-height: 140px !important; }
-  .s1-kpi-row > .kpi-card .kpi-num { font-size: 20px !important; }
-  .s1-title h1 { font-size: 28px !important; }}
+  .s1-kpi-row > .kpi-card .kpi-num { font-size:var(--type-metric-sm) !important; }
+  .s1-title h1 { font-size:var(--type-page-title) !important; }}
 
 /* ── KPI cards (section 1) ── */
 [data-theme="light"] #page-dashboard .s1-kpi-card {
@@ -103,23 +103,23 @@
   }
 
   #page-dashboard .s1-health-row .health-title span {
-    font-size: 13px !important;
+    font-size:var(--type-control) !important;
     line-height: 1.25 !important;
     white-space: normal !important;
   }
 
   #page-dashboard .s1-health-row .health-subtitle {
-    font-size: 10.5px !important;
+    font-size:var(--type-caption) !important;
     line-height: 1.45 !important;
   }
 
-  #page-dashboard .s1-health-row [style*="font-size:15px"],
-  #page-dashboard .s1-health-row [style*="font-size:18px"] {
-    font-size: 13px !important;
+  #page-dashboard .s1-health-row [style*="font-size:var(--type-component-title)"],
+  #page-dashboard .s1-health-row [style*="font-size:var(--type-section-title)"] {
+    font-size:var(--type-control) !important;
     line-height: 1.25 !important;
     white-space: normal !important;
   }
 
-  #page-dashboard .s1-health-row [style*="font-size:12px"] {
-    font-size: 10.5px !important;
+  #page-dashboard .s1-health-row [style*="font-size:var(--type-label)"] {
+    font-size:var(--type-caption) !important;
   }}

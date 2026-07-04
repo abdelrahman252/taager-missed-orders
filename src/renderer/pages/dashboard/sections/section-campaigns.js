@@ -207,7 +207,7 @@
       }, { maxHeight: "220px", ariaLabel: "Product Actions shared calculator currency" });
       return;
     }
-    wrap.innerHTML = '<select class="campaign-currency-native" style="width:100%;height:32px;border-radius:9px;border:1px solid rgba(255,255,255,0.12);background:#0b1120;color:#fff;font-size:12px;font-weight:800;font-family:inherit;padding:0 8px">' +
+    wrap.innerHTML = '<select class="campaign-currency-native" style="width:100%;height:32px;border-radius:var(--dash-radius-sm);border:1px solid rgba(255,255,255,0.12);background:var(--dash-surface);color:#fff;font-size:var(--type-label);font-weight:var(--weight-semibold);font-family:inherit;padding:0 8px">' +
       options.map(function (opt) {
         return '<option value="' + esc(opt.value) + '"' + (opt.value === current ? " selected" : "") + '>' + esc(opt.label) + '</option>';
       }).join("") +
@@ -555,6 +555,9 @@
       var cpaLabel = group.taagerOrders > 0 ? money(group.taagerCpa, currency) : "No Taager orders";
       var deliveredCpaLabel = group.taagerDelivered > 0 ? money(group.deliveredCpa, currency) : "No delivered orders";
       var productTitle = campaignProductName(group.sku, group.product);
+      var productTitleHtml = window.dashboardProductNameHtml
+        ? window.dashboardProductNameHtml(compactText(productTitle, 58), { tag: "strong", title: productTitle })
+        : '<strong data-dashboard-product-name data-i18n-preserve><bdi dir="auto">' + esc(compactText(productTitle, 58)) + '</bdi></strong>';
       var displayDecision = decisionLabel(group.decision);
       var netState = financialState(group.netProfit, true);
       var roiState = financialState(group.roiPct, group.spend > 0);
@@ -568,11 +571,11 @@
       var totalSales = group.totalSales != null ? group.totalSales : group.deliveredSales;
       var totalSalesRoas = group.totalSalesRoas != null ? group.totalSalesRoas : group.deliveredSalesRoas;
       var skuSmall = window.dashboardSkuCopyHtml
-        ? window.dashboardSkuCopyHtml(group.sku || "", { emptyText: "missing", style: "font-size:11px;color:inherit;font-weight:inherit" })
+        ? window.dashboardSkuCopyHtml(group.sku || "", { emptyText: "missing", style: "font-size:var(--type-caption);color:inherit;font-weight:inherit" })
         : "SKU " + esc(group.sku || "missing");
       
       return '<tr>' +
-        '<td class="campaign-cell-name" title="' + esc(productTitle) + '"><strong>' + esc(compactText(productTitle, 58)) + '</strong><small>' + skuSmall + '</small></td>' +
+        '<td class="campaign-cell-name" title="' + esc(productTitle) + '">' + productTitleHtml + '<small>' + skuSmall + '</small></td>' +
         '<td class="campaign-num">' + money(group.spend, currency) + '</td>' +
         '<td class="campaign-num"><strong>' + fmt(group.clicks) + '</strong><small>' + fmt(group.campaignCount) + ' campaigns</small></td>' +
         '<td class="campaign-num"><strong>' + fmt(group.taagerOrders) + '</strong><small>' + conversionLabel + ' conversion · ' + fmt(trafficViewCount) + ' ' + trafficViewLabel + '</small></td>' +
@@ -603,8 +606,11 @@
         ? ("SKU " + (row.productSku || ""))
         : (row.suggestedProduct ? compactText(row.suggestedProduct, 42) : "No Taager product attribution");
       var matchSubHtml = row.attributionVerified && row.productSku && window.dashboardSkuCopyHtml
-        ? window.dashboardSkuCopyHtml(row.productSku, { style: "font-size:11px;color:inherit;font-weight:inherit" })
+        ? window.dashboardSkuCopyHtml(row.productSku, { style: "font-size:var(--type-caption);color:inherit;font-weight:inherit" })
         : esc(matchSub);
+      var matchTextHtml = row.attributionVerified && window.dashboardProductNameHtml
+        ? window.dashboardProductNameHtml(matchText, { tag: "strong", title: matchedProductName })
+        : '<strong' + (row.attributionVerified ? ' data-dashboard-product-name data-i18n-preserve' : '') + '>' + (row.attributionVerified ? '<bdi dir="auto">' : '') + esc(matchText) + (row.attributionVerified ? '</bdi>' : '') + '</strong>';
       var rowCurrency = row.rawCurrency || "USD";
       var rowSpend = row.rawSpend != null ? row.rawSpend : row.spend;
       var campaignTitle = row.campaign || "";
@@ -617,7 +623,7 @@
         '<td class="campaign-num">' + percent(row.ctrPct) + '</td>' +
         '<td class="campaign-num"><strong>' + moneyInCurrency(row.platformCpc, row.platformCpcCurrency || rowCurrency) + '</strong><small>Native CPC</small></td>' +
         '<td class="campaign-num">' + moneyInCurrency(row.platformCpm, rowCurrency) + '</td>' +
-        '<td class="campaign-cell-match" title="' + esc(row.attributionVerified ? matchedProductName : (isAmbiguousMatch ? (row.candidateIds || []).join(", ") : (row.suggestedProduct || ""))) + '"><strong>' + esc(matchText) + '</strong><small>' + matchSubHtml + '</small></td>' +
+        '<td class="campaign-cell-match" title="' + esc(row.attributionVerified ? matchedProductName : (isAmbiguousMatch ? (row.candidateIds || []).join(", ") : (row.suggestedProduct || ""))) + '">' + matchTextHtml + '<small>' + matchSubHtml + '</small></td>' +
       '</tr>';
     }).join("");
   }
@@ -1468,6 +1474,32 @@
     };
   }
 
+  function emptyCampaignIntel(data) {
+    return {
+      _loading: true,
+      currency: data && data.meta && (data.meta.reportingCurrency || data.meta.activeCurrency) || window.dashboardActiveCurrency || "SAR",
+      periodLabel: data && data.meta && data.meta.periodLabel || "",
+      sourceOfTruth: "Loading campaign intelligence...",
+      lastSyncAt: "",
+      totals: {},
+      objectiveMix: [],
+      objectives: [],
+      decisionCounts: {},
+      creativeSummary: {},
+      allCampaigns: [],
+      allProductGroups: []
+    };
+  }
+
+  function renderLegacyCampaigns(mount, data, ctx, renderToken) {
+    if (!mount || mount.isConnected === false) return null;
+    if (renderToken && mount._campaignRenderToken !== renderToken) return null;
+    var snapshot = buildCampaignIntelSnapshot(mount, data, ctx);
+    mount._campaignLegacyIntel = snapshot.intel;
+    renderMainCampaignsUI(mount, data, ctx, snapshot.state, snapshot.intel);
+    return snapshot;
+  }
+
   function refreshCampaignCurrencyUIOnly(mount, data, ctx) {
     if (!mount || mount.isConnected === false) return;
     var snapshot = buildCampaignIntelSnapshot(mount, data, ctx);
@@ -1494,23 +1526,36 @@
   }
 
   function renderSectionCampaigns(mount, data, ctx) {
-    var snapshot = buildCampaignIntelSnapshot(mount, data, ctx);
     data = data || window.dashboardGeoData || {};
     ctx = ctx || {};
-    var state = snapshot.state;
-    var intel = snapshot.intel;
-    var accountId = snapshot.accountId;
-    mount._campaignLegacyIntel = intel;
+    var state = defaultState(mount);
+    var accountId = campaignAccountId(data);
+    var intel = emptyCampaignIntel(data);
+    var renderToken = 0;
+    mount._campaignLegacyIntel = null;
     
     renderMainCampaignsUI(mount, data, ctx, state, intel);
+    renderToken = Number(mount._campaignRenderToken || 0);
+    markCampaignRowsBusy(mount, { products: true, campaigns: true });
 
     if (window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.flags === "function") {
       window.DashboardQueryRuntime.flags().then(function (flags) {
+        if (renderToken !== mount._campaignRenderToken || mount.isConnected === false) return;
         mount._campaignBackendEnabled = !!(flags && flags.campaigns);
         if (mount._campaignBackendEnabled && mount.isConnected !== false) {
-          scheduleCampaignsUIUpdate(mount, data, ctx, state, mount._campaignIntel || mount._campaignLegacyIntel || intel, { fullRender: true, busy: { products: true, campaigns: true } });
+          requestBackendCampaigns(mount, data, ctx, state, true).then(function (ok) {
+            if (!ok && renderToken === mount._campaignRenderToken && mount.isConnected !== false) {
+              renderLegacyCampaigns(mount, data, ctx, renderToken);
+            }
+          });
+          return;
         }
+        renderLegacyCampaigns(mount, data, ctx, renderToken);
+      }).catch(function () {
+        renderLegacyCampaigns(mount, data, ctx, renderToken);
       });
+    } else {
+      renderLegacyCampaigns(mount, data, ctx, renderToken);
     }
 
     if (window.DashboardRoiState && typeof window.DashboardRoiState.subscribe === "function") {

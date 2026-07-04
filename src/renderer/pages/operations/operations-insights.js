@@ -104,7 +104,7 @@ function _opsInsightHTML(insight, index) {
     ? window.TaagerSmartInsights.trustLabel(insight.trust || "measured")
     : "Measured";
   const evidence = Array.isArray(insight.evidence) && insight.evidence.length
-    ? `<div class="ops-insight-evidence" style="font-size:10px;color:var(--text3);margin-top:4px">${insight.evidence.slice(0, 2).join(" · ")}</div>`
+    ? `<div class="ops-insight-evidence" style="font-size:var(--type-micro);color:var(--text3);margin-top:4px">${insight.evidence.slice(0, 2).join(" · ")}</div>`
     : "";
   return `
     <div class="ops-insight-row ${insight.type}">
@@ -113,7 +113,7 @@ function _opsInsightHTML(insight, index) {
       </div>
       <div class="ops-insight-body">
         <div class="ops-insight-kicker">${window.t_ops('insights.cardLabel', { index })}</div>
-        <div class="ops-insight-text"><span style="font-size:9px;font-weight:800;text-transform:uppercase;color:var(--text3);margin-inline-end:6px">${trust}</span>${insight.text}${evidence}</div>
+        <div class="ops-insight-text"><span style="font-size:var(--type-micro);font-weight:var(--weight-semibold);text-transform:uppercase;color:var(--text3);margin-inline-end:6px">${trust}</span>${insight.text}${evidence}</div>
         ${insight.action ? `<button class="ops-insight-action" data-action="${insight.actionType || ""}">${insight.action} →</button>` : ""}
       </div>
       <div class="ops-insight-arrow">›</div>

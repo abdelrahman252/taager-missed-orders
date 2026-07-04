@@ -4,7 +4,7 @@
   inset: 0;
   pointer-events: none;
   z-index: 80;
-  font-family: Cairo, "Segoe UI", sans-serif;
+  font-family:var(--font-ui);
 }
 
 .ai-command-shell {
@@ -23,7 +23,7 @@
   height: 48px;
   padding: 0 10px 0 16px;
   border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: 14px;
+  border-radius:var(--dash-radius-lg);
   background: rgba(8, 11, 18, 0.86);
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(18px);
@@ -41,7 +41,10 @@
   outline: 0;
   background: transparent;
   color: #fff;
-  font: 700 13px/1.2 inherit;
+  font-family: inherit;
+  font-size: var(--type-control);
+  font-weight: var(--weight-bold);
+  line-height: 1.2;
 }
 
 #ai-command-input::placeholder {
@@ -53,7 +56,7 @@
   width: 34px;
   height: 34px;
   border: 1px solid rgba(168, 85, 247, 0.35);
-  border-radius: 10px;
+  border-radius:var(--dash-radius-md);
   background: rgba(168, 85, 247, 0.14);
   color: #d8b4fe;
   cursor: pointer;
@@ -66,7 +69,7 @@
   margin-top: 8px;
   padding: 6px;
   border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 12px;
+  border-radius:var(--dash-radius-md);
   background: rgba(8, 11, 18, 0.94);
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
   display: grid;
@@ -89,16 +92,16 @@
 
 .ai-panel-head span {
   display: block;
-  font-size: 10px;
+  font-size:var(--type-micro);
   color: #14b8a6;
-  font-weight: 900;
+  font-weight:var(--weight-semibold);
   letter-spacing: 0.16em;
 }
 
 .ai-panel-head strong {
   display: block;
   margin-top: 3px;
-  font-size: 17px;
+  font-size:var(--type-section-title);
   color: #fff;
 }
 
@@ -228,7 +231,7 @@
   inset: 0 !important;
   pointer-events: none !important;
   z-index: 72 !important;
-  font-family: Cairo, "Segoe UI", sans-serif !important;
+  font-family:var(--font-ui);
 }
 
 #dashboard-ai-root .ai-copilot-orb {
@@ -249,7 +252,6 @@
   outline: none;
   z-index: 100;
   transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s;
-  animation: ai-orb-breathe 4s ease-in-out infinite;
   pointer-events: auto;
 }
 
@@ -270,7 +272,7 @@
   height: min(720px, calc(100vh - 108px));
   background: color-mix(in srgb, var(--dash-surface) 90%, transparent);
   border: 1px solid var(--dash-border);
-  border-radius: 22px;
+  border-radius:var(--dash-radius-xl);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(24px);
   display: flex;
@@ -310,19 +312,19 @@
 }
 
 #dashboard-ai-root .ai-panel-title strong {
-  font-size: 15px;
-  font-weight: 800;
+  font-size:var(--type-component-title);
+  font-weight:var(--weight-semibold);
   color: var(--dash-text);
   letter-spacing: 0.02em;
 }
 
 #dashboard-ai-root .ai-panel-title span {
-  font-size: 10px;
-  font-weight: 700;
+  font-size:var(--type-micro);
+  font-weight:var(--weight-semibold);
   color: #a89cf7;
   background: rgba(123, 92, 240, 0.15);
   padding: 3px 8px;
-  border-radius: 99px;
+  border-radius:var(--radius-pill);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -365,7 +367,7 @@
 
 #dashboard-ai-root .ai-copilot-feed::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--dash-text, var(--text, #fff)) 12%, transparent);
-  border-radius: 12px;
+  border-radius:var(--dash-radius-md);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
@@ -381,7 +383,7 @@
 
 [data-theme="light"] #dashboard-ai-root .ai-copilot-feed::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--dash-text, var(--text, #000)) 12%, transparent);
-  border-radius: 12px;
+  border-radius:var(--dash-radius-md);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
@@ -408,8 +410,8 @@
 
 #dashboard-ai-root .ai-message-bubble {
   padding: 15px 17px;
-  border-radius: 17px;
-  font-size: 14px;
+  border-radius:var(--dash-radius-xl);
+  font-size:var(--type-body);
   line-height: 1.75;
   color: var(--dash-text);
   white-space: pre-line;
@@ -418,7 +420,7 @@
 
 #dashboard-ai-root .ai-message.ai .ai-message-bubble {
   background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border:1px solid var(--dash-border-soft);
   border-bottom-left-radius: 4px;
   width: 100%;
 }
@@ -454,7 +456,7 @@
 #dashboard-ai-root .ai-insight-block {
   background: var(--dash-surface-soft);
   border: 1px solid var(--dash-border);
-  border-radius: 12px;
+  border-radius:var(--dash-radius-md);
   padding: 14px;
   margin-top: 8px;
   display: flex;
@@ -469,8 +471,8 @@
 }
 
 #dashboard-ai-root .ai-insight-label {
-  font-size: 10px;
-  font-weight: 800;
+  font-size:var(--type-micro);
+  font-weight:var(--weight-semibold);
   text-transform: uppercase;
   color: #a89cf7;
   letter-spacing: 0.06em;
@@ -482,8 +484,8 @@
 }
 
 #dashboard-ai-root .ai-insight-title {
-  font-size: 12px;
-  font-weight: 700;
+  font-size:var(--type-label);
+  font-weight:var(--weight-semibold);
   color: var(--dash-text);
   line-height: 1.4;
 }
@@ -497,12 +499,12 @@
 
 #dashboard-ai-root .ai-popup-action {
   min-height: 36px;
-  border-radius: 11px;
+  border-radius:var(--dash-radius-md);
   border: 1px solid rgba(168, 85, 247, 0.32);
   background: rgba(168, 85, 247, 0.12);
   color: var(--dash-text);
-  font-size: 12px;
-  font-weight: 700;
+  font-size:var(--type-label);
+  font-weight:var(--weight-semibold);
   padding: 8px 11px;
   cursor: pointer;
   white-space: normal;
@@ -540,9 +542,9 @@
   min-width: 0;
   white-space: normal;
   padding: 8px 10px;
-  border-radius: 11px;
-  font-size: 11.5px;
-  font-weight: 600;
+  border-radius:var(--dash-radius-md);
+  font-size:var(--type-caption);
+  font-weight:var(--weight-semibold);
   color: var(--dash-text-muted);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -563,7 +565,7 @@
   align-items: center;
   background: var(--dash-surface-soft);
   border: 1px solid var(--dash-border);
-  border-radius: 14px;
+  border-radius:var(--dash-radius-lg);
   padding: 6px 6px 6px 16px;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
@@ -582,7 +584,7 @@
   border: none;
   background: transparent;
   color: var(--dash-text);
-  font-size: 14px;
+  font-size:var(--type-body);
   outline: none;
   min-width: 0;
 }

@@ -18,6 +18,7 @@ const {
   TAAGER_COUNTRY_NAMES,
 } = require("./taager-country");
 const { createEasyOrdersExportFlow } = require("./easy-orders-export");
+const { createLightFunnelsFlow } = require("./lightfunnels-flow");
 const { createTaagerOrdersExportFlow } = require("./taager-orders-export-flow");
 const {
   installTaagerInterruptionAutoDismiss,
@@ -42,8 +43,23 @@ const easyOrdersFlow = createEasyOrdersExportFlow({
   log,
   emit: (message) => process.send && process.send(message),
 });
+const lightFunnelsFlow = createLightFunnelsFlow({
+  config,
+  log,
+  emit: (message) => process.send && process.send(message),
+  waitForManualGoogleLogin,
+  closeForManualGoogle: closeActiveContextForManualGoogle,
+  chromePathProvider: () => config.chromePath || findChrome(),
+  relaunchAfterManualGoogle: async (stage, targetUrl) => {
+    await closeActiveContextForManualGoogle();
+    const relaunched = await launchRunnerContext(config.profilePath, config.chromePath || findChrome());
+    await gotoWithNetworkRetries(relaunched.page, targetUrl, `LightFunnels ${stage} relaunch`, { attempts: 3, timeout: 45000, waitMs: 5000 });
+    return relaunched.page;
+  },
+});
 const TAAGER_COUNTRY = normalizeTaagerCountry(config.taagerCountry || config.taagerCountry || "sa");
 const taagerCountryUrl = (pathname) => taagerUrl(TAAGER_COUNTRY, pathname);
+const CMS_PROVIDER = String(config.cmsProvider || "easyorders").trim().toLowerCase() === "lightfunnels" ? "lightfunnels" : "easyorders";
 
 const MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS = 3;
 const TAAGER_POPUP_RETRY_WAIT_MS = 0;
@@ -71,7 +87,16 @@ let parserFns = null;
 let outputFns = null;
 let activeContext = null;
 let activePage = null;
+let stopRequested = false;
 let taagerIdentityVerified = false;
+
+function handleStopMessage(message) {
+  if (!message || message.type !== "stop") return;
+  stopRequested = true;
+  closeActiveContextForManualGoogle().catch(() => {});
+}
+
+process.on("message", handleStopMessage);
 
 function parser() {
   if (!parserFns) parserFns = require("./parser");
@@ -1128,12 +1153,19 @@ async function verifyEasyOrdersIdentity(page, where = "session") {
 async function launchRunnerContext(profilePath, chromePath) {
   let lastError = null;
   for (let attempt = 1; attempt <= 6; attempt++) {
+    if (stopRequested) throw new Error("BOT_STOPPED_BY_USER");
     try {
       const context = await launchPersistentChromeContext(chromium, profilePath, {
         executablePath: chromePath,
         windowSize: "1280,800",
         viewport: null,
       });
+      activeContext = context;
+      activePage = null;
+      if (stopRequested) {
+        await closeActiveContextForManualGoogle();
+        throw new Error("BOT_STOPPED_BY_USER");
+      }
       await context.addInitScript(() => {
         Object.defineProperty(navigator, "webdriver", { get: () => undefined });
         delete window.__playwright;
@@ -1151,6 +1183,7 @@ async function launchRunnerContext(profilePath, chromePath) {
       return { context, page };
     } catch (error) {
       lastError = error;
+      if (stopRequested) throw error;
       if (attempt >= 6) break;
       log(`Chrome profile is still busy. Close the Google login Chrome window, then waiting to retry (${attempt}/6)...`);
       await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -4238,6 +4271,12 @@ async function phase5_uploadToTaager(page, orders, outputOptions = {}) {
 
     viewport: null,
   });
+  activeContext = context;
+  activePage = null;
+  if (stopRequested) {
+    await closeActiveContextForManualGoogle();
+    return;
+  }
 
   // ── TASK 5: Spoof browser fingerprint on every page before any JS runs ──
   // Hides all Playwright/automation traces from website bot-detection scripts.
@@ -4300,6 +4339,16 @@ async function phase5_uploadToTaager(page, orders, outputOptions = {}) {
 
   try {
     // Phase 1 — Easy-Orders login (unchanged)
+    if (CMS_PROVIDER === "lightfunnels") {
+      log("\n========================================");
+      log("  PHASE 1 - LightFunnels Login");
+      log("========================================\n");
+      emitStage("lightfunnels.login", "started", "Logging into LightFunnels");
+      page = await lightFunnelsFlow.login(page);
+      emitStage("lightfunnels.login", "ok", `LightFunnels account verified: ${config.lightfunnelsAccountName || "configured account"}`);
+      throw new Error("LIGHTFUNNELS_ORDER_EXPORT_NOT_IMPLEMENTED: login and account selection are complete, but LightFunnels order export is not built yet.");
+    }
+
     await phase1_easyOrdersLogin(page);
 
     // Phase 2 — Real orders export (unchanged)
@@ -4550,10 +4599,21 @@ async function phase5_uploadToTaager(page, orders, outputOptions = {}) {
     });
 
   } catch (err) {
+    if (stopRequested) return;
     const message = friendlyErrorMessage(err);
     log(`❌ FATAL: ${message}`);
     process.send && process.send({ type: "error", error: message });
   } finally {
     await (activeContext || context).close().catch(() => {});
+    activeContext = null;
+    activePage = null;
   }
-})();
+})().catch(async (err) => {
+  await closeActiveContextForManualGoogle();
+  if (!stopRequested) {
+    const message = friendlyErrorMessage(err);
+    process.send && process.send({ type: "error", error: message });
+  }
+}).finally(() => {
+  process.removeListener("message", handleStopMessage);
+});

@@ -221,7 +221,7 @@ function _opsSyncMonitorUI(container) {
       if (phoneEl && live.currentOrder.phone) phoneEl.textContent = "📞 " + live.currentOrder.phone;
       if (statBadge && live.currentOrder.orderStatus) {
         const sc = _opsStatusColor(live.currentOrder.orderStatus);
-        statBadge.innerHTML = `<span style="background:${sc.bg};color:${sc.text};padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700">${live.currentOrder.orderStatus}</span>`;
+        statBadge.innerHTML = `<span style="background:${sc.bg};color:${sc.text};padding:2px 9px;border-radius:var(--radius-sm);font-size:var(--type-caption);font-weight:var(--weight-semibold)">${live.currentOrder.orderStatus}</span>`;
       }
     } else {
       orderBox.style.display = "none";

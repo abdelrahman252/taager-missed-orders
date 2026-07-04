@@ -15,6 +15,12 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     return safeFilenamePart(value || data?._accountLabel || "account");
   }
 
+  function getTaagerOrderCount(stats) {
+    const count = Number(stats?.taagerOrderCount);
+    if (Number.isFinite(count) && count >= 0) return count;
+    return (stats?.realInTaager || 0) + (stats?.missedInTaager || 0);
+  }
+
   const RESULTS_PAGE_SIZE = 10;
   let resultsPagerSeq = 0;
 
@@ -39,8 +45,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         border-radius: var(--radius-sm);
         background: var(--bg2);
         color: var(--text);
-        font-size: 14px;
-        font-weight: 700;
+        font-size:var(--type-body);
+        font-weight:var(--weight-semibold);
         cursor: pointer;
       }
       .res-pagination-btn:hover:not(:disabled) {
@@ -54,8 +60,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       .res-pagination-status {
         min-width: 82px;
         text-align: center;
-        font-size: 11px;
-        font-weight: 700;
+        font-size:var(--type-caption);
+        font-weight:var(--weight-semibold);
         color: var(--text2);
         white-space: nowrap;
       }
@@ -65,14 +71,14 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         padding: 7px 10px;
         text-align: left;
         border-bottom: 1px solid var(--border);
-        font-size: 12px;
+        font-size:var(--type-label);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
       .orders-preview-table th {
-        font-weight: 700;
-        font-size: 11px;
+        font-weight:var(--weight-semibold);
+        font-size:var(--type-caption);
         text-transform: uppercase;
         letter-spacing: .04em;
         color: var(--text2);
@@ -96,7 +102,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       .results-orders-table .res-index {
         text-align: center;
         color: var(--text2);
-        font-size: 11px;
+        font-size:var(--type-caption);
       }
       .results-orders-table .res-name,
       .results-orders-table .res-product {
@@ -104,22 +110,22 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         text-align: right;
       }
       .results-orders-table .res-name {
-        font-weight: 600;
+        font-weight:var(--weight-semibold);
       }
       .results-orders-table .res-product {
         color: var(--text);
-        font-weight: 650;
+        font-weight:var(--weight-bold);
       }
       .results-orders-table .res-phone {
         direction: ltr;
-        font-family: monospace;
+        font-family:var(--font-mono);
         color: var(--accent);
-        font-size: 13px;
-        font-weight: 700;
+        font-size:var(--type-control);
+        font-weight:var(--weight-semibold);
       }
       .results-orders-table .res-number {
         text-align: right;
-        font-weight: 700;
+        font-weight:var(--weight-bold);
       }
       .results-orders-table .res-price {
         color: var(--success);
@@ -157,37 +163,37 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         width: 58px;
         text-align: center;
         color: var(--text2);
-        font-size: 11px;
-        font-weight: 800;
+        font-size:var(--type-caption);
+        font-weight:var(--weight-semibold);
       }
       .failed-orders-table .failed-sku,
       .failed-orders-table .failed-phone,
       .failed-orders-table .failed-error {
         direction: ltr;
         text-align: left;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-family:var(--font-mono);
         font-variant-numeric: tabular-nums;
       }
       .failed-orders-table .failed-sku {
         color: var(--accent);
-        font-size: 12px;
-        font-weight: 800;
+        font-size:var(--type-label);
+        font-weight:var(--weight-semibold);
       }
       .failed-orders-table .failed-product {
         direction: rtl;
         text-align: right;
         color: var(--text);
-        font-weight: 700;
+        font-weight:var(--weight-bold);
       }
       .failed-orders-table .failed-phone {
         color: var(--text);
-        font-size: 12px;
-        font-weight: 800;
+        font-size:var(--type-label);
+        font-weight:var(--weight-semibold);
       }
       .failed-orders-table .failed-error {
         color: var(--danger);
-        font-size: 12px;
-        font-weight: 800;
+        font-size:var(--type-label);
+        font-weight:var(--weight-semibold);
       }
       .failed-orders-table .failed-product,
       .failed-orders-table .failed-error {
@@ -272,7 +278,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
   function buildProductSplitListHtml(rows, showBars) {
     if (!rows || rows.length === 0) {
-      return `<div style="color:var(--text2);font-size:13px">${t("results.no_product_data")}</div>`;
+      return `<div style="color:var(--text2);font-size:var(--type-control)">${t("results.no_product_data")}</div>`;
     }
     const paged = buildPagedItems(rows, (p, i, attrs) => `
       <div class="product-split-row" ${attrs}>
@@ -282,9 +288,9 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <div class="product-split-bar-ok" style="width:${p.pct}%"></div>
           <div class="product-split-bar-fail" style="width:${100-p.pct}%"></div>
         </div>` : ""}
-        <div style="display:flex;gap:10px;flex-shrink:0;font-size:12px">
-          ${p.ok > 0 ? `<span style="color:var(--success);font-weight:700">✅ ${p.ok}</span>` : ""}
-          ${p.fail > 0 ? `<span style="color:var(--danger);font-weight:700">❌ ${p.fail}</span>` : ""}
+        <div style="display:flex;gap:10px;flex-shrink:0;font-size:var(--type-label)">
+          ${p.ok > 0 ? `<span style="color:var(--success);font-weight:var(--weight-bold)">✅ ${p.ok}</span>` : ""}
+          ${p.fail > 0 ? `<span style="color:var(--danger);font-weight:var(--weight-bold)">❌ ${p.fail}</span>` : ""}
         </div>
       </div>`, "products");
     return `${paged.itemsHtml}${paged.pagerHtml}`;
@@ -304,12 +310,12 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const reasonKey = row.uncertain && row.reason === "phone_parse_failed" ? "phone_uncertain_zero_appended" : row.reason;
       return `<tr ${attrs} style="${row.uncertain ? "background:rgba(255,170,0,0.05)" : ""}">
         <td style="color:var(--text2)">${i + 1}</td>
-        <td style="font-weight:700;color:${row.uploadedWithWarning ? "var(--warning)" : "var(--danger)"}">${row.uploadedWithWarning ? t("results.warning_uploaded") : t("results.warning_skipped")}</td>
+        <td style="font-weight:var(--weight-bold);color:${row.uploadedWithWarning ? "var(--warning)" : "var(--danger)"}">${row.uploadedWithWarning ? t("results.warning_uploaded") : t("results.warning_skipped")}</td>
         <td style="direction:rtl">${row.name || "—"}</td>
-        <td style="font-family:monospace;color:${row.uploadedWithWarning ? "var(--warning)" : "var(--danger)"};direction:ltr">${row.rawPhone || "—"}</td>
-        <td style="font-family:monospace;color:var(--text);direction:ltr">${row.normalizedPhone || "—"}</td>
+        <td style="font-family:var(--font-mono);color:${row.uploadedWithWarning ? "var(--warning)" : "var(--danger)"};direction:ltr">${row.rawPhone || "—"}</td>
+        <td style="font-family:var(--font-mono);color:var(--text);direction:ltr">${row.normalizedPhone || "—"}</td>
         <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl" title="${(row.productName || "").replace(/"/g,"")}">${row.productName || "—"}</td>
-        <td style="font-size:11px">${reasonLabels[reasonKey] || reasonKey || "—"}</td>
+        <td style="font-size:var(--type-caption)">${reasonLabels[reasonKey] || reasonKey || "—"}</td>
         <td style="text-align:center">${row.uncertain ? `<span title="${t("results.phone_rescued_verify")}" style="color:var(--warning)">⚠️</span>` : ""}</td>
       </tr>`;
     }, "skipped");
@@ -319,10 +325,10 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <div class="dash-section-title" style="color:var(--warning)">
             <span>⚠️</span> ${typeof t("results.couldnt_process_title") === "function" ? t("results.couldnt_process_title")(skippedOrders.count) : t("results.couldnt_process_title")}
           </div>
-          <div style="font-size:11px;color:var(--text2)">${t("results.skipped_followup")}</div>
+          <div style="font-size:var(--type-caption);color:var(--text2)">${t("results.skipped_followup")}</div>
         </div>
         <div class="dash-section-body no-pad" style="overflow-x:auto">
-          <table class="orders-preview-table" style="font-size:12px">
+          <table class="orders-preview-table" style="font-size:var(--type-label)">
             <thead><tr>
               <th>#</th>
               <th>${t("results.warning_status_col")}</th>
@@ -345,13 +351,13 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     if (rows.length > 0) {
       const paged = buildPagedItems(rows, (row, i, attrs) => `<tr ${attrs}>
         <td style="color:var(--text2)">${row.row || i + 1}</td>
-        <td style="font-family:monospace;color:var(--accent)">${row.sku || "—"}</td>
+        <td style="font-family:var(--font-mono);color:var(--accent)">${row.sku || "—"}</td>
         <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(row.product || row.productName || "").replace(/"/g,"")}">${row.product || row.productName || "—"}</td>
-        <td style="font-family:monospace">${row.phone || "—"}</td>
-        <td style="color:var(--danger);font-weight:600">${row.error || "—"}</td>
+        <td style="font-family:var(--font-mono)">${row.phone || "—"}</td>
+        <td style="color:var(--danger);font-weight:var(--weight-semibold)">${row.error || "—"}</td>
       </tr>`, "failed-orders");
       return `<div style="overflow-x:auto">
-        <table class="orders-preview-table" style="font-size:12px">
+        <table class="orders-preview-table" style="font-size:var(--type-label)">
           <thead><tr>
             ${[t("results.row_col") || t("results.row"), t("results.sku"), t("results.product_col"), t("results.phone_col") || t("results.phone"), t("results.error_col") || t("results.error")]
               .map(h => `<th>${h}</th>`).join("")}
@@ -365,15 +371,15 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     const summary = failedOrders?.summary || [];
     if (summary.length > 0) {
       const paged = buildPagedItems(summary, (f, i, attrs) => `
-        <div ${attrs} style="background:rgba(255,77,109,0.12);border:1px solid rgba(255,77,109,0.3);border-radius:6px;padding:7px 14px;font-size:12px;user-select:text;-webkit-user-select:text">
+        <div ${attrs} style="background:rgba(255,77,109,0.12);border:1px solid rgba(255,77,109,0.3);border-radius:var(--radius-xs);padding:7px 14px;font-size:var(--type-label);user-select:text;-webkit-user-select:text">
           <span style="color:var(--text2)">${t("results.product_col")}:</span>
-          <span style="color:var(--text);font-weight:600;margin-left:4px">${f.productName || t("results.unknown")}</span>
-          <span style="color:var(--danger);font-weight:700;margin-left:10px">${f.count} ${t("results.product_count")(f.count)}</span>
+          <span style="color:var(--text);font-weight:var(--weight-semibold);margin-left:4px">${f.productName || t("results.unknown")}</span>
+          <span style="color:var(--danger);font-weight:var(--weight-bold);margin-left:10px">${f.count} ${t("results.product_count")(f.count)}</span>
         </div>`, "failed-summary");
       return `<div style="display:flex;flex-wrap:wrap;gap:8px;padding:16px 18px">${paged.itemsHtml}</div>${paged.pagerHtml}`;
     }
 
-    return `<div style="padding:12px 18px;font-size:12px;color:var(--text2)">${t("results.no_error_info")}</div>`;
+    return `<div style="padding:12px 18px;font-size:var(--type-label);color:var(--text2)">${t("results.no_error_info")}</div>`;
   }
 
   function buildFailedOrdersDetailHtml(failedOrders) {
@@ -409,7 +415,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           </tr></thead>
           <tbody>${paged.itemsHtml}</tbody>
         </table>
-        <div style="padding:8px 12px;border-top:1px solid var(--border);font-size:11px;color:var(--text2)">${t("results.failed_table_hint")}</div>
+        <div style="padding:8px 12px;border-top:1px solid var(--border);font-size:var(--type-caption);color:var(--text2)">${t("results.failed_table_hint")}</div>
         ${paged.pagerHtml}
       </div>`;
     }
@@ -417,15 +423,15 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     const summary = failedOrders?.summary || [];
     if (summary.length > 0) {
       const paged = buildPagedItems(summary, (f, i, attrs) => `
-        <div ${attrs} style="background:rgba(255,77,109,0.12);border:1px solid rgba(255,77,109,0.3);border-radius:6px;padding:7px 14px;font-size:12px;user-select:text;-webkit-user-select:text">
+        <div ${attrs} style="background:rgba(255,77,109,0.12);border:1px solid rgba(255,77,109,0.3);border-radius:var(--radius-xs);padding:7px 14px;font-size:var(--type-label);user-select:text;-webkit-user-select:text">
           <span style="color:var(--text2)">${t("results.product_col")}:</span>
-          <span style="color:var(--text);font-weight:600;margin-left:4px">${f.productName || t("results.unknown")}</span>
-          <span style="color:var(--danger);font-weight:700;margin-left:10px">${f.count} ${t("results.product_count")(f.count)}</span>
+          <span style="color:var(--text);font-weight:var(--weight-semibold);margin-left:4px">${f.productName || t("results.unknown")}</span>
+          <span style="color:var(--danger);font-weight:var(--weight-bold);margin-left:10px">${f.count} ${t("results.product_count")(f.count)}</span>
         </div>`, "failed-summary");
       return `<div style="display:flex;flex-wrap:wrap;gap:8px;padding:16px 18px">${paged.itemsHtml}</div>${paged.pagerHtml}`;
     }
 
-    return `<div style="padding:12px 18px;font-size:12px;color:var(--text2)">${t("results.no_error_info")}</div>`;
+    return `<div style="padding:12px 18px;font-size:var(--type-label);color:var(--text2)">${t("results.no_error_info")}</div>`;
   }
 
   function addFailedProductCounts(target, failedOrders) {
@@ -475,7 +481,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
     function renderOrderRows(rows) {
       if (!rows || rows.length === 0) {
-        return `<tr><td colspan="8" style="text-align:center;padding:14px;color:var(--text2);font-size:12px">${t("results.no_orders_found") || "No orders match your search"}</td></tr>`;
+        return `<tr><td colspan="8" style="text-align:center;padding:14px;color:var(--text2);font-size:var(--type-label)">${t("results.no_orders_found") || "No orders match your search"}</td></tr>`;
       }
       return buildPagedItems(rows, renderOrderRow, `orders-${tableUid}`).itemsHtml;
     }
@@ -495,7 +501,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const pagerHost = document.getElementById(`${uid}-pager`);
       if (!tbody) return;
       if (!filtered.length) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:14px;color:var(--text2);font-size:12px">${t("results.no_orders_found") || "No orders match your search"}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:14px;color:var(--text2);font-size:var(--type-label)">${t("results.no_orders_found") || "No orders match your search"}</td></tr>`;
         if (pagerHost) pagerHost.innerHTML = "";
         return;
       }
@@ -512,11 +518,11 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     return `
       <div class="dash-section">
         <div class="dash-section-header">
-          <div class="dash-section-title"><span>📋</span> ${label || t("results.all_orders_label")} <span style="font-size:11px;font-weight:400;color:var(--text2);margin-left:6px">${typeof ordersCountFn === "function" ? ordersCountFn(orderRows.length) : ordersCountFn}</span></div>
-          <div style="font-size:11px;color:var(--text2)">${t("run.click_to_copy")}</div>
+          <div class="dash-section-title"><span>📋</span> ${label || t("results.all_orders_label")} <span style="font-size:var(--type-caption);font-weight:var(--weight-regular);color:var(--text2);margin-left:6px">${typeof ordersCountFn === "function" ? ordersCountFn(orderRows.length) : ordersCountFn}</span></div>
+          <div style="font-size:var(--type-caption);color:var(--text2)">${t("run.click_to_copy")}</div>
         </div>
         <div style="padding:8px 12px;border-bottom:1px solid var(--border);background:rgba(0,0,0,0.04)">
-          <input type="text" placeholder="${t('results.search_orders_placeholder') || 'Search by name, phone or product...'}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font-size:12px;color:var(--text);outline:none" oninput="window._resOrderSearch('${tableUid}',this.value)">
+          <input type="text" placeholder="${t('results.search_orders_placeholder') || 'Search by name, phone or product...'}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font-size:var(--type-label);color:var(--text);outline:none" oninput="window._resOrderSearch('${tableUid}',this.value)">
         </div>
         <div class="dash-section-body no-pad results-orders-table-wrap" style="overflow-x:auto">
           <table class="orders-preview-table results-orders-table" style="width:100%;min-width:1360px;table-layout:fixed;border-collapse:collapse">
@@ -580,7 +586,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     function buildOverviewPane() {
       const totalOrders = accountResults.reduce((s, r) => s + (r.data?.orders || 0), 0);
       const totalFailed = accountResults.reduce((s, r) => s + (r.data?.failedOrders?.count || 0), 0);
-      const totalInTaager = accountResults.reduce((s, r) => s + ((r.data?.stats?.realInTaager||0)+(r.data?.stats?.missedInTaager||0)), 0);
+      const totalInTaager = accountResults.reduce((s, r) => s + getTaagerOrderCount(r.data?.stats || {}), 0);
       const totalDupes  = accountResults.reduce((s, r) => s + ((r.data?.stats?.realDupe||0)+(r.data?.stats?.missedDupe||0)), 0);
       const totalAttempt = totalOrders + totalFailed;
       const successRate  = totalAttempt > 0 ? Math.round(totalOrders / totalAttempt * 100) : 100;
@@ -636,13 +642,13 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         <div class="dash-section">
           <div class="dash-section-header">
             <div class="dash-section-title"><span style="color:var(--success)">📊</span> ${t("results.overall_success_rate")}</div>
-            <div style="font-size:22px;font-weight:800;color:${successRate===100?"var(--success)":successRate>=70?"var(--warning)":"var(--danger)"}">${successRate}%</div>
+            <div style="font-size:var(--type-metric-sm);font-weight:var(--weight-bold);color:${successRate===100?"var(--success)":successRate>=70?"var(--warning)":"var(--danger)"}">${successRate}%</div>
           </div>
           <div class="dash-section-body">
-            <div style="height:12px;background:var(--border);border-radius:6px;overflow:hidden">
-              <div style="height:100%;width:${successRate}%;background:${successRate===100?"var(--success)":successRate>=70?"var(--warning)":"var(--danger)"};border-radius:6px;transition:width 0.8s ease"></div>
+            <div style="height:12px;background:var(--border);border-radius:var(--radius-xs);overflow:hidden">
+              <div style="height:100%;width:${successRate}%;background:${successRate===100?"var(--success)":successRate>=70?"var(--warning)":"var(--danger)"};border-radius:var(--radius-xs);transition:width 0.8s ease"></div>
             </div>
-            <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--text2)">
+            <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:var(--type-label);color:var(--text2)">
               <span>${(()=>{const fn=t("results.succeeded");return typeof fn==="function"?fn(totalOrders):fn;})()}</span>
               <span>${(()=>{const fn=t("results.total_attempted");return typeof fn==="function"?fn(totalAttempt):fn;})()}</span>
               ${totalFailed > 0 ? `<span style="color:var(--danger)">❌ ${totalFailed} ${t("results.failed")}</span>` : ""}
@@ -657,7 +663,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <div class="dash-section">
             <div class="dash-section-header">
               <div class="dash-section-title"><span>👥</span> ${t("results.per_account_summary")}</div>
-              <div style="font-size:11px;color:var(--text2)">${(()=>{const fn=t("results.accounts_click");return typeof fn==="function"?fn(accountResults.length):fn;})()}</div>
+              <div style="font-size:var(--type-caption);color:var(--text2)">${(()=>{const fn=t("results.accounts_click");return typeof fn==="function"?fn(accountResults.length):fn;})()}</div>
             </div>
             <div class="dash-section-body no-pad">
               <table class="orders-preview-table">
@@ -672,17 +678,17 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
                     const orders = r.data?.orders || 0;
                     const failed = r.data?.failedOrders?.count || 0;
                     return `<tr style="cursor:pointer" onclick="window._resSelectPane('${r.accountId}')">
-                      <td style="font-weight:600">${r.success?"✅":"❌"} ${r.accountLabel||r.accountId}</td>
-                      <td style="text-align:right;color:var(--success);font-weight:700">${orders}</td>
+                      <td style="font-weight:var(--weight-semibold)">${r.success?"✅":"❌"} ${r.accountLabel||r.accountId}</td>
+                      <td style="text-align:right;color:var(--success);font-weight:var(--weight-bold)">${orders}</td>
                       <td style="text-align:right;color:${failed>0?"var(--danger)":"var(--text2)"};font-weight:${failed>0?"700":"400"}">${failed}</td>
-                      <td style="text-align:right"><span style="background:${r.success?"rgba(0,214,143,0.12)":"rgba(255,77,109,0.12)"};color:${r.success?"var(--success)":"var(--danger)"};border-radius:99px;padding:3px 10px;font-size:11px;font-weight:700;white-space:nowrap">${r.success?t("results.ok_status"):t("results.error_status")}</span></td>
+                      <td style="text-align:right"><span style="background:${r.success?"rgba(0,214,143,0.12)":"rgba(255,77,109,0.12)"};color:${r.success?"var(--success)":"var(--danger)"};border-radius:var(--radius-pill);padding:3px 10px;font-size:var(--type-caption);font-weight:var(--weight-semibold);white-space:nowrap">${r.success?t("results.ok_status"):t("results.error_status")}</span></td>
                     </tr>`;
                   }).join("")}
                 </tbody>
                 <tfoot><tr>
-                  <td style="font-weight:700;padding:10px;border-top:1px solid var(--border)">${t("results.total")}</td>
-                  <td style="text-align:right;font-weight:700;padding:10px;border-top:1px solid var(--border);color:var(--success)">${totalOrders}</td>
-                  <td style="text-align:right;font-weight:700;padding:10px;border-top:1px solid var(--border);color:${totalFailed>0?"var(--danger)":"var(--text2)"}">${totalFailed}</td>
+                  <td style="font-weight:var(--weight-bold);padding:10px;border-top:1px solid var(--border)">${t("results.total")}</td>
+                  <td style="text-align:right;font-weight:var(--weight-bold);padding:10px;border-top:1px solid var(--border);color:var(--success)">${totalOrders}</td>
+                  <td style="text-align:right;font-weight:var(--weight-bold);padding:10px;border-top:1px solid var(--border);color:${totalFailed>0?"var(--danger)":"var(--text2)"}">${totalFailed}</td>
                   <td style="border-top:1px solid var(--border)"></td>
                 </tr></tfoot>
               </table>
@@ -693,7 +699,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <div class="dash-section">
             <div class="dash-section-header">
               <div class="dash-section-title"><span>📦</span> ${t("results.all_products_combined")}</div>
-              <div style="font-size:11px;color:var(--text2)">${(()=>{const fn=t("results.products_click");return typeof fn==="function"?fn(aggSplitRows.length):fn;})()}</div>
+              <div style="font-size:var(--type-caption);color:var(--text2)">${(()=>{const fn=t("results.products_click");return typeof fn==="function"?fn(aggSplitRows.length):fn;})()}</div>
             </div>
             <div class="dash-section-body selectable" style="overflow-y:visible">
               ${buildProductSplitListHtml(aggSplitRows, totalFailed > 0)}
@@ -730,14 +736,14 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const failReason   = r.error || "";
       const hasFailed    = failedOrders.count > 0;
       const hasSkipped   = skippedOrders.count > 0;
-      const totalInTaager  = (stats.realInTaager||0) + (stats.missedInTaager||0);
+      const totalInTaager  = getTaagerOrderCount(stats);
       const totalDupes   = (stats.realDupe||0) + (stats.missedDupe||0);
       const totalAttempt = totalNew + failedOrders.count;
       const successRate  = totalAttempt > 0 ? Math.round(totalNew / totalAttempt * 100) : 100;
       const pagedUploadedProducts = buildPagedItems(products, (p, i, attrs) => `<tr ${attrs}>
-        <td style="font-weight:600">${p.productName||"—"}</td>
+        <td style="font-weight:var(--weight-semibold)">${p.productName||"—"}</td>
         <td style="text-align:right"><span class="badge badge-success">${p.count}</span></td>
-        <td style="text-align:right;font-weight:700;color:var(--accent)">${p.totalQty}</td>
+        <td style="text-align:right;font-weight:var(--weight-bold);color:var(--accent)">${p.totalQty}</td>
       </tr>`, "uploaded-products");
 
       const failTitleFn = t("results.fail_title");
@@ -752,7 +758,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <span class="notice-icon">❌</span>
           <div class="notice-text">
             <strong>${t("results.run_failed")}</strong>
-            <div style="font-size:12px;color:var(--text2);margin-top:3px">${failReason||t("results.error_occurred")}</div>
+            <div style="font-size:var(--type-label);color:var(--text2);margin-top:3px">${failReason||t("results.error_occurred")}</div>
           </div>
         </div>` : ""}
 
@@ -797,13 +803,13 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         <div class="dash-section">
           <div class="dash-section-header">
             <div class="dash-section-title"><span style="color:var(--success)">📊</span> ${t("results.upload_success_rate")}</div>
-            <div style="font-size:22px;font-weight:800;color:${successRate===100?"var(--success)":successRate>=70?"var(--warning)":"var(--danger)"}">${successRate}%</div>
+            <div style="font-size:var(--type-metric-sm);font-weight:var(--weight-bold);color:${successRate===100?"var(--success)":successRate>=70?"var(--warning)":"var(--danger)"}">${successRate}%</div>
           </div>
           <div class="dash-section-body">
-            <div style="height:12px;background:var(--border);border-radius:6px;overflow:hidden">
-              <div style="height:100%;width:${successRate}%;background:${successRate===100?"var(--success)":successRate>=70?"var(--warning)":"var(--danger)"};border-radius:6px;transition:width 0.8s ease"></div>
+            <div style="height:12px;background:var(--border);border-radius:var(--radius-xs);overflow:hidden">
+              <div style="height:100%;width:${successRate}%;background:${successRate===100?"var(--success)":successRate>=70?"var(--warning)":"var(--danger)"};border-radius:var(--radius-xs);transition:width 0.8s ease"></div>
             </div>
-            <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--text2)">
+            <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:var(--type-label);color:var(--text2)">
               <span>${(()=>{const fn=t("results.succeeded");return typeof fn==="function"?fn(totalNew):fn;})()}</span>
               <span>${(()=>{const fn=t("results.total_attempted");return typeof fn==="function"?fn(totalAttempt):fn;})()}</span>
               ${hasFailed ? `<span style="color:var(--danger)">❌ ${failedOrders.count} ${t("results.failed")}</span>` : ""}
@@ -818,7 +824,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <div class="dash-section">
             <div class="dash-section-header">
               <div class="dash-section-title"><span>📦</span> ${t("results.orders_by_product")}</div>
-              <div style="font-size:11px;color:var(--text2)">${(()=>{const fn=t("results.products_click");return typeof fn==="function"?fn(productSplitRows.length):fn;})()}</div>
+              <div style="font-size:var(--type-caption);color:var(--text2)">${(()=>{const fn=t("results.products_click");return typeof fn==="function"?fn(productSplitRows.length):fn;})()}</div>
             </div>
             <div class="dash-section-body selectable">
               ${buildProductSplitListHtml(productSplitRows, hasFailed)}
@@ -834,16 +840,14 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
               <div class="dash-section-body">
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
                   <div style="background:rgba(79,142,247,0.08);border:1px solid rgba(79,142,247,0.2);border-radius:var(--radius-sm);padding:14px;text-align:center">
-                    <div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t("results.from_real")}</div>
-                    <div style="font-size:28px;font-weight:800;color:var(--text)">${stats.realNew||0}</div>
-                    <div style="font-size:11px;color:var(--text2);margin-top:2px">${t("results.new_unique")}</div>
-                    ${(stats.realInTaager||0)>0?`<div style="font-size:11px;color:var(--text2);margin-top:4px">${(()=>{const fn=t("results.already_in_taager_n");return typeof fn==="function"?fn(stats.realInTaager):fn;})()}</div>`:""}
+                    <div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t("results.from_real")}</div>
+                    <div style="font-size:var(--type-page-title);font-weight:var(--weight-bold);color:var(--text)">${stats.realNew||0}</div>
+                    <div style="font-size:var(--type-caption);color:var(--text2);margin-top:2px">${t("results.new_unique")}</div>
                   </div>
                   <div style="background:rgba(124,106,247,0.08);border:1px solid rgba(124,106,247,0.2);border-radius:var(--radius-sm);padding:14px;text-align:center">
-                    <div style="font-size:11px;font-weight:700;color:#a89cf7;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t("results.from_missed")}</div>
-                    <div style="font-size:28px;font-weight:800;color:var(--text)">${stats.missedNew||0}</div>
-                    <div style="font-size:11px;color:var(--text2);margin-top:2px">${t("results.new_unique")}</div>
-                    ${(stats.missedInTaager||0)>0?`<div style="font-size:11px;color:var(--text2);margin-top:4px">${(()=>{const fn=t("results.already_in_taager_n");return typeof fn==="function"?fn(stats.missedInTaager):fn;})()}</div>`:""}
+                    <div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:#a89cf7;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t("results.from_missed")}</div>
+                    <div style="font-size:var(--type-page-title);font-weight:var(--weight-bold);color:var(--text)">${stats.missedNew||0}</div>
+                    <div style="font-size:var(--type-caption);color:var(--text2);margin-top:2px">${t("results.new_unique")}</div>
                   </div>
                 </div>
               </div>
@@ -852,18 +856,18 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
             ${totalNew === 0 ? `
             <div class="dash-section">
               <div class="dash-section-body" style="text-align:center;padding:28px">
-                <div style="font-size:36px;margin-bottom:8px">🎉</div>
-                <div style="font-size:15px;font-weight:700;margin-bottom:4px">${t("results.all_caught")}</div>
+                <div style="font-size:var(--type-display);margin-bottom:8px">🎉</div>
+                <div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);margin-bottom:4px">${t("results.all_caught")}</div>
                 <div class="text-muted text-sm">${t("results.no_orders")}</div>
               </div>
             </div>` : `
             <div class="dash-section">
               <div class="dash-section-header">
                 <div class="dash-section-title"><span style="color:var(--success)">✅</span> ${t("results.uploaded_orders_title")}</div>
-                <div style="font-size:11px;color:var(--text2)">${t("run.click_to_copy")}</div>
+                <div style="font-size:var(--type-caption);color:var(--text2)">${t("run.click_to_copy")}</div>
               </div>
               <div class="dash-section-body no-pad" style="overflow-x:auto">
-                <table class="orders-preview-table" style="font-size:12px">
+                <table class="orders-preview-table" style="font-size:var(--type-label)">
                   <thead><tr>
                     <th>${t("results.product_col")}</th>
                     <th style="text-align:right">${t("results.orders_col")}</th>
@@ -871,9 +875,9 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
                   </tr></thead>
                   <tbody>${pagedUploadedProducts.itemsHtml}</tbody>
                   <tfoot><tr>
-                    <td style="font-weight:700;border-top:1px solid var(--border);padding:8px 10px">${t("results.total")}</td>
-                    <td style="text-align:right;font-weight:700;border-top:1px solid var(--border);padding:8px 10px;color:var(--success)">${totalNew}</td>
-                    <td style="text-align:right;font-weight:700;border-top:1px solid var(--border);padding:8px 10px;color:var(--accent)">${products.reduce((s,p)=>s+p.totalQty,0)}</td>
+                    <td style="font-weight:var(--weight-bold);border-top:1px solid var(--border);padding:8px 10px">${t("results.total")}</td>
+                    <td style="text-align:right;font-weight:var(--weight-bold);border-top:1px solid var(--border);padding:8px 10px;color:var(--success)">${totalNew}</td>
+                    <td style="text-align:right;font-weight:var(--weight-bold);border-top:1px solid var(--border);padding:8px 10px;color:var(--accent)">${products.reduce((s,p)=>s+p.totalQty,0)}</td>
                   </tfoot>
                 </table>
                 ${pagedUploadedProducts.pagerHtml}
@@ -888,8 +892,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <div class="dash-section-header" style="background:rgba(255,77,109,0.06)">
             <div class="dash-section-title" style="color:var(--danger)"><span>❌</span> ${failTitle}</div>
             <div style="display:flex;gap:8px;align-items:center">
-              <div style="font-size:11px;color:var(--text2)">${t("results.fail_saved")}</div>
-              ${failedOrders.failedDir ? `<button id="acc-btn-open-failed-${r.accountId}" class="btn btn-danger" style="font-size:11px;padding:5px 12px">${t("results.open_folder")}</button>` : ""}
+              <div style="font-size:var(--type-caption);color:var(--text2)">${t("results.fail_saved")}</div>
+              ${failedOrders.failedDir ? `<button id="acc-btn-open-failed-${r.accountId}" class="btn btn-danger" style="font-size:var(--type-caption);padding:5px 12px">${t("results.open_folder")}</button>` : ""}
             </div>
           </div>
           <div class="dash-section-body no-pad">${errorRowsHtml}</div>
@@ -967,7 +971,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         <!-- Header -->
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
           <div>
-            <div class="page-title" style="font-size:20px">${allOk ? "✅" : "⚠️"} Results — ${dateDisplay}</div>
+            <div class="page-title" style="font-size:var(--type-metric-sm)">${allOk ? "✅" : "⚠️"} Results — ${dateDisplay}</div>
             <div class="text-muted text-sm">${t("results.completed")} · ${(()=>{const fn=t("results.accounts_count_label");return typeof fn==="function"?fn(accountResults.length):fn;})()}</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -984,11 +988,11 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
             <!-- All accounts item -->
             <div class="res-sidebar-item res-sidebar-active" data-pane="__all__" onclick="window._resSelectPane('__all__')">
-              <div style="font-size:13px;font-weight:700">${t("results.all_accounts_sidebar")}</div>
-              <div style="font-size:11px;color:var(--text2);margin-top:2px">${(()=>{const fn=t("results.n_accounts_ok");return typeof fn==="function"?fn(accountResults.length, accountResults.filter(r=>r.success).length):fn;})()}</div>
+              <div style="font-size:var(--type-control);font-weight:var(--weight-semibold)">${t("results.all_accounts_sidebar")}</div>
+              <div style="font-size:var(--type-caption);color:var(--text2);margin-top:2px">${(()=>{const fn=t("results.n_accounts_ok");return typeof fn==="function"?fn(accountResults.length, accountResults.filter(r=>r.success).length):fn;})()}</div>
             </div>
 
-            <div style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;padding:6px 4px 2px">${t("results.accounts_label")}</div>
+            <div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:var(--text2);text-transform:uppercase;letter-spacing:.08em;padding:6px 4px 2px">${t("results.accounts_label")}</div>
 
             ${accountResults.map(r => {
               const orders = r.data?.orders || 0;
@@ -997,8 +1001,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
               return `
               <div class="res-sidebar-item" data-pane="${r.accountId}" onclick="window._resSelectPane('${r.accountId}')"
                    style="border-left:3px solid ${borderColor}">
-                <div style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${r.accountLabel||r.accountId}">${r.success?"✅":"❌"} ${r.accountLabel||r.accountId}</div>
-                <div style="font-size:10px;color:var(--text2);margin-top:2px;display:flex;gap:8px">
+                <div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${r.accountLabel||r.accountId}">${r.success?"✅":"❌"} ${r.accountLabel||r.accountId}</div>
+                <div style="font-size:var(--type-micro);color:var(--text2);margin-top:2px;display:flex;gap:8px">
                   <span style="color:var(--success)">↑${orders}</span>
                   ${failed > 0 ? `<span style="color:var(--danger)">✗${failed}</span>` : ""}
                 </div>
@@ -1056,7 +1060,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   const runFailed    = data._runFailed   || false;
   const failReason   = data._failReason  || "";
 
-  const totalInTaager    = (stats.realInTaager || 0) + (stats.missedInTaager || 0);
+  const totalInTaager    = getTaagerOrderCount(stats);
   const totalDupes     = (stats.realDupe     || 0) + (stats.missedDupe     || 0);
   const hasFailed      = failedOrders.count > 0;
   const hasSkipped     = skippedOrders.count > 0;
@@ -1085,9 +1089,9 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   }).sort((a, b) => b.total - a.total);
 
   const pagedUploadedProducts = buildPagedItems(products, (p, i, attrs) => `<tr ${attrs}>
-    <td style="font-weight:600">${p.productName || "—"}</td>
+    <td style="font-weight:var(--weight-semibold)">${p.productName || "—"}</td>
     <td style="text-align:right"><span class="badge badge-success">${p.count}</span></td>
-    <td style="text-align:right;font-weight:700;color:var(--accent)">${p.totalQty}</td>
+    <td style="text-align:right;font-weight:var(--weight-bold);color:var(--accent)">${p.totalQty}</td>
   </tr>`, "uploaded-products");
 
   const errorRowsHtml = buildFailedOrdersDetailHtml(failedOrders);
@@ -1102,7 +1106,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div>
-          <div class="page-title" style="font-size:20px">${runFailed ? "❌" : hasFailed ? "⚠️" : "✅"} ${title}</div>
+          <div class="page-title" style="font-size:var(--type-metric-sm)">${runFailed ? "❌" : hasFailed ? "⚠️" : "✅"} ${title}</div>
           <div class="text-muted text-sm">${t("results.completed")} · 📅 ${dateDisplay}</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1119,7 +1123,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         <span class="notice-icon">❌</span>
         <div class="notice-text">
           <strong>${t("results.run_failed")}</strong>
-          <div style="font-size:12px;color:var(--text2);margin-top:3px">${failReason || t("results.error_occurred")}</div>
+          <div style="font-size:var(--type-label);color:var(--text2);margin-top:3px">${failReason || t("results.error_occurred")}</div>
         </div>
       </div>` : ""}
 
@@ -1156,13 +1160,13 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       <div class="dash-section">
         <div class="dash-section-header">
           <div class="dash-section-title"><span style="color:var(--success)">📊</span> ${t("results.upload_success_rate")}</div>
-          <div style="font-size:22px;font-weight:800;color:${successRate === 100 ? "var(--success)" : successRate >= 70 ? "var(--warning)" : "var(--danger)"}">${successRate}%</div>
+          <div style="font-size:var(--type-metric-sm);font-weight:var(--weight-bold);color:${successRate === 100 ? "var(--success)" : successRate >= 70 ? "var(--warning)" : "var(--danger)"}">${successRate}%</div>
         </div>
         <div class="dash-section-body">
-          <div style="height:12px;background:var(--border);border-radius:6px;overflow:hidden">
-            <div style="height:100%;width:${successRate}%;background:${successRate === 100 ? "var(--success)" : successRate >= 70 ? "var(--warning)" : "var(--danger)"};border-radius:6px;transition:width 0.8s ease"></div>
+          <div style="height:12px;background:var(--border);border-radius:var(--radius-xs);overflow:hidden">
+            <div style="height:100%;width:${successRate}%;background:${successRate === 100 ? "var(--success)" : successRate >= 70 ? "var(--warning)" : "var(--danger)"};border-radius:var(--radius-xs);transition:width 0.8s ease"></div>
           </div>
-          <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--text2)">
+          <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:var(--type-label);color:var(--text2)">
             <span>${(()=>{const fn=t("results.succeeded");return typeof fn==="function"?fn(totalNew):fn;})()}</span>
             <span>${(()=>{const fn=t("results.total_attempted");return typeof fn==="function"?fn(totalUploaded):fn;})()}</span>
             ${hasFailed ? `<span style="color:var(--danger)">❌ ${failedOrders.count} ${t("results.failed")}</span>` : ""}
@@ -1177,7 +1181,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         <div class="dash-section">
           <div class="dash-section-header">
             <div class="dash-section-title"><span>📦</span> ${t("results.orders_by_product")}</div>
-            <div style="font-size:11px;color:var(--text2)">${(()=>{const fn=t("results.products_click");return typeof fn==="function"?fn(productSplitRows.length):fn;})()}</div>
+            <div style="font-size:var(--type-caption);color:var(--text2)">${(()=>{const fn=t("results.products_click");return typeof fn==="function"?fn(productSplitRows.length):fn;})()}</div>
           </div>
           <div class="dash-section-body selectable">
             ${buildProductSplitListHtml(productSplitRows, hasFailed)}
@@ -1193,16 +1197,14 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
             <div class="dash-section-body">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
                 <div style="background:rgba(79,142,247,0.08);border:1px solid rgba(79,142,247,0.2);border-radius:var(--radius-sm);padding:14px;text-align:center">
-                  <div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t("results.from_real")}</div>
-                  <div style="font-size:28px;font-weight:800;color:var(--text)">${stats.realNew || 0}</div>
-                  <div style="font-size:11px;color:var(--text2);margin-top:2px">${t("results.new_unique")}</div>
-                  ${(stats.realInTaager || 0) > 0 ? `<div style="font-size:11px;color:var(--text2);margin-top:4px">${(()=>{const fn=t("results.already_in_taager_n");return typeof fn==="function"?fn(stats.realInTaager):fn;})()}</div>` : ""}
+                  <div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t("results.from_real")}</div>
+                  <div style="font-size:var(--type-page-title);font-weight:var(--weight-bold);color:var(--text)">${stats.realNew || 0}</div>
+                  <div style="font-size:var(--type-caption);color:var(--text2);margin-top:2px">${t("results.new_unique")}</div>
                 </div>
                 <div style="background:rgba(124,106,247,0.08);border:1px solid rgba(124,106,247,0.2);border-radius:var(--radius-sm);padding:14px;text-align:center">
-                  <div style="font-size:11px;font-weight:700;color:#a89cf7;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t("results.from_missed")}</div>
-                  <div style="font-size:28px;font-weight:800;color:var(--text)">${stats.missedNew || 0}</div>
-                  <div style="font-size:11px;color:var(--text2);margin-top:2px">${t("results.new_unique")}</div>
-                  ${(stats.missedInTaager || 0) > 0 ? `<div style="font-size:11px;color:var(--text2);margin-top:4px">${(()=>{const fn=t("results.already_in_taager_n");return typeof fn==="function"?fn(stats.missedInTaager):fn;})()}</div>` : ""}
+                  <div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:#a89cf7;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t("results.from_missed")}</div>
+                  <div style="font-size:var(--type-page-title);font-weight:var(--weight-bold);color:var(--text)">${stats.missedNew || 0}</div>
+                  <div style="font-size:var(--type-caption);color:var(--text2);margin-top:2px">${t("results.new_unique")}</div>
                 </div>
               </div>
             </div>
@@ -1211,18 +1213,18 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           ${totalNew === 0 ? `
           <div class="dash-section">
             <div class="dash-section-body" style="text-align:center;padding:32px">
-              <div style="font-size:36px;margin-bottom:10px">🎉</div>
-              <div style="font-size:15px;font-weight:700;margin-bottom:4px">${t("results.all_caught")}</div>
+              <div style="font-size:var(--type-display);margin-bottom:10px">🎉</div>
+              <div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);margin-bottom:4px">${t("results.all_caught")}</div>
               <div class="text-muted text-sm">${t("results.no_orders")}</div>
             </div>
           </div>` : `
           <div class="dash-section">
             <div class="dash-section-header">
               <div class="dash-section-title"><span style="color:var(--success)">✅</span> ${t("results.uploaded_orders_title")}</div>
-              <div style="font-size:11px;color:var(--text2)">${t("run.click_cells_copy")}</div>
+              <div style="font-size:var(--type-caption);color:var(--text2)">${t("run.click_cells_copy")}</div>
             </div>
             <div class="dash-section-body no-pad" style="overflow-x:auto">
-              <table class="orders-preview-table" style="font-size:12px">
+              <table class="orders-preview-table" style="font-size:var(--type-label)">
                 <thead><tr>
                   <th>${t("results.product_col")}</th>
                   <th style="text-align:right">${t("results.orders_col")}</th>
@@ -1232,9 +1234,9 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
                   ${pagedUploadedProducts.itemsHtml}
                 </tbody>
                 <tfoot><tr>
-                  <td style="font-weight:700;border-top:1px solid var(--border);padding:8px 10px">${t("results.total")}</td>
-                  <td style="text-align:right;font-weight:700;border-top:1px solid var(--border);padding:8px 10px;color:var(--success)">${totalNew}</td>
-                  <td style="text-align:right;font-weight:700;border-top:1px solid var(--border);padding:8px 10px;color:var(--accent)">${products.reduce((s, p) => s + p.totalQty, 0)}</td>
+                  <td style="font-weight:var(--weight-bold);border-top:1px solid var(--border);padding:8px 10px">${t("results.total")}</td>
+                  <td style="text-align:right;font-weight:var(--weight-bold);border-top:1px solid var(--border);padding:8px 10px;color:var(--success)">${totalNew}</td>
+                  <td style="text-align:right;font-weight:var(--weight-bold);border-top:1px solid var(--border);padding:8px 10px;color:var(--accent)">${products.reduce((s, p) => s + p.totalQty, 0)}</td>
                 </tfoot>
               </table>
               ${pagedUploadedProducts.pagerHtml}
@@ -1249,8 +1251,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         <div class="dash-section-header" style="background:rgba(255,77,109,0.06)">
           <div class="dash-section-title" style="color:var(--danger)"><span>❌</span> ${failTitle}</div>
           <div style="display:flex;gap:8px;align-items:center">
-            <div style="font-size:11px;color:var(--text2)">${t("results.fail_saved")}</div>
-            ${failedOrders.failedDir ? `<button id="btn-open-failed-folder" class="btn btn-danger" style="font-size:11px;padding:5px 12px">${t("results.open_folder")}</button>` : ""}
+            <div style="font-size:var(--type-caption);color:var(--text2)">${t("results.fail_saved")}</div>
+            ${failedOrders.failedDir ? `<button id="btn-open-failed-folder" class="btn btn-danger" style="font-size:var(--type-caption);padding:5px 12px">${t("results.open_folder")}</button>` : ""}
           </div>
         </div>
         <div class="dash-section-body no-pad">${errorRowsHtml}</div>
@@ -1311,7 +1313,7 @@ function showToast(msg) {
     position:fixed;bottom:24px;right:24px;
     background:var(--bg2);border:1px solid var(--border);
     border-radius:var(--radius-sm);padding:12px 18px;
-    font-size:13px;color:var(--text);
+    font-size:var(--type-control);color:var(--text);
     box-shadow:0 4px 20px rgba(0,0,0,.4);
     z-index:9999;
   `;

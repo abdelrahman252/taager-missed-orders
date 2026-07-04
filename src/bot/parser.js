@@ -485,17 +485,31 @@ function parseTaagerOrderKeys(buffer, country = COUNTRY) {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
   const header = rows[0] || [];
+  const orderIdx = findHeaderIndex(header, ["Order Number"], 0);
   const phoneIdx = findHeaderIndex(header, ["رقم الهاتف", "Phone Number", "Phone"], 5);
 
   const phones = new Set();
+  const orderNumbers = new Set();
+  let rowOrderCount = 0;
   let skipped = 0;
   for (let i = 1; i < rows.length; i++) {
-    const phone = normalizePhone(rows[i][phoneIdx], country);
+    const row = rows[i] || [];
+    const hasData = row.some((cell) => String(cell == null ? "" : cell).trim() !== "");
+    if (!hasData) continue;
+    rowOrderCount++;
+
+    const orderNumber = String(row[orderIdx] || "").trim();
+    if (orderNumber) orderNumbers.add(orderNumber);
+
+    const phone = normalizePhone(row[phoneIdx], country);
     if (phone) phones.add(phone);
     else skipped++;
   }
 
-  console.log(`Taager: ${phones.size} existing phones loaded | skipped:${skipped}`);
+  phones.taagerOrderCount = orderNumbers.size || rowOrderCount;
+  phones.taagerUniqueOrderNumbers = orderNumbers.size;
+  phones.taagerRowOrderCount = rowOrderCount;
+  console.log(`Taager: ${phones.taagerOrderCount} orders loaded | ${phones.size} existing phones loaded | skipped phones:${skipped}`);
   return phones;
 }
 
@@ -507,6 +521,7 @@ function mergeAndDeduplicate(realOrders, resolvedMissed, existingPhones) {
   const seen = new Set();
   const result = [];
   const stats = {
+    taagerOrderCount: Number(existingPhones && existingPhones.taagerOrderCount) || 0,
     realValid: realOrders.length,
     missedValid: resolvedMissed.length,
     realNew: 0,
@@ -828,18 +843,21 @@ function parseFullMonthSnapshot(buffer, options = {}) {
       const itemCount = Math.max(products.length, qtys.length, prices.length, 1);
       const createdAt = localDateKey(row[idx.created]);
       const updatedAt = localDateKey(row[idx.updated]);
+      const statusMeta = taagerStatusMeta(row[idx.status]);
       if (createdAt) {
         diagnostics.datedSourceRows++;
         if (!diagnostics.sourceDateFrom || createdAt < diagnostics.sourceDateFrom) diagnostics.sourceDateFrom = createdAt;
         if (!diagnostics.sourceDateTo || createdAt > diagnostics.sourceDateTo) diagnostics.sourceDateTo = createdAt;
       }
+      // Dashboard membership is a creation-date cohort. Last Updated remains
+      // delivery metadata for Actual NDR, but must not pull an older cohort
+      // into the selected period.
       if (!inRange(createdAt)) {
         diagnostics.skippedOutOfRange++;
         continue;
       }
-      const dashboardDate = inRange(createdAt) ? createdAt : inRange(updatedAt) ? updatedAt : (createdAt || updatedAt || rangeFromKey);
+      const dashboardDate = createdAt || updatedAt || rangeFromKey;
       const notes = String(row[idx.notes] || "").trim();
-      const statusMeta = taagerStatusMeta(row[idx.status]);
       const profitCountry = products.some((sku) => /^IQ/i.test(sku))
         ? "iq"
         : (options.taagerCountry || options.country || COUNTRY);

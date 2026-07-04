@@ -533,7 +533,7 @@
     var body = item.summary || item.reason || item.expectedBenefit || "";
 
     var titleHtml = title ? '<div class="ai-insight-title">' + esc(title) + '</div>' : '';
-    var bodyHtml = (body && body !== title) ? '<div class="ai-insight-body" style="font-size: 11px; opacity: 0.8; margin-top: 2px;">' + esc(body) + '</div>' : '';
+    var bodyHtml = (body && body !== title) ? '<div class="ai-insight-body" style="font-size:var(--type-caption); opacity: 0.8; margin-top: 2px;">' + esc(body) + '</div>' : '';
 
     return '<div class="ai-insight-block ' + esc(severityClass) + '">' +
              '<div class="ai-insight-label">' + esc(label) + '</div>' +

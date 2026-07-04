@@ -1620,7 +1620,10 @@
       }
       var requestMode = options.force ? 'force' : (options.revalidate ? 'revalidate' : 'cached');
       var requestSeq = Number(_marketingLoadSeq[loadKey] || 0);
-      if (requestMode !== 'cached' && !options.background) this.setLoading(true, id, platform);
+      // Even a local cached lookup is asynchronous across IPC. Mark it as
+      // resolving so spend-derived UI never flashes a manual/default value
+      // while the connection state is still unknown.
+      if (!options.background) this.setLoading(true, id, platform);
       var self = this;
       console.info('[Marketing][Store] status request', { accountId: id, platform: platform, mode: requestMode });
       _marketingLoadRequests[loadKey] = window.api.getMarketingStatus(id, platform, { mode: requestMode }).then(function (response) {

@@ -16,6 +16,54 @@
 window.renderSection8 = function (mountEl, data, ctx) {
   'use strict';
 
+  function s8Debug(event, detail, level) {
+    if (window.TaagerDebugLog) window.TaagerDebugLog('dashboard-section8', event, detail || {}, level);
+    else (console[level || 'log'] || console.log).call(console, '[DashboardSection8] ' + event, detail || {});
+  }
+
+  var s8RenderNow = Date.now();
+  var s8PreviousRenderAt = Number(mountEl._s8LastRenderAt || 0);
+  mountEl._s8RenderCount = Number(mountEl._s8RenderCount || 0) + 1;
+  mountEl._s8LastRenderAt = s8RenderNow;
+  var s8RenderReason = mountEl._s8PendingRefreshReason || (mountEl._s8RenderCount === 1 ? 'initial' : 'direct');
+  mountEl._s8PendingRefreshReason = '';
+  s8Debug('render:start', {
+    renderCount: mountEl._s8RenderCount,
+    reason: s8RenderReason,
+    sincePreviousRenderMs: s8PreviousRenderAt ? s8RenderNow - s8PreviousRenderAt : null,
+    connected: !!(mountEl && mountEl.isConnected),
+    hidden: !!(mountEl && mountEl.hidden),
+    dataLoaded: !!(data && data._loaded),
+    dataLoading: !!(data && data._loading),
+    version: data && data._version,
+    activeAccountId: data && data.meta && data.meta.activeAccountId
+  });
+
+  function scheduleS8Refresh(reason, detail) {
+    mountEl._s8PendingRefreshReason = reason || 'unknown';
+    s8Debug('refresh:schedule', Object.assign({
+      reason: reason || 'unknown',
+      hidden: !!mountEl.hidden,
+      connected: !!mountEl.isConnected
+    }, detail || {}));
+    if (!mountEl.isConnected || mountEl.hidden) {
+      mountEl._dashboardNeedsRefresh = true;
+      return;
+    }
+    if (mountEl._s8RefreshTimer) clearTimeout(mountEl._s8RefreshTimer);
+    mountEl._s8RefreshTimer = setTimeout(function () {
+      mountEl._s8RefreshTimer = null;
+      if (!mountEl.isConnected || mountEl.hidden) {
+        mountEl._dashboardNeedsRefresh = true;
+        s8Debug('refresh:skip-inactive', { reason: reason || 'unknown' });
+        return;
+      }
+      mountEl.classList.add('dash-section-refreshing');
+      s8Debug('refresh:run', { reason: reason || 'unknown' });
+      window.renderSection8(mountEl, data, ctx);
+    }, 450);
+  }
+
   // -- Theme Observer ---------------------------------------------------------
   // Re-render the whole section whenever the user switches light ? dark so that
   // all inline-style bg/color values are recomputed for the new theme.
@@ -30,7 +78,11 @@ window.renderSection8 = function (mountEl, data, ctx) {
     }
     mutations.forEach(function (m) {
       if (m.attributeName === 'data-theme') {
-        window.renderSection8(mountEl, data, ctx);
+        var refresh = function () {
+          if (mountEl.isConnected && !mountEl.hidden) window.renderSection8(mountEl, data, ctx);
+        };
+        if (window.TaagerAfterNextPaint) window.TaagerAfterNextPaint(refresh);
+        else setTimeout(refresh, 0);
       }
     });
   });
@@ -106,6 +158,8 @@ window.renderSection8 = function (mountEl, data, ctx) {
   var marketingState = window.DashboardMarketingState
     ? window.DashboardMarketingState.get(_roiAccountId)
     : null;
+  var marketingSpendPending = !!(marketingState && marketingState.loading && !marketingState.manualOverride);
+  var marketingSpendUnavailable = !!(marketingState && marketingState.status === 'connected' && marketingState.error && !marketingState.manualOverride && !marketingSpendPending);
   var syncedSpendActive = !!(
     marketingState &&
     marketingState.status === "connected" &&
@@ -227,7 +281,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
     { label: s8Txt('Confirmation Rate', 'نسبة التأكيد'), value: overview.confirmationRate ? overview.confirmationRate.value : 0, unit: '%', delta: overview.confirmationRate ? overview.confirmationRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.confirmationRate.tooltip', 'Confirmation Rate = progressed statuses / all orders. Confirmation + cancel + pending = 100%.') },
     { label: s8Txt('DR Rate', 'نسبة DR'), value: overview.drRate ? overview.drRate.value : 0, unit: '%', delta: overview.drRate ? overview.drRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.drRate.tooltip', 'DR = delivered orders / confirmed orders.') },
     { label: s8Txt('NDR Rate', 'نسبة NDR'), value: overview.ndrRate ? overview.ndrRate.value : (cod.ndrPct != null ? num(cod.ndrPct, 0) : 0), unit: '%', delta: overview.ndrRate ? overview.ndrRate.delta : 0, color: 'orange', spark: [], iconType: 'orange', tooltip: tx('kpi.ndrRate.tooltip', 'NDR = delivered orders / net placed orders.') },
-    { label: s8Txt('Net ROAS', 'العائد الصافي على الإعلان'), value: netRoasUnavailable ? 0 : netRoas.toFixed(2), displayValue: netRoasUnavailable ? '—' : netRoas.toFixed(2), unit: 'x', delta: netRoasDelta, hideDelta: netRoasUnavailable, color: 'purple', spark: [], iconType: 'purple', tooltip: tx('kpi.netRoas.tooltip', s8Txt('Net ROAS = delivered sales divided by ad spend. It uses only successfully delivered order revenue, so pending, canceled, and returned orders do not inflate ad performance.', 'العائد الصافي على الإعلان يساوي المبيعات المسلمة مقسومة على الإنفاق الإعلاني، ويستخدم فقط إيرادات الطلبات المسلمة بنجاح حتى لا تضخم الطلبات المعلقة أو الملغاة أو المرتجعة أداء الإعلانات.')) }
+    { label: s8Txt('Net ROAS', 'العائد الصافي على الإعلان'), value: netRoasUnavailable ? 0 : netRoas.toFixed(2), displayValue: netRoasUnavailable ? '—' : netRoas.toFixed(2), loading: marketingSpendPending, unavailable: marketingSpendUnavailable, unit: 'x', delta: netRoasDelta, hideDelta: netRoasUnavailable, color: 'purple', spark: [], iconType: 'purple', tooltip: tx('kpi.netRoas.tooltip', s8Txt('Net ROAS = delivered sales divided by ad spend. It uses only successfully delivered order revenue, so pending, canceled, and returned orders do not inflate ad performance.', 'العائد الصافي على الإعلان يساوي المبيعات المسلمة مقسومة على الإنفاق الإعلاني، ويستخدم فقط إيرادات الطلبات المسلمة بنجاح حتى لا تضخم الطلبات المعلقة أو الملغاة أو المرتجعة أداء الإعلانات.')) }
   ];
 
   // Keep Performance Overview balanced as two rows of six cards.
@@ -469,9 +523,9 @@ window.renderSection8 = function (mountEl, data, ctx) {
   function sectionBadge(num, title, color) {
     color = color || '#a855f7';
     return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;justify-content:flex-end;">' +
-      '<span style="font-size:14px;font-weight:700;color:#fff;">' + title + '</span>' +
+      '<span style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#fff;">' + title + '</span>' +
       '<div style="width:26px;height:26px;border-radius:50%;background:' + color + '22;border:1.5px solid ' + color + '80;' +
-        'display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:' + color + ';flex-shrink:0;">' +
+        'display:flex;align-items:center;justify-content:center;font-size:var(--type-caption);font-weight:var(--weight-semibold);color:' + color + ';flex-shrink:0;">' +
         num +
       '</div>' +
     '</div>';
@@ -525,7 +579,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
     } else if (isLast && !isFirst) {
       borderRadius = isAr ? 'border-top-left-radius: 12px; border-bottom-left-radius: 12px;' : 'border-top-right-radius: 12px; border-bottom-right-radius: 12px;';
     } else if (isFirst && isLast) {
-      borderRadius = 'border-radius: 12px;';
+      borderRadius = 'border-radius:var(--dash-radius-md);';
     }
     
     // Separator line
@@ -600,19 +654,19 @@ window.renderSection8 = function (mountEl, data, ctx) {
     var iconSvg = stageIcons[displayLabel] || stageIcons[s.label] || stageIcons['Pending Confirmation'];
     var sarLabel = s.sarLabel || '';
     if (!sarLabel && s.sar) {
-      if (displayLabel === s8Txt('In Shipping', 'قيد الشحن') || displayLabel === s8Txt('Shipping', 'قيد الشحن')) {
+      if (s.businessGroup === 'incoming' || displayLabel === s8Txt('In Shipping', 'قيد الشحن') || displayLabel === s8Txt('Shipping', 'قيد الشحن')) {
         sarLabel = s8Txt('Incoming Profit After Tax', 'الربح القادم بعد الضريبة');
-      } else if (displayLabel === s8Txt('Delivered', 'تم التوصيل')) {
+      } else if (s.businessGroup === 'earned' || displayLabel === s8Txt('Delivered', 'تم التوصيل')) {
         sarLabel = s8Txt('Earned Profit After Tax', 'الربح المحقق بعد الضريبة');
-      } else if (displayLabel === s8Txt('Failed', 'فشل')) {
+      } else if (s.businessGroup === 'lost' || displayLabel === s8Txt('Failed', 'فشل')) {
         sarLabel = s8Txt('Lost Profit After Tax', 'الربح الضائع بعد الضريبة');
       }
     }
     var sarHtml = '';
     if (s.sar) {
       sarHtml = '<div style="display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1.05;">' +
-        '<span style="font-family:\'Inter\', sans-serif;font-size:10px;font-weight:700;color:' + s.color + ';">' + s.sar + ' ' + nativeCurrency + '</span>' +
-        (sarLabel ? '<span style="font-family:\'Inter\', sans-serif;font-size:7px;font-weight:600;color:rgba(255,255,255,0.42);text-align:center;max-width:72px;">' + sarLabel + '</span>' : '') +
+        '<span style="font-family:var(--font-ui);font-size:var(--type-micro);font-weight:var(--weight-semibold);color:' + s.color + ';">' + s.sar + ' ' + nativeCurrency + '</span>' +
+        (sarLabel ? '<span style="font-family:var(--font-ui);font-size:var(--type-micro);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.42);text-align:center;max-width:72px;">' + sarLabel + '</span>' : '') +
       '</div>';
     }
 
@@ -622,18 +676,18 @@ window.renderSection8 = function (mountEl, data, ctx) {
       'onmouseenter="this.style.background=\'' + hoverBg + '\'; this.style.transform=\'translateY(-2px)\'; this.style.zIndex=\'10\';" ' +
       'onmouseleave="this.style.background=\'' + bg + '\'; this.style.transform=\'none\'; this.style.zIndex=\'1\';">' +
       
-      '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:' + s.color + ';pointer-events:none;' + (isFirst && !isLast ? (isAr ? 'border-top-right-radius:12px;' : 'border-top-left-radius:12px;') : isLast && !isFirst ? (isAr ? 'border-top-left-radius:12px;' : 'border-top-right-radius:12px;') : isFirst && isLast ? 'border-radius:12px 12px 0 0;' : '') + '"></div>' +
+      '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:' + s.color + ';pointer-events:none;' + (isFirst && !isLast ? (isAr ? 'border-top-right-radius:12px;' : 'border-top-left-radius:12px;') : isLast && !isFirst ? (isAr ? 'border-top-left-radius:12px;' : 'border-top-right-radius:12px;') : isFirst && isLast ? 'border-radius:var(--dash-radius-md) 12px 0 0;' : '') + '"></div>' +
       '<div style="position:absolute;top:3px;left:0;right:0;height:37px;background:linear-gradient(to bottom, ' + s.color + topTintOpacity + ', transparent);pointer-events:none;"></div>' +
 
-      '<div style="font-family:\'Inter\', \'Cairo\', sans-serif;font-size:10px;color:' + labelColor + ';text-align:center;direction:' + (isAr ? 'rtl' : 'ltr') + ';line-height:1.2;min-height:24px;display:flex;align-items:center;justify-content:center;z-index:1;font-weight:600;">' + displayLabel + '</div>' +
+      '<div style="font-family:var(--font-ui);font-size:var(--type-micro);color:' + labelColor + ';text-align:center;direction:' + (isAr ? 'rtl' : 'ltr') + ';line-height:1.2;min-height:24px;display:flex;align-items:center;justify-content:center;z-index:1;font-weight:var(--weight-semibold);">' + displayLabel + '</div>' +
       
       '<div style="width:30px;height:30px;border-radius:50%;background:' + s.color + '10;border:1px solid ' + s.color + '30;box-shadow:0 0 14px ' + s.color + '20;display:flex;align-items:center;justify-content:center;flex-shrink:0;z-index:1;color:' + s.color + ';">' +
         iconSvg +
       '</div>' +
       
-      '<span style="font-family:\'Inter\', sans-serif;font-size:18px;font-weight:800;color:' + countColor + ';line-height:1;margin-top:2px;z-index:1;white-space:nowrap;">' + s.count + '</span>' +
+      '<span style="font-family:var(--font-ui);font-size:var(--type-section-title);font-weight:var(--weight-bold);color:' + countColor + ';line-height:1;margin-top:2px;z-index:1;white-space:nowrap;">' + s.count + '</span>' +
       
-      '<span style="font-family:\'Inter\', sans-serif;font-size:10px;font-weight:700;color:' + pctColor + ';background:' + pctColor + '15;padding:2px 6px;border-radius:6px;z-index:1;">' +
+      '<span style="font-family:var(--font-ui);font-size:var(--type-micro);font-weight:var(--weight-semibold);color:' + pctColor + ';background:' + pctColor + '15;padding:2px 6px;border-radius:var(--dash-radius-sm);z-index:1;">' +
         ((typeof s.pct === 'string' && s.pct.indexOf('%') !== -1) ? s.pct : s.pct + '%') +
       '</span>' +
       
@@ -699,7 +753,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
     var ticksSvg = ticks.map(function (tk) {
       var pt = gaugePoint(tk.t, R + SW / 2 + 12);
       var tickFill = isLight ? 'rgba(30,41,59,0.55)' : 'rgba(255,255,255,0.4)';
-      return '<text x="' + pt.x.toFixed(2) + '" y="' + (pt.y + 3).toFixed(2) + '" text-anchor="middle" fill="' + tickFill + '" font-size="8" font-weight="600">' + tk.l + '</text>';
+      return '<text x="' + pt.x.toFixed(2) + '" y="' + (pt.y + 3).toFixed(2) + '" text-anchor="middle" fill="' + tickFill + '" font-size="10" font-weight="600">' + tk.l + '</text>';
     }).join('');
     var isLight = document.documentElement.getAttribute('data-theme') === 'light';
     var needleStroke  = isLight ? '#1e293b' : '#fff';
@@ -712,11 +766,11 @@ window.renderSection8 = function (mountEl, data, ctx) {
       ticksSvg +
       '<line x1="' + cx + '" y1="' + cy + '" x2="' + needle.x.toFixed(2) + '" y2="' + needle.y.toFixed(2) + '" stroke="' + needleStroke + '" stroke-width="3" stroke-linecap="round" style="filter:' + needleShadow + '"/>' +
       '<circle cx="' + cx + '" cy="' + cy + '" r="5" fill="' + centerFill + '"/>' +
-      '<text x="' + cx + '" y="' + (cy - 8) + '" text-anchor="middle" fill="' + needleColor + '" font-size="27" font-weight="900" font-family="Cairo">' + roiLabel + '</text>' +
+      '<text x="' + cx + '" y="' + (cy - 8) + '" text-anchor="middle" fill="' + needleColor + '" font-size="27" font-weight="700" font-family="Inter, IBM Plex Sans Arabic, sans-serif">' + roiLabel + '</text>' +
       '</svg>' +
       '<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:-8px;">' +
         '<div style="width:6px;height:6px;border-radius:50%;background:' + needleColor + ';box-shadow:0 0 6px ' + needleColor + ';"></div>' +
-        '<span style="font-size:11px;color:' + needleColor + ';font-weight:700;font-family:Cairo;">' + badgeLabel + '</span>' +
+        '<span style="font-size:var(--type-caption);color:' + needleColor + ';font-weight:var(--weight-semibold);font-family:var(--font-ui);">' + badgeLabel + '</span>' +
       '</div>';
   }
 
@@ -749,7 +803,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
   var kpiRowHtml = KPI_CARDS.map(function (c, i) {
     return '<div class="fade-up" style="flex:1 1 calc((100% - 50px) / 6);min-width:170px;animation-delay:' + (i * 100) + 'ms;">' +
       window.s8KpiCard({
-        label: c.label, value: c.value, displayValue: c.displayValue, staticDisplay: c.staticDisplay, unit: c.unit, delta: c.delta, deltaLabel: comparisonLabel, hideDelta: c.hideDelta,
+        label: c.label, value: c.value, displayValue: c.displayValue, staticDisplay: c.staticDisplay, loading: c.loading, unavailable: c.unavailable, unit: c.unit, delta: c.delta, deltaLabel: comparisonLabel, hideDelta: c.hideDelta,
         color: c.color, sparklineData: c.spark, iconType: c.iconType,
         tooltip: c.tooltip
       }) +
@@ -759,7 +813,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
   var newKpiRowHtml = NEW_KPI_CARDS.map(function (c, i) {
     return '<div class="fade-up" style="flex:1 1 calc((100% - 50px) / 6);min-width:170px;animation-delay:' + ((i + 6) * 100) + 'ms;">' +
       window.s8KpiCard({
-        label: c.label, value: c.value, displayValue: c.displayValue, staticDisplay: c.staticDisplay, unit: c.unit, delta: c.delta, deltaLabel: comparisonLabel, hideDelta: c.hideDelta,
+        label: c.label, value: c.value, displayValue: c.displayValue, staticDisplay: c.staticDisplay, loading: c.loading, unavailable: c.unavailable, unit: c.unit, delta: c.delta, deltaLabel: comparisonLabel, hideDelta: c.hideDelta,
         color: c.color, sparklineData: c.spark, iconType: c.iconType,
         tooltip: c.tooltip
       }) +
@@ -768,17 +822,17 @@ window.renderSection8 = function (mountEl, data, ctx) {
 
   var financialKpiCards = [
     { label: s8Txt('Average Profit', 'متوسط الربح'), value: avgCommissionInTargetCurrency, decimals: 2, color: 'green', iconType: 'green', tooltip: s8Txt('Average Profit = average profit after tax per delivered order.', 'متوسط الربح = متوسط الربح بعد الضريبة لكل طلب مسلم.') },
-    { label: s8Txt('Account CPA', 'تكلفة الطلب للحساب'), value: accountCpa, decimals: 2, color: 'purple', iconType: 'purple', tooltip: s8Txt('Account CPA = total spend divided by net total orders.', 'تكلفة الطلب للحساب = إجمالي الإنفاق مقسوما على صافي إجمالي الطلبات.') },
+    { label: s8Txt('Account CPA', 'تكلفة الطلب للحساب'), value: accountCpa, loading: marketingSpendPending, unavailable: marketingSpendUnavailable, decimals: 2, color: 'purple', iconType: 'purple', tooltip: s8Txt('Account CPA = total spend divided by net total orders.', 'تكلفة الطلب للحساب = إجمالي الإنفاق مقسوما على صافي إجمالي الطلبات.') },
     { label: s8Txt('Account Break-even CPA', 'تكلفة التعادل للحساب'), value: accountBreakEvenCpa, decimals: 2, color: 'orange', iconType: 'orange', tooltip: s8Txt('Account Break-even CPA = average profit after tax per delivered order multiplied by account NDR.', 'تكلفة التعادل للحساب = متوسط الربح بعد الضريبة لكل طلب مسلم مضروبا في نسبة التسليم الصافي للحساب.') },
-    { label: s8Txt('Total Spend', 'إجمالي الإنفاق'), value: accountSpend, decimals: 0, color: 'blue', iconType: 'blue', tooltip: s8Txt('Total Spend = live connected marketing spend or the current Account Calculator spend.', 'إجمالي الإنفاق = الإنفاق التسويقي المتصل مباشرة أو إنفاق حاسبة الحساب الحالي.') },
+    { label: s8Txt('Total Spend', 'إجمالي الإنفاق'), value: accountSpend, loading: marketingSpendPending, unavailable: marketingSpendUnavailable, decimals: 0, color: 'blue', iconType: 'blue', tooltip: s8Txt('Total Spend = live connected marketing spend or the current Account Calculator spend.', 'إجمالي الإنفاق = الإنفاق التسويقي المتصل مباشرة أو إنفاق حاسبة الحساب الحالي.') },
     { label: s8Txt('Total Revenue', 'إجمالي الإيرادات'), value: accountRevenue, decimals: 0, color: 'green', iconType: 'green', tooltip: s8Txt('Total Revenue = delivered orders multiplied by average profit after tax per delivered order.', 'إجمالي الإيرادات = الطلبات المسلمة مضروبة في متوسط الربح بعد الضريبة لكل طلب مسلم.') },
-    { label: s8Txt('Net Profit', 'صافي الربح'), value: accountNetProfit, decimals: 0, color: accountNetProfit >= 0 ? 'green' : 'red', iconType: accountNetProfit >= 0 ? 'green' : 'red', tooltip: s8Txt('Net Profit = total revenue minus total spend.', 'صافي الربح = إجمالي الإيرادات ناقص إجمالي الإنفاق.') }
+    { label: s8Txt('Net Profit', 'صافي الربح'), value: accountNetProfit, loading: marketingSpendPending, unavailable: marketingSpendUnavailable, decimals: 0, color: accountNetProfit >= 0 ? 'green' : 'red', iconType: accountNetProfit >= 0 ? 'green' : 'red', tooltip: s8Txt('Net Profit = total revenue minus total spend.', 'صافي الربح = إجمالي الإيرادات ناقص إجمالي الإنفاق.') }
   ];
 
   var financialKpiRowHtml = financialKpiCards.map(function (c, i) {
     return '<div class="fade-up" style="flex:1 1 calc((100% - 50px) / 6);min-width:170px;animation-delay:' + ((i + 12) * 100) + 'ms;">' +
       window.s8KpiCard({
-        label: c.label, value: c.value, unit: targetCurrency, decimals: c.decimals, delta: 0, hideDelta: true,
+        label: c.label, value: c.value, loading: c.loading, unavailable: c.unavailable, unit: targetCurrency, decimals: c.decimals, delta: 0, hideDelta: true,
         color: c.color, sparklineData: [], iconType: c.iconType,
         tooltip: c.tooltip
       }) +
@@ -908,23 +962,23 @@ window.renderSection8 = function (mountEl, data, ctx) {
   }).join('');
 
   var pipelineSummaryRow1Html = PIPELINE_SUMMARY.slice(0, 3).map(function (s) {
-    var valHtml = '<span style="font-family:\'Inter\', sans-serif;font-size:14px;font-weight:800;color:' + s.color + ';white-space:nowrap;">' + s.value + '</span>';
+    var valHtml = '<span style="font-family:var(--font-ui);font-size:var(--type-body);font-weight:var(--weight-semibold);color:' + s.color + ';white-space:nowrap;">' + s.value + '</span>';
     if (s.suffix) {
-      valHtml += '<span style="font-family:\'Inter\', sans-serif;font-size:9px;font-weight:700;color:rgba(255,255,255,0.4);margin-left:3px;">' + s.suffix + '</span>';
+      valHtml += '<span style="font-family:var(--font-ui);font-size:var(--type-micro);font-weight:var(--weight-semibold);color:var(--dash-text-faint);margin-left:3px;">' + s.suffix + '</span>';
     }
     return '<div ' + tipAttr(s.tooltip) + ' style="display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;">' +
-      '<span style="font-family:\'Inter\', \'Cairo\', sans-serif;font-size:9px;color:rgba(255,255,255,0.55);font-weight:600;white-space:nowrap;text-align:center;">' + s.label + '</span>' +
+      '<span style="font-family:var(--font-ui);font-size:var(--type-micro);color:rgba(255,255,255,0.55);font-weight:var(--weight-semibold);white-space:nowrap;text-align:center;">' + s.label + '</span>' +
       '<div style="display:flex;align-items:baseline;direction:ltr;white-space:nowrap;">' + valHtml + '</div>' +
     '</div>';
   }).join('');
 
   var pipelineSummaryRow2Html = PIPELINE_SUMMARY.slice(3).map(function (s) {
-    var valHtml = '<span style="font-family:\'Inter\', sans-serif;font-size:14px;font-weight:800;color:' + s.color + ';white-space:nowrap;">' + s.value + '</span>';
+    var valHtml = '<span style="font-family:var(--font-ui);font-size:var(--type-body);font-weight:var(--weight-semibold);color:' + s.color + ';white-space:nowrap;">' + s.value + '</span>';
     if (s.suffix) {
-      valHtml += '<span style="font-family:\'Inter\', sans-serif;font-size:9px;font-weight:700;color:rgba(255,255,255,0.4);margin-left:3px;">' + s.suffix + '</span>';
+      valHtml += '<span style="font-family:var(--font-ui);font-size:var(--type-micro);font-weight:var(--weight-semibold);color:var(--dash-text-faint);margin-left:3px;">' + s.suffix + '</span>';
     }
     return '<div ' + tipAttr(s.tooltip) + ' style="display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;">' +
-      '<span style="font-family:\'Inter\', \'Cairo\', sans-serif;font-size:9px;color:rgba(255,255,255,0.55);font-weight:600;white-space:nowrap;text-align:center;">' + s.label + '</span>' +
+      '<span style="font-family:var(--font-ui);font-size:var(--type-micro);color:rgba(255,255,255,0.55);font-weight:var(--weight-semibold);white-space:nowrap;text-align:center;">' + s.label + '</span>' +
       '<div style="display:flex;align-items:baseline;direction:ltr;white-space:nowrap;">' + valHtml + '</div>' +
     '</div>';
   }).join('');
@@ -944,17 +998,17 @@ window.renderSection8 = function (mountEl, data, ctx) {
   var codMetricsHtml = COD_METRICS.map(function (m) {
     var metricUnit = (m.label === 'DR' || m.label === 'NDR') ? '' : nativeCurrency;
     return '<div ' + tipAttr(m.tooltip) + ' style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:' + m.color + '0a;' +
-      'border:1px solid ' + m.color + '30;border-radius:10px;direction:ltr;position:relative;box-sizing:border-box;">' +
-      '<div style="width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">' +
+      'border:1px solid ' + m.color + '30;border-radius:var(--dash-radius-md);direction:ltr;position:relative;box-sizing:border-box;">' +
+      '<div style="width:24px;height:24px;border-radius:var(--dash-radius-sm);display:flex;align-items:center;justify-content:center;flex-shrink:0;">' +
         codMetricIcon(m.icon, m.color) +
       '</div>' +
       '<div style="flex:1;min-width:0;direction:' + (isAr ? 'rtl' : 'ltr') + ';display:flex;flex-direction:column;justify-content:center;">' +
-        '<div style="font-size:9px;color:' + m.color + ';font-weight:700;margin-bottom:2px;">' + m.label + '</div>' +
+        '<div style="font-size:var(--type-micro);color:' + m.color + ';font-weight:var(--weight-semibold);margin-bottom:2px;">' + m.label + '</div>' +
         '<div style="display:flex;align-items:baseline;gap:3px;justify-content:flex-start;direction:ltr;flex-direction:row-reverse;">' +
-          '<span style="font-size:13px;font-weight:900;color:#fff;line-height:1;white-space:nowrap;">' + m.value + '</span>' +
-          (metricUnit ? '<span style="font-size:9px;color:rgba(255,255,255,0.6);font-weight:600;">' + metricUnit + '</span>' : '') +
+          '<span style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:#fff;line-height:1;white-space:nowrap;">' + m.value + '</span>' +
+          (metricUnit ? '<span style="font-size:var(--type-micro);color:var(--dash-text-muted);font-weight:var(--weight-semibold);">' + metricUnit + '</span>' : '') +
         '</div>' +
-        '<div style="font-size:9px;color:' + m.color + ';font-weight:700;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + m.pct + '</div>' +
+        '<div style="font-size:var(--type-micro);color:' + m.color + ';font-weight:var(--weight-semibold);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + m.pct + '</div>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -964,10 +1018,10 @@ window.renderSection8 = function (mountEl, data, ctx) {
     var citySarLabel = fmt(citySar, citySar % 1 ? 1 : 0);
     return '<div class="city-bar-row" style="display:flex;flex-direction:column;gap:6px;direction:ltr;" data-pct="' + c.pct + '" data-delay="' + (i * 40) + '">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-        '<span style="font-size:11px;color:#60a5fa;font-weight:700;">' + c.name + '</span>' +
+        '<span style="font-size:var(--type-caption);color:#60a5fa;font-weight:var(--weight-semibold);">' + c.name + '</span>' +
         '<div style="display:flex;align-items:baseline;gap:4px;">' +
-          '<span style="font-size:11px;color:#fff;font-weight:800;">' + citySarLabel + '</span>' +
-          '<span style="font-size:8px;color:rgba(255,255,255,0.4);font-weight:600;">' + nativeCurrency + '</span>' +
+          '<span style="font-size:var(--type-caption);color:#fff;font-weight:var(--weight-semibold);">' + citySarLabel + '</span>' +
+          '<span style="font-size:var(--type-micro);color:var(--dash-text-faint);font-weight:var(--weight-semibold);">' + nativeCurrency + '</span>' +
         '</div>' +
       '</div>' +
       '<div style="width:100%;height:4px;background:rgba(59,130,246,0.1);border-radius:2px;overflow:hidden;">' +
@@ -988,20 +1042,20 @@ window.renderSection8 = function (mountEl, data, ctx) {
       var earnedProfitAfterTax = num(p.commission, 0);
       return '<div class="fade-up" style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:' + border + ';direction:' + (isAr ? 'rtl' : 'ltr') + ';animation-delay:' + (i * 70) + 'ms;">' +
         '<div style="width:22px;height:22px;border-radius:50%;background:' + meta.bg + ';display:flex;align-items:center;justify-content:center;' +
-          'font-size:9px;font-weight:900;color:#fff;flex-shrink:0;box-shadow:' + (meta.glow !== 'none' ? '0 0 8px ' + meta.glow : 'none') + ';">' +
+          'font-size:var(--type-micro);font-weight:var(--weight-semibold);color:#fff;flex-shrink:0;box-shadow:' + (meta.glow !== 'none' ? '0 0 8px ' + meta.glow : 'none') + ';">' +
           p.rank +
         '</div>' +
-        '<div style="width:32px;height:32px;border-radius:8px;background:' + meta.accent + '16;border:1px solid ' + meta.accent + '30;' +
-          'display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">' +
+        '<div style="width:32px;height:32px;border-radius:var(--dash-radius-sm);background:' + meta.accent + '16;border:1px solid ' + meta.accent + '30;' +
+          'display:flex;align-items:center;justify-content:center;font-size:var(--type-subtitle);flex-shrink:0;">' +
           p.emoji +
         '</div>' +
-        '<div data-i18n-preserve style="flex:1;min-width:0;font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;">' +
+        '<div data-i18n-preserve style="flex:1;min-width:0;font-size:var(--type-micro);font-weight:var(--weight-semibold);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;">' +
           p.name +
         '</div>' +
-        '<div style="font-size:14px;font-weight:900;color:#fff;width:26px;text-align:center;flex-shrink:0;">' + p.units + '</div>' +
+        '<div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#fff;width:26px;text-align:center;flex-shrink:0;">' + p.units + '</div>' +
         '<div style="text-align:left;flex-shrink:0;min-width:52px;">' +
-          '<div style="font-size:12px;font-weight:900;color:#fff;line-height:1;">' + earnedProfitAfterTax.toLocaleString("en-US") + '</div>' +
-          '<div style="font-size:8px;color:rgba(255,255,255,0.32);margin-top:2px;">' + nativeCurrency + '</div>' +
+          '<div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:#fff;line-height:1;">' + earnedProfitAfterTax.toLocaleString("en-US") + '</div>' +
+          '<div style="font-size:var(--type-micro);color:rgba(255,255,255,0.32);margin-top:2px;">' + nativeCurrency + '</div>' +
         '</div>' +
       '</div>';
     }).join('');
@@ -1019,16 +1073,16 @@ window.renderSection8 = function (mountEl, data, ctx) {
     paginationHtml = '<div style="display:flex;justify-content:center;margin-top:10px;">' + dots.join('') + '</div>';
   }
 
-  var viewAllBtnHtml = '<button id="s8-btn-products-bottom" style="margin-top:16px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:8px;padding:8px 14px;font-size:11px;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:700;cursor:pointer;width:100%;font-family:inherit;box-shadow:0 4px 10px rgba(0,0,0,0.2);">' +
+  var viewAllBtnHtml = '<button id="s8-btn-products-bottom" style="margin-top:16px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:var(--dash-radius-sm);padding:8px 14px;font-size:var(--type-caption);display:flex;align-items:center;justify-content:center;gap:8px;font-weight:var(--weight-semibold);cursor:pointer;width:100%;font-family:inherit;box-shadow:0 4px 10px rgba(0,0,0,0.2);">' +
     s8Txt('VIEW ALL PRODUCTS', 'عرض كل المنتجات') +
   '</button>';
 
   var chartStatsHtml = CHART_STATS.map(function (s, i) {
     var bl = (i < CHART_STATS.length - 1) ? '1px solid rgba(255,255,255,0.07)' : 'none';
     return '<div style="flex:1;text-align:center;border-left:' + bl + ';padding:0 6px;">' +
-      '<div style="font-size:7.5px;color:rgba(255,255,255,0.32);margin-bottom:4px;line-height:1.4;">' + s.label + '</div>' +
-      '<div style="font-size:11px;font-weight:900;color:' + s.color + ';line-height:1;">' + s.value + '</div>' +
-      (s.sub ? '<div style="font-size:7px;color:rgba(255,255,255,0.25);margin-top:2px;">' + s.sub + '</div>' : '') +
+      '<div style="font-size:var(--type-micro);color:rgba(255,255,255,0.32);margin-bottom:4px;line-height:1.4;">' + s.label + '</div>' +
+      '<div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:' + s.color + ';line-height:1;">' + s.value + '</div>' +
+      (s.sub ? '<div style="font-size:var(--type-micro);color:rgba(255,255,255,0.25);margin-top:2px;">' + s.sub + '</div>' : '') +
     '</div>';
   }).join('');
 
@@ -1037,7 +1091,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
     var leftBlock;
     if (item.stars) {
       leftBlock = '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;padding-left:4px;">' +
-        '<span style="font-size:24px;font-weight:900;color:#fff;line-height:1;">' + item.value + '</span>' +
+        '<span style="font-size:var(--type-metric);font-weight:var(--weight-bold);color:#fff;line-height:1;">' + item.value + '</span>' +
         starsHtml(item.rating) +
       '</div>';
     } else {
@@ -1052,20 +1106,20 @@ window.renderSection8 = function (mountEl, data, ctx) {
     var valueBlock = '';
     if (!item.stars) {
       valueBlock = '<div style="display:flex;align-items:baseline;gap:4px;justify-content:flex-start;direction:ltr;flex-direction:row-reverse;">' +
-        '<span style="font-size:20px;font-weight:800;color:' + (item.valueColor || '#fff') + ';line-height:1;">' + item.value + '</span>' +
-        (item.suffix ? '<span style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.4);">' + item.suffix + '</span>' : '') +
+        '<span style="font-size:var(--type-metric-sm);font-weight:var(--weight-semibold);color:' + (item.valueColor || '#fff') + ';line-height:1;">' + item.value + '</span>' +
+        (item.suffix ? '<span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:var(--dash-text-faint);">' + item.suffix + '</span>' : '') +
       '</div>';
     }
 
     return '<div class="fade-up" ' + tipAttr(item.tooltip) + ' style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;direction:ltr;' +
       'padding:14px 10px;background:rgba(16,20,31,0.55);border:1px solid rgba(255,255,255,0.03);border-top:1px solid rgba(255,255,255,0.06);' +
-      'border-radius:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.02),0 4px 16px rgba(0,0,0,0.3);' +
+      'border-radius:var(--dash-radius-md);box-shadow:inset 0 1px 0 rgba(255,255,255,0.02),0 4px 16px rgba(0,0,0,0.3);' +
       'animation-delay:' + (40 + i * 55) + 'ms;">' +
       leftBlock +
       '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;direction:' + (isAr ? 'rtl' : 'ltr') + ';text-align:right;justify-content:center;">' +
-        '<div style="font-size:10.5px;color:rgba(255,255,255,0.5);font-weight:600;line-height:1.3;">' + item.label + '</div>' +
+        '<div style="font-size:var(--type-caption);color:var(--dash-text-faint);font-weight:var(--weight-semibold);line-height:1.3;">' + item.label + '</div>' +
         valueBlock +
-        (item.sub ? '<div style="font-size:10px;color:rgba(255,255,255,0.3);font-weight:500;line-height:1;">' + item.sub + '</div>' : '') +
+        (item.sub ? '<div style="font-size:var(--type-micro);color:rgba(255,255,255,0.3);font-weight:var(--weight-medium);line-height:1;">' + item.sub + '</div>' : '') +
       '</div>' +
     '</div>';
   }).join('');
@@ -1096,27 +1150,27 @@ window.renderSection8 = function (mountEl, data, ctx) {
       : s8Txt('Current calculator inputs point to a loss. Open Section 7 to find the break-even lever.', 'مدخلات الحاسبة الحالية تشير إلى خسارة. افتح القسم 7 للعثور على عامل التعادل.');
 
   function roiMetricCard(label, value, sub, color, iconSvg) {
-    return '<div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;background:' + color + '0d;border:1px solid ' + color + '33;padding:12px;border-radius:14px;min-width:0;width:100%;box-sizing:border-box;">' +
-      '<div style="width:30px;height:30px;border-radius:8px;background:' + color + '18;display:flex;align-items:center;justify-content:center;color:' + color + ';box-shadow:0 0 10px ' + color + '20;flex-shrink:0;">' + iconSvg + '</div>' +
+    return '<div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;background:' + color + '0d;border:1px solid ' + color + '33;padding:12px;border-radius:var(--dash-radius-lg);min-width:0;width:100%;box-sizing:border-box;">' +
+      '<div style="width:30px;height:30px;border-radius:var(--dash-radius-sm);background:' + color + '18;display:flex;align-items:center;justify-content:center;color:' + color + ';box-shadow:0 0 10px ' + color + '20;flex-shrink:0;">' + iconSvg + '</div>' +
       '<div style="min-width:0;width:100%;">' +
-        '<div style="font-size:9px;color:rgba(255,255,255,0.48);font-weight:700;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + label + '</div>' +
-        '<div style="font-size:14px;font-weight:900;color:#fff;line-height:1.1;direction:ltr;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + value + '</div>' +
-        (sub ? '<div style="font-size:8px;color:rgba(255,255,255,0.34);font-weight:700;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + sub + '">' + sub + '</div>' : '') +
+        '<div style="font-size:var(--type-micro);color:rgba(255,255,255,0.48);font-weight:var(--weight-semibold);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + label + '</div>' +
+        '<div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#fff;line-height:1.1;direction:ltr;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + value + '</div>' +
+        (sub ? '<div style="font-size:var(--type-micro);color:rgba(255,255,255,0.34);font-weight:var(--weight-semibold);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + sub + '">' + sub + '</div>' : '') +
       '</div>' +
     '</div>';
   }
 
   var roiPreviewGauge = roiGaugeSvg(roiPct);
-  var roiWidgetHtml = '<div id="s8-roi-preview" style="background:#0a0f18;border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:20px;height:100%;display:flex;flex-direction:column;box-shadow:inset 0 0 40px rgba(0,0,0,0.5);">' +
+  var roiWidgetHtml = '<div id="s8-roi-preview" style="background:#0a0f18;border:1px solid rgba(255,255,255,0.06);border-radius:var(--dash-radius-xl);padding:20px;height:100%;display:flex;flex-direction:column;box-shadow:inset 0 0 40px rgba(0,0,0,0.5);">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px;">' +
       '<div style="display:flex;align-items:center;gap:10px;">' +
-      '<div style="width:20px;height:20px;border-radius:50%;border:1px solid #a855f7;background:rgba(168,85,247,0.1);display:flex;align-items:center;justify-content:center;color:#a855f7;font-size:10px;font-weight:800;box-shadow:0 0 10px rgba(168,85,247,0.3);">6</div>' +
+      '<div style="width:20px;height:20px;border-radius:50%;border:1px solid #a855f7;background:rgba(168,85,247,0.1);display:flex;align-items:center;justify-content:center;color:#a855f7;font-size:var(--type-micro);font-weight:var(--weight-semibold);box-shadow:0 0 10px rgba(168,85,247,0.3);">6</div>' +
         '<div>' +
-          '<div style="font-size:15px;font-weight:800;color:#fff;font-family:Cairo;">' + s8Txt('Calculator Results Preview', 'معاينة نتائج الحاسبة') + '</div>' +
-          '<div style="font-size:10.5px;color:rgba(255,255,255,0.36);font-weight:700;margin-top:3px;">' + s8Txt('Read-only snapshot from Account Calculator', 'لقطة قراءة فقط من حاسبة الحساب') + '</div>' +
+          '<div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:#fff;font-family:var(--font-ui);">' + s8Txt('Calculator Results Preview', 'معاينة نتائج الحاسبة') + '</div>' +
+          '<div style="font-size:var(--type-caption);color:rgba(255,255,255,0.36);font-weight:var(--weight-semibold);margin-top:3px;">' + s8Txt('Read-only snapshot from Account Calculator', 'لقطة قراءة فقط من حاسبة الحساب') + '</div>' +
         '</div>' +
       '</div>' +
-      '<span style="font-size:10px;font-weight:900;color:' + roiProfitColor + ';background:' + roiProfitColor + '18;border:1px solid ' + roiProfitColor + '38;border-radius:999px;padding:6px 10px;white-space:nowrap;">' + roiStateLabel + '</span>' +
+      '<span style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:' + roiProfitColor + ';background:' + roiProfitColor + '18;border:1px solid ' + roiProfitColor + '38;border-radius:var(--radius-pill);padding:6px 10px;white-space:nowrap;">' + roiStateLabel + '</span>' +
     '</div>' +
     '<div style="display:grid;grid-template-columns:minmax(0,1.05fr) minmax(260px,.95fr);gap:18px;align-items:stretch;flex:1;" class="s8-roi-preview-grid">' +
       '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-content:start;">' +
@@ -1127,20 +1181,20 @@ window.renderSection8 = function (mountEl, data, ctx) {
         roiMetricCard('CPA', roiMoney(roiCpa, 2), s8Txt('spend ÷ net orders', 'الإنفاق ÷ صافي الطلبات'), '#a855f7', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>') +
         roiMetricCard(s8Txt('Break-even deliveries', 'تسليمات التعادل'), fmtCount(roiBreakEvenDeliveries), s8Txt('needed to cover spend', 'المطلوبة لتغطية الإنفاق'), '#f59e0b', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16"/><path d="M12 4v16"/></svg>') +
       '</div>' +
-      '<div style="display:flex;flex-direction:column;gap:12px;border:1px solid rgba(255,255,255,0.06);border-radius:16px;background:rgba(255,255,255,0.025);padding:16px;min-width:0;">' +
+      '<div style="display:flex;flex-direction:column;gap:12px;border:1px solid rgba(255,255,255,0.06);border-radius:var(--dash-radius-xl);background:rgba(255,255,255,0.025);padding:16px;min-width:0;">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">' +
           '<div>' +
-            '<div style="font-size:11px;color:rgba(255,255,255,0.48);font-weight:800;">' + s8Txt('Return on investment', 'العائد على الاستثمار') + '</div>' +
-            '<div style="font-size:28px;font-weight:950;color:' + roiProfitColor + ';line-height:1.1;direction:ltr;text-align:left;">' + (roiPct > 0 ? '+' : '') + roiPct.toFixed(1) + '%</div>' +
+            '<div style="font-size:var(--type-caption);color:rgba(255,255,255,0.48);font-weight:var(--weight-semibold);">' + s8Txt('Return on investment', 'العائد على الاستثمار') + '</div>' +
+            '<div style="font-size:var(--type-page-title);font-weight:var(--weight-bold);color:' + roiProfitColor + ';line-height:1.1;direction:ltr;text-align:left;">' + (roiPct > 0 ? '+' : '') + roiPct.toFixed(1) + '%</div>' +
           '</div>' +
-          '<div style="font-size:10px;color:rgba(255,255,255,0.42);font-weight:800;direction:ltr;text-align:right;">ROAS<br><span style="color:#fff;font-size:14px;">' + roiReturnPerSar.toFixed(2) + 'x</span></div>' +
+          '<div style="font-size:var(--type-micro);color:rgba(255,255,255,0.42);font-weight:var(--weight-semibold);direction:ltr;text-align:right;">ROAS<br><span style="color:#fff;font-size:var(--type-body);">' + roiReturnPerSar.toFixed(2) + 'x</span></div>' +
         '</div>' +
         '<div style="min-height:150px;display:flex;align-items:center;justify-content:center;">' + roiPreviewGauge + '</div>' +
-        '<div style="background:rgba(16,185,129,0.05);border:1px dashed rgba(16,185,129,0.3);border-radius:12px;padding:12px;direction:' + (isAr ? 'rtl' : 'ltr') + ';">' +
-          '<div style="font-size:11px;font-weight:900;color:#10b981;margin-bottom:6px;">' + s8Txt('Calculator note', 'ملاحظة الحاسبة') + '</div>' +
-          '<div style="font-size:10.5px;color:rgba(255,255,255,0.68);line-height:1.55;">' + roiAdvice + '</div>' +
+        '<div style="background:rgba(16,185,129,0.05);border:1px dashed rgba(16,185,129,0.3);border-radius:var(--dash-radius-md);padding:12px;direction:' + (isAr ? 'rtl' : 'ltr') + ';">' +
+          '<div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:#10b981;margin-bottom:6px;">' + s8Txt('Calculator note', 'ملاحظة الحاسبة') + '</div>' +
+          '<div style="font-size:var(--type-caption);color:rgba(255,255,255,0.68);line-height:1.55;">' + roiAdvice + '</div>' +
         '</div>' +
-        '<button id="s8-btn-calculator" type="button" style="margin-top:auto;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg, rgba(168,85,247,0.25), rgba(168,85,247,0.1));border:1px solid rgba(168,85,247,0.5);box-shadow:0 4px 12px rgba(168,85,247,0.2);color:' + (document.documentElement.getAttribute('data-theme') === 'light' ? '#7c3aed' : '#e9d5ff') + ';border-radius:12px;padding:12px 14px;font-size:11.5px;font-weight:900;cursor:pointer;font-family:inherit;transition:all 0.25s ease;text-shadow:0 1px 2px rgba(0,0,0,0.4);" ' +
+        '<button id="s8-btn-calculator" type="button" style="margin-top:auto;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg, rgba(168,85,247,0.25), rgba(168,85,247,0.1));border:1px solid rgba(168,85,247,0.5);box-shadow:0 4px 12px rgba(168,85,247,0.2);color:' + (document.documentElement.getAttribute('data-theme') === 'light' ? '#7c3aed' : '#e9d5ff') + ';border-radius:var(--dash-radius-md);padding:12px 14px;font-size:var(--type-caption);font-weight:var(--weight-semibold);cursor:pointer;font-family:inherit;transition:all 0.25s ease;text-shadow:0 1px 2px rgba(0,0,0,0.4);" ' +
           'onmouseenter="this.style.transform=\'translateY(-2px)\';this.style.boxShadow=\'0 6px 18px rgba(168,85,247,0.35)\';this.style.background=\'linear-gradient(135deg, rgba(168,85,247,0.35), rgba(168,85,247,0.15))\'" ' +
           'onmouseleave="this.style.transform=\'none\';this.style.boxShadow=\'0 4px 12px rgba(168,85,247,0.2)\';this.style.background=\'linear-gradient(135deg, rgba(168,85,247,0.25), rgba(168,85,247,0.1))\'">' +
           '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h2M14 10h2M8 14h2M14 14h2M8 18h2M14 18h2"/></svg>' +
@@ -1149,6 +1203,14 @@ window.renderSection8 = function (mountEl, data, ctx) {
       '</div>' +
     '</div>' +
   '</div>';
+
+  if (marketingSpendPending || marketingSpendUnavailable) {
+    roiWidgetHtml = '<div id="s8-roi-preview" style="background:#0a0f18;border:1px solid rgba(96,165,250,.22);border-radius:var(--dash-radius-xl);padding:24px;height:100%;min-height:250px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;">' +
+      (marketingSpendPending ? window.dashboardMarketingLoadingHtml() : window.dashboardMarketingUnavailableHtml()) +
+      '<div style="font-size:var(--type-caption);color:rgba(255,255,255,.48);max-width:360px;line-height:1.6;">' + s8Txt('ROI, CPA, net profit, and ROAS will appear when the connected marketing spend is ready.', 'سيظهر العائد وتكلفة الطلب وصافي الربح والعائد الإعلاني عند اكتمال تحميل الإنفاق التسويقي المتصل.') + '</div>' +
+      '<button id="s8-btn-calculator" type="button" style="border:1px solid rgba(168,85,247,.45);background:rgba(168,85,247,.12);color:#e9d5ff;border-radius:var(--dash-radius-md);padding:9px 14px;font:inherit;font-size:var(--type-caption);font-weight:var(--weight-semibold);cursor:pointer;">' + s8Txt('Open Account Calculator', 'فتح حاسبة الحساب') + '</button>' +
+    '</div>';
+  }
 
   var gmvSnapshot = window.DashboardGmvTargetState && typeof window.DashboardGmvTargetState.snapshot === 'function'
     ? window.DashboardGmvTargetState.snapshot(d)
@@ -1187,50 +1249,50 @@ window.renderSection8 = function (mountEl, data, ctx) {
   var gmvPreviewHtml = '';
   if (gmvSnapshot && gmvSnapshot.hasTarget) {
     gmvPreviewHtml =
-      '<div id="s8-gmv-preview" style="background:' + gmvPreviewBg + ';border:1px solid ' + gmvPreviewBorder + ';border-radius:16px;padding:18px 20px;margin-bottom:22px;box-shadow:' + gmvPreviewShadow + ';">' +
+      '<div id="s8-gmv-preview" style="background:' + gmvPreviewBg + ';border:1px solid ' + gmvPreviewBorder + ';border-radius:var(--dash-radius-xl);padding:18px 20px;margin-bottom:22px;box-shadow:' + gmvPreviewShadow + ';">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;flex-wrap:wrap;">' +
           '<div style="display:flex;align-items:center;gap:10px;">' +
-            '<div style="width:28px;height:28px;border-radius:8px;background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.35);color:#a855f7;display:flex;align-items:center;justify-content:center;">' + (window.icon ? window.icon('target', { size: 16, color: 'currentColor' }) : '') + '</div>' +
+            '<div style="width:28px;height:28px;border-radius:var(--dash-radius-sm);background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.35);color:#a855f7;display:flex;align-items:center;justify-content:center;">' + (window.icon ? window.icon('target', { size: 16, color: 'currentColor' }) : '') + '</div>' +
             '<div>' +
-              '<div style="font-size:15px;font-weight:900;color:' + gmvPreviewText + ';">' + s8Txt('GMV Target Progress', 'تقدم هدف GMV') + '</div>' +
-              '<div style="font-size:10.5px;color:' + gmvPreviewFaint + ';font-weight:700;margin-top:2px;">' + s8Txt('Net Total Delivered Sales goal', 'هدف صافي مبيعات الطلبات المسلمة') + '</div>' +
+              '<div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:' + gmvPreviewText + ';">' + s8Txt('GMV Target Progress', 'تقدم هدف GMV') + '</div>' +
+              '<div style="font-size:var(--type-caption);color:' + gmvPreviewFaint + ';font-weight:var(--weight-semibold);margin-top:2px;">' + s8Txt('Net Total Delivered Sales goal', 'هدف صافي مبيعات الطلبات المسلمة') + '</div>' +
             '</div>' +
           '</div>' +
-          '<span style="font-size:10px;font-weight:900;color:' + gmvStatusMeta.color + ';background:' + gmvStatusMeta.color + '18;border:1px solid ' + gmvStatusMeta.color + '45;border-radius:999px;padding:6px 10px;white-space:nowrap;">' + gmvStatusMeta.label + '</span>' +
+          '<span style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:' + gmvStatusMeta.color + ';background:' + gmvStatusMeta.color + '18;border:1px solid ' + gmvStatusMeta.color + '45;border-radius:var(--radius-pill);padding:6px 10px;white-space:nowrap;">' + gmvStatusMeta.label + '</span>' +
         '</div>' +
         '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;">' +
           '<div style="min-width:0;">' +
             '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:8px;">' +
-              '<strong style="font-size:22px;line-height:1;color:' + gmvPreviewText + ';direction:ltr;text-align:left;">' + gmvMoney(gmvSnapshot.currentGmv, 0, true) + ' / ' + gmvMoney(gmvSnapshot.targetGmv, 0, true) + '</strong>' +
-              '<span style="font-size:12px;font-weight:900;color:' + gmvStatusMeta.color + ';">' + gmvRate(gmvSnapshot.progressPct) + '%</span>' +
+              '<strong style="font-size:var(--type-metric-sm);line-height:1;color:' + gmvPreviewText + ';direction:ltr;text-align:left;">' + gmvMoney(gmvSnapshot.currentGmv, 0, true) + ' / ' + gmvMoney(gmvSnapshot.targetGmv, 0, true) + '</strong>' +
+              '<span style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:' + gmvStatusMeta.color + ';">' + gmvRate(gmvSnapshot.progressPct) + '%</span>' +
             '</div>' +
-            '<div style="position:relative;height:10px;border-radius:999px;background:' + gmvPreviewTrackBg + ';overflow:hidden;margin-bottom:9px;">' +
-              '<div style="position:absolute;inset:0;width:100%;height:100%;border-radius:999px;background:' + gmvPreviewFillBg + ';box-shadow:0 0 16px rgba(59,130,246,0.2);clip-path:inset(0 ' + (100 - Math.min(100, gmvSnapshot.progressPct)).toFixed(2) + '% 0 0);"></div>' +
+            '<div style="position:relative;height:10px;border-radius:var(--radius-pill);background:' + gmvPreviewTrackBg + ';overflow:hidden;margin-bottom:9px;">' +
+              '<div style="position:absolute;inset:0;width:100%;height:100%;border-radius:var(--radius-pill);background:' + gmvPreviewFillBg + ';box-shadow:0 0 16px rgba(59,130,246,0.2);clip-path:inset(0 ' + (100 - Math.min(100, gmvSnapshot.progressPct)).toFixed(2) + '% 0 0);"></div>' +
               '<span style="position:absolute;top:0;bottom:0;left:25%;width:1px;background:' + gmvPreviewTick + ';"></span>' +
               '<span style="position:absolute;top:0;bottom:0;left:50%;width:1px;background:' + gmvPreviewTick + ';"></span>' +
               '<span style="position:absolute;top:0;bottom:0;left:75%;width:1px;background:' + gmvPreviewTick + ';"></span>' +
               '<span style="position:absolute;top:0;bottom:0;left:calc(100% - 1px);width:2px;background:rgba(168,85,247,0.7);"></span>' +
             '</div>' +
-            '<div style="display:flex;gap:12px;flex-wrap:wrap;color:' + gmvPreviewMuted + ';font-size:11px;font-weight:800;">' +
+            '<div style="display:flex;gap:12px;flex-wrap:wrap;color:' + gmvPreviewMuted + ';font-size:var(--type-caption);font-weight:var(--weight-semibold);">' +
               '<span>' + s8Txt('Missing', 'المتبقي') + ': <b style="color:' + gmvPreviewText + ';">' + gmvMoney(gmvSnapshot.remainingGmv, 0, true) + '</b></span>' +
               '<span>' + s8Txt('Need', 'المطلوب') + ': <b style="color:' + gmvPreviewText + ';">' + gmvRate(gmvSnapshot.dailyOrdersNeeded) + s8Txt('/day', '/يوم') + '</b></span>' +
               '<span>' + s8Txt('Current pace', 'الوتيرة الحالية') + ': <b style="color:' + gmvPreviewText + ';">' + gmvRate(gmvSnapshot.runRate) + s8Txt('/day', '/يوم') + '</b></span>' +
             '</div>' +
           '</div>' +
-          '<button id="s8-btn-gmv-target" type="button" style="min-width:128px;height:40px;border-radius:9px;border:1px solid rgba(168,85,247,0.45);background:rgba(168,85,247,0.14);color:' + gmvOpenPlannerColor + ';font-size:11px;font-weight:900;cursor:pointer;font-family:inherit;">' + s8Txt('Open Planner', 'فتح المخطط') + '</button>' +
+          '<button id="s8-btn-gmv-target" type="button" style="min-width:128px;height:40px;border-radius:var(--dash-radius-sm);border:1px solid rgba(168,85,247,0.45);background:rgba(168,85,247,0.14);color:' + gmvOpenPlannerColor + ';font-size:var(--type-caption);font-weight:var(--weight-semibold);cursor:pointer;font-family:inherit;">' + s8Txt('Open Planner', 'فتح المخطط') + '</button>' +
         '</div>' +
       '</div>';
   } else {
     gmvPreviewHtml =
-      '<div id="s8-gmv-preview" style="background:' + gmvPreviewBg + ';border:1px dashed ' + gmvPreviewDashBorder + ';border-radius:16px;padding:18px 20px;margin-bottom:22px;display:flex;align-items:center;justify-content:space-between;gap:16px;box-shadow:' + gmvPreviewShadow + ';">' +
+      '<div id="s8-gmv-preview" style="background:' + gmvPreviewBg + ';border:1px dashed ' + gmvPreviewDashBorder + ';border-radius:var(--dash-radius-xl);padding:18px 20px;margin-bottom:22px;display:flex;align-items:center;justify-content:space-between;gap:16px;box-shadow:' + gmvPreviewShadow + ';">' +
         '<div style="display:flex;align-items:center;gap:11px;min-width:0;">' +
-          '<div style="width:34px;height:34px;border-radius:9px;background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.35);color:#a855f7;display:flex;align-items:center;justify-content:center;flex-shrink:0;">' + (window.icon ? window.icon('target', { size: 18, color: 'currentColor' }) : '') + '</div>' +
+          '<div style="width:34px;height:34px;border-radius:var(--dash-radius-sm);background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.35);color:#a855f7;display:flex;align-items:center;justify-content:center;flex-shrink:0;">' + (window.icon ? window.icon('target', { size: 18, color: 'currentColor' }) : '') + '</div>' +
           '<div style="min-width:0;">' +
-            '<div style="font-size:15px;font-weight:900;color:' + gmvPreviewText + ';">' + s8Txt('GMV Target Progress', 'تقدم هدف GMV') + '</div>' +
-            '<div style="font-size:11px;color:' + gmvPreviewFaint2 + ';font-weight:750;margin-top:3px;">' + s8Txt('No GMV target set yet', 'لم يتم تحديد هدف GMV بعد') + '</div>' +
+            '<div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:' + gmvPreviewText + ';">' + s8Txt('GMV Target Progress', 'تقدم هدف GMV') + '</div>' +
+            '<div style="font-size:var(--type-caption);color:' + gmvPreviewFaint2 + ';font-weight:var(--weight-semibold);margin-top:3px;">' + s8Txt('No GMV target set yet', 'لم يتم تحديد هدف GMV بعد') + '</div>' +
           '</div>' +
         '</div>' +
-        '<button id="s8-btn-gmv-target" type="button" style="height:40px;border-radius:9px;border:1px solid rgba(168,85,247,0.58);background:linear-gradient(135deg,rgba(168,85,247,0.96),rgba(59,130,246,0.9));color:#f8fafc;padding:0 15px;font-size:11px;font-weight:950;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 10px 22px rgba(59,130,246,0.16);">' + s8Txt('Set Goal', 'تحديد الهدف') + '</button>' +
+        '<button id="s8-btn-gmv-target" type="button" style="height:40px;border-radius:var(--dash-radius-sm);border:1px solid rgba(168,85,247,0.58);background:linear-gradient(135deg,rgba(168,85,247,0.96),rgba(59,130,246,0.9));color:#f8fafc;padding:0 15px;font-size:var(--type-caption);font-weight:var(--weight-semibold);cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 10px 22px rgba(59,130,246,0.16);">' + s8Txt('Set Goal', 'تحديد الهدف') + '</button>' +
       '</div>';
   }
 
@@ -1240,18 +1302,18 @@ window.renderSection8 = function (mountEl, data, ctx) {
   
   mountEl.innerHTML =
     '<div class="dash-scroll s8-body" style="flex:1;display:flex;flex-direction:column;height:100%;' +
-      'overflow-y:auto;background:#080b12;direction:' + (isAr ? 'rtl' : 'ltr') + ';">' +
+      'overflow-y:auto;background:var(--dash-bg);direction:' + (isAr ? 'rtl' : 'ltr') + ';">' +
 
     '<div style="padding:22px 28px 32px;flex:1;">' +
 
       /* Page heading row */
       '<div class="fade-up" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;">' +
         '<div>' +
-          '<h1 style="font-size:30px;font-weight:900;color:#fff;margin:0;line-height:1.2;font-family:Cairo;">' + s8Txt('Quick Insights', 'رؤى سريعة') + '</h1>' +
-          '<p style="font-size:12px;color:rgba(255,255,255,0.38);margin:5px 0 0;">' + s8Txt('Comprehensive overview of your real bot performance', 'نظرة شمولية على أداء عمل البوت الخاص بك') + '</p>' +
+          '<h1 style="font-size:var(--type-page-title);font-weight:var(--weight-bold);color:#fff;margin:0;line-height:1.2;font-family:var(--font-ui);">' + s8Txt('Quick Insights', 'رؤى سريعة') + '</h1>' +
+          '<p style="font-size:var(--type-label);color:rgba(255,255,255,0.38);margin:5px 0 0;">' + s8Txt('Comprehensive overview of your real bot performance', 'نظرة شمولية على أداء عمل البوت الخاص بك') + '</p>' +
         '</div>' +
         '<div style="display:flex;gap:8px;">' +
-          '<div style="padding:6px 14px;border-radius:9px;background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.3);font-size:11px;color:#a855f7;font-weight:700;">' + ((d.meta && d.meta.monthLabel) || s8Txt('Current Period', 'الفترة الحالية')) + '</div>' +
+          '<div style="padding:6px 14px;border-radius:var(--dash-radius-sm);background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.3);font-size:var(--type-caption);color:#a855f7;font-weight:var(--weight-semibold);">' + ((d.meta && d.meta.monthLabel) || s8Txt('Current Period', 'الفترة الحالية')) + '</div>' +
         '</div>' +
       '</div>' +
 
@@ -1264,11 +1326,11 @@ window.renderSection8 = function (mountEl, data, ctx) {
 
       /* Row 2 & 3 badge */
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;justify-content:flex-end;">' +
-        '<span style="font-size:14px;font-weight:700;color:#fff;">' + s8Txt('Status Pipeline · COD Collection', 'مسار الحالات · تحصيل COD') + '</span>' +
-        '<div style="display:flex;align-items:center;gap:4px;padding:2px 10px;border-radius:20px;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.35);">' +
+        '<span style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#fff;">' + s8Txt('Status Pipeline · COD Collection', 'مسار الحالات · تحصيل COD') + '</span>' +
+        '<div style="display:flex;align-items:center;gap:4px;padding:2px 10px;border-radius:var(--dash-radius-xl);background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.35);">' +
           '<div style="width:7px;height:7px;border-radius:50%;background:#3b82f6;"></div>' +
           '<div style="width:7px;height:7px;border-radius:50%;background:#00e676;"></div>' +
-          '<span style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.55);margin-left:2px;">2 · 3</span>' +
+          '<span style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.55);margin-left:2px;">2 · 3</span>' +
         '</div>' +
       '</div>' +
 
@@ -1276,16 +1338,16 @@ window.renderSection8 = function (mountEl, data, ctx) {
       '<div class="fade-up s8-row2" style="margin-bottom:22px;animation-delay:200ms;display:flex;flex-wrap:wrap;gap:18px;width:100%;direction:ltr;">' +
 
         /* Pipeline (2) — flex:1; min-width:320px; */
-        '<div class="s8-pipeline-panel" style="flex:1;min-width:320px;background:#0a0f18;border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:18px 16px;display:flex;flex-direction:column;box-shadow:inset 0 0 40px rgba(0,0,0,0.5);box-sizing:border-box;">' +
+        '<div class="s8-pipeline-panel" style="flex:1;min-width:320px;background:#0a0f18;border:1px solid rgba(255,255,255,0.06);border-radius:var(--dash-radius-xl);padding:18px 16px;display:flex;flex-direction:column;box-shadow:inset 0 0 40px rgba(0,0,0,0.5);box-sizing:border-box;">' +
           '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">' +
-            '<div style="width:20px;height:20px;border-radius:50%;border:1px solid #3b82f6;background:rgba(59,130,246,0.1);display:flex;align-items:center;justify-content:center;color:#3b82f6;font-size:10px;font-weight:800;box-shadow:0 0 10px rgba(59,130,246,0.3);">2</div>' +
-            '<span style="font-size:14px;font-weight:700;color:#fff;font-family:\'Inter\', \'Cairo\', sans-serif;">' + s8Txt('Status Pipeline (Fulfillment Funnel)', 'مسار الحالات (قمع التنفيذ)') + '</span>' +
+            '<div style="width:20px;height:20px;border-radius:50%;border:1px solid #3b82f6;background:rgba(59,130,246,0.1);display:flex;align-items:center;justify-content:center;color:#3b82f6;font-size:var(--type-micro);font-weight:var(--weight-semibold);box-shadow:0 0 10px rgba(59,130,246,0.3);">2</div>' +
+            '<span style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#fff;font-family:var(--font-ui);">' + s8Txt('Status Pipeline (Fulfillment Funnel)', 'مسار الحالات (قمع التنفيذ)') + '</span>' +
           '</div>' +
           '<div class="s8-pipeline-stages" style="display:flex;flex:1;gap:0;overflow-x:auto;">' + pipelineStagesHtml + '</div>' +
           '<div class="s8-pipeline-summary-box">' +
             '<div class="s8-pipeline-summary-strip">' + pipelineSummaryAllHtml + '</div>' +
             '<div class="s8-pipeline-summary-action">' +
-              '<button id="s8-btn-pipeline" style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);color:#3b82f6;border-radius:8px;padding:7px 12px;font-size:10px;display:flex;align-items:center;gap:6px;font-weight:700;cursor:pointer;direction:' + (isAr ? 'rtl' : 'ltr') + ';box-shadow:0 0 10px rgba(59,130,246,0.15);font-family:inherit;flex-shrink:0;white-space:nowrap;">' +
+              '<button id="s8-btn-pipeline" style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);color:#3b82f6;border-radius:var(--dash-radius-sm);padding:7px 12px;font-size:var(--type-micro);display:flex;align-items:center;gap:6px;font-weight:var(--weight-semibold);cursor:pointer;direction:' + (isAr ? 'rtl' : 'ltr') + ';box-shadow:0 0 10px rgba(59,130,246,0.15);font-family:inherit;flex-shrink:0;white-space:nowrap;">' +
                 '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="12" y1="18" x2="20" y2="18"/></svg>' +
                 s8Txt('View Order Details', 'عرض تفاصيل الطلبات') +
               '</button>' +
@@ -1294,13 +1356,13 @@ window.renderSection8 = function (mountEl, data, ctx) {
         '</div>' +
 
         /* COD (3) — flex:1; min-width:320px; */
-        '<div class="s8-cod-panel" style="flex:1;min-width:320px;background:#0a0f18;border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:18px 16px;display:flex;flex-direction:column;box-shadow:inset 0 0 40px rgba(0,0,0,0.5);box-sizing:border-box;">' +
+        '<div class="s8-cod-panel" style="flex:1;min-width:320px;background:#0a0f18;border:1px solid rgba(255,255,255,0.06);border-radius:var(--dash-radius-xl);padding:18px 16px;display:flex;flex-direction:column;box-shadow:inset 0 0 40px rgba(0,0,0,0.5);box-sizing:border-box;">' +
           '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:6px;">' +
             '<div style="display:flex;align-items:center;gap:10px;">' +
-              '<div style="width:20px;height:20px;border-radius:50%;border:1px solid #3b82f6;background:rgba(59,130,246,0.1);display:flex;align-items:center;justify-content:center;color:#3b82f6;font-size:10px;font-weight:800;box-shadow:0 0 10px rgba(59,130,246,0.3);">3</div>' +
-              '<span style="font-size:14px;font-weight:700;color:#fff;font-family:Cairo;">' + s8Txt('COD Collection', 'تحصيل COD') + '</span>' +
+              '<div style="width:20px;height:20px;border-radius:50%;border:1px solid #3b82f6;background:rgba(59,130,246,0.1);display:flex;align-items:center;justify-content:center;color:#3b82f6;font-size:var(--type-micro);font-weight:var(--weight-semibold);box-shadow:0 0 10px rgba(59,130,246,0.3);">3</div>' +
+              '<span style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#fff;font-family:var(--font-ui);">' + s8Txt('COD Collection', 'تحصيل COD') + '</span>' +
             '</div>' +
-            '<span style="font-size:12px;color:rgba(255,255,255,0.6);font-family:Cairo;direction:' + (isAr ? 'rtl' : 'ltr') + ';font-weight:700;">' + s8Txt('Top Collected Cities', 'أعلى المدن تحصيلا') + '</span>' +
+            '<span style="font-size:var(--type-label);color:var(--dash-text-muted);font-family:var(--font-ui);direction:' + (isAr ? 'rtl' : 'ltr') + ';font-weight:var(--weight-semibold);">' + s8Txt('Top Collected Cities', 'أعلى المدن تحصيلا') + '</span>' +
           '</div>' +
           '<div class="s8-cod-content" style="display:flex;flex-wrap:wrap;gap:16px;flex:1;min-width:0;">' +
             /* Left part: COD Donut and metrics */
@@ -1310,9 +1372,9 @@ window.renderSection8 = function (mountEl, data, ctx) {
                   donutPaths +
                 '</svg>' +
                 '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;">' +
-                  '<span style="font-size:9px;color:rgba(255,255,255,0.6);margin-bottom:4px;font-family:Cairo;font-weight:700;">DR</span>' +
-                  '<span style="font-size:18px;font-weight:800;color:#fff;line-height:1;">' + drPct.toFixed(1) + '</span>' +
-                  '<span style="font-size:9px;color:rgba(255,255,255,0.8);margin-top:2px;font-weight:700;">%</span>' +
+                  '<span style="font-size:var(--type-micro);color:var(--dash-text-muted);margin-bottom:4px;font-family:var(--font-ui);font-weight:var(--weight-semibold);">DR</span>' +
+                  '<span style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff;line-height:1;">' + drPct.toFixed(1) + '</span>' +
+                  '<span style="font-size:var(--type-micro);color:rgba(255,255,255,0.8);margin-top:2px;font-weight:var(--weight-semibold);">%</span>' +
                 '</div>' +
               '</div>' +
               '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;">' + codMetricsHtml + '</div>' +
@@ -1322,7 +1384,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
               '<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:10px;" id="s8-cities">' +
                 citiesHtml +
               '</div>' +
-              '<button id="s8-btn-cod" style="margin-top:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);padding:7px 10px;border-radius:8px;color:rgba(255,255,255,0.6);font-size:10px;display:flex;align-items:center;justify-content:space-between;font-weight:600;cursor:pointer;direction:' + (isAr ? 'rtl' : 'ltr') + ';box-shadow:0 4px 10px rgba(0,0,0,0.2);width:100%;font-family:inherit;">' +
+              '<button id="s8-btn-cod" style="margin-top:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);padding:7px 10px;border-radius:var(--dash-radius-sm);color:var(--dash-text-muted);font-size:var(--type-micro);display:flex;align-items:center;justify-content:space-between;font-weight:var(--weight-semibold);cursor:pointer;direction:' + (isAr ? 'rtl' : 'ltr') + ';box-shadow:0 4px 10px rgba(0,0,0,0.2);width:100%;font-family:inherit;">' +
                 '<span>' + s8Txt('View All Cities', 'عرض كل المدن') + '</span>' +
                 '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="12" y1="18" x2="20" y2="18"/></svg>' +
               '</button>' +
@@ -1338,22 +1400,22 @@ window.renderSection8 = function (mountEl, data, ctx) {
         /* Section 5: Taager profit chart (flex: 1.2; min-width: 280px) */
         '<div style="flex:1.2;min-width:280px;display:flex;flex-direction:column;">' +
           sectionBadge('5', s8Txt('Daily Taager Profit After Tax Trend', 'اتجاه الربح بعد الضريبة اليومي'), '#22c55e') +
-          '<div style="flex:1;background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;box-sizing:border-box;">' +
+          '<div style="flex:1;background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:var(--dash-radius-xl);padding:18px 20px;display:flex;flex-direction:column;gap:12px;box-sizing:border-box;">' +
             '<div style="display:flex;justify-content:space-between;align-items:center;">' +
               '<div style="display:flex;align-items:center;gap:8px;">' +
-                '<span style="font-size:13px;font-weight:700;color:#fff;direction:' + (isAr ? 'rtl' : 'ltr') + ';font-family:Cairo;">' + s8Txt('Daily Taager Profit After Tax Trend', 'اتجاه الربح بعد الضريبة اليومي') + '</span>' +
+                '<span style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:#fff;direction:' + (isAr ? 'rtl' : 'ltr') + ';font-family:var(--font-ui);">' + s8Txt('Daily Taager Profit After Tax Trend', 'اتجاه الربح بعد الضريبة اليومي') + '</span>' +
                 '<div id="s8-commission-dot" style="width:4px;height:18px;border-radius:2px;background:' + displayColor + ';"></div>' +
               '</div>' +
               '<div id="s8-commission-type-wrap" style="width:130px;"></div>' +
             '</div>' +
             '<div style="direction:' + (isAr ? 'rtl' : 'ltr') + ';">' +
-              '<div id="s8-commission-subtitle" style="font-size:9px;color:rgba(255,255,255,0.32);margin-bottom:3px;">' + s8Txt('Total ', 'الإجمالي ') + displayTitle + '</div>' +
+              '<div id="s8-commission-subtitle" style="font-size:var(--type-micro);color:rgba(255,255,255,0.32);margin-bottom:3px;">' + s8Txt('Total ', 'الإجمالي ') + displayTitle + '</div>' +
               '<div style="display:flex;align-items:baseline;gap:6px;">' +
-                '<span id="s8-commission-val" style="font-size:26px;font-weight:900;color:#fff;line-height:1;">' + displayCommissionVal.toLocaleString("en-US") + '</span>' +
-                '<span style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.42);">' + nativeCurrency + '</span>' +
+                '<span id="s8-commission-val" style="font-size:var(--type-page-title);font-weight:var(--weight-bold);color:#fff;line-height:1;">' + displayCommissionVal.toLocaleString("en-US") + '</span>' +
+                '<span style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.42);">' + nativeCurrency + '</span>' +
               '</div>' +
-              '<div style="font-size:10px;margin-top:4px;">' +
-                '<span id="s8-commission-delta" style="color:' + topDisplayDeltaColor + ';font-weight:700;">' + topDisplayDeltaSign + Math.abs(displayDeltaVal).toFixed(1) + '%</span>' +
+              '<div style="font-size:var(--type-micro);margin-top:4px;">' +
+                '<span id="s8-commission-delta" style="color:' + topDisplayDeltaColor + ';font-weight:var(--weight-bold);">' + topDisplayDeltaSign + Math.abs(displayDeltaVal).toFixed(1) + '%</span>' +
                 '<span style="color:rgba(255,255,255,0.32);margin-right:6px;">' + s8Txt('vs previous period', 'مقارنة بالفترة السابقة') + '</span>' +
               '</div>' +
             '</div>' +
@@ -1369,16 +1431,16 @@ window.renderSection8 = function (mountEl, data, ctx) {
         /* Section 4: Products (flex: 0.8; min-width: 230px) */
         '<div style="flex:0.8;min-width:230px;display:flex;flex-direction:column;">' +
           sectionBadge('4', s8Txt('Top Products', 'أفضل المنتجات'), '#fbbf24') +
-          '<div style="flex:1;background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:18px 20px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box;">' +
+          '<div style="flex:1;background:#0d1220;border:1px solid rgba(255,255,255,0.07);border-radius:var(--dash-radius-xl);padding:18px 20px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box;">' +
             '<div style="display:flex;justify-content:space-between;align-items:center;">' +
               '<div style="display:flex;align-items:center;gap:8px;">' +
-                '<span style="font-size:13px;font-weight:700;color:#fff;direction:' + (isAr ? 'rtl' : 'ltr') + ';font-family:Cairo;">' + s8Txt('Top Products', 'أفضل المنتجات') + '</span>' +
+                '<span style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:#fff;direction:' + (isAr ? 'rtl' : 'ltr') + ';font-family:var(--font-ui);">' + s8Txt('Top Products', 'أفضل المنتجات') + '</span>' +
                 '<div style="width:4px;height:18px;border-radius:2px;background:#fbbf24;"></div>' +
               '</div>' +
             '</div>' +
             '<div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.06);direction:' + (isAr ? 'rtl' : 'ltr') + ';">' +
-              '<span style="font-size:8px;color:rgba(255,255,255,0.28);font-weight:600;">' + s8Txt('Earned Taager Profit After Tax', 'الربح المحصل بعد الضريبة') + '</span>' +
-              '<span style="font-size:8px;color:rgba(255,255,255,0.28);font-weight:600;">' + s8Txt('Delivered Count', 'عدد التسليمات') + '</span>' +
+              '<span style="font-size:var(--type-micro);color:rgba(255,255,255,0.28);font-weight:var(--weight-semibold);">' + s8Txt('Earned Taager Profit After Tax', 'الربح المحصل بعد الضريبة') + '</span>' +
+              '<span style="font-size:var(--type-micro);color:rgba(255,255,255,0.28);font-weight:var(--weight-semibold);">' + s8Txt('Delivered Count', 'عدد التسليمات') + '</span>' +
             '</div>' +
             '<div style="display:flex;flex-direction:column;flex:1;">' + productsPagesHtml + '</div>' + paginationHtml + viewAllBtnHtml +
           '</div>' +
@@ -1394,12 +1456,12 @@ window.renderSection8 = function (mountEl, data, ctx) {
 
       /* Section 7: Quick Summary */
       '<div class="fade-up" style="animation-delay:500ms;display:flex;flex-direction:column;gap:18px;width:100%;' +
-        'background:rgba(8,11,18,0.75);border:1px solid rgba(255,255,255,0.04);border-radius:16px;padding:24px;' +
+        'background:rgba(8,11,18,0.75);border:1px solid rgba(255,255,255,0.04);border-radius:var(--dash-radius-xl);padding:24px;' +
         'box-shadow:inset 0 0 30px rgba(0,0,0,0.5),0 8px 32px rgba(0,0,0,0.3);">' +
         '<div style="display:flex;align-items:center;gap:10px;direction:ltr;justify-content:flex-start;">' +
           '<div style="width:28px;height:28px;border-radius:50%;background:rgba(59,130,246,0.15);border:1.5px solid rgba(59,130,246,0.55);' +
-            'box-shadow:0 0 10px rgba(59,130,246,0.45);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#3b82f6;flex-shrink:0;">7</div>' +
-          '<span style="font-size:16px;font-weight:700;color:#fff;font-family:Cairo;">' + s8Txt('Quick Indicator Summary', 'ملخص المؤشرات السريع') + '</span>' +
+            'box-shadow:0 0 10px rgba(59,130,246,0.45);display:flex;align-items:center;justify-content:center;font-size:var(--type-body);font-weight:var(--weight-semibold);color:#3b82f6;flex-shrink:0;">7</div>' +
+          '<span style="font-size:var(--type-subtitle);font-weight:var(--weight-semibold);color:#fff;font-family:var(--font-ui);">' + s8Txt('Quick Indicator Summary', 'ملخص المؤشرات السريع') + '</span>' +
         '</div>' +
         '<div class="s8-summary-grid" style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px;width:100%;direction:ltr;">' +
           summaryItemsHtml +
@@ -1443,7 +1505,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
       };
       var pal = colors[type] || colors.scale;
       var col = score < 35 ? pal.low : score < 65 ? pal.mid : pal.high;
-      return '<span style="padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;background:' + col + '18;color:' + col + ';border:1px solid ' + col + '44;">' + score + '</span>';
+      return '<span style="padding:2px 7px;border-radius:var(--dash-radius-sm);font-size:var(--type-micro);font-weight:var(--weight-semibold);background:' + col + '18;color:' + col + ';border:1px solid ' + col + '44;">' + score + '</span>';
     }
 
     var rows = topScaling.map(function (c, i) {
@@ -1454,40 +1516,40 @@ window.renderSection8 = function (mountEl, data, ctx) {
       var barW = Math.max(4, Math.round(c.scalingScore || 0));
 
       return '<div style="display:grid;grid-template-columns:28px 1fr 70px 60px 60px 60px;' +
-        'gap:10px;align-items:center;padding:10px 16px;border-radius:10px;' +
+        'gap:10px;align-items:center;padding:10px 16px;border-radius:var(--dash-radius-md);' +
         'background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.05);' +
         'transition:background 0.2s;" ' +
         'onmouseover="this.style.background=&quot;rgba(124,58,237,0.08)&quot;" ' +
         'onmouseout="this.style.background=&quot;rgba(255,255,255,0.025)&quot;">' +
-        '<div style="font-size:12px;font-weight:900;color:' + rankColor + ';text-align:center">#' + rank + '</div>' +
+        '<div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:' + rankColor + ';text-align:center">#' + rank + '</div>' +
         '<div>' +
-          '<div style="font-size:13px;font-weight:800;color:#fff">' + (c.name || '—') + '</div>' +
+          '<div style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:#fff">' + (c.name || '—') + '</div>' +
           '<div style="margin-top:4px;height:4px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden">' +
             '<div style="height:100%;width:0;border-radius:4px;background:linear-gradient(90deg,#7c3aed,#14b8a6);transition:width 0.8s ease;' +
               'animation:none" data-width="' + barW + '%" class="s8-scale-bar"></div>' +
           '</div>' +
         '</div>' +
-        '<div style="text-align:center;font-size:12px;font-weight:700;color:rgba(255,255,255,0.6)">' + (c.orders || 0).toLocaleString('en-US') + '</div>' +
-        '<div style="text-align:center;font-size:12px;font-weight:800;color:' + ndrColor + '">' + ndr + '%</div>' +
+        '<div style="text-align:center;font-size:var(--type-label);font-weight:var(--weight-semibold);color:var(--dash-text-muted)">' + (c.orders || 0).toLocaleString('en-US') + '</div>' +
+        '<div style="text-align:center;font-size:var(--type-label);font-weight:var(--weight-semibold);color:' + ndrColor + '">' + ndr + '%</div>' +
         '<div style="text-align:center">' + scoreBadge(c.scalingScore || 0, 'scale') + '</div>' +
         '<div style="text-align:center">' + scoreBadge(c.riskScore || 0, 'risk') + '</div>' +
       '</div>';
     }).join('');
 
     mount.innerHTML =
-      '<div style="margin:0 28px 28px;background:#0b1120;border:1px solid rgba(255,255,255,0.07);' +
-        'border-radius:18px;padding:20px 4px;">' +
+      '<div style="margin:0 28px 28px;background:var(--dash-surface);border:1px solid rgba(255,255,255,0.07);' +
+        'border-radius:var(--dash-radius-xl);padding:20px 4px;">' +
         '<div style="padding:0 12px 16px;display:flex;align-items:center;gap:10px;">' +
-          '<div style="width:32px;height:32px;border-radius:10px;background:#7c3aed1e;display:flex;align-items:center;justify-content:center;">' +
+          '<div style="width:32px;height:32px;border-radius:var(--dash-radius-md);background:#7c3aed1e;display:flex;align-items:center;justify-content:center;">' +
             '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2.2" stroke-linecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>' +
           '</div>' +
           '<div>' +
-            '<div style="font-size:14px;font-weight:900;color:#fff">' + s8Txt('Best Expansion List', 'قائمة أفضل توسع') + '</div>' +
-            '<div style="font-size:11px;color:rgba(255,255,255,0.38);margin-top:2px">' + s8Txt('Candidate cities for expansion based on index', 'مدن مرشحة للتوسع حسب المؤشر') + '</div>' +
+            '<div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#fff">' + s8Txt('Best Expansion List', 'قائمة أفضل توسع') + '</div>' +
+            '<div style="font-size:var(--type-caption);color:rgba(255,255,255,0.38);margin-top:2px">' + s8Txt('Candidate cities for expansion based on index', 'مدن مرشحة للتوسع حسب المؤشر') + '</div>' +
           '</div>' +
         '</div>' +
         '<div style="padding:0 12px 6px;display:grid;grid-template-columns:28px 1fr 70px 60px 60px 60px;' +
-          'gap:10px;font-size:10px;font-weight:700;color:rgba(255,255,255,0.3);border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:8px;margin-bottom:8px;">' +
+          'gap:10px;font-size:var(--type-micro);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.3);border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:8px;margin-bottom:8px;">' +
           '<div style="text-align:center">#</div><div>' + s8Txt('City', 'المدينة') + '</div>' +
           '<div style="text-align:center">' + s8Txt('Orders', 'الطلبات') + '</div><div style="text-align:center">NDR%</div>' +
           '<div style="text-align:center">' + s8Txt('Expansion', 'التوسع') + '</div><div style="text-align:center">' + s8Txt('Risk', 'المخاطر') + '</div>' +
@@ -1610,9 +1672,9 @@ window.renderSection8 = function (mountEl, data, ctx) {
         statsWrap.innerHTML = cStats.map(function(stat, i) {
           return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;' +
             (i < cStats.length - 1 ? 'border-left:1px solid rgba(255,255,255,0.06);' : '') + '">' +
-            '<div style="font-size:9px;color:rgba(255,255,255,0.3);margin-bottom:4px;font-weight:600;">' + stat.label + '</div>' +
-            '<div style="font-size:12px;font-weight:800;color:' + stat.color + ';">' + stat.value + '</div>' +
-            (stat.sub ? '<div style="font-size:9px;color:rgba(255,255,255,0.22);margin-top:2px;">' + stat.sub + '</div>' : '') +
+            '<div style="font-size:var(--type-micro);color:rgba(255,255,255,0.3);margin-bottom:4px;font-weight:var(--weight-semibold);">' + stat.label + '</div>' +
+            '<div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:' + stat.color + ';">' + stat.value + '</div>' +
+            (stat.sub ? '<div style="font-size:var(--type-micro);color:rgba(255,255,255,0.22);margin-top:2px;">' + stat.sub + '</div>' : '') +
           '</div>';
         }).join('');
       }
@@ -1674,7 +1736,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
               borderWidth:     1,
               titleColor:      theme.muted,
               bodyColor:       dispColor,
-              bodyFont:        { size: 10, family: 'Cairo' },
+              bodyFont:        { size: 10, family: "Inter, 'IBM Plex Sans Arabic', sans-serif" },
               callbacks: {
                 label: function (item) {
                   var n = Number(item.raw || 0);
@@ -1686,7 +1748,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
           scales: {
             x: {
               grid: { display: false },
-              ticks: { color: theme.label, font: { size: 7, family: 'Cairo' } },
+              ticks: { color: theme.label, font: { size: 10, family: "Inter, 'IBM Plex Sans Arabic', sans-serif" } },
               border: { display: false },
             },
             y: {
@@ -1694,7 +1756,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
               max: yMax,
               ticks: {
                 color: theme.label,
-                font: { size: 7, family: 'Cairo' },
+                font: { size: 10, family: "Inter, 'IBM Plex Sans Arabic', sans-serif" },
                 stepSize: stepSize,
                 callback: function (value) {
                   return Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
@@ -1738,11 +1800,12 @@ window.renderSection8 = function (mountEl, data, ctx) {
     }
     mountEl._s8GmvTargetListener = function (next) {
       if (!next || String(next.accountId) !== String(_roiAccountId)) return;
-      if (mountEl.hidden) {
-        mountEl._dashboardNeedsRefresh = true;
-        return;
-      }
-      window.renderSection8(mountEl, data, ctx);
+      s8Debug('listener:gmv-target', {
+        accountId: next.accountId,
+        hidden: !!mountEl.hidden,
+        connected: !!mountEl.isConnected
+      });
+      scheduleS8Refresh('gmv-target', { accountId: next.accountId });
     };
     window.DashboardGmvTargetState.subscribe(mountEl._s8GmvTargetListener);
   }
@@ -1753,11 +1816,12 @@ window.renderSection8 = function (mountEl, data, ctx) {
     }
     mountEl._s8RoiListener = function (next) {
       if (!next || String(next.accountId) !== String(_roiAccountId)) return;
-      if (mountEl.hidden) {
-        mountEl._dashboardNeedsRefresh = true;
-        return;
-      }
-      window.renderSection8(mountEl, data, ctx);
+      s8Debug('listener:roi', {
+        accountId: next.accountId,
+        hidden: !!mountEl.hidden,
+        connected: !!mountEl.isConnected
+      });
+      scheduleS8Refresh('roi', { accountId: next.accountId });
     };
     window.DashboardRoiState.subscribe(mountEl._s8RoiListener);
   }
@@ -1772,19 +1836,48 @@ window.renderSection8 = function (mountEl, data, ctx) {
       : '';
     mountEl._s8MarketingListener = function (next) {
       if (!next || String(next.accountId) !== String(_roiAccountId)) return;
+      // The store emits both the changed platform and a combined account
+      // summary. Section 8 renders the combined total, so reacting to the
+      // platform event duplicates refreshes and can temporarily replace the
+      // combined key with a platform-specific one.
+      if (next.platform && next.platform !== 'combined') {
+        s8Debug('listener:marketing-skip-platform', {
+          accountId: next.accountId,
+          platform: next.platform
+        });
+        return;
+      }
+      s8Debug('listener:marketing', {
+        accountId: next.accountId,
+        hidden: !!mountEl.hidden,
+        connected: !!mountEl.isConnected,
+        status: next.status,
+        loading: !!next.loading,
+        lastSyncAt: next.lastSyncAt || '',
+        hasSummary: !!next.summary
+      });
       if (mountEl.hidden) {
         mountEl._dashboardNeedsRefresh = true;
         return;
       }
       var nextKey = [next.lastSyncAt || '', next.summary && next.summary.adSpend || 0, next.manualOverride ? 1 : 0].join('|');
-      if (nextKey === mountEl._s8MarketingKey) return;
+      if (nextKey === mountEl._s8MarketingKey) {
+        s8Debug('listener:marketing-skip-same-key', { nextKey: nextKey });
+        return;
+      }
       mountEl._s8MarketingKey = nextKey;
-      window.renderSection8(mountEl, data, ctx);
+      s8Debug('listener:marketing-rerender', { nextKey: nextKey });
+      scheduleS8Refresh('marketing', { accountId: next.accountId, nextKey: nextKey });
     };
     window.DashboardMarketingState.subscribe(mountEl._s8MarketingListener);
   }
 
   mountEl._dashboardSectionCleanup = function () {
+    s8Debug('cleanup');
+    if (mountEl._s8RefreshTimer) {
+      clearTimeout(mountEl._s8RefreshTimer);
+      mountEl._s8RefreshTimer = null;
+    }
     if (mountEl._commissionChartInstance) {
       mountEl._commissionChartInstance.destroy();
       mountEl._commissionChartInstance = null;

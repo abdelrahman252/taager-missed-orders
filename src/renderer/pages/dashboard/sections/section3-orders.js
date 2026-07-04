@@ -44,7 +44,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
     size = size || 36;
     var colors = PRODUCT_COLORS[type] || PRODUCT_COLORS.cream;
     var ic = colors[0], pc = colors[1];
-    return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;' +
+    return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:var(--dash-radius-sm);flex-shrink:0;display:flex;align-items:center;justify-content:center;' +
       'background:linear-gradient(135deg,' + pc + '33 0%,' + pc + '10 60%,rgba(255,255,255,0.02) 100%);' +
       'border:1px solid ' + pc + '44;">' +
       productThumbSvg(type, ic) +
@@ -68,7 +68,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
 
   function statusPill(status) {
     var c = statusColor(status);
-    return '<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:100px;font-size:11px;font-weight:700;white-space:nowrap;flex-direction:row-reverse;' +
+    return '<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:var(--radius-pill);font-size:var(--type-caption);font-weight:var(--weight-semibold);white-space:nowrap;flex-direction:row-reverse;' +
       'background:' + c + '1a;border:1px solid ' + c + '55;color:' + c + ';">' +
       '<span style="width:6px;height:6px;border-radius:50%;background:' + c + ';box-shadow:0 0 6px ' + c + ',0 0 12px ' + c + '77;"></span>' +
       status +
@@ -154,6 +154,33 @@ window.renderSection3 = function (mountEl, data, ctx) {
       iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>' }
   };
   Object.keys(EXTRA_STAGE_TEMPLATES).forEach(function (id) { STAGE_TEMPLATE_BY_ID[id] = EXTRA_STAGE_TEMPLATES[id]; });
+  var STATUS_ICON_SVGS = {
+    received: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    confirmed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M20 6L9 17l-5-5"/><circle cx="12" cy="12" r="9"/></svg>',
+    waiting: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M6 3h12"/><path d="M6 21h12"/><path d="M8 3c0 5 8 5 8 9s-8 4-8 9"/><path d="M16 3c0 5-8 5-8 9s8 4 8 9"/></svg>',
+    on_hold: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="12" r="9"/><path d="M10 8v8"/><path d="M14 8v8"/></svg>',
+    shipping: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="2" y="7" width="12" height="8" rx="1"/><path d="M14 10h4l3 3v2h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>',
+    delivery_suspended: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M3 7h11v8H3z"/><path d="M14 10h4l3 3v2h-7z"/><path d="M8 11h1"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>',
+    delivered: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M9 14l2 2 4-5"/></svg>',
+    failed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6"/><path d="M9 9l6 6"/></svg>',
+    return_verified: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M9 14l-4-4 4-4"/><path d="M5 10h9a5 5 0 010 10h-1"/><path d="M16 4l2 2 4-4"/></svg>',
+    canceled_by_you: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>',
+    customer_refused_confirmation: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M16 21v-2a4 4 0 00-4-4H7a4 4 0 00-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M18 8l4 4"/><path d="M22 8l-4 4"/></svg>',
+    out_of_stock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M15 11l-6 6"/><path d="M9 11l6 6"/></svg>',
+    after_sales_done: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M14.7 6.3a4 4 0 00-5 5L4 17v3h3l5.7-5.7a4 4 0 005-5z"/><path d="M17 4l3 3"/><path d="M8 18l2 2 5-5"/></svg>',
+    after_sales_progress: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 01-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V22h-4v-.2a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 01-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H2v-4h.2a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 012.8-2.8l.1.1a1.7 1.7 0 001.8.3 1.7 1.7 0 001-1.5V2h4v.2a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 012.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8 1.7 1.7 0 001.5 1h.2v4h-.2a1.7 1.7 0 00-1.5 1z"/></svg>'
+  };
+  function statusIconSvg(bucket, dashboardBucket) {
+    return STATUS_ICON_SVGS[bucket] ||
+      STATUS_ICON_SVGS[dashboardBucket] ||
+      STAGE_TEMPLATE_BY_ID[dashboardBucket] && STAGE_TEMPLATE_BY_ID[dashboardBucket].iconSvg ||
+      STAGE_TEMPLATE_BY_ID.confirmed && STAGE_TEMPLATE_BY_ID.confirmed.iconSvg ||
+      FALLBACK_STAGE_TEMPLATE.iconSvg;
+  }
+  Object.keys(STATUS_ICON_SVGS).forEach(function (bucket) {
+    if (STAGE_TEMPLATE_BY_ID[bucket]) STAGE_TEMPLATE_BY_ID[bucket].iconSvg = STATUS_ICON_SVGS[bucket];
+    if (STAGE_TEMPLATE_BY_ID[exactStatusId(bucket)]) STAGE_TEMPLATE_BY_ID[exactStatusId(bucket)].iconSvg = STATUS_ICON_SVGS[bucket];
+  });
   var FALLBACK_STAGE_TEMPLATE = STAGE_TEMPLATE_BY_ID.intake ||
     STAGE_TEMPLATE_BY_ID.received ||
     STAGE_TEMPLATE_BY_ID[exactStatusId('received')] ||
@@ -193,6 +220,64 @@ window.renderSection3 = function (mountEl, data, ctx) {
     entry[cacheKey] = { length: sourceRows.length, rows: rows };
     return rows;
   }
+
+  function splitOrderList(value) {
+    return String(value == null ? '' : value)
+      .split(/\r?\n|\s*,\s*|\s*\|\s*/)
+      .map(function (item) { return String(item || '').trim(); })
+      .filter(Boolean);
+  }
+
+  function uniqueOrderList(items) {
+    var seen = {};
+    var out = [];
+    (items || []).forEach(function (item) {
+      var value = String(item || '').trim();
+      var key = value.toLowerCase();
+      if (!value || seen[key]) return;
+      seen[key] = true;
+      out.push(value);
+    });
+    return out;
+  }
+
+  function savedProductName(value) {
+    if (!window.TaagerProductNames || typeof window.TaagerProductNames.get !== 'function') return '';
+    return window.TaagerProductNames.get(value);
+  }
+
+  function resolveOrderProductName(row) {
+    row = row || {};
+    var skuItems = uniqueOrderList([]
+      .concat(splitOrderList(row.sku))
+      .concat(splitOrderList(row.skuNumber))
+      .concat(splitOrderList(row.itemSkus))
+      .concat(splitOrderList(row.skus)));
+    var productItems = uniqueOrderList([]
+      .concat(splitOrderList(row.productName))
+      .concat(splitOrderList(row.product))
+      .concat(splitOrderList(row.products)));
+
+    if (skuItems.length) {
+      return uniqueOrderList(skuItems.map(function (sku, index) {
+        var mapped = savedProductName(sku);
+        if (mapped) return mapped;
+        var rawAtIndex = productItems[index] || '';
+        return savedProductName(rawAtIndex) || rawAtIndex || sku;
+      })).join(', ');
+    }
+
+    if (productItems.length) {
+      return uniqueOrderList(productItems.map(function (item) {
+        return savedProductName(item) || item;
+      })).join(', ');
+    }
+
+    return window.dashboardI18n && window.dashboardI18n.isRtl()
+      ? 'منتج غير معروف'
+      : 'Unknown Product';
+  }
+
   if (data && data.orders) {
     var dateCache = {};
     var phoneCache = {};
@@ -208,7 +293,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
       var isAr = window.dashboardI18n ? window.dashboardI18n.currentLocale === 'ar' : true;
       var customer = o.customerName || o.name || o.customer || (isAr ? 'عميل غير معروف' : 'Unknown Customer');
       var city = o.city || 'الرياض';
-      var product = o.products || o.product || (isAr ? 'منتج غير معروف' : 'Unknown Product');
+      var product = resolveOrderProductName(o);
       
       var type = 'cream';
       var prodLower = product.toLowerCase();
@@ -247,7 +332,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
 
       var date = o.createdAt || o.date || '';
       var phone = o.phone || o.phone1 || o.phone2 || o.rawPhone || o.normPhone || o.customerPhone || o.phoneNumber || '';
-      var sku = o.sku || o.skuNumber || '';
+      var sku = o.sku || o.skuNumber || o.itemSkus || '';
       var dateInfo = dateCache[date];
       if (!dateInfo) {
         var parsedDate = date ? new Date(date) : null;
@@ -309,7 +394,19 @@ window.renderSection3 = function (mountEl, data, ctx) {
         _phoneSearch: phoneClean + ' ' + phoneLocal + ' ' + phoneNoCode
       };
     }
-    var normalizationCacheKey = [window.dashboardI18n && window.dashboardI18n.currentLocale || (isRtl ? 'ar' : 'en'), window.TaagerStatus ? 'taager-status' : 'legacy-status'].join('|');
+    var productNameCacheKey = '';
+    try {
+      productNameCacheKey = window.TaagerProductNames && typeof window.TaagerProductNames.all === 'function'
+        ? JSON.stringify(window.TaagerProductNames.all())
+        : '';
+    } catch (_) {
+      productNameCacheKey = '';
+    }
+    var normalizationCacheKey = [
+      window.dashboardI18n && window.dashboardI18n.currentLocale || (isRtl ? 'ar' : 'en'),
+      window.TaagerStatus ? 'taager-status' : 'legacy-status',
+      productNameCacheKey
+    ].join('|');
     var rawCreatedOrders = orders;
     var normalizedCreatedOrders = null;
     getCreatedOrders = function () {
@@ -343,7 +440,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
     var isAr = window.dashboardI18n ? window.dashboardI18n.currentLocale === 'ar' : true;
     var customer = o && (o.customerName || o.name || o.customer) || (isAr ? 'عميل غير معروف' : 'Unknown Customer');
     var city = o && o.city || 'الرياض';
-    var product = o && (o.products || o.product || o.productName) || (isAr ? 'منتج غير معروف' : 'Unknown Product');
+    var product = resolveOrderProductName(o);
     var type = 'cream';
     var prodLower = String(product || '').toLowerCase();
     if (prodLower.includes('serum') || prodLower.includes('سيروم')) type = 'serum';
@@ -492,6 +589,10 @@ window.renderSection3 = function (mountEl, data, ctx) {
 
   function stageMatchesOrder(stageId, order) {
     if (stageId === 'all') return true;
+    if (isConfirmationStageId(stageId)) {
+      var confirmationBucket = order.exactStatusBucket || (window.TaagerStatus ? window.TaagerStatus.normalize(order.rawStatus || order.status).bucket : '');
+      return isConfirmationBucket(confirmationBucket);
+    }
     var exactBucket = exactBucketFromStageId(stageId);
     if (exactBucket) {
       return (order.exactStatusBucket || (window.TaagerStatus ? window.TaagerStatus.normalize(order.rawStatus || order.status).bucket : '')) === exactBucket;
@@ -620,6 +721,66 @@ window.renderSection3 = function (mountEl, data, ctx) {
     return String(stageId || '').indexOf('status:') === 0 ? String(stageId).slice(7) : '';
   }
 
+  function isConfirmationStageId(stageId) {
+    return stageId === 'confirmation';
+  }
+
+  function confirmationStageLabel() {
+    return window.dashboardI18n && window.dashboardI18n.pick
+      ? window.dashboardI18n.pick('Confirmation', 'التأكيد')
+      : tx('Confirmation');
+  }
+
+  function confirmationMetricCount() {
+    if (!certifiedMetrics) return NaN;
+    return certifiedMetrics.confirmationStatusCount != null
+      ? Number(certifiedMetrics.confirmationStatusCount)
+      : (certifiedMetrics.confirmedCount != null ? Number(certifiedMetrics.confirmedCount) : NaN);
+  }
+
+  function confirmationMetricTotal() {
+    return Number(
+      certifiedMetrics && (
+        certifiedMetrics.statusTotalCount ||
+        certifiedMetrics.netOrderCount ||
+        certifiedMetrics.totalOrders ||
+        certifiedMetrics.businessTotalOrders
+      ) || orders.length || 0
+    );
+  }
+
+  function isConfirmationBucket(bucket) {
+    bucket = String(bucket || '');
+    if (window.TaagerStatus && typeof window.TaagerStatus.statusGroup === 'function') {
+      return window.TaagerStatus.statusGroup(bucket) === 'confirmation';
+    }
+    return [
+      'confirmed', 'waiting', 'shipping', 'delivery_suspended', 'processing',
+      'delivered', 'failed', 'return_verified', 'after_sales_progress', 'after_sales_done'
+    ].indexOf(bucket) !== -1;
+  }
+
+  function s3Pick(en, ar) {
+    return window.dashboardI18n && typeof window.dashboardI18n.pick === 'function'
+      ? window.dashboardI18n.pick(en, ar || en)
+      : (isRtl ? (ar || en) : en);
+  }
+
+  function orderUnitLabel(count) {
+    return s3Pick(Number(count) === 1 ? 'order' : 'orders', 'طلب');
+  }
+
+  function stageDescription(stageId) {
+    if (stageId === 'all') return s3Pick('All orders currently in this dashboard scope', 'جميع الطلبات المسجلة في النظام');
+    if (stageId === 'received') return s3Pick('Orders received and still waiting for the next action', 'الطلبات التي تم استلامها ولم تنتقل بعد للخطوة التالية');
+    if (stageId === 'confirmation') return s3Pick('Orders that passed confirmation or progressed after confirmation', 'الطلبات التي تم تأكيدها أو تقدمت بعد التأكيد');
+    if (stageId === 'confirmed') return s3Pick('Orders confirmed and ready for preparation or shipment', 'الطلبات التي تم تأكيدها وجاهزة للتجهيز والشحن');
+    if (stageId === 'shipping') return s3Pick('Orders currently with shipping or delivery operations', 'الطلبات التي تم شحنها وتحت النقل إلى العميل');
+    if (stageId === 'delivered') return s3Pick('Orders successfully delivered to customers', 'الطلبات التي تم تسليمها بنجاح للعميل النهائي');
+    if (exactBucketFromStageId(stageId)) return s3Pick('Orders matching this exact Taager status', 'الطلبات المطابقة لهذه الحالة من ملف تاجر');
+    return s3Pick('Orders matching this pipeline stage', 'الطلبات المطابقة لهذه المرحلة');
+  }
+
   function exactStatusStages() {
     if (exactStatusStagesCache !== undefined) return exactStatusStagesCache;
     if (!window.TaagerStatus || !Array.isArray(window.TaagerStatus.all)) {
@@ -634,22 +795,19 @@ window.renderSection3 = function (mountEl, data, ctx) {
     exactStatusStagesCache = window.TaagerStatus.all.map(function (meta) {
       var dashboardBucket = window.TaagerStatus.dashboardBucket(meta.bucket);
       var label = window.TaagerStatus.display(meta.bucket, { locale: isRtl ? 'ar' : 'en' });
+      var isAggregateConfirmation = meta.bucket === 'confirmed' && Number.isFinite(confirmationMetricCount());
+      var count = isAggregateConfirmation ? confirmationMetricCount() : Number(counts[meta.bucket] || 0);
+      var total = isAggregateConfirmation ? confirmationMetricTotal() : orders.length;
+      var displayLabel = isAggregateConfirmation ? confirmationStageLabel() : label;
       return {
-        id: exactStatusId(meta.bucket),
+        id: isAggregateConfirmation ? 'confirmation' : exactStatusId(meta.bucket),
         exactBucket: meta.bucket,
-        label: label,
-        shortLabel: label,
-        count: Number(counts[meta.bucket] || 0),
-        pct: orders.length > 0 ? parseFloat(((Number(counts[meta.bucket] || 0) / orders.length) * 100).toFixed(1)) : 0,
+        label: displayLabel,
+        shortLabel: displayLabel,
+        count: count,
+        pct: total > 0 ? parseFloat(((count / total) * 100).toFixed(1)) : 0,
         color: window.TaagerStatus.color(meta.bucket),
-        iconSvg: meta.delivered ? STAGE_TEMPLATE_BY_ID.delivered.iconSvg :
-          meta.bucket === 'canceled_by_you' ? STAGE_TEMPLATE_BY_ID.waiting.iconSvg :
-          meta.bucket === 'received' ? FALLBACK_STAGE_TEMPLATE.iconSvg :
-          dashboardBucket === 'failed' ? STAGE_TEMPLATE_BY_ID.failed.iconSvg :
-          dashboardBucket === 'shipping' ? STAGE_TEMPLATE_BY_ID.shipping.iconSvg :
-          dashboardBucket === 'confirmed' ? STAGE_TEMPLATE_BY_ID.confirmed.iconSvg :
-          dashboardBucket === 'processing' ? STAGE_TEMPLATE_BY_ID.processing.iconSvg :
-          STAGE_TEMPLATE_BY_ID.waiting.iconSvg
+        iconSvg: statusIconSvg(meta.bucket, dashboardBucket)
       };
     });
     return exactStatusStagesCache;
@@ -884,13 +1042,13 @@ window.renderSection3 = function (mountEl, data, ctx) {
     style.id = 's3-stage-tooltip-style';
     style.textContent = [
       '.s3-stage-label-wrap { position: relative; display: inline-flex; align-items: center; max-width: calc(100% - 38px); }',
-      '.s3-stage-label-wrap .s3-stage-short { font-size:10.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }',
+      '.s3-stage-label-wrap .s3-stage-short { font-size:var(--type-caption); font-weight:var(--weight-semibold); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }',
       '#s3-floating-tooltip {',
       '  position: fixed;',
       '  background: rgba(10,15,30,0.97);',
       '  border: 1px solid rgba(255,255,255,0.15);',
-      '  color: #fff; font-size: 11px; font-weight: 600; white-space: nowrap;',
-      '  padding: 5px 11px; border-radius: 7px;',
+      '  color: #fff; font-size:var(--type-caption); font-weight:var(--weight-semibold); white-space: nowrap;',
+      '  padding: 5px 11px; border-radius:var(--dash-radius-sm);',
       '  pointer-events: none; z-index: 99999;',
       '  box-shadow: 0 4px 18px rgba(0,0,0,0.6);',
       '  transition: opacity 0.15s ease;',
@@ -961,7 +1119,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
 
       cardsHtml +=
         '<div class="s3-mini-stage fade-up" data-id="' + s.id + '" style="flex:1;min-width:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;animation-delay:' + (i * 60) + 'ms;">' +
-          '<div class="s3-mini-card" style="width:94%;height:96px;border-radius:12px;' +
+          '<div class="s3-mini-card" style="width:94%;height:96px;border-radius:var(--dash-radius-md);' +
             'transform:skewX(-6deg);' +
             'border:1.5px solid ' + s.color + ';' +
             'background:' + bg + ';' +
@@ -979,8 +1137,8 @@ window.renderSection3 = function (mountEl, data, ctx) {
               '</div>' +
               /* Bottom row: count + percentage */
               '<div style="display:flex;align-items:baseline;gap:5px;justify-content:flex-' + (isRtl ? 'end' : 'start') + ';flex-direction:' + rowDir + ';">' +
-                '<span class="s3-mini-count" title="' + formatReadableNumber(s.count, 0) + '" style="font-size:26px;font-weight:900;color:' + (isLightTheme ? '#1e293b' : '#fff') + ';line-height:1;letter-spacing:-0.5px;font-variant-numeric:tabular-nums;">' + formatReadableNumber(s.count, 0) + '</span>' +
-                '<span class="s3-mini-pct" style="font-size:11px;color:' + (isLightTheme ? '#64748b' : 'rgba(255,255,255,0.55)') + ';font-weight:600;">' + s.pct + '%</span>' +
+                '<span class="s3-mini-count" title="' + formatReadableNumber(s.count, 0) + '" style="font-size:var(--type-page-title);font-weight:var(--weight-bold);color:' + (isLightTheme ? '#1e293b' : '#fff') + ';line-height:1;letter-spacing:-0.5px;font-variant-numeric:tabular-nums;">' + formatReadableNumber(s.count, 0) + '</span>' +
+                '<span class="s3-mini-pct" style="font-size:var(--type-caption);color:' + (isLightTheme ? '#64748b' : 'rgba(255,255,255,0.55)') + ';font-weight:var(--weight-semibold);">' + s.pct + '%</span>' +
               '</div>' +
             '</div>' +
           '</div>' +
@@ -1047,6 +1205,8 @@ window.renderSection3 = function (mountEl, data, ctx) {
     var allOrdersLabel = isRtl ? 'كل الطلبات' : 'All orders';
     var templateStage = activeStageId === 'all'
       ? { id: 'all', label: allOrdersLabel, shortLabel: allOrdersLabel, color: '#3b82f6', iconSvg: FALLBACK_STAGE_TEMPLATE.iconSvg }
+      : isConfirmationStageId(activeStageId)
+        ? (exactStatusStages() || []).find(function (stage) { return stage.id === activeStageId; }) || STAGE_TEMPLATE_BY_ID.confirmed || FALLBACK_STAGE_TEMPLATE
       : (exactBucketFromStageId(activeStageId)
         ? (exactStatusStages() || []).find(function (stage) { return stage.id === activeStageId; }) || FALLBACK_STAGE_TEMPLATE
         : (STAGE_TEMPLATE_BY_ID[activeStageId] || FALLBACK_STAGE_TEMPLATE));
@@ -1137,16 +1297,16 @@ window.renderSection3 = function (mountEl, data, ctx) {
     var rowDir = isRtl ? 'row-reverse' : 'row';
 
     var kpisHtml = kpisDynamic.map(function (k, i) {
-      return '<div class="fade-up s3-kpi" data-to="' + k.value + '" data-dec="' + k.decimals + '" style="flex:1;min-width:0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:14px 16px;text-align:' + textAlign + ';animation-delay:' + (150 + i * 60) + 'ms;">' +
+      return '<div class="fade-up s3-kpi" data-to="' + k.value + '" data-dec="' + k.decimals + '" style="flex:1;min-width:0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:var(--dash-radius-md);padding:14px 16px;text-align:' + textAlign + ';animation-delay:' + (150 + i * 60) + 'ms;">' +
         '<div style="display:flex;align-items:center;gap:8px;justify-content:flex-' + (isRtl ? 'end' : 'start') + ';margin-bottom:8px;flex-direction:' + rowDir + ';color:' + k.color + ';">' +
-          '<span style="font-size:11px;color:rgba(255,255,255,0.55);font-weight:600;">' + k.label + '</span>' +
+          '<span style="font-size:var(--type-caption);color:rgba(255,255,255,0.55);font-weight:var(--weight-semibold);">' + k.label + '</span>' +
           k.iconSvg +
         '</div>' +
         '<div style="display:flex;align-items:baseline;gap:6px;justify-content:flex-' + (isRtl ? 'end' : 'start') + ';flex-direction:' + rowDir + ';">' +
-          '<span class="s3-kpi-num" data-to="' + k.value + '" data-dec="' + k.decimals + '" title="' + formatReadableNumber(k.value, k.decimals) + '" style="font-size:24px;font-weight:900;color:#fff;line-height:1;letter-spacing:0;font-variant-numeric:tabular-nums;">' + formatReadableNumber(k.value, k.decimals) + '</span>' +
-          '<span style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;">' + k.unit + '</span>' +
+          '<span class="s3-kpi-num" data-to="' + k.value + '" data-dec="' + k.decimals + '" title="' + formatReadableNumber(k.value, k.decimals) + '" style="font-size:var(--type-metric);font-weight:var(--weight-semibold);color:#fff;line-height:1;letter-spacing:0;font-variant-numeric:tabular-nums;">' + formatReadableNumber(k.value, k.decimals) + '</span>' +
+          '<span style="font-size:var(--type-caption);color:var(--dash-text-faint);font-weight:var(--weight-semibold);">' + k.unit + '</span>' +
         '</div>' +
-        '<div style="font-size:10px;margin-top:8px;color:' + (k.positive ? '#00e676' : 'rgba(255,255,255,0.4)') + ';">' + k.sub + '</div>' +
+        '<div style="font-size:var(--type-micro);margin-top:8px;color:' + (k.positive ? '#00e676' : 'rgba(255,255,255,0.4)') + ';">' + k.sub + '</div>' +
       '</div>';
     }).join('');
 
@@ -1158,7 +1318,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
 
     var dlSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
 
-    container.innerHTML = '<div class="fade-up s3-details-panel" style="animation-delay:100ms;background:#0b1120;border:1px solid ' + activeStage.color + '55;border-radius:16px;padding:28px;margin-bottom:24px;display:flex;flex-direction:' + rowDir + ';gap:28px;align-items:center;box-shadow:0 0 28px ' + activeStage.color + '1c,inset 0 0 40px ' + activeStage.color + '06;">' +
+    container.innerHTML = '<div class="fade-up s3-details-panel" style="animation-delay:100ms;background:var(--dash-surface);border:1px solid ' + activeStage.color + '55;border-radius:var(--dash-radius-xl);padding:28px;margin-bottom:24px;display:flex;flex-direction:' + rowDir + ';gap:28px;align-items:center;box-shadow:0 0 28px ' + activeStage.color + '1c,inset 0 0 40px ' + activeStage.color + '06;">' +
       /* Left: icon + title */
       '<div style="display:flex;align-items:center;gap:16px;flex-shrink:0;min-width:260px;flex-direction:' + rowDir + ';border-' + (isRtl ? 'left' : 'right') + ':1px solid rgba(255,255,255,0.06);padding-' + (isRtl ? 'left' : 'right') + ':24px;">' +
         '<div style="width:68px;height:68px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;' +
@@ -1169,19 +1329,11 @@ window.renderSection3 = function (mountEl, data, ctx) {
         '</div>' +
         '<div style="text-align:' + textAlign + ';flex:1;">' +
           '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;justify-content:flex-' + (isRtl ? 'end' : 'start') + ';flex-direction:' + rowDir + ';">' +
-            '<span style="font-size:22px;font-weight:900;color:#fff;">' + activeStage.label + '</span>' +
-            '<span style="padding:4px 12px;border-radius:100px;font-size:11px;font-weight:700;background:' + activeStage.color + '22;border:1px solid ' + activeStage.color + '66;color:' + activeStage.color + ';font-variant-numeric:tabular-nums;">' + formatReadableNumber(stageOrders.length, 0) + ' ' + tx('طلب') + '</span>' +
+            '<span style="font-size:var(--type-metric-sm);font-weight:var(--weight-bold);color:#fff;">' + activeStage.label + '</span>' +
+            '<span style="padding:4px 12px;border-radius:var(--radius-pill);font-size:var(--type-caption);font-weight:var(--weight-semibold);background:' + activeStage.color + '22;border:1px solid ' + activeStage.color + '66;color:' + activeStage.color + ';font-variant-numeric:tabular-nums;">' + formatReadableNumber(stageOrders.length, 0) + ' ' + orderUnitLabel(stageOrders.length) + '</span>' +
           '</div>' +
-          '<div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:10px;line-height:1.5;">' + 
-            (activeStageId === 'all' ? tx('جميع الطلبات المسجلة في النظام') :
-             activeStageId === 'received' ? tx('الطلبات التي تم استلامها ولم تنتقل بعد للخطوة التالية') :
-             activeStageId === 'confirmed' ? tx('الطلبات التي تم تأكيدها وجاهزة للتجهيز والشحن') :
-             activeStageId === 'shipping' ? tx('الطلبات التي تم شحنها وتحت النقل إلى العميل') :
-             activeStageId === 'delivered' ? tx('الطلبات التي تم تسليمها بنجاح للعميل النهائي') :
-             exactBucketFromStageId(activeStageId) ? tx('الطلبات المطابقة لهذه الحالة من ملف تاجر') :
-             tx('الطلبات الفاشلة أو الملغاة من قبل النظام أو العميل')) +
-          '</div>' +
-          '<button id="s3-export-btn" style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.10);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.8);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;flex-direction:' + rowDir + ';margin-' + (isRtl ? 'right' : 'left') + ':auto;">' +
+          '<div style="font-size:var(--type-label);color:var(--dash-text-faint);margin-bottom:10px;line-height:1.5;">' + stageDescription(activeStageId) + '</div>' +
+          '<button id="s3-export-btn" style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:var(--dash-radius-sm);border:1px solid rgba(255,255,255,0.10);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.8);font-size:var(--type-label);font-weight:var(--weight-semibold);cursor:pointer;font-family:inherit;flex-direction:' + rowDir + ';margin-' + (isRtl ? 'right' : 'left') + ':auto;">' +
             dlSvg + '<span>' + tx('تصدير البيانات') + '</span>' +
           '</button>' +
         '</div>' +
@@ -1196,7 +1348,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
     var exportBtn = mountEl.querySelector('#s3-export-btn');
     if (exportBtn) {
       exportBtn.addEventListener('click', function() {
-        if (canUseBackendOrdersPage() && window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.exportOrders === 'function') {
+        if (canUseBackendOrdersPage() && !isConfirmationStageId(activeStageId) && window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.exportOrders === 'function') {
           var backendSort = backendOrderSort();
           exportBtn.disabled = true;
           window.DashboardQueryRuntime.exportOrders(Object.assign({
@@ -1233,31 +1385,31 @@ window.renderSection3 = function (mountEl, data, ctx) {
     var mapPinSvg = '<svg viewBox="0 0 24 24" fill="none" stroke=" ' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(54, 4, 83, 0.35)' : 'rgba(255,255,255,0.35)') + ' " stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>';
 
     var sortIcon = function(key) {
-      if (sortVal === key + '_desc') return '<span style="color:#a855f7;font-size:12px;margin-right:4px;">↓</span>';
-      if (sortVal === key + '_asc') return '<span style="color:#a855f7;font-size:12px;margin-right:4px;">↑</span>';
-      return '<span style="color:rgba(255,255,255,0.15);font-size:12px;margin-right:4px;">↕</span>';
+      if (sortVal === key + '_desc') return '<span style="color:#a855f7;font-size:var(--type-label);margin-right:4px;">↓</span>';
+      if (sortVal === key + '_asc') return '<span style="color:#a855f7;font-size:var(--type-label);margin-right:4px;">↑</span>';
+      return '<span style="color:rgba(255,255,255,0.15);font-size:var(--type-label);margin-right:4px;">↕</span>';
     };
 
-    var thStyle = 'cursor:pointer;text-align:right; padding:12px 16px; color:#8892a4; font-weight:600; font-size:10px; transition:color 0.2s;';
+    var thStyle = 'cursor:pointer;text-align:right; padding:12px 16px; color:#8892a4; font-weight:var(--weight-semibold); font-size:var(--type-micro); transition:color 0.2s;';
 
     container.innerHTML = '<div>' +
       /* Filter row */
       '<div class="s3-filter-row" style="display:flex;flex-direction:row;gap:12px;margin-bottom:16px;flex-direction:row-reverse;width:100%; align-items:center;">' +
         '<div id="s3-sort-wrap" style="min-width:140px;"></div>' +
-        '<div id="s3-clear-sort-wrap" style="min-width:110px; display:flex; align-items:center;"><button id="s3-clear-sort" type="button"' + (sortVal === 'date_desc' ? ' disabled' : '') + ' style="width:100%; height:36px; padding:0 12px; border-radius:8px; border:1px solid rgba(168,85,247,0.35); background:rgba(168,85,247,0.10); color:#c084fc; font-family:inherit; font-size:11px; font-weight:700; cursor:' + (sortVal === 'date_desc' ? 'default' : 'pointer') + '; opacity:' + (sortVal === 'date_desc' ? '0.45' : '1') + ';">' + tt('orders.clearSort') + '</button></div>' +
+        '<div id="s3-clear-sort-wrap" style="min-width:110px; display:flex; align-items:center;"><button id="s3-clear-sort" type="button"' + (sortVal === 'date_desc' ? ' disabled' : '') + ' style="width:100%; height:36px; padding:0 12px; border-radius:var(--dash-radius-sm); border:1px solid rgba(168,85,247,0.35); background:rgba(168,85,247,0.10); color:#c084fc; font-family:inherit; font-size:var(--type-caption); font-weight:var(--weight-semibold); cursor:' + (sortVal === 'date_desc' ? 'default' : 'pointer') + '; opacity:' + (sortVal === 'date_desc' ? '0.45' : '1') + ';">' + tt('orders.clearSort') + '</button></div>' +
         '<div id="s3-status-wrap" style="min-width:150px;"></div>' +
         '<div id="s3-date-wrap" style="min-width:140px;"></div>' +
         '<div id="s3-product-wrap" style="min-width:140px;"></div>' +
         '<div id="s3-city-wrap" style="min-width:140px;"></div>' +
         /* Search input wrapper */
         '<div class="explorer-search-wrap" style="flex:1; width:auto; display:flex; align-items:center; position:relative;">' +
-          '<span class="explorer-search-icon" style="right:12px; left:auto; pointer-events:none; font-size:10px; color:#64748b; position:absolute;">🔍</span>' +
+          '<span class="explorer-search-icon" style="right:12px; left:auto; pointer-events:none; font-size:var(--type-micro); color:#64748b; position:absolute;">🔍</span>' +
           '<input id="s3-search" type="text" class="explorer-search" value="' + searchTerm + '" placeholder="' + tt('orders.searchPlaceholder') + '" style="direction:' + (isRtl ? 'rtl' : 'ltr') + '; text-align:right; padding:6px 32px 6px 12px; width:100%;" autocomplete="off" spellcheck="false" />' +
         '</div>' +
       '</div>' +
 
       /* Table structure */
-      '<div class="explorer-table-wrap s3-table-scroll" style="background:#0b1120;border:1px solid rgba(255,255,255,0.06);border-radius:12px;width:100%;">' +
+      '<div class="explorer-table-wrap s3-table-scroll" style="background:var(--dash-surface);border:1px solid rgba(255,255,255,0.06);border-radius:var(--dash-radius-md);width:100%;">' +
         '<table class="explorer-table" style="min-width:1120px;width:100%;direction:' + (isRtl ? 'rtl' : 'ltr') + ';border-collapse:collapse;">' +
           '<thead>' +
             '<tr style="background:rgba(255,255,255,0.015); border-bottom:1px solid rgba(255,255,255,0.04);">' +
@@ -1265,7 +1417,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
               '<th style="' + thStyle.replace('cursor:pointer;', '') + '">' + tx('رقم العميل') + '</th>' +
               '<th class="s3-sortable" data-sort="customer" style="' + thStyle + '">' + tx('العميل') + ' ' + sortIcon('customer') + '</th>' +
               '<th class="s3-sortable" data-sort="city" style="' + thStyle + '">' +
-                '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end; font-weight:700;">' + mapPinSvg + ' ' + tx('المدينة') + ' ' + sortIcon('city') + '</div>' +
+                '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end; font-weight:var(--weight-bold);">' + mapPinSvg + ' ' + tx('المدينة') + ' ' + sortIcon('city') + '</div>' +
               '</th>' +
               '<th class="s3-sortable" data-sort="product" style="' + thStyle + '">' + tx('المنتج') + ' ' + sortIcon('product') + '</th>' +
               '<th class="s3-sortable" data-sort="total" style="' + thStyle + '">' + tx('قيمة الطلب') + ' ' + sortIcon('total') + '</th>' +
@@ -1416,9 +1568,34 @@ window.renderSection3 = function (mountEl, data, ctx) {
   }
 
   function canUseBackendOrdersPage() {
-    return backendOrdersEnabled &&
+    return !isConfirmationStageId(activeStageId) &&
+      backendOrdersEnabled &&
       window.DashboardQueryRuntime &&
       typeof window.DashboardQueryRuntime.query === 'function';
+  }
+
+  function renderOrdersTableSkeleton(rowsEl) {
+    if (!rowsEl) return;
+    var cells = [12, 10, 18, 13, 26, 10, 12, 13, 14, 4];
+    var rowCount = Math.min(Math.max(Number(perPage) || 10, 5), 8);
+    var html = [];
+    for (var r = 0; r < rowCount; r++) {
+      html.push('<tr class="s3-order-skeleton-row" aria-hidden="true">');
+      cells.forEach(function (width) {
+        html.push('<td><span class="s3-order-skeleton-cell" style="width:' + width + 'ch"></span></td>');
+      });
+      html.push('</tr>');
+    }
+    rowsEl.innerHTML = html.join('');
+  }
+
+  function setOrdersTableBusy(isBusy, rowsEl) {
+    var tableWrap = mountEl.querySelector('.s3-table-scroll');
+    if (tableWrap) {
+      tableWrap.classList.toggle('s3-table-loading', !!isBusy);
+      tableWrap.setAttribute('aria-busy', isBusy ? 'true' : 'false');
+    }
+    if (isBusy) renderOrdersTableSkeleton(rowsEl || mountEl.querySelector('#s3-rows'));
   }
 
   async function refreshTableData() {
@@ -1432,6 +1609,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
     var backendPage = null;
     if (canUseBackendOrdersPage()) {
       var backendSort = backendOrderSort();
+      setOrdersTableBusy(true, rowsEl);
       backendPage = await window.DashboardQueryRuntime.query('orders', {
         page: currentPage,
         pageSize: perPage,
@@ -1441,7 +1619,10 @@ window.renderSection3 = function (mountEl, data, ctx) {
         filters: backendOrderFilters()
       }, data).catch(function () { return null; });
       if (requestId !== backendOrdersRequest || !mountEl.isConnected) return;
+      setOrdersTableBusy(false, rowsEl);
       if (!backendPage || !backendPage.ok) backendPage = null;
+    } else {
+      setOrdersTableBusy(false, rowsEl);
     }
     var allFiltered = backendPage
       ? (backendPage.rows || []).map(normalizeBackendOrder)
@@ -1462,29 +1643,29 @@ window.renderSection3 = function (mountEl, data, ctx) {
 
     // 1. Draw Table Rows
     if (pageOrders.length === 0) {
-      rowsEl.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:48px;color:rgba(255,255,255,0.4);font-size:14px;">' +
+      rowsEl.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:48px;color:var(--dash-text-faint);font-size:var(--type-body);">' +
         tt('orders.emptyFiltered') +
       '</td></tr>';
     } else {
       rowsEl.innerHTML = pageOrders.map(function (o, i) {
         return '<tr class="s3-order-row" style="cursor:pointer; transition:background 0.15s; text-align:right; animation-delay: ' + (i * 12) + 'ms;">' +
-          '<td style="color:#3b82f6;font-weight:700;font-family:monospace;text-align:right;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.015);">' + o.id + '</td>' +
-          '<td style="font-size:11px;color:#93c5fd;font-family:monospace;text-align:right;direction:ltr;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.015);">' + (o.phone || '—') + '</td>' +
+          '<td style="color:#3b82f6;font-weight:var(--weight-semibold);font-family:var(--font-mono);text-align:right;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.015);">' + o.id + '</td>' +
+          '<td style="font-size:var(--type-caption);color:#93c5fd;font-family:var(--font-mono);text-align:right;direction:ltr;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.015);">' + (o.phone || '—') + '</td>' +
           '<td style="text-align:right;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.015);">' +
-            '<div style="color:#fff;font-weight:700;">' + o.customer + '</div>' +
+            '<div style="color:#fff;font-weight:var(--weight-semibold);">' + o.customer + '</div>' +
           '</td>' +
           '<td style="color:rgba(255,255,255,0.75);text-align:right;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.015);">' +
-            '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end; font-weight:700;">' + o.city + mapPinSvg + '</div>' +
+            '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end; font-weight:var(--weight-semibold);">' + o.city + mapPinSvg + '</div>' +
           '</td>' +
           '<td style="text-align:right;min-width:0;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.015);">' +
             '<div style="display:flex;align-items:center;gap:10px;justify-content:flex-start;min-width:0;direction:' + (isRtl ? 'rtl' : 'ltr') + ';">' +
               productThumb(o.type, 36) +
-              '<span data-i18n-preserve style="color:rgba(255,255,255,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;font-weight:700;">' + o.product + '</span>' +
+              '<span data-i18n-preserve style="color:rgba(255,255,255,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;font-weight:var(--weight-semibold);">' + o.product + '</span>' +
             '</div>' +
           '</td>' +
-          '<td style="color:#fff;text-align:right;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.015);font-variant-numeric:tabular-nums;"><span style="font-weight:700;">' + formatReadableNumber(o.total, 2) + '</span> <span style="font-size:10px;color:rgba(255,255,255,0.5);">' + activeCurrency + '</span></td>' +
-          '<td style="color:#f59e0b;font-weight:700;text-shadow:0 0 8px rgba(245,158,11,0.3);text-align:right;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.015);font-variant-numeric:tabular-nums;">' + formatReadableNumber(o.commission, 2) + ' <span style="font-size:10px;color:rgba(255,255,255,0.4);font-weight:500;">' + activeCurrency + '</span></td>' +
-          '<td style="color:' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(54, 4, 83, 0.4)' : 'rgba(255,255,255,0.4)') + ';font-size:12px;text-align:right;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.015);">' + formatDate(o.date) + '</td>' +
+          '<td style="color:#fff;text-align:right;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.015);font-variant-numeric:tabular-nums;"><span style="font-weight:var(--weight-semibold);">' + formatReadableNumber(o.total, 2) + '</span> <span style="font-size:var(--type-micro);color:var(--dash-text-faint);">' + activeCurrency + '</span></td>' +
+          '<td style="color:#f59e0b;font-weight:var(--weight-semibold);text-shadow:0 0 8px rgba(245,158,11,0.3);text-align:right;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.015);font-variant-numeric:tabular-nums;">' + formatReadableNumber(o.commission, 2) + ' <span style="font-size:var(--type-micro);color:var(--dash-text-faint);font-weight:var(--weight-medium);">' + activeCurrency + '</span></td>' +
+          '<td style="color:' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(54, 4, 83, 0.4)' : 'rgba(255,255,255,0.4)') + ';font-size:var(--type-label);text-align:right;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.015);">' + formatDate(o.date) + '</td>' +
           '<td style="text-align:right;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.015);">' + statusPill(o.status) + '</td>' +
           '<td style="text-align:right;width:36px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.015);">' +
             '<button style="background:transparent;border:none;cursor:pointer;padding:6px;color:rgba(255,255,255,0.35);display:flex;align-items:center;justify-content:center;margin-right:auto;">' +
@@ -1512,7 +1693,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
       if (!window.renderDashboardPagination) {
       pagWrap.innerHTML = 
         /* Page Limit selector (RTL alignment) */
-        '<div style="display:flex;align-items:center;gap:10px;font-size:11px;color:rgba(255,255,255,0.55);flex-direction:row-reverse;">' +
+        '<div style="display:flex;align-items:center;gap:10px;font-size:var(--type-caption);color:rgba(255,255,255,0.55);flex-direction:row-reverse;">' +
           '<span>' + tx('عرض') + '</span>' +
           '<div id="s3-per-page-wrap" style="min-width:60px;"></div>' +
           '<span>' + tx('لكل صفحة') + '</span>' +
@@ -1530,7 +1711,7 @@ window.renderSection3 = function (mountEl, data, ctx) {
         '</div>' +
         
         /* showing numbers count */
-        '<div class="explorer-pagination-info" style="font-size:11px;color:rgba(255,255,255,0.55);">' + tt('orders.pagination', { start: startLabel, end: endLabel, total: totalLabel }) + '</div>';
+        '<div class="explorer-pagination-info" style="font-size:var(--type-caption);color:rgba(255,255,255,0.55);">' + tt('orders.pagination', { start: startLabel, end: endLabel, total: totalLabel }) + '</div>';
 
       }
 
@@ -1597,12 +1778,12 @@ window.renderSection3 = function (mountEl, data, ctx) {
   function render() {
     var isRtl = window.dashboardI18n ? window.dashboardI18n.isRtl() : true;
     var html =
-      '<div class="dash-scroll" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;background:#080b12;direction:' + (isRtl ? 'rtl' : 'ltr') + ';">' +
+      '<div class="dash-scroll" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;background:var(--dash-bg);direction:' + (isRtl ? 'rtl' : 'ltr') + ';">' +
 
         /* Page title headers */
         '<div style="padding-top:28px;padding-bottom:16px;padding-left:40px;padding-right:40px;text-align:center;">' +
-          '<h1 id="s3-h1" style="font-size:30px;font-weight:900;color:var(--dash-text,#fff);margin:0;opacity:0;transform:translateY(-8px);transition:opacity 0.4s ease,transform 0.4s ease;">' + tt('orders.pipelineTitle') + '</h1>' +
-          '<div id="s3-sub" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dash-text-faint,rgba(255,255,255,0.45));margin-top:8px;justify-content:center;flex-direction:row-reverse;opacity:0;transition:opacity 0.4s ease 0.1s;">' +
+          '<h1 id="s3-h1" style="font-size:var(--type-page-title);font-weight:var(--weight-bold);color:var(--dash-text,#fff);margin:0;opacity:0;transform:translateY(-8px);transition:opacity 0.4s ease,transform 0.4s ease;">' + tt('orders.pipelineTitle') + '</h1>' +
+          '<div id="s3-sub" style="display:flex;align-items:center;gap:6px;font-size:var(--type-label);color:var(--dash-text-faint,rgba(255,255,255,0.45));margin-top:8px;justify-content:center;flex-direction:row-reverse;opacity:0;transition:opacity 0.4s ease 0.1s;">' +
             tt('orders.pipelineHint') +
             '<svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" width="14" height="14" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
           '</div>' +

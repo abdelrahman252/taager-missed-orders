@@ -137,7 +137,7 @@ contextBridge.exposeInMainWorld("api", {
   setLaunchMinimized: (val)  => monitoredInvoke("set-launch-minimized", val),
   setAutoConfirm:     (val)  => monitoredInvoke("set-auto-confirm", val),
   getAutoRunProgress: ()     => monitoredInvoke("get-auto-run-progress"),
-  killBot:            ()     => ipcRenderer.send("kill-bot"),
+  killBot:            ()     => monitoredInvoke("kill-bot"),
   openFolder:         (folder) => monitoredInvoke("open-folder", folder),
   getProfilePath:      ()     => monitoredInvoke("get-profile-path"),
 

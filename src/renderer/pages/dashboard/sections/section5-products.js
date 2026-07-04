@@ -1,4 +1,4 @@
-﻿// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // section5-products.js  -  Task 5: أفضل المنتجات
 //
 // FIXES vs v6:
@@ -17,11 +17,11 @@ function isActiveProductsPane(mountEl) {
 
 function productsHydrationSkeleton() {
   return '<div class="dash-scroll" data-dashboard-hydrating="products" role="status" aria-live="polite" aria-label="Loading" ' +
-    'style="flex:1;display:flex;align-items:center;justify-content:center;background:#080b12;">' +
+    'style="flex:1;display:flex;align-items:center;justify-content:center;background:var(--dash-bg);">' +
       '<div aria-hidden="true" style="width:min(720px,78%);display:grid;gap:14px;">' +
-        '<div style="height:28px;width:38%;border-radius:10px;background:rgba(255,255,255,0.07);"></div>' +
-        '<div style="height:92px;border-radius:16px;background:rgba(255,255,255,0.045);"></div>' +
-        '<div style="height:160px;border-radius:16px;background:rgba(255,255,255,0.035);"></div>' +
+        '<div style="height:28px;width:38%;border-radius:var(--dash-radius-md);background:rgba(255,255,255,0.07);"></div>' +
+        '<div style="height:92px;border-radius:var(--dash-radius-xl);background:rgba(255,255,255,0.045);"></div>' +
+        '<div style="height:160px;border-radius:var(--dash-radius-xl);background:rgba(255,255,255,0.035);"></div>' +
       '</div>' +
     '</div>';
 }
@@ -196,14 +196,14 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       'background:rgba(2,6,23,0.72)'
     ].join(';');
     overlay.innerHTML =
-      '<div role="dialog" aria-modal="true" aria-labelledby="s5-edit-name-title" style="width:min(440px,94vw);border-radius:16px;background:#0b1120;border:1px solid rgba(255,255,255,0.12);padding:18px;color:#fff;font-family:inherit">' +
-        '<div id="s5-edit-name-title" style="font-size:16px;font-weight:900;margin-bottom:6px">' + esc(s5Txt('Edit product name', 'تعديل اسم المنتج')) + '</div>' +
-        skuCopyHtml(sku, { block: true, prefix: false, style: 'font-size:11px;color:rgba(255,255,255,0.48);font-weight:700;margin-bottom:12px;direction:ltr;text-align:left' }) +
-        '<input id="s5-product-name-edit-input" data-i18n-preserve type="text" value="' + attrData(currentName) + '" autocomplete="off" spellcheck="false" style="width:100%;box-sizing:border-box;border-radius:11px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.06);color:#fff;font-family:inherit;font-size:13px;font-weight:700;padding:11px 12px;outline:none" />' +
+      '<div role="dialog" aria-modal="true" aria-labelledby="s5-edit-name-title" style="width:min(440px,94vw);border-radius:var(--dash-radius-xl);background:var(--dash-surface);border:1px solid rgba(255,255,255,0.12);padding:18px;color:#fff;font-family:inherit">' +
+        '<div id="s5-edit-name-title" style="font-size:var(--type-subtitle);font-weight:var(--weight-bold);margin-bottom:6px">' + esc(s5Txt('Edit product name', 'تعديل اسم المنتج')) + '</div>' +
+        skuCopyHtml(sku, { block: true, prefix: false, style: 'font-size:var(--type-caption);color:rgba(255,255,255,0.48);font-weight:var(--weight-bold);margin-bottom:12px;direction:ltr;text-align:left' }) +
+        '<input id="s5-product-name-edit-input" data-i18n-preserve type="text" value="' + attrData(currentName) + '" autocomplete="off" spellcheck="false" style="width:100%;box-sizing:border-box;border-radius:var(--dash-radius-md);border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.06);color:#fff;font-family:inherit;font-size:var(--type-control);font-weight:var(--weight-bold);padding:11px 12px;outline:none" />' +
         '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;flex-wrap:wrap">' +
-          '<button type="button" data-s5-edit-cancel style="border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.78);border-radius:10px;padding:9px 14px;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer">' + esc(s5Txt('Cancel', 'إلغاء')) + '</button>' +
-          '<button type="button" data-s5-edit-clear style="border:1px solid rgba(248,113,113,0.28);background:rgba(248,113,113,0.10);color:#fca5a5;border-radius:10px;padding:9px 14px;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer">' + esc(s5Txt('Use SKU', 'استخدم الكود')) + '</button>' +
-          '<button type="button" data-s5-edit-save style="border:1px solid rgba(56,189,248,0.38);background:#0284c7;color:#fff;border-radius:10px;padding:9px 16px;font-family:inherit;font-size:12px;font-weight:900;cursor:pointer">' + esc(s5Txt('Save name', 'حفظ الاسم')) + '</button>' +
+          '<button type="button" data-s5-edit-cancel style="border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.78);border-radius:var(--dash-radius-md);padding:9px 14px;font-family:inherit;font-size:var(--type-label);font-weight:var(--weight-bold);cursor:pointer">' + esc(s5Txt('Cancel', 'إلغاء')) + '</button>' +
+          '<button type="button" data-s5-edit-clear style="border:1px solid rgba(248,113,113,0.28);background:rgba(248,113,113,0.10);color:#fca5a5;border-radius:var(--dash-radius-md);padding:9px 14px;font-family:inherit;font-size:var(--type-label);font-weight:var(--weight-bold);cursor:pointer">' + esc(s5Txt('Use SKU', 'استخدم الكود')) + '</button>' +
+          '<button type="button" data-s5-edit-save style="border:1px solid rgba(56,189,248,0.38);background:#0284c7;color:#fff;border-radius:var(--dash-radius-md);padding:9px 16px;font-family:inherit;font-size:var(--type-label);font-weight:var(--weight-bold);cursor:pointer">' + esc(s5Txt('Save name', 'حفظ الاسم')) + '</button>' +
         '</div>' +
       '</div>';
 
@@ -1294,10 +1294,10 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     const hasDeliveries = (deliveredCount || 0) > 0;
     const hasOrders = (placedCount || 0) > 0;
     if (!hasDeliveries && !hasOrders) {
-      return `<div style="width:32px;height:32px;border-radius:50%;flex-shrink:0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.25);font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center">${rank}</div>`;
+      return `<div style="width:32px;height:32px;border-radius:50%;flex-shrink:0;background:rgba(255,255,255,0.05);border:1px solid var(--dash-border-soft);color:rgba(255,255,255,0.25);font-size:var(--type-control);font-weight:var(--weight-bold);display:flex;align-items:center;justify-content:center">${rank}</div>`;
     }
     const cfg = (rank <= 3) ? RANK_CFG[rank - 1] : RANK_CFG[3];
-    return `<div style="width:32px;height:32px;border-radius:50%;flex-shrink:0;background:${cfg.bg};color:${cfg.color};font-size:14px;font-weight:900;display:flex;align-items:center;justify-content:center">${rank}</div>`;
+    return `<div style="width:32px;height:32px;border-radius:50%;flex-shrink:0;background:${cfg.bg};color:${cfg.color};font-size:var(--type-body);font-weight:var(--weight-bold);display:flex;align-items:center;justify-content:center">${rank}</div>`;
   }
 
   // ── Stat card icons ──────────────────────────────────────────────────────
@@ -1330,7 +1330,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     const capped = Math.min(Math.max(value, 0), 100);
     const label = s5PctValue(value);
 
-    return `<div class="s5-rate-badge"><div style="font-size:16px;font-weight:900;color:${color};line-height:1;text-align:center">${label}٪</div>
+    return `<div class="s5-rate-badge"><div style="font-size:var(--type-subtitle);font-weight:var(--weight-bold);color:${color};line-height:1;text-align:center">${label}٪</div>
 <div class="s5-rate-track" style="width:100%;height:3px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;margin-top:6px">
   <div class="s5-rate-bar" data-target="${capped}" style="height:100%;width:100%;transform:scaleX(${capped / 100});transform-origin:${isAr ? 'right' : 'left'};background:${color};border-radius:2px;transition:none"></div>
 </div></div>`;
@@ -1352,10 +1352,10 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       const indent = i * 14;
       return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;padding-right:${indent}px">
         <div style="width:${Math.max(4, s.pct)}%;max-width:160px;height:20px;border-radius:4px;background:${s.color}22;border:1px solid ${s.color}55;display:flex;align-items:center;padding:0 8px;min-width:56px">
-          <div style="font-size:10px;font-weight:700;color:${s.color};white-space:nowrap">${s.pct}٪</div>
+          <div style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:${s.color};white-space:nowrap">${s.pct}٪</div>
         </div>
-        <div style="font-size:12px;color:rgba(255,255,255,0.7);flex-shrink:0">${s.label}</div>
-        <div style="font-size:12px;font-weight:700;color:#fff;margin-right:auto">${(s.count||0).toLocaleString('en-US')}</div>
+        <div style="font-size:var(--type-label);color:rgba(255,255,255,0.7);flex-shrink:0">${s.label}</div>
+        <div style="font-size:var(--type-label);font-weight:var(--weight-bold);color:#fff;margin-right:auto">${(s.count||0).toLocaleString('en-US')}</div>
       </div>`;
     }).join('');
   }
@@ -1388,7 +1388,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
   }
 
   function analysisPlaceholderHTML(label, loading) {
-    return `<div class="${loading ? 's5-analysis-loading' : 's5-analysis-empty'}" style="color:rgba(255,255,255,0.3);font-size:12px;font-style:${loading ? 'italic' : 'normal'};padding:8px 0">${label}</div>`;
+    return `<div class="${loading ? 's5-analysis-loading' : 's5-analysis-empty'}" style="color:rgba(255,255,255,0.3);font-size:var(--type-label);font-style:${loading ? 'italic' : 'normal'};padding:8px 0">${label}</div>`;
   }
 
   function citiesHTML(p) {
@@ -1397,7 +1397,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         ? analysisPlaceholderHTML(s5Txt('Loading city data...', 'جار تحميل بيانات المدن...'), true)
         : analysisPlaceholderHTML(s5Txt('No data', 'لا توجد بيانات'), false);
     }
-    if (!p.cityBreakdown || !p.cityBreakdown.length) return `<div style="color:rgba(255,255,255,0.3);font-size:12px">${s5Txt('No data', 'لا توجد بيانات')}</div>`;
+    if (!p.cityBreakdown || !p.cityBreakdown.length) return `<div style="color:rgba(255,255,255,0.3);font-size:var(--type-label)">${s5Txt('No data', 'لا توجد بيانات')}</div>`;
     const topCities = p.cityBreakdown.slice(0, 5);
     const maxCount = topCities[0].count;
 
@@ -1448,12 +1448,12 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
     const headerRow = `<div style="display:grid;grid-template-columns:1fr 42px 42px 42px 42px 42px;gap:5px;
       padding:3px 6px 6px;margin-bottom:2px;border-bottom:1px solid rgba(255,255,255,0.06);">
-      <span style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.28)">${s5Txt('City','المدينة')}</span>
-      <span style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Orders','طلبات')}</span>
-      <span style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Conf.','مؤكد')}</span>
-      <span style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.28);text-align:center">CR</span>
-      <span style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Dlvrd','وصل')}</span>
-      <span style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.28);text-align:center">NDR</span>
+      <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28)">${s5Txt('City','المدينة')}</span>
+      <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Orders','طلبات')}</span>
+      <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Conf.','مؤكد')}</span>
+      <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28);text-align:center">CR</span>
+      <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Dlvrd','وصل')}</span>
+      <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28);text-align:center">NDR</span>
     </div>`;
 
     const dataRows = topCities.map((c, i) => {
@@ -1470,18 +1470,18 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       const ndrTextColor = ndrVal === null ? 'rgba(255,255,255,0.22)' : ndrColor(ndrVal);
       const ndrText  = ndrVal === null ? '-' : s5PctValue(ndrVal) + '%';
       return `<div style="display:grid;grid-template-columns:1fr 42px 42px 42px 42px 42px;gap:5px;
-        align-items:center;margin-bottom:7px;padding:5px 6px;border-radius:7px;background:rgba(255,255,255,0.02);">
+        align-items:center;margin-bottom:7px;padding:5px 6px;border-radius:var(--dash-radius-sm);background:rgba(255,255,255,0.02);">
         <div>
-          <div style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.name)}</div>
+          <div style="font-size:var(--type-caption);font-weight:var(--weight-bold);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.name)}</div>
           <div style="height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;margin-top:4px">
             <div style="height:100%;width:${barPct}%;background:${color};border-radius:2px"></div>
           </div>
         </div>
-        <div style="text-align:center;font-size:11px;font-weight:700;color:${color}">${c.count}</div>
-        <div style="text-align:center;font-size:11px;font-weight:700;color:#3b82f6">${confirmedDisplay}</div>
-        <div style="text-align:center;font-size:11px;font-weight:800;color:${crColor}">${crText}</div>
-        <div style="text-align:center;font-size:11px;font-weight:700;color:rgba(255,255,255,0.65)">${deliveredDisplay}</div>
-        <div style="text-align:center;font-size:11px;font-weight:800;color:${ndrTextColor}">${ndrText}</div>
+        <div style="text-align:center;font-size:var(--type-caption);font-weight:var(--weight-bold);color:${color}">${c.count}</div>
+        <div style="text-align:center;font-size:var(--type-caption);font-weight:var(--weight-bold);color:#3b82f6">${confirmedDisplay}</div>
+        <div style="text-align:center;font-size:var(--type-caption);font-weight:var(--weight-bold);color:${crColor}">${crText}</div>
+        <div style="text-align:center;font-size:var(--type-caption);font-weight:var(--weight-bold);color:rgba(255,255,255,0.65)">${deliveredDisplay}</div>
+        <div style="text-align:center;font-size:var(--type-caption);font-weight:var(--weight-bold);color:${ndrTextColor}">${ndrText}</div>
       </div>`;
     }).join('');
 
@@ -1503,12 +1503,12 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     const maxCount = p.piecesBreakdown.reduce((max, x) => Math.max(max, Number(x.count) || 0), 0) || 1;
     const headerRow = `<div style="display:grid;grid-template-columns:38px 46px 46px 46px 46px 46px;gap:5px;
       padding:3px 0 6px;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.06);">
-      <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.28)">${s5Txt('Qty','Qty')}</span>
-      <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Orders','Orders')}</span>
-      <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Conf.','مؤكد')}</span>
-      <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.28);text-align:center">CR</span>
-      <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Delivered','Delivered')}</span>
-      <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.28);text-align:center">${s5Txt('NDR','NDR')}</span>
+      <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28)">${s5Txt('Qty','Qty')}</span>
+      <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Orders','Orders')}</span>
+      <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Conf.','مؤكد')}</span>
+      <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28);text-align:center">CR</span>
+      <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Delivered','Delivered')}</span>
+      <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28);text-align:center">${s5Txt('NDR','NDR')}</span>
     </div>`;
     const rows = p.piecesBreakdown.map(item => {
       const pct = parseFloat((item.count / total * 100).toFixed(1));
@@ -1529,16 +1529,16 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       const ndrTextColor = hasOrders ? ndrColor(ndrVal) : 'rgba(255,255,255,0.45)';
       return `<div style="display:grid;grid-template-columns:38px 46px 46px 46px 46px 46px;gap:5px;align-items:center;margin-bottom:8px">
         <div>
-          <div style="font-size:13px;font-weight:900;color:#f59e0b">${esc(item.qty)}x</div>
+          <div style="font-size:var(--type-control);font-weight:var(--weight-bold);color:#f59e0b">${esc(item.qty)}x</div>
           <div style="height:3px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;margin-top:4px">
             <div style="height:100%;width:${barPct || pct}%;background:#f59e0b;border-radius:2px"></div>
           </div>
         </div>
-        <span style="text-align:center;font-size:12px;font-weight:700;color:#f59e0b">${Number(item.count || 0).toLocaleString('en-US')}</span>
-        <span style="text-align:center;font-size:12px;font-weight:700;color:#3b82f6">${confirmed.toLocaleString('en-US')}</span>
-        <span style="text-align:center;font-size:11px;font-weight:700;color:${crTextColor}">${crText}</span>
-        <span style="text-align:center;font-size:12px;font-weight:700;color:#00e676">${hasDeliveredMetric ? delivered.toLocaleString('en-US') : '-'}</span>
-        <span style="text-align:center;font-size:11px;font-weight:700;color:${ndrTextColor}">${ndrText}</span>
+        <span style="text-align:center;font-size:var(--type-label);font-weight:var(--weight-bold);color:#f59e0b">${Number(item.count || 0).toLocaleString('en-US')}</span>
+        <span style="text-align:center;font-size:var(--type-label);font-weight:var(--weight-bold);color:#3b82f6">${confirmed.toLocaleString('en-US')}</span>
+        <span style="text-align:center;font-size:var(--type-caption);font-weight:var(--weight-bold);color:${crTextColor}">${crText}</span>
+        <span style="text-align:center;font-size:var(--type-label);font-weight:var(--weight-bold);color:#00e676">${hasDeliveredMetric ? delivered.toLocaleString('en-US') : '-'}</span>
+        <span style="text-align:center;font-size:var(--type-caption);font-weight:var(--weight-bold);color:${ndrTextColor}">${ndrText}</span>
       </div>`;
     }).join('');
     return headerRow + rows;
@@ -1556,7 +1556,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         : analysisPlaceholderHTML(s5Txt('No data', 'لا توجد بيانات'), false);
     }
     if (!p.quantityCityBreakdown || !p.quantityCityBreakdown.length) {
-      return `<div style="color:rgba(255,255,255,0.3);font-size:12px">${s5Txt('No data', 'لا توجد بيانات')}</div>`;
+      return `<div style="color:rgba(255,255,255,0.3);font-size:var(--type-label)">${s5Txt('No data', 'لا توجد بيانات')}</div>`;
     }
 
     const PAGE_SIZE_QTY_CITIES = options.pageSize || 4;
@@ -1596,12 +1596,12 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
         const colHdr = `<div style="display:grid;grid-template-columns:1fr 42px 42px 42px 42px 42px;gap:5px;
           padding:3px 6px 5px;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,0.06);">
-          <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.28)">${s5Txt('City','المدينة')}</span>
-          <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Orders','طلبات')}</span>
-          <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Conf.','مؤكد')}</span>
-          <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.28);text-align:center">CR</span>
-          <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Delivered','مُسلَّمة')}</span>
-          <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.28);text-align:center">${s5Txt('NDR','NDR')}</span>
+          <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28)">${s5Txt('City','المدينة')}</span>
+          <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Orders','طلبات')}</span>
+          <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Conf.','مؤكد')}</span>
+          <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28);text-align:center">CR</span>
+          <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28);text-align:center">${s5Txt('Delivered','مُسلَّمة')}</span>
+          <span style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.28);text-align:center">${s5Txt('NDR','NDR')}</span>
         </div>`;
 
         const cityRows = cities.length ? cities.map((city, i) => {
@@ -1627,23 +1627,23 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           }
           return `<div style="display:grid;grid-template-columns:1fr 42px 42px 42px 42px 42px;gap:5px;
             align-items:center;margin-bottom:${i === cities.length - 1 ? '0' : '7px'};
-            padding:5px 6px;border-radius:7px;background:rgba(255,255,255,0.02);">
+            padding:5px 6px;border-radius:var(--dash-radius-sm);background:rgba(255,255,255,0.02);">
             <div>
-              <div style="font-size:11px;color:rgba(255,255,255,0.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(city.name)}</div>
+              <div style="font-size:var(--type-caption);color:rgba(255,255,255,0.75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(city.name)}</div>
               <div style="height:2px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;margin-top:3px">
                 <div style="height:100%;width:${barPct}%;background:#f59e0b;border-radius:2px"></div>
               </div>
             </div>
-            <span style="text-align:center;font-size:12px;font-weight:700;color:#f59e0b">${city.count.toLocaleString('en-US')}</span>
-            <span style="text-align:center;font-size:12px;font-weight:700;color:#3b82f6">${confirmed.toLocaleString('en-US')}</span>
-            <span style="text-align:center;font-size:11px;font-weight:700;color:${crColor}">${crCell}</span>
-            <span style="text-align:center;font-size:12px;font-weight:700;color:#00e676">${deliveredCell}</span>
-            <span style="text-align:center;font-size:11px;font-weight:700;color:${ndrTextColor}">${ndrCell}</span>
+            <span style="text-align:center;font-size:var(--type-label);font-weight:var(--weight-bold);color:#f59e0b">${city.count.toLocaleString('en-US')}</span>
+            <span style="text-align:center;font-size:var(--type-label);font-weight:var(--weight-bold);color:#3b82f6">${confirmed.toLocaleString('en-US')}</span>
+            <span style="text-align:center;font-size:var(--type-caption);font-weight:var(--weight-bold);color:${crColor}">${crCell}</span>
+            <span style="text-align:center;font-size:var(--type-label);font-weight:var(--weight-bold);color:#00e676">${deliveredCell}</span>
+            <span style="text-align:center;font-size:var(--type-caption);font-weight:var(--weight-bold);color:${ndrTextColor}">${ndrCell}</span>
           </div>`;
-        }).join('') : `<div style="color:rgba(255,255,255,0.3);font-size:11px">${s5Txt('No data', 'لا توجد بيانات')}</div>`;
+        }).join('') : `<div style="color:rgba(255,255,255,0.3);font-size:var(--type-caption)">${s5Txt('No data', 'لا توجد بيانات')}</div>`;
 
-        return `<div style="min-width:0;padding:12px;border-radius:10px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06)">
-          <div style="font-size:13px;font-weight:900;color:#f59e0b;margin-bottom:10px">${esc(item.qty)}x</div>
+        return `<div style="min-width:0;padding:12px;border-radius:var(--dash-radius-md);background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06)">
+          <div style="font-size:var(--type-control);font-weight:var(--weight-bold);color:#f59e0b;margin-bottom:10px">${esc(item.qty)}x</div>
           ${colHdr}${cityRows}
         </div>`;
       }).join('')}
@@ -1652,8 +1652,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
   function detailPanelContent(p) {
     var aiHtml = window.renderProductAiAdvisor ? window.renderProductAiAdvisor(p) : '';
-    var cardStyle = 'background:rgba(255,255,255,0.018);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px 16px;';
-    var labelStyle = 'font-size:10px;font-weight:800;color:rgba(255,255,255,0.35);letter-spacing:.5px;text-transform:uppercase;margin-bottom:10px;';
+    var cardStyle = 'background:rgba(255,255,255,0.018);border:1px solid rgba(255,255,255,0.06);border-radius:var(--dash-radius-md);padding:14px 16px;';
+    var labelStyle = 'font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.35);letter-spacing:.5px;text-transform:uppercase;margin-bottom:10px;';
     return (
       '<div style="display:grid;gap:12px;">' +
         /* AI Advisor — full width */
@@ -1734,6 +1734,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
     const productKey = p.key || p.sku || p.name || i;
     const totalPiecesText = productCompactNumber(p.totalPieces || 0, 0, 10000);
+    const shippingText = productCompactNumber(p.shippingCount || 0, 0, 10000);
+    const deliveredText = productCompactNumber(p.deliveredCount || 0, 0, 10000);
     const failedText = productCompactNumber(p.failedCount || 0, 0, 10000);
     const canceledText = productCompactNumber(p.canceledCount || 0, 0, 10000);
     const averageProfitText = productCompactNumber(p.averageProfit || 0, 2, 10000);
@@ -1741,26 +1743,20 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     const cpaText = productCompactNumber(p.cpa || 0, 2, 10000);
     const breakEvenText = productCompactNumber(p.breakEvenCpa || 0, 2, 10000);
     const pnlText = productCompactNumber(p.profitLoss || 0, 2, 10000);
-    let hlCount = p.deliveries || 0;
-    if (filterState.statusKey === 'shipping') hlCount = p.shippingCount || 0;
-    else if (filterState.statusKey === 'failed') hlCount = p.failedCount || 0;
-    else if (filterState.statusKey === 'canceled') hlCount = p.canceledCount || 0;
-    else if (filterState.statusKey === 'processing') hlCount = p.processingCount || 0;
     const displayOrderCount = p.totalOrderCount || p.statusTotalCount || p.placedCount || 0;
     const displayNetOrderCount = p.netOrderCount || p.placedCount || 0;
     const displayConfirmedCount = p.confirmationStatusCount || p.confirmedCount || 0;
     const placedText = productCompactNumber(displayOrderCount, 0, 10000);
     const netOrderText = productCompactNumber(displayNetOrderCount, 0, 10000);
     const confirmedText = productCompactNumber(displayConfirmedCount, 0, 10000);
-    const hlCountText = productCompactNumber(hlCount, 0, 10000);
     const revenueInFinancialCurrency = commissionInCurrency(p.revenue || 0);
     const revenueText = productCompactNumber(revenueInFinancialCurrency, 0, 10000);
     const productSkuLine = p.sku
-      ? skuCopyHtml(p.sku, { block: true, style: 'font-size:11px;color:rgba(255,255,255,0.32);margin-top:3px;font-weight:700' })
+      ? skuCopyHtml(p.sku, { block: true, style: 'font-size:var(--type-caption);color:rgba(255,255,255,0.32);margin-top:3px;font-weight:var(--weight-bold)' })
       : esc(p.cat);
 
     return `<div class="s5-product-row s5-metrics-track" data-idx="${i}" data-product-key="${attr(productKey)}"
-         style="display:flex;align-items:center;border-radius:14px;
+         style="display:flex;align-items:center;border-radius:var(--dash-radius-lg);
                 background:${hs.bg};
                  box-shadow:none;
                 border:1px solid ${hs.border};
@@ -1771,8 +1767,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       <div class="s5-cell s5-cell-identity" style="flex:0 0 200px;min-width:200px;padding:10px 10px;display:flex;align-items:center;gap:9px">
         ${rankBadgeHTML(p.rank, p.deliveredCount, p.placedCount || p.statusTotalCount || p.totalOrderCount)}
         <div style="text-align:start;min-width:0">
-          <div class="s5-product-title s5-product-name-edit" data-i18n-preserve data-product-sku="${attrData(p.sku || productKey)}" data-product-name="${attrData(p.name || '')}" title="${attrData(p.name || '')}" style="font-size:14px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">${escData(p.name)}</div>
-          <button type="button" class="s5-product-name-edit" data-product-sku="${attrData(p.sku || productKey)}" data-product-name="${attrData(p.name || '')}" style="margin-top:4px;background:transparent;border:0;color:#38bdf8;font-size:10px;font-weight:800;cursor:pointer;padding:0">${s5Txt('Edit name', 'تعديل الاسم')}</button>
+          <div class="s5-product-title s5-product-name-edit" data-i18n-preserve data-product-sku="${attrData(p.sku || productKey)}" data-product-name="${attrData(p.name || '')}" title="${attrData(p.name || '')}" style="font-size:var(--type-body);font-weight:var(--weight-bold);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">${escData(p.name)}</div>
           ${productSkuLine}
         </div>
       </div>
@@ -1780,37 +1775,49 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
       <!-- Col 2: Total Orders -->
       <div class="s5-cell s5-cell-orders" style="flex:0 0 64px;min-width:64px;text-align:center;padding:0 5px">
-        <div id="s5-placed-${i}" class="s5-number-fit" title="${attr(productNumber(displayOrderCount, 0))}" style="font-size:${compact?'15px':'17px'};font-weight:900;color:rgba(255,255,255,0.8)">${placedText}</div>
+        <div id="s5-placed-${i}" class="s5-number-fit" title="${attr(productNumber(displayOrderCount, 0))}" style="font-size:${compact?'15px':'17px'};font-weight:var(--weight-bold);color:rgba(255,255,255,0.8)">${placedText}</div>
       </div>
       ${DIV}
 
       <!-- Col 2b: Net Orders (excludes canceled-by-you) -->
       <div class="s5-cell s5-cell-net-orders" style="flex:0 0 64px;min-width:64px;text-align:center;padding:0 5px">
-        <div class="s5-number-fit" title="${attr(productNumber(displayNetOrderCount, 0))}" style="font-size:${compact?'15px':'17px'};font-weight:900;color:#38bdf8">${netOrderText}</div>
+        <div class="s5-number-fit" title="${attr(productNumber(displayNetOrderCount, 0))}" style="font-size:${compact?'15px':'17px'};font-weight:var(--weight-bold);color:#38bdf8">${netOrderText}</div>
       </div>
       ${DIV}
 
       <!-- Col 3: Quantity -->
       <div class="s5-cell s5-cell-pieces" style="flex:0 0 68px;min-width:68px;text-align:center;padding:0 5px">
-        <div class="s5-number-fit" title="${attr(productNumber(p.totalPieces || 0, 0))}" style="font-size:${compact?'14px':'16px'};font-weight:800;color:#3b82f6">${totalPiecesText}</div>
+        <div class="s5-number-fit" title="${attr(productNumber(p.totalPieces || 0, 0))}" style="font-size:${compact?'14px':'16px'};font-weight:var(--weight-bold);color:#3b82f6">${totalPiecesText}</div>
       </div>
       ${DIV}
 
-      <!-- Col 4: Failed Orders raw count -->
-      <div class="s5-cell s5-cell-failed" style="flex:0 0 64px;min-width:64px;text-align:center;padding:0 5px">
-        <div class="s5-number-fit" title="${attr(productNumber(p.failedCount || 0, 0))}" style="font-size:${compact?'14px':'16px'};font-weight:800;color:#f97316">${failedText}</div>
-      </div>
-      ${DIV}
-
-      <!-- Col 5: Canceled Orders raw count -->
-      <div class="s5-cell s5-cell-canceled-raw" style="flex:0 0 68px;min-width:68px;text-align:center;padding:0 5px">
-        <div class="s5-number-fit" title="${attr(productNumber(p.canceledCount || 0, 0))}" style="font-size:${compact?'14px':'16px'};font-weight:800;color:#ef4444">${canceledText}</div>
-      </div>
-      ${DIV}
-
-      <!-- Col 5b: Confirmed Orders count -->
+      <!-- Col 4: Confirmed Orders count -->
       <div class="s5-cell s5-cell-confirmed-count" style="flex:0 0 64px;min-width:64px;text-align:center;padding:0 5px">
-        <div class="s5-number-fit" title="${attr(productNumber(displayConfirmedCount, 0))}" style="font-size:${compact?'14px':'16px'};font-weight:800;color:#3b82f6">${confirmedText}</div>
+        <div class="s5-number-fit" title="${attr(productNumber(displayConfirmedCount, 0))}" style="font-size:${compact?'14px':'16px'};font-weight:var(--weight-bold);color:#3b82f6">${confirmedText}</div>
+      </div>
+      ${DIV}
+
+      <!-- Col 5: In Shipping count -->
+      <div class="s5-cell s5-cell-shipping" style="flex:0 0 64px;min-width:64px;text-align:center;padding:0 5px">
+        <div class="s5-number-fit" title="${attr(productNumber(p.shippingCount || 0, 0))}" style="font-size:${compact?'14px':'16px'};font-weight:var(--weight-bold);color:#14b8a6">${shippingText}</div>
+      </div>
+      ${DIV}
+
+      <!-- Col 6: Delivered Orders count -->
+      <div class="s5-cell s5-cell-delivered-count" style="flex:0 0 64px;min-width:64px;text-align:center;padding:0 5px">
+        <div id="s5-del-${i}" class="s5-number-fit" title="${attr(productNumber(p.deliveredCount || 0, 0))}" style="font-size:${compact?'15px':'17px'};font-weight:var(--weight-bold);color:#14b8a6">${deliveredText}${window.supposedBadgeHtml('delivered')}</div>
+      </div>
+      ${DIV}
+
+      <!-- Col 7: Failed Orders raw count -->
+      <div class="s5-cell s5-cell-failed" style="flex:0 0 64px;min-width:64px;text-align:center;padding:0 5px">
+        <div class="s5-number-fit" title="${attr(productNumber(p.failedCount || 0, 0))}" style="font-size:${compact?'14px':'16px'};font-weight:var(--weight-bold);color:#f97316">${failedText}</div>
+      </div>
+      ${DIV}
+
+      <!-- Col 8: Canceled Orders raw count -->
+      <div class="s5-cell s5-cell-canceled-raw" style="flex:0 0 68px;min-width:68px;text-align:center;padding:0 5px">
+        <div class="s5-number-fit" title="${attr(productNumber(p.canceledCount || 0, 0))}" style="font-size:${compact?'14px':'16px'};font-weight:var(--weight-bold);color:#ef4444">${canceledText}</div>
       </div>
       ${DIV}
 
@@ -1844,69 +1851,58 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       </div>
       ${DIV}
 
-      <!-- Col 11: Highlighted outcome count -->
-      <div class="s5-cell s5-cell-delivery-count" style="flex:0 0 ${compact?'64px':'66px'};min-width:${compact?'64px':'66px'};text-align:center;padding:0 5px">
-        <div id="s5-del-${i}" class="s5-number-fit" title="${attr(productNumber(hlCount, 0))}" style="font-size:${compact?'15px':'17px'};font-weight:900;color:${
-          filterState.statusKey === 'shipping' ? '#14b8a6' :
-          filterState.statusKey === 'failed' ? '#f97316' :
-          filterState.statusKey === 'canceled' ? '#ef4444' :
-          filterState.statusKey === 'processing' ? '#3b82f6' : '#14b8a6'
-        }">${hlCountText}${(!filterState.statusKey || filterState.statusKey === 'delivered' || filterState.statusKey === 'deliveries') ? window.supposedBadgeHtml('delivered') : ''}</div>
-      </div>
-      ${DIV}
-
       <!-- Col 11: Average Profit -->
       <div class="s5-cell s5-cell-average-profit" title="${attr(s5Txt('Average profit per delivered order', 'متوسط الربح لكل طلب مسلم'))}" style="flex:0 0 80px;min-width:80px;text-align:center;padding:0 5px">
-        <div class="s5-number-fit" data-financial-value="averageProfit" title="${attr(productMoney(p.averageProfit || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:900;color:#38bdf8;white-space:nowrap">${averageProfitText}</div>
-        <div data-financial-currency="averageProfit" style="font-size:9px;color:rgba(56,189,248,0.55);font-weight:700;margin-top:2px">${selectedCurrency()}</div>
+        <div class="s5-number-fit" data-financial-value="averageProfit" title="${attr(productMoney(p.averageProfit || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:var(--weight-bold);color:#38bdf8;white-space:nowrap">${averageProfitText}</div>
+        <div data-financial-currency="averageProfit" style="font-size:var(--type-micro);color:rgba(56,189,248,0.55);font-weight:var(--weight-bold);margin-top:2px">${selectedCurrency()}</div>
       </div>
       ${DIV}
 
       <!-- Col 12: Allocated Ad Spend -->
       <div class="s5-cell s5-cell-ad-spend" title="${attr(p5Txt('adSpendHelp'))}" style="flex:0 0 80px;min-width:80px;text-align:center;padding:0 5px">
-        <div class="s5-number-fit" data-financial-value="allocatedAdSpend" title="${attr(productMoney(p.allocatedAdSpend || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:800;color:#60a5fa;white-space:nowrap">${adSpendText}</div>
-        <div data-financial-currency="allocatedAdSpend" style="font-size:9px;color:rgba(96,165,250,0.55);font-weight:700;margin-top:2px">${selectedCurrency()}</div>
+        <div class="s5-number-fit" data-financial-value="allocatedAdSpend" title="${attr(productMoney(p.allocatedAdSpend || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:var(--weight-bold);color:#60a5fa;white-space:nowrap">${adSpendText}</div>
+        <div data-financial-currency="allocatedAdSpend" style="font-size:var(--type-micro);color:rgba(96,165,250,0.55);font-weight:var(--weight-bold);margin-top:2px">${selectedCurrency()}</div>
       </div>
       ${DIV}
 
       <!-- Col 13: CPA -->
       <div class="s5-cell s5-cell-cpa" title="${attr(p5Txt('cpaHelp'))}" style="flex:0 0 68px;min-width:68px;text-align:center;padding:0 5px">
-        <div class="s5-number-fit" data-financial-value="cpa" title="${attr(productMoney(p.cpa || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:800;color:#a78bfa;white-space:nowrap">${cpaText}</div>
-        <div data-financial-currency="cpa" style="font-size:9px;color:rgba(167,139,250,0.55);font-weight:700;margin-top:2px">${selectedCurrency()}</div>
+        <div class="s5-number-fit" data-financial-value="cpa" title="${attr(productMoney(p.cpa || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:var(--weight-bold);color:#a78bfa;white-space:nowrap">${cpaText}</div>
+        <div data-financial-currency="cpa" style="font-size:var(--type-micro);color:rgba(167,139,250,0.55);font-weight:var(--weight-bold);margin-top:2px">${selectedCurrency()}</div>
       </div>
       ${DIV}
 
       <!-- Col 14: Break-even CPA -->
       <div class="s5-cell s5-cell-breakeven" title="${attr(p5Txt('breakEvenHelp'))}" style="flex:0 0 76px;min-width:76px;text-align:center;padding:0 5px">
-        <div class="s5-number-fit" data-financial-value="breakEvenCpa" title="${attr(productMoney(p.breakEvenCpa || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:900;color:${(Number(p.cpa)||0) > (Number(p.breakEvenCpa)||0) ? '#ef4444' : '#f59e0b'};white-space:nowrap">${breakEvenText}</div>
-        <div data-financial-currency="breakEvenCpa" style="font-size:9px;color:rgba(245,158,11,0.55);font-weight:700;margin-top:2px">${selectedCurrency()}</div>
+        <div class="s5-number-fit" data-financial-value="breakEvenCpa" title="${attr(productMoney(p.breakEvenCpa || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:var(--weight-bold);color:${(Number(p.cpa)||0) > (Number(p.breakEvenCpa)||0) ? '#ef4444' : '#f59e0b'};white-space:nowrap">${breakEvenText}</div>
+        <div data-financial-currency="breakEvenCpa" style="font-size:var(--type-micro);color:rgba(245,158,11,0.55);font-weight:var(--weight-bold);margin-top:2px">${selectedCurrency()}</div>
       </div>
       ${DIV}
 
       <!-- Col 15: P&L -->
       <div class="s5-cell s5-cell-pnl" title="${attr(p5Txt('pnlHelp'))}" style="flex:0 0 76px;min-width:76px;text-align:center;padding:0 5px">
-        <div class="s5-number-fit" data-financial-value="profitLoss" title="${attr(productMoney(p.profitLoss || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:900;color:${p.profitLoss >= 0 ? '#00e676' : '#ef4444'};white-space:nowrap">${pnlText}${window.supposedBadgeHtml('profit')}</div>
-        <div data-financial-currency="profitLoss" style="font-size:9px;color:${p.profitLoss >= 0 ? 'rgba(0,230,118,0.55)' : 'rgba(239,68,68,0.55)'};font-weight:700;margin-top:2px">${selectedCurrency()}</div>
+        <div class="s5-number-fit" data-financial-value="profitLoss" title="${attr(productMoney(p.profitLoss || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:var(--weight-bold);color:${p.profitLoss >= 0 ? '#00e676' : '#ef4444'};white-space:nowrap">${pnlText}${window.supposedBadgeHtml('profit')}</div>
+        <div data-financial-currency="profitLoss" style="font-size:var(--type-micro);color:${p.profitLoss >= 0 ? 'rgba(0,230,118,0.55)' : 'rgba(239,68,68,0.55)'};font-weight:var(--weight-bold);margin-top:2px">${selectedCurrency()}</div>
       </div>
       ${DIV}
 
       <!-- Col 16: Taager profit (commission key retained for compatibility) -->
       <div class="s5-cell s5-cell-commission" style="flex:0 0 80px;min-width:80px;text-align:center;padding:0 5px">
-        <div style="font-size:${compact?'16px':'18px'};font-weight:900;color:${p.accent || '#f59e0b'};letter-spacing:-0.5px">
+        <div style="font-size:${compact?'16px':'18px'};font-weight:var(--weight-bold);color:${p.accent || '#f59e0b'};letter-spacing:-0.5px">
           <span id="s5-rev-${i}" class="s5-number-fit" data-financial-value="revenue" title="${attr(productMoney(revenueInFinancialCurrency) + (selectedCurrency() !== activeCurrency ? ' | Native: ' + productNumber(p.revenue || 0, 0) + ' ' + activeCurrency : ''))}">${revenueText}${window.supposedBadgeHtml('revenue')}</span>
         </div>
-        <div data-financial-currency="revenue" style="font-size:9px;color:rgba(255,255,255,0.35);font-weight:600;margin-top:2px">${selectedCurrency()}</div>
+        <div data-financial-currency="revenue" style="font-size:var(--type-micro);color:rgba(255,255,255,0.35);font-weight:var(--weight-semibold);margin-top:2px">${selectedCurrency()}</div>
       </div>
 
       <!-- Actions cell -->
-      <div class="s5-cell s5-cell-actions" style="width:72px;min-width:72px;height:100%;min-height:${minH};flex-shrink:0;display:grid;grid-template-columns:repeat(2, 26px);grid-auto-rows:26px;align-content:center;justify-content:center;column-gap:5px;row-gap:9px;
+      <div class="s5-cell s5-cell-actions" style="width:58px;min-width:58px;height:100%;min-height:${minH};flex-shrink:0;display:grid;grid-template-columns:repeat(2, 22px);grid-auto-rows:22px;align-content:center;justify-content:center;column-gap:4px;row-gap:5px;
                   background-color:#080b12;background-image:${hs.bg.includes('linear-gradient') ? hs.bg : 'none'};position:sticky;right:0;z-index:2;border-left:1px solid var(--dash-border-soft, rgba(255,255,255,0.08));
                   padding:4px;box-sizing:border-box;">
         
         <!-- T-22: Show on map button -->
         <button class="s5-map-btn" data-product-key="${attr(productKey)}" data-tooltip="${s5Txt('Analyze cities for this product', 'تحليل المدن لهذا المنتج')}"
-                style="width:28px;height:28px;border-radius:6px;border:1px solid rgba(20,184,166,0.3);
-                       background:rgba(20,184,166,0.1);color:#14b8a6;font-size:12px;
+                style="width:28px;height:28px;border-radius:var(--dash-radius-sm);border:1px solid rgba(20,184,166,0.3);
+                       background:rgba(20,184,166,0.1);color:#14b8a6;font-size:var(--type-label);
                        display:flex;align-items:center;justify-content:center;cursor:pointer;
                        flex-shrink:0;padding:0;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none"><path d="M14.5 4.5 9.5 2 3 5.5v16l6.5-3.5 5 2.5 6.5-3.5v-16l-6.5 3.5Z"/><path d="M9.5 2v16"/><path d="M14.5 4.5v16"/></svg>
@@ -1914,7 +1910,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
         <!-- Modal Details Button -->
         <button class="s5-modal-btn" data-modal-open="1" data-product-key="${attr(productKey)}" data-tooltip="${s5Txt('View full product details', 'عرض تفاصيل المنتج كاملة')}"
-                style="width:28px;height:28px;border-radius:6px;border:1px solid rgba(139,92,246,0.3);
+                style="width:28px;height:28px;border-radius:var(--dash-radius-sm);border:1px solid rgba(139,92,246,0.3);
                        background:rgba(139,92,246,0.1);color:#8b5cf6;
                        display:flex;align-items:center;justify-content:center;cursor:pointer;
                        flex-shrink:0;padding:0;">
@@ -1923,7 +1919,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
         <!-- Compare product button -->
         <button class="s5-compare-row-btn" data-compare-open="1" data-product-key="${attr(productKey)}" data-tooltip="${s5Txt('Compare this product', 'قارن هذا المنتج')}"
-                style="width:28px;height:28px;border-radius:6px;border:1px solid rgba(245,158,11,0.38);
+                style="width:28px;height:28px;border-radius:var(--dash-radius-sm);border:1px solid rgba(245,158,11,0.38);
                        background:rgba(245,158,11,0.12);color:#f59e0b;
                        display:flex;align-items:center;justify-content:center;cursor:pointer;
                        flex-shrink:0;padding:0;">
@@ -1932,8 +1928,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
         <!-- Expand accordion button -->
         <button class="s5-expand-btn" data-idx="${i}" data-tooltip="${s5Txt('Quick analysis (funnel / cities)', 'تحليل سريع (مسار / مدن)')}"
-                style="width:28px;height:28px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);
-                       background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.6);
+                style="width:28px;height:28px;border-radius:var(--dash-radius-sm);border:1px solid rgba(255,255,255,0.12);
+                       background:rgba(255,255,255,0.05);color:var(--dash-text-muted);
                        display:flex;align-items:center;justify-content:center;cursor:pointer;
                        flex-shrink:0;padding:0;">
           <svg class="s5-expand-arrow" data-idx="${i}" width="14" height="14" viewBox="0 0 24 24"
@@ -1949,7 +1945,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     <div class="s5-detail-panel" id="s5-detail-${i}"
          style="display:none;max-height:none;overflow:hidden;opacity:1;
                 padding:0 24px;
-                margin-bottom:0;border-radius:14px;
+                margin-bottom:0;border-radius:var(--dash-radius-lg);
                 background:rgba(255,255,255,0.02);
                 border:1px solid rgba(255,255,255,0);
                 box-sizing:border-box">
@@ -1971,7 +1967,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     
     return `<button class="s5-sort-col" data-field="${field}"
         style="${flexStyle}${minWidthStyle};background:none;border:none;color:rgba(255,255,255,0.35);
-               font-size:10px;font-weight:700;cursor:pointer;
+               font-size:var(--type-micro);font-weight:var(--weight-bold);cursor:pointer;
                display:flex;align-items:center;justify-content:center;gap:4px;
                font-family:inherit;padding:0;width:100%;text-align:center">
       ${label}
@@ -2021,14 +2017,14 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
       return pages.map(p => {
         if (p === '...') {
-          return `<span style="width:32px;text-align:center;color:rgba(255,255,255,0.25);font-size:13px;font-weight:600;user-select:none">...</span>`;
+          return `<span style="width:32px;text-align:center;color:rgba(255,255,255,0.25);font-size:var(--type-control);font-weight:var(--weight-semibold);user-select:none">...</span>`;
         }
         const isActive = p === currentPage;
         return `<button class="s5-page-btn" data-page="${p}"
-          style="width:32px;height:32px;border-radius:8px;border:1px solid ${isActive ? '#f59e0b' : 'rgba(255,255,255,0.1)'};
+          style="width:32px;height:32px;border-radius:var(--dash-radius-sm);border:1px solid ${isActive ? '#f59e0b' : 'rgba(255,255,255,0.1)'};
                  background:${isActive ? 'rgba(245,158,11,0.18)' : 'rgba(255,255,255,0.03)'};
                  color:${isActive ? '#f59e0b' : 'rgba(255,255,255,0.6)'};
-                 font-size:13px;font-weight:${isActive ? '800' : '600'};
+                 font-size:var(--type-control);font-weight:${isActive ? '800' : '600'};
                  cursor:${isActive ? 'default' : 'pointer'};font-family:inherit;
                  display:inline-flex;align-items:center;justify-content:center">${p}</button>`;
       }).join('');
@@ -2038,7 +2034,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     const nextDisabled = currentPage >= total;
 
     const arrowStyle = (disabled) =>
-      `width:32px;height:32px;border-radius:8px;border:1px solid ${disabled ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)'};
+      `width:32px;height:32px;border-radius:var(--dash-radius-sm);border:1px solid ${disabled ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)'};
        background:${disabled ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.05)'};
        color:${disabled ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.7)'};
        cursor:${disabled ? 'default' : 'pointer'};font-family:inherit;
@@ -2047,7 +2043,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
     return `<div id="s5-pagination" style="display:flex;align-items:center;justify-content:space-between;gap:10px;
               margin:14px 0 24px;padding:12px 16px;
-              border:1px solid rgba(255,255,255,0.06);border-radius:12px;
+              border:1px solid rgba(255,255,255,0.06);border-radius:var(--dash-radius-md);
               background:rgba(255,255,255,0.02);direction:${isAr ? 'ltr' : 'rtl'}">
       <button id="s5-prev-page" ${prevDisabled ? 'disabled' : ''} style="${arrowStyle(prevDisabled)}">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -2063,7 +2059,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         </svg>
       </button>
     </div>
-    <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.3);font-weight:600;margin-bottom:8px;direction:${isAr ? 'rtl' : 'ltr'}">
+    <div style="text-align:center;font-size:var(--type-caption);color:rgba(255,255,255,0.3);font-weight:var(--weight-semibold);margin-bottom:8px;direction:${isAr ? 'rtl' : 'ltr'}">
       ${s5Txt(`Showing ${start}–${end} of ${totalItems} products`, `عرض ${start}–${end} من ${totalItems} منتج`)}
     </div>`;
   }
@@ -2072,25 +2068,25 @@ function renderSection5Hydrated(mountEl, data, ctx) {
   function statCardHTML(c, i) {
     const displayValue = c.displayValue != null ? String(c.displayValue) : productCompactNumber(c.value, 0, 10000);
     const titleValue = c.displayValue != null ? String(c.displayValue) : productNumber(c.value, 0);
-    return `<div class="s5-stat-card" style="flex:1;background:#0b1120;border:1px solid ${c.color}28;border-radius:14px;padding:14px 16px;direction:${isAr ? 'ltr' : 'rtl'};display:flex;flex-direction:row;align-items:center;gap:14px;position:relative;overflow:hidden">
+    return `<div class="s5-stat-card" style="flex:1;background:var(--dash-surface);border:1px solid ${c.color}28;border-radius:var(--dash-radius-lg);padding:14px 16px;direction:${isAr ? 'ltr' : 'rtl'};display:flex;flex-direction:row;align-items:center;gap:14px;position:relative;overflow:hidden">
       <div style="position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 20% 50%,${c.color}10 0%,transparent 65%)"></div>
-      <div class="s5-stat-icon" style="width:46px;height:46px;border-radius:12px;flex-shrink:0;background:${c.color}22;border:1.5px solid ${c.color}35;display:flex;align-items:center;justify-content:center;position:relative;z-index:1">${statIconHTML(c.iconType, c.color)}</div>
+      <div class="s5-stat-icon" style="width:46px;height:46px;border-radius:var(--dash-radius-md);flex-shrink:0;background:${c.color}22;border:1.5px solid ${c.color}35;display:flex;align-items:center;justify-content:center;position:relative;z-index:1">${statIconHTML(c.iconType, c.color)}</div>
       <div style="flex:1;text-align:right;direction:${isAr ? 'rtl' : 'ltr'};position:relative;z-index:1">
-        <div class="s5-stat-label" style="font-size:10px;color:rgba(255,255,255,0.35);font-weight:600;margin-bottom:4px;line-height:1.3">${c.label}</div>
-        <div id="s5-stat-${i}" class="s5-stat-value s5-number-fit" title="${attr(titleValue)}" style="font-size:26px;font-weight:900;color:#fff;line-height:1;letter-spacing:0">${esc(displayValue)}</div>
-        <div class="s5-stat-unit" data-stat-unit="${i}" style="font-size:10px;color:${c.color};font-weight:700;margin-top:4px;letter-spacing:0.3px">${c.unit}</div>
+        <div class="s5-stat-label" style="font-size:var(--type-micro);color:rgba(255,255,255,0.35);font-weight:var(--weight-semibold);margin-bottom:4px;line-height:1.3">${c.label}</div>
+        <div id="s5-stat-${i}" class="s5-stat-value s5-number-fit" title="${attr(titleValue)}" style="font-size:var(--type-page-title);font-weight:var(--weight-bold);color:#fff;line-height:1;letter-spacing:0">${esc(displayValue)}</div>
+        <div class="s5-stat-unit" data-stat-unit="${i}" style="font-size:var(--type-micro);color:${c.color};font-weight:var(--weight-bold);margin-top:4px;letter-spacing:0.3px">${c.unit}</div>
       </div>
     </div>`;
   }
 
   // ── Insight card ──────────────────────────────────────────────────────────
   function insightCardHTML(ins, i) {
-    return `<div data-insight-card="${i}" style="flex:1;background:${ins.bg};border:1px solid ${ins.border};border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px;direction:${isAr ? 'ltr' : 'rtl'}">
-      <div style="width:44px;height:44px;border-radius:50%;flex-shrink:0;background:${ins.iconGlow}22;border:1.5px solid ${ins.iconGlow}35;display:flex;align-items:center;justify-content:center;font-size:20px">${ins.emoji}</div>
+    return `<div data-insight-card="${i}" style="flex:1;background:${ins.bg};border:1px solid ${ins.border};border-radius:var(--dash-radius-lg);padding:14px 16px;display:flex;align-items:center;gap:12px;direction:${isAr ? 'ltr' : 'rtl'}">
+      <div style="width:44px;height:44px;border-radius:50%;flex-shrink:0;background:${ins.iconGlow}22;border:1.5px solid ${ins.iconGlow}35;display:flex;align-items:center;justify-content:center;font-size:var(--type-metric-sm)">${ins.emoji}</div>
       <div style="flex:1;text-align:right;direction:${isAr ? 'rtl' : 'ltr'}">
-        <div style="font-size:10px;color:rgba(255,255,255,0.4);font-weight:600;margin-bottom:3px">${ins.label}</div>
-        <div data-insight-value="${i}" style="font-size:12px;font-weight:700;color:#fff;margin-bottom:4px;line-height:1.3">${esc(ins.value)}</div>
-        <div data-insight-detail="${i}" style="font-size:11px;font-weight:700;color:${ins.detailColor}">${esc(ins.detail)}</div>
+        <div style="font-size:var(--type-micro);color:var(--dash-text-faint);font-weight:var(--weight-semibold);margin-bottom:3px">${ins.label}</div>
+        <div data-insight-value="${i}" style="font-size:var(--type-label);font-weight:var(--weight-bold);color:#fff;margin-bottom:4px;line-height:1.3">${esc(ins.value)}</div>
+        <div data-insight-detail="${i}" style="font-size:var(--type-caption);font-weight:var(--weight-bold);color:${ins.detailColor}">${esc(ins.detail)}</div>
       </div>
     </div>`;
   }
@@ -2137,20 +2133,20 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       if (isAll) {
         return `<button class="s5-pill" data-key="all"
           style="display:flex;align-items:center;gap:6px;
-                 padding:6px 14px;border-radius:100px;font-size:12px;font-weight:${isActive?'800':'600'};
+                 padding:6px 14px;border-radius:var(--radius-pill);font-size:var(--type-label);font-weight:${isActive?'800':'600'};
                  border:1px solid ${isActive ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.1)'};
                  cursor:pointer;font-family:inherit;
                  background:${isActive ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.04)'};
                  color:${isActive ? '#fff' : 'rgba(255,255,255,0.5)'};
                  white-space:nowrap">
           ${s5Txt('All', 'الكل')}
-          ${isActive ? `<span style="background:#f59e0b;color:#000;font-size:9px;font-weight:900;padding:1px 6px;border-radius:100px;line-height:1.5">${backendProductsActive ? backendProductsTotal : list.length}</span>` : ''}
+          ${isActive ? `<span style="background:#f59e0b;color:#000;font-size:var(--type-micro);font-weight:var(--weight-bold);padding:1px 6px;border-radius:var(--radius-pill);line-height:1.5">${backendProductsActive ? backendProductsTotal : list.length}</span>` : ''}
         </button>`;
       }
 
       return `<button class="s5-pill" data-key="${pill.key}"
           style="display:flex;align-items:center;gap:6px;
-                 padding:6px 14px;border-radius:100px;font-size:12px;font-weight:${isActive?'800':'600'};
+                 padding:6px 14px;border-radius:var(--radius-pill);font-size:var(--type-label);font-weight:${isActive?'800':'600'};
                  border:1px solid ${isActive ? pill.color + '60' : 'rgba(255,255,255,0.08)'};
                  cursor:pointer;font-family:inherit;
                  background:${isActive ? pill.color + '18' : 'rgba(255,255,255,0.03)'};
@@ -2166,7 +2162,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       const isActive = sortState.field === opt.value;
       return `<div class="s5-sort-option ${isActive ? 'active' : ''}" data-value="${opt.value}">
         <span class="s5-opt-dot"></span>
-        <span style="font-size:14px;line-height:1">${opt.icon}</span>
+        <span style="font-size:var(--type-body);line-height:1">${opt.icon}</span>
         <span>${opt.label}</span>
         ${isActive ? `<svg style="margin-right:auto;flex-shrink:0" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>` : ''}
       </div>`;
@@ -2176,7 +2172,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         style="margin-bottom:16px;
                background:linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.015) 100%);
                border:1px solid rgba(255,255,255,0.09);
-               border-radius:16px;padding:14px 16px;direction:${isAr ? 'rtl' : 'ltr'};">
+               border-radius:var(--dash-radius-xl);padding:14px 16px;direction:${isAr ? 'rtl' : 'ltr'};">
 
       <!-- Search bar -->
       <div style="position:relative;margin-bottom:12px">
@@ -2185,15 +2181,15 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
         </svg>
         <input id="s5-search" type="text" placeholder="${s5Txt('Search by Product name or SKU...', 'ابحث باسم المنتج أو SKU...')}" value="${attr(filterState.search)}"
-          style="width:100%;padding:10px 42px 10px 42px;border-radius:11px;
+          style="width:100%;padding:10px 42px 10px 42px;border-radius:var(--dash-radius-md);
                  border:1px solid rgba(255,255,255,0.1);
-                 background:rgba(255,255,255,0.05);color:#fff;font-size:13px;font-family:inherit;
+                 background:rgba(255,255,255,0.05);color:#fff;font-size:var(--type-control);font-family:inherit;
                  outline:none;box-sizing:border-box;direction:${isAr ? 'rtl' : 'ltr'};"/>
         ${filterState.search ? `<button id="s5-search-clear"
           style="position:absolute;left:12px;top:50%;transform:translateY(-50%);
                  width:20px;height:20px;border-radius:50%;border:none;cursor:pointer;
-                 background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.6);
-                 display:flex;align-items:center;justify-content:center;font-size:10px;
+                 background:rgba(255,255,255,0.12);color:var(--dash-text-muted);
+                 display:flex;align-items:center;justify-content:center;font-size:var(--type-micro);
                  line-height:1;padding:0;font-family:inherit">x</button>` : ''}
       </div>
 
@@ -2205,34 +2201,34 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           <div style="display:flex;align-items:center;gap:12px;margin-inline-start:12px;padding-inline-start:12px;border-inline-start:1px solid rgba(255,255,255,0.06);">
             <div style="display:flex;align-items:center;gap:4px;" title="${s5Txt('Delivery rate >= 40%', 'نسبة التسليم >= 40%')}">
                <div style="width:8px;height:8px;border-radius:50%;background:#22d3ee"></div>
-               <span style="font-size:10px;color:rgba(255,255,255,0.45);font-weight:600">${s5Txt('Scalable', 'قابل للتوسع')}</span>
+               <span style="font-size:var(--type-micro);color:rgba(255,255,255,0.45);font-weight:var(--weight-semibold)">${s5Txt('Scalable', 'قابل للتوسع')}</span>
             </div>
             <div style="display:flex;align-items:center;gap:4px;" title="${s5Txt('Cancel rate >= 40%', 'نسبة الإلغاء >= 40%')}">
                <div style="width:8px;height:8px;border-radius:50%;background:#ef4444"></div>
-               <span style="font-size:10px;color:rgba(255,255,255,0.45);font-weight:600">${s5Txt('Danger', 'خطر')}</span>
+               <span style="font-size:var(--type-micro);color:rgba(255,255,255,0.45);font-weight:var(--weight-semibold)">${s5Txt('Danger', 'خطر')}</span>
             </div>
             <div style="display:flex;align-items:center;gap:4px;" title="${s5Txt('NDR < 20%', 'نسبة التسليم الصافي < 20%')}">
                <div style="width:8px;height:8px;border-radius:50%;background:#ef4444"></div>
-               <span style="font-size:10px;color:rgba(255,255,255,0.45);font-weight:600">${s5Txt('Warning', 'تحذير')}</span>
+               <span style="font-size:var(--type-micro);color:rgba(255,255,255,0.45);font-weight:var(--weight-semibold)">${s5Txt('Warning', 'تحذير')}</span>
             </div>
             <div style="display:flex;align-items:center;gap:4px;" title="${s5Txt('Top 3 performing products', 'أفضل 3 منتجات أداء')}">
                <div style="width:8px;height:8px;border-radius:50%;background:#fbbf24"></div>
-               <span style="font-size:10px;color:rgba(255,255,255,0.45);font-weight:600">${s5Txt('Top Products', 'أفضل المنتجات')}</span>
+               <span style="font-size:var(--type-micro);color:rgba(255,255,255,0.45);font-weight:var(--weight-semibold)">${s5Txt('Top Products', 'أفضل المنتجات')}</span>
             </div>
           </div>
         </div>
 
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
           <button id="s5-compare-open" data-tooltip="${s5Txt('Compare Products', 'مقارنة المنتجات')}"
-            style="height:34px;padding:0 12px;border-radius:9px;border:1px solid rgba(245,158,11,0.28);
+            style="height:34px;padding:0 12px;border-radius:var(--dash-radius-sm);border:1px solid rgba(245,158,11,0.28);
                    background:rgba(245,158,11,0.10);color:#fbbf24;display:flex;align-items:center;
                    justify-content:center;gap:7px;cursor:pointer;flex-shrink:0;
-                   font-size:11px;font-weight:800;font-family:inherit;">
+                   font-size:var(--type-caption);font-weight:var(--weight-bold);font-family:inherit;">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 7h14"/><path d="M6 7l-4 7h8L6 7z"/><path d="M18 7l-4 7h8l-4-7z"/></svg>
             ${s5Txt('Compare Products', 'مقارنة المنتجات')}
           </button>
 
-          <span style="font-size:10px;color:rgba(255,255,255,0.28);font-weight:700;
+          <span style="font-size:var(--type-micro);color:rgba(255,255,255,0.28);font-weight:var(--weight-bold);
                        letter-spacing:0.5px;white-space:nowrap;text-transform:uppercase">${s5Txt("Sort", "ترتيب")}</span>
 
           <!-- Trigger only - menu is body-teleported in bindFilterBar to escape overflow:hidden -->
@@ -2251,17 +2247,17 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           <div style="display:flex;align-items:center;gap:4px;">
             ${sortState.field !== 'default' ? `
             <button id="s5-clear-sort" title="${s5Txt('Clear Sort', 'إلغاء الترتيب')}"
-              style="width:34px;height:34px;border-radius:9px;border:1px solid rgba(239,68,68,0.2);
+              style="width:34px;height:34px;border-radius:var(--dash-radius-sm);border:1px solid rgba(239,68,68,0.2);
                      background:rgba(239,68,68,0.05);color:#ef4444;display:flex;align-items:center;
                      justify-content:center;cursor:pointer;flex-shrink:0;padding:0;box-sizing:border-box;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>` : ''}
             
             <button id="s5-sort-dir-btn"
-            style="width:34px;height:34px;border-radius:9px;
+            style="width:34px;height:34px;border-radius:var(--dash-radius-sm);
                    border:1px solid rgba(255,255,255,0.1);
                    background:rgba(255,255,255,0.04);
-                   color:rgba(255,255,255,0.6);cursor:pointer;
+                   color:var(--dash-text-muted);cursor:pointer;
                    display:flex;align-items:center;justify-content:center;
                    flex-shrink:0;padding:0;box-sizing:border-box;"
             title="${sortState.dir === 'desc' ? s5Txt('Ascending', 'تصاعدي') : s5Txt('Descending', 'تنازلي')}">
@@ -2281,8 +2277,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
   // ── Column headers ────────────────────────────────────────────────────────
   function columnHeadersHTML() {
     const compact = viewMode === 'compact';
-    return `<div class="s5-header-cols s5-metrics-track" style="display:flex;align-items:center;padding:0 0 10px 0;border-bottom:1px solid rgba(255,255,255,0.05);margin-bottom:10px;position:sticky;top:0;z-index:9;background:#080b12">
-      <div class="s5-header-product" style="flex:0 0 200px;min-width:200px;padding-inline-start:10px;font-size:10px;color:rgba(255,255,255,0.42);font-weight:800;text-align:start">${s5Txt('Product', 'المنتج')}</div>
+    return `<div class="s5-header-cols s5-metrics-track" style="display:flex;align-items:center;padding:0 0 10px 0;border-bottom:1px solid rgba(255,255,255,0.05);margin-bottom:10px;position:sticky;top:0;z-index:9;background:var(--dash-bg)">
+      <div class="s5-header-product" style="flex:0 0 200px;min-width:200px;padding-inline-start:10px;font-size:var(--type-micro);color:rgba(255,255,255,0.42);font-weight:var(--weight-bold);text-align:start">${s5Txt('Product', 'المنتج')}</div>
       <div style="width:1px"></div>
       ${colHeaderBtn(s5Txt('Orders', 'الطلبات'),'totalOrderCount','flex:0 0 64px')}
       <div style="width:1px"></div>
@@ -2290,33 +2286,25 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       <div style="width:1px"></div>
       ${colHeaderBtn(s5Txt('Quantity', 'القطع'),'totalPieces','flex:0 0 68px')}
       <div style="width:1px"></div>
+      ${colHeaderBtn(s5Txt('Confirmed', 'مؤكد'),'confirmationStatusCount','flex:0 0 64px')}
+      <div style="width:1px"></div>
+      ${colHeaderBtn(s5Txt('In Shipping', 'قيد الشحن'),'shippingCount','flex:0 0 64px')}
+      <div style="width:1px"></div>
+      ${colHeaderBtn(s5Txt('Delivered', 'تم التسليم'),'deliveredCount','flex:0 0 64px')}
+      <div style="width:1px"></div>
       ${colHeaderBtn(p5Txt('failedOrders'),'failedCount','flex:0 0 64px')}
       <div style="width:1px"></div>
       ${colHeaderBtn(p5Txt('canceledOrders'),'canceledCount','flex:0 0 68px')}
       <div style="width:1px"></div>
-      ${colHeaderBtn(s5Txt('Confirmed', 'مؤكد'),'confirmationStatusCount','flex:0 0 64px')}
+      ${colHeaderBtn(s5Txt('Confirmation Rate', 'نسبة التأكيد'),'confirmationPct',`flex:0 0 ${compact?'66':'70'}px`)}
       <div style="width:1px"></div>
-      ${colHeaderBtn(s5Txt('Confirm', 'التأكيد'),'confirmationPct',`flex:0 0 ${compact?'66':'70'}px`)}
+      ${colHeaderBtn(s5Txt('Cancel Rate', 'نسبة الإلغاء'),'cancelPct',`flex:0 0 ${compact?'66':'70'}px`)}
       <div style="width:1px"></div>
-      ${colHeaderBtn(s5Txt('Cancel', 'الإلغاء'),'cancelPct',`flex:0 0 ${compact?'66':'70'}px`)}
-      <div style="width:1px"></div>
-      ${colHeaderBtn(s5Txt('Pending', 'قيد الانتظار'),'pendingPct',`flex:0 0 ${compact?'66':'70'}px`)}
+      ${colHeaderBtn(s5Txt('Pending Rate', 'نسبة قيد الانتظار'),'pendingPct',`flex:0 0 ${compact?'66':'70'}px`)}
       <div style="width:1px"></div>
       ${colHeaderBtn('NDR','ndrPct',`flex:0 0 ${compact?'64':'66'}px`)}
       <div style="width:1px"></div>
       ${colHeaderBtn(s5Txt('DR', 'التسليم'),'drRate',`flex:0 0 ${compact?'66':'70'}px`)}
-      <div style="width:1px"></div>
-      ${colHeaderBtn(
-        filterState.statusKey === 'shipping' ? s5Txt('Shipping', 'شحن') :
-        filterState.statusKey === 'failed' ? p5Txt('failedShort') :
-        filterState.statusKey === 'canceled' ? s5Txt('Canceled', 'ملغي') :
-        filterState.statusKey === 'processing' ? s5Txt('Processing', 'معالجة') : s5Txt('Delivered', 'تم تسليمها'),
-        filterState.statusKey === 'shipping' ? 'shippingCount' :
-        filterState.statusKey === 'failed' ? 'failedCount' :
-        filterState.statusKey === 'canceled' ? 'canceledCount' :
-        filterState.statusKey === 'processing' ? 'processingCount' : 'deliveredCount',
-        `flex:0 0 ${compact?'64':'66'}px`
-      )}
       <div style="width:1px"></div>
       ${colHeaderBtn(s5Txt('Average Profits', 'متوسط الأرباح'),'averageProfit','flex:0 0 80px')}
       <div style="width:1px"></div>
@@ -2330,7 +2318,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       <div style="width:1px"></div>
       ${colHeaderBtn(s5Txt('Taager Profit After Tax', 'ربح تاجر بعد الضريبة'),'commission','flex:0 0 80px')}
       <div style="width:1px"></div>
-      <div class="s5-header-actions" style="width:72px;flex:0 0 72px;text-align:center;font-size:9px;color:rgba(255,255,255,0.3);font-weight:700;position:sticky;right:0;background:var(--dash-bg, #080b12);z-index:10;border-left:1px solid var(--dash-border-soft, rgba(255,255,255,0.08));">${s5Txt('Actions', 'إجراءات')}</div>
+      <div class="s5-header-actions" style="width:58px;flex:0 0 58px;text-align:center;font-size:var(--type-micro);color:rgba(255,255,255,0.3);font-weight:var(--weight-bold);position:sticky;right:0;background:var(--dash-bg, #080b12);z-index:10;border-left:1px solid var(--dash-border-soft, rgba(255,255,255,0.08));">${s5Txt('Actions', 'إجراءات')}</div>
     </div>`;
   }
 
@@ -2346,7 +2334,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         --s5-sku-size: 10px;
       }
       #page-dashboard .dash-shell:not(.dash-size-sm):not(.dash-size-xs) .s5-metrics-track {
-        min-width: 1427px !important;
+        min-width: 1468px !important;
         width: max-content !important;
       }
       #page-dashboard .dash-shell:not(.dash-size-sm):not(.dash-size-xs) .s5-product-row {
@@ -2370,22 +2358,62 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         box-sizing: border-box;
         overflow: hidden;
       }
+      .s5-cell-identity { flex-basis:188px !important; min-width:188px !important; padding-inline:8px !important; }
+      .s5-cell-orders,
+      .s5-cell-net-orders,
+      .s5-cell-confirmed-count,
+      .s5-cell-shipping,
+      .s5-cell-delivered-count,
+      .s5-cell-failed { flex-basis:58px !important; min-width:58px !important; }
+      .s5-cell-pieces { flex-basis:62px !important; min-width:62px !important; }
+      .s5-cell-canceled-raw { flex-basis:60px !important; min-width:60px !important; }
+      .s5-cell-confirmation,
+      .s5-cell-cancel,
+      .s5-cell-pending,
+      .s5-cell-delivery { flex-basis:64px !important; min-width:64px !important; }
+      .s5-cell-ndr { flex-basis:60px !important; min-width:60px !important; }
+      .s5-cell-average-profit,
+      .s5-cell-ad-spend,
+      .s5-cell-commission { flex-basis:72px !important; min-width:72px !important; }
+      .s5-cell-cpa { flex-basis:64px !important; min-width:64px !important; }
+      .s5-cell-breakeven,
+      .s5-cell-pnl { flex-basis:68px !important; min-width:68px !important; }
+      .s5-header-cols > .s5-header-product { flex-basis:188px !important; min-width:188px !important; }
+      .s5-header-cols .s5-sort-col[data-field="totalOrderCount"],
+      .s5-header-cols .s5-sort-col[data-field="netOrderCount"],
+      .s5-header-cols .s5-sort-col[data-field="confirmationStatusCount"],
+      .s5-header-cols .s5-sort-col[data-field="shippingCount"],
+      .s5-header-cols .s5-sort-col[data-field="deliveredCount"],
+      .s5-header-cols .s5-sort-col[data-field="failedCount"] { flex-basis:58px !important; min-width:58px !important; }
+      .s5-header-cols .s5-sort-col[data-field="totalPieces"] { flex-basis:62px !important; min-width:62px !important; }
+      .s5-header-cols .s5-sort-col[data-field="canceledCount"] { flex-basis:60px !important; min-width:60px !important; }
+      .s5-header-cols .s5-sort-col[data-field="confirmationPct"],
+      .s5-header-cols .s5-sort-col[data-field="cancelPct"],
+      .s5-header-cols .s5-sort-col[data-field="pendingPct"],
+      .s5-header-cols .s5-sort-col[data-field="drRate"] { flex-basis:64px !important; min-width:64px !important; }
+      .s5-header-cols .s5-sort-col[data-field="ndrPct"] { flex-basis:60px !important; min-width:60px !important; }
+      .s5-header-cols .s5-sort-col[data-field="averageProfit"],
+      .s5-header-cols .s5-sort-col[data-field="allocatedAdSpend"],
+      .s5-header-cols .s5-sort-col[data-field="commission"] { flex-basis:72px !important; min-width:72px !important; }
+      .s5-header-cols .s5-sort-col[data-field="cpa"] { flex-basis:64px !important; min-width:64px !important; }
+      .s5-header-cols .s5-sort-col[data-field="breakEvenCpa"],
+      .s5-header-cols .s5-sort-col[data-field="profitLoss"] { flex-basis:68px !important; min-width:68px !important; }
       .s5-cell > div {
         max-width: 100%;
       }
       .s5-cell-identity button.s5-product-name-edit {
-        font-size: 10px !important;
+        font-size:var(--type-micro) !important;
         margin-top: 3px !important;
       }
-      .s5-cell-identity div[style*="font-size:11px"] {
+      .s5-cell-identity div[style*="font-size:var(--type-caption)"] {
         font-size: var(--s5-sku-size) !important;
       }
       .s5-cell-actions button {
-        width: 26px !important;
-        height: 26px !important;
+        width: 22px !important;
+        height: 22px !important;
       }
       .s5-cell [data-financial-currency] {
-        font-size: 9px !important;
+        font-size:var(--type-micro) !important;
         margin-top: 1px !important;
       }
       .s5-cell .s5-number-fit,
@@ -2430,11 +2458,11 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         justify-content: center;
         box-sizing: border-box;
         border: 1px dashed rgba(148,163,184,0.24);
-        border-radius: 7px;
+        border-radius:var(--dash-radius-sm);
         background: rgba(148,163,184,0.055);
         color: rgba(203,213,225,0.5);
-        font-size: 14px;
-        font-weight: 800;
+        font-size:var(--type-body);
+        font-weight:var(--weight-bold);
         line-height: 1;
         cursor: help;
       }
@@ -2503,7 +2531,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         max-width: 28px !important;
         min-height: 28px !important;
         aspect-ratio: 1 / 1 !important;
-        border-radius: 999px !important;
+        border-radius:var(--radius-pill) !important;
         padding: 0 !important;
         box-sizing: border-box !important;
         flex: 0 0 28px !important;
@@ -2516,7 +2544,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         position: absolute;
         width: 11px;
         height: 2px;
-        border-radius: 99px;
+        border-radius:var(--radius-pill);
         background: currentColor;
         left: 50%;
         top: 50%;
@@ -2530,12 +2558,12 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       .s5-sort-dropdown { position: relative; user-select: none; }
       .s5-sort-trigger {
         display: flex; align-items: center; gap: 8px;
-        padding: 8px 12px; border-radius: 10px;
+        padding: 8px 12px; border-radius:var(--dash-radius-md);
         border: 1px solid rgba(255,255,255,0.12);
         background: rgba(255,255,255,0.05);
-        color: #fff; font-size: 12px; font-weight: 600;
+        color: #fff; font-size:var(--type-label); font-weight:var(--weight-semibold);
         cursor: pointer; white-space: nowrap;
-        font-family: 'Cairo', sans-serif;
+        font-family:var(--font-ui);
         min-width: 148px; justify-content: space-between;
       }
       .s5-sort-trigger:hover {
@@ -2548,7 +2576,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         color: #f59e0b;
       }
       .s5-sort-trigger.open .s5-sort-chevron { color: #f59e0b; }
-      .s5-sort-chevron { color: rgba(255,255,255,0.4); flex-shrink: 0; }
+      .s5-sort-chevron { color:var(--dash-text-faint); flex-shrink: 0; }
 
       /* ── Sort col header ── */
       .s5-sort-col:hover { color: rgba(255,255,255,0.7) !important; }
@@ -2607,14 +2635,14 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       }
       .s5-compare-card {
         border:1px solid rgba(255,255,255,0.09);
-        border-radius:18px;
+        border-radius:var(--dash-radius-xl);
         background:linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.018));
         padding:14px;
         min-width:0;
       }
       .s5-compare-metric {
         padding:9px 10px;
-        border-radius:10px;
+        border-radius:var(--dash-radius-md);
         border:1px solid rgba(255,255,255,0.065);
         background:rgba(255,255,255,0.025);
       }
@@ -2637,7 +2665,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       }
       .s5-cmp-dd-list::-webkit-scrollbar-thumb {
         background:rgba(245,158,11,0.35);
-        border-radius:99px;
+        border-radius:var(--radius-pill);
       }
       [data-theme="light"] #s5-compare-modal .s5-compare-modal-panel {
         background: #ffffff !important;
@@ -2675,7 +2703,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       }
       @media (max-width: 1366px) {
         #page-dashboard .dash-shell:not(.dash-size-sm):not(.dash-size-xs) .s5-metrics-track {
-          min-width: 1381px !important;
+          min-width: 1400px !important;
         }
         .s5-root {
           --s5-row-num-size: 12px;
@@ -2689,7 +2717,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         }
         .s5-status-chip {
           padding: 6px 10px !important;
-          font-size: 11px !important;
+          font-size:var(--type-caption) !important;
         }
         .s5-stat-row {
           gap: 9px !important;
@@ -2698,22 +2726,22 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         .s5-stat-card {
           padding: 11px 12px !important;
           gap: 10px !important;
-          border-radius: 12px !important;
+          border-radius:var(--dash-radius-md) !important;
         }
         .s5-stat-icon {
           width: 38px !important;
           height: 38px !important;
-          border-radius: 10px !important;
+          border-radius:var(--dash-radius-md) !important;
         }
         .s5-stat-value {
-          font-size: 20px !important;
+          font-size:var(--type-metric-sm) !important;
         }
         .s5-stat-label,
         .s5-stat-unit {
-          font-size: 9px !important;
+          font-size:var(--type-micro) !important;
         }
         .s5-product-row {
-          border-radius: 11px !important;
+          border-radius:var(--dash-radius-md) !important;
           margin-bottom: 6px !important;
         }
         .s5-cell {
@@ -2726,14 +2754,17 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           gap: 7px !important;
         }
         .s5-cell-identity button.s5-product-name-edit {
-          font-size: 9px !important;
+          font-size:var(--type-micro) !important;
           margin-top: 2px !important;
         }
-        .s5-cell-identity div[style*="font-size:11px"] {
+        .s5-cell-identity div[style*="font-size:var(--type-caption)"] {
           font-size: var(--s5-sku-size) !important;
         }
-        .s5-cell-orders { flex-basis: 60px !important; min-width: 60px !important; }
-        .s5-cell-net-orders { flex-basis: 60px !important; min-width: 60px !important; }
+        .s5-cell-orders,
+        .s5-cell-net-orders,
+        .s5-cell-confirmed-count,
+        .s5-cell-shipping,
+        .s5-cell-delivered-count { flex-basis: 58px !important; min-width: 58px !important; }
         .s5-cell-pieces { flex-basis: 62px !important; min-width: 62px !important; }
         .s5-cell-failed { flex-basis: 62px !important; min-width: 62px !important; }
         .s5-cell-canceled-raw { flex-basis: 62px !important; min-width: 62px !important; }
@@ -2741,8 +2772,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         .s5-cell-cancel,
         .s5-cell-pending,
         .s5-cell-delivery { flex-basis: 66px !important; min-width: 66px !important; }
-        .s5-cell-ndr,
-        .s5-cell-delivery-count { flex-basis: 64px !important; min-width: 64px !important; }
+        .s5-cell-ndr { flex-basis: 60px !important; min-width: 60px !important; }
         .s5-cell-average-profit { flex-basis: 72px !important; min-width: 72px !important; }
         .s5-cell-ad-spend { flex-basis: 70px !important; min-width: 70px !important; }
         .s5-cell-cpa { flex-basis: 64px !important; min-width: 64px !important; }
@@ -2750,23 +2780,23 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         .s5-cell-pnl { flex-basis: 68px !important; min-width: 68px !important; }
         .s5-cell-commission { flex-basis: 70px !important; min-width: 70px !important; }
         .s5-cell-actions {
-          width: 68px !important;
-          min-width: 68px !important;
-          grid-template-columns: repeat(2, 24px) !important;
-          grid-auto-rows: 24px !important;
+          width: 56px !important;
+          min-width: 56px !important;
+          grid-template-columns: repeat(2, 21px) !important;
+          grid-auto-rows: 21px !important;
           column-gap: 4px !important;
-          row-gap: 7px !important;
+          row-gap: 5px !important;
           padding: 4px !important;
         }
         .s5-cell-actions button {
-          width: 24px !important;
-          height: 24px !important;
+          width: 21px !important;
+          height: 21px !important;
         }
         .s5-cell .s5-number-fit {
           font-size: var(--s5-row-num-size) !important;
         }
         .s5-cell-orders .s5-number-fit,
-        .s5-cell-delivery-count .s5-number-fit,
+        .s5-cell-delivered-count .s5-number-fit,
         .s5-cell-commission .s5-number-fit {
           font-size: var(--s5-row-num-size-strong) !important;
         }
@@ -2775,15 +2805,18 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           min-width: 176px !important;
           padding-inline-start: 7px !important;
           padding-right: 0 !important;
-          font-size: 10px !important;
+          font-size:var(--type-micro) !important;
           text-align: start !important;
         }
         .s5-header-cols .s5-sort-col {
-          font-size: 10px !important;
+          font-size:var(--type-micro) !important;
           gap: 3px !important;
         }
         .s5-header-cols .s5-sort-col[data-field="totalOrderCount"],
-        .s5-header-cols .s5-sort-col[data-field="netOrderCount"] { flex-basis: 60px !important; min-width: 60px !important; }
+        .s5-header-cols .s5-sort-col[data-field="netOrderCount"],
+        .s5-header-cols .s5-sort-col[data-field="confirmationStatusCount"],
+        .s5-header-cols .s5-sort-col[data-field="shippingCount"],
+        .s5-header-cols .s5-sort-col[data-field="deliveredCount"] { flex-basis: 58px !important; min-width: 58px !important; }
         .s5-header-cols .s5-sort-col[data-field="totalPieces"] { flex-basis: 62px !important; min-width: 62px !important; }
         .s5-header-cols .s5-sort-col[data-field="failedCount"] { flex-basis: 62px !important; min-width: 62px !important; }
         .s5-header-cols .s5-sort-col[data-field="canceledCount"] { flex-basis: 62px !important; min-width: 62px !important; }
@@ -2791,10 +2824,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         .s5-header-cols .s5-sort-col[data-field="cancelPct"],
         .s5-header-cols .s5-sort-col[data-field="pendingPct"],
         .s5-header-cols .s5-sort-col[data-field="drRate"] { flex-basis: 66px !important; min-width: 66px !important; }
-        .s5-header-cols .s5-sort-col[data-field="ndrPct"],
-        .s5-header-cols .s5-sort-col[data-field="deliveredCount"],
-        .s5-header-cols .s5-sort-col[data-field="shippingCount"],
-        .s5-header-cols .s5-sort-col[data-field="processingCount"] { flex-basis: 64px !important; min-width: 64px !important; }
+        .s5-header-cols .s5-sort-col[data-field="ndrPct"] { flex-basis: 60px !important; min-width: 60px !important; }
         .s5-header-cols .s5-sort-col[data-field="averageProfit"] { flex-basis: 72px !important; min-width: 72px !important; }
         .s5-header-cols .s5-sort-col[data-field="allocatedAdSpend"] { flex-basis: 70px !important; min-width: 70px !important; }
         .s5-header-cols .s5-sort-col[data-field="cpa"] { flex-basis: 64px !important; min-width: 64px !important; }
@@ -2802,10 +2832,10 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         .s5-header-cols .s5-sort-col[data-field="profitLoss"] { flex-basis: 68px !important; min-width: 68px !important; }
         .s5-header-cols .s5-sort-col[data-field="commission"] { flex-basis: 70px !important; min-width: 70px !important; }
         .s5-header-cols > div:last-child {
-          width: 68px !important;
-          min-width: 68px !important;
-          flex: 0 0 68px !important;
-          font-size: 9px !important;
+          width: 56px !important;
+          min-width: 56px !important;
+          flex: 0 0 56px !important;
+          font-size:var(--type-micro) !important;
         }
       }
       @media (max-width: 1180px) {
@@ -2833,34 +2863,34 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         to   { transform: rotate(360deg); }
       }
     </style>
-    <div class="s5-root dash-scroll" dir="${isAr ? 'rtl' : 'ltr'}" style="flex:1 1 auto;display:flex;flex-direction:column;background:#080b12;color:#fff;font-family:'Cairo',sans-serif;overflow-y:auto;overflow-x:hidden;height:100%;min-height:0">
+    <div class="s5-root dash-scroll" dir="${isAr ? 'rtl' : 'ltr'}" style="flex:1 1 auto;display:flex;flex-direction:column;background:var(--dash-bg);color:#fff;font-family:var(--font-ui);overflow-y:auto;overflow-x:hidden;height:100%;min-height:0">
 
       <!-- Sticky topbar -->
-      <div class="s5-topbar" style="display:flex;align-items:center;justify-content:space-between;padding:0 28px;height:68px;border-bottom:1px solid rgba(255,255,255,0.05);background:#080b12;position:sticky;top:0;z-index:10;flex-shrink:0">
+      <div class="s5-topbar" style="display:flex;align-items:center;justify-content:space-between;padding:0 28px;height:68px;border-bottom:1px solid rgba(255,255,255,0.05);background:var(--dash-bg);position:sticky;top:0;z-index:10;flex-shrink:0">
         <div style="display:flex;gap:10px;align-items:center">
-          <span class="s5-status-chip" aria-label="${s5Txt('Dashboard period', 'فترة لوحة التحكم')}" style="display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.7);font-size:12px;font-weight:600;font-family:inherit">
+          <span class="s5-status-chip" aria-label="${s5Txt('Dashboard period', 'فترة لوحة التحكم')}" style="display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:var(--dash-radius-md);border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.7);font-size:var(--type-label);font-weight:var(--weight-semibold);font-family:inherit">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="3" stroke="rgba(255,255,255,0.45)" stroke-width="1.5"/><path d="M8 2v4M16 2v4M3 10h18" stroke="rgba(255,255,255,0.45)" stroke-width="1.5" stroke-linecap="round"/></svg>
             <span style="color:#f59e0b">${(function(){ var M=['January','February','March','April','May','June','July','August','September','October','November','December']; var M_ar=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']; var n=new Date(); return (isAr ? M_ar[n.getMonth()] : M[n.getMonth()])+' '+n.getFullYear(); })()}</span>
           </span>
-          <span class="s5-status-chip" aria-label="${s5Txt('Dashboard account', 'حساب لوحة التحكم')}" style="display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.7);font-size:12px;font-weight:600;font-family:inherit">
+          <span class="s5-status-chip" aria-label="${s5Txt('Dashboard account', 'حساب لوحة التحكم')}" style="display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:var(--dash-radius-md);border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.7);font-size:var(--type-label);font-weight:var(--weight-semibold);font-family:inherit">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="rgba(255,255,255,0.45)" stroke-width="1.5"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="rgba(255,255,255,0.45)" stroke-width="1.5" stroke-linecap="round"/></svg>
             <span>${window.currentActiveAccountLabel || s5Txt('All Shared Accounts', 'كل الحسابات المشتركة')}</span>
           </span>
         </div>
         <div style="text-align:center;flex:1">
-          <div style="font-size:22px;font-weight:900;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px">
+          <div style="font-size:var(--type-metric-sm);font-weight:var(--weight-bold);color:#fff;display:flex;align-items:center;justify-content:center;gap:8px">
             ${s5Txt('Top Products', 'أفضل المنتجات')}
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 7.2H22l-6.2 4.5 2.4 7.2L12 17l-6.2 3.9 2.4-7.2L2 9.2h7.6z" fill="#f59e0b"/></svg>
           </div>
-          <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:3px">${s5Txt('Product Health Board', 'لوحة صحة المنتجات')}</div>
+          <div style="font-size:var(--type-caption);color:rgba(255,255,255,0.35);margin-top:3px">${s5Txt('Product Health Board', 'لوحة صحة المنتجات')}</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
-          <button id="s5-view-toggle" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:9px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:rgba(255,255,255,0.55);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">
+          <button id="s5-view-toggle" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--dash-radius-sm);border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:rgba(255,255,255,0.55);font-size:var(--type-caption);font-weight:var(--weight-bold);cursor:pointer;font-family:inherit">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
             ${s5Txt('Compact', 'مضغوط')}
           </button>
-          <div style="font-size:11px;color:rgba(255,255,255,0.35)">${s5Txt('Last update: Today', 'آخر تحديث: اليوم')}</div>
-          <div style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.7)">${(function(){ var n=new Date(); return ('0'+n.getHours()).slice(-2)+':'+('0'+n.getMinutes()).slice(-2); })()}</div>
+          <div style="font-size:var(--type-caption);color:rgba(255,255,255,0.35)">${s5Txt('Last update: Today', 'آخر تحديث: اليوم')}</div>
+          <div style="font-size:var(--type-control);font-weight:var(--weight-bold);color:rgba(255,255,255,0.7)">${(function(){ var n=new Date(); return ('0'+n.getHours()).slice(-2)+':'+('0'+n.getMinutes()).slice(-2); })()}</div>
         </div>
       </div>
 
@@ -2878,13 +2908,13 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           ${columnHeadersHTML()}
           <div id="s5-rows">
             ${initialPageProducts.length ? initialPageProducts.map((p, i) => productRowHTML(p, i)).join('') : `
-              <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;margin-bottom:12px;">
+              <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:var(--dash-radius-lg);margin-bottom:12px;">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" style="margin-bottom:16px;">
                   <circle cx="11" cy="11" r="8"></circle>
                   <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
-                <div style="font-size:16px;font-weight:800;color:rgba(255,255,255,0.6);margin-bottom:8px;">${s5Txt('No products available yet', 'لا توجد منتجات متاحة بعد')}</div>
-                <div style="font-size:12px;color:rgba(255,255,255,0.3);">${s5Txt('Update the dashboard to load real product performance for this account and range.', 'حدّث لوحة التحكم لتحميل أداء المنتجات الحقيقي لهذا الحساب وهذه الفترة.')}</div>
+                <div style="font-size:var(--type-subtitle);font-weight:var(--weight-bold);color:var(--dash-text-muted);margin-bottom:8px;">${s5Txt('No products available yet', 'لا توجد منتجات متاحة بعد')}</div>
+                <div style="font-size:var(--type-label);color:rgba(255,255,255,0.3);">${s5Txt('Update the dashboard to load real product performance for this account and range.', 'حدّث لوحة التحكم لتحميل أداء المنتجات الحقيقي لهذا الحساب وهذه الفترة.')}</div>
               </div>`}
           </div>
           <div id="s5-pagination-wrap">${paginationHTML(initialProductList)}</div>
@@ -2892,7 +2922,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           ${INSIGHTS.length ? `
           <div>
             <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:14px">
-              <span style="font-size:15px;font-weight:800;color:rgba(255,255,255,0.82)">رؤى ذكية</span>
+              <span style="font-size:var(--type-component-title);font-weight:var(--weight-bold);color:rgba(255,255,255,0.82)">رؤى ذكية</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 7.2H22l-6.2 4.5 2.4 7.2L12 17l-6.2 3.9 2.4-7.2L2 9.2h7.6z" fill="#f59e0b"/></svg>
             </div>
             <div class="s5-insights-row" style="display:flex;gap:12px;flex-wrap:wrap">
@@ -3024,13 +3054,13 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
   function noProductsMatchHTML() {
     return `
-      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;margin-bottom:12px;">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:var(--dash-radius-lg);margin-bottom:12px;">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" style="margin-bottom:16px;">
           <circle cx="11" cy="11" r="8"></circle>
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
         </svg>
-        <div style="font-size:16px;font-weight:800;color:rgba(255,255,255,0.6);margin-bottom:8px;">${s5Txt('No products match the filter', 'لا توجد منتجات تطابق الفلتر')}</div>
-        <div style="font-size:12px;color:rgba(255,255,255,0.3);">${s5Txt('Try changing the filters or search to show results.', 'جرب تغيير خيارات التصفية أو البحث لعرض النتائج.')}</div>
+        <div style="font-size:var(--type-subtitle);font-weight:var(--weight-bold);color:var(--dash-text-muted);margin-bottom:8px;">${s5Txt('No products match the filter', 'لا توجد منتجات تطابق الفلتر')}</div>
+        <div style="font-size:var(--type-label);color:rgba(255,255,255,0.3);">${s5Txt('Try changing the filters or search to show results.', 'جرب تغيير خيارات التصفية أو البحث لعرض النتائج.')}</div>
       </div>`;
   }
 
@@ -3076,12 +3106,12 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       'min-width:28px',
       'max-width:28px',
       'aspect-ratio:1/1',
-      'border-radius:999px',
+      'border-radius:var(--radius-pill)',
       'border:none',
       'cursor:pointer',
       'box-sizing:border-box',
       'background:rgba(255,255,255,0.12)',
-      'color:rgba(255,255,255,0.6)',
+      'color:var(--dash-text-muted)',
       'display:flex',
       'align-items:center',
       'justify-content:center',
@@ -3109,7 +3139,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       return;
     }
 
-    wrap.innerHTML = '<select id="s5-currency-native" style="width:100%;height:32px;border-radius:9px;border:1px solid rgba(255,255,255,0.12);background:#0b1120;color:#fff;font-size:12px;font-weight:800;font-family:inherit;padding:0 8px">' +
+    wrap.innerHTML = '<select id="s5-currency-native" style="width:100%;height:32px;border-radius:var(--dash-radius-sm);border:1px solid rgba(255,255,255,0.12);background:var(--dash-surface);color:#fff;font-size:var(--type-label);font-weight:var(--weight-bold);font-family:inherit;padding:0 8px">' +
       options.map(function (opt) {
         return '<option value="' + attr(opt.value) + '"' + (opt.value === current ? ' selected' : '') + '>' + esc(opt.label) + '</option>';
       }).join('') +
@@ -3144,7 +3174,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
             var count = backendProductsActive ? backendProductsTotal : (list ? list.length : 0);
             if (!badge) {
               badge = document.createElement('span');
-              badge.style.cssText = 'background:#f59e0b;color:#000;font-size:9px;font-weight:900;padding:1px 6px;border-radius:100px;line-height:1.5';
+              badge.style.cssText = 'background:#f59e0b;color:#000;font-size:var(--type-micro);font-weight:var(--weight-bold);padding:1px 6px;border-radius:var(--radius-pill);line-height:1.5';
               btn.appendChild(badge);
             }
             badge.textContent = count;
@@ -3207,16 +3237,16 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     bodyMenu.id = 's5-body-sort-menu';
     bodyMenu.className = 's5-body-sort-menu dash-overlay-scope';
     bodyMenu.innerHTML =
-      '<div class="s5-sort-menu-title" style="padding:10px 14px 8px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:10px;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.6px;direction:' + (isAr ? 'rtl' : 'ltr') + '">' +
+      '<div class="s5-sort-menu-title" style="padding:10px 14px 8px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:var(--type-micro);font-weight:var(--weight-bold);color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.6px;direction:' + (isAr ? 'rtl' : 'ltr') + '">' +
         s5Txt('Sort By', 'ترتيب حسب') +
       '</div>' +
       SORT_OPTIONS.map(function (opt) {
         const active = sortState.field === opt.value;
-        return '<button type="button" class="s5-sort-option' + (active ? ' active' : '') + '" data-value="' + attr(opt.value) + '" style="width:100%;display:flex;align-items:center;gap:10px;padding:10px 14px;border:0;border-bottom:1px solid rgba(255,255,255,0.04);background:' + (active ? 'rgba(245,158,11,0.12)' : 'transparent') + ';color:' + (active ? '#f59e0b' : 'rgba(255,255,255,0.65)') + ';font:600 12px Cairo,sans-serif;cursor:pointer;text-align:start;direction:' + (isAr ? 'rtl' : 'ltr') + '">' +
-          '<span style="font-size:14px;line-height:1">' + opt.icon + '</span><span>' + opt.label + '</span>' +
+        return '<button type="button" class="s5-sort-option' + (active ? ' active' : '') + '" data-value="' + attr(opt.value) + '" style="width:100%;display:flex;align-items:center;gap:10px;padding:10px 14px;border:0;border-bottom:1px solid rgba(255,255,255,0.04);background:' + (active ? 'rgba(245,158,11,0.12)' : 'transparent') + ';color:' + (active ? '#f59e0b' : 'rgba(255,255,255,0.65)') + ';font-family:var(--font-ui);font-size:var(--type-label);font-weight:var(--weight-semibold);line-height:var(--leading-control);cursor:pointer;text-align:start;direction:' + (isAr ? 'rtl' : 'ltr') + '">' +
+          '<span style="font-size:var(--type-body);line-height:1">' + opt.icon + '</span><span>' + opt.label + '</span>' +
         '</button>';
       }).join('');
-    bodyMenu.style.cssText = 'position:fixed;display:none;background:#0f1523;border:1px solid rgba(255,255,255,0.14);border-radius:12px;overflow-y:auto;overflow-x:hidden;z-index:2147483647;min-width:180px;max-height:min(360px,48vh);direction:' + (isAr ? 'rtl' : 'ltr');
+    bodyMenu.style.cssText = 'position:fixed;display:none;background:#0f1523;border:1px solid rgba(255,255,255,0.14);border-radius:var(--dash-radius-md);overflow-y:auto;overflow-x:hidden;z-index:2147483647;min-width:180px;max-height:min(360px,48vh);direction:' + (isAr ? 'rtl' : 'ltr');
     document.body.appendChild(bodyMenu);
     bodyMenu.addEventListener('click', function (event) {
       const option = event.target.closest('.s5-sort-option');
@@ -3231,11 +3261,13 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
     function outsideClick(event) {
       const trigger = mountEl.querySelector('#s5-sort-trigger');
-      if (bodyMenu.contains(event.target) || (trigger && trigger.contains(event.target))) return;
+      const target = event && event.target && typeof event.target.nodeType === 'number' ? event.target : null;
+      if (target && (bodyMenu.contains(target) || (trigger && trigger.contains(target)))) return;
       closeProductSortMenu();
     }
     function outsideScroll(event) {
-      if (event && event.target && bodyMenu.contains(event.target)) return;
+      const target = event && event.target && typeof event.target.nodeType === 'number' ? event.target : null;
+      if (target && bodyMenu.contains(target)) return;
       if (_dropdownOpen) closeProductSortMenu();
     }
     document.addEventListener('click', outsideClick);
@@ -3328,7 +3360,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
   // Lightweight skeleton shown while quick-analysis content renders in next rAF
   function _s5ExpandSkeleton() {
     var bar = function(w, h, mb) {
-      return '<div style="height:' + (h||10) + 'px;width:' + (w||'100%') + ';border-radius:6px;background:linear-gradient(90deg,rgba(255,255,255,0.06) 25%,rgba(255,255,255,0.12) 50%,rgba(255,255,255,0.06) 75%);background-size:400% 100%;animation:s5shimmer 1.2s ease infinite;margin-bottom:' + (mb||8) + 'px"></div>';
+      return '<div style="height:' + (h||10) + 'px;width:' + (w||'100%') + ';border-radius:var(--dash-radius-sm);background:linear-gradient(90deg,rgba(255,255,255,0.06) 25%,rgba(255,255,255,0.12) 50%,rgba(255,255,255,0.06) 75%);background-size:400% 100%;animation:s5shimmer 1.2s ease infinite;margin-bottom:' + (mb||8) + 'px"></div>';
     };
     return '<style>@keyframes s5shimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}</style>' +
       '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:4px 0">' +
@@ -3921,7 +3953,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     compareModal.style.cssText = [
       'position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;',
       'padding:18px;background:rgba(0,0,0,0.72);',
-      'font-family:Cairo,sans-serif;direction:' + (isAr ? 'rtl' : 'ltr') + ';box-sizing:border-box;'
+      'font-family:var(--font-ui);direction:' + (isAr ? 'rtl' : 'ltr') + ';box-sizing:border-box;'
     ].join('');
     document.body.appendChild(compareModal);
 
@@ -4313,7 +4345,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     function dangerBadge(metric, product) {
       var value = Number(metric.get(product)) || 0;
       if (!isDangerValue(metric, value)) return '';
-      return '<span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:900;color:#ef4444;background:rgba(239,68,68,0.14);border:1px solid rgba(239,68,68,0.35);border-radius:5px;padding:1px 5px;margin-inline-start:4px;vertical-align:middle;flex-shrink:0">!</span>';
+      return '<span style="display:inline-flex;align-items:center;gap:3px;font-size:var(--type-micro);font-weight:var(--weight-bold);color:#ef4444;background:rgba(239,68,68,0.14);border:1px solid rgba(239,68,68,0.35);border-radius:5px;padding:1px 5px;margin-inline-start:4px;vertical-align:middle;flex-shrink:0">!</span>';
     }
     function winnerCrown() {
       return '<svg width="11" height="11" viewBox="0 0 24 24" fill="#fbbf24" stroke="none" style="flex-shrink:0;margin-inline-start:3px;vertical-align:middle"><path d="M2 19h20v2H2zM2 8l5 6 5-8 5 8 5-6v9H2z"/></svg>';
@@ -4326,9 +4358,9 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       var displaySku = product ? String(product.sku || '') : '';
       var placeholder = s5Txt('Search products...', 'ابحث عن منتج...');
       var triggerInner = product
-        ? '<span style="display:flex;flex-direction:column;align-items:flex-start;min-width:0;flex:1;gap:1px"><span class="s5-product-data-text" data-i18n-preserve style="font-size:12px;font-weight:850;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">' + displayName + '</span>' +
-          (displaySku ? skuCopyHtml(displaySku, { style: 'font-size:10px;color:rgba(255,255,255,0.42);font-weight:700' }) : '') + '</span>'
-        : '<span style="font-size:12px;color:rgba(255,255,255,0.35);font-weight:750;flex:1">' + placeholder + '</span>';
+        ? '<span style="display:flex;flex-direction:column;align-items:flex-start;min-width:0;flex:1;gap:1px"><span class="s5-product-data-text" data-i18n-preserve style="font-size:var(--type-label);font-weight:var(--weight-bold);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">' + displayName + '</span>' +
+          (displaySku ? skuCopyHtml(displaySku, { style: 'font-size:var(--type-micro);color:rgba(255,255,255,0.42);font-weight:var(--weight-bold)' }) : '') + '</span>'
+        : '<span style="font-size:var(--type-label);color:rgba(255,255,255,0.35);font-weight:var(--weight-bold);flex:1">' + placeholder + '</span>';
       var options = productOptionSource().map(function (pr, idx) {
         var key = productKeyOf(pr, idx);
         var name = pr.name || s5Txt('Unnamed', 'بدون اسم');
@@ -4337,21 +4369,21 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         if (!pr._searchKey) {
           pr._searchKey = textKey(name + ' ' + sku);
         }
-        return '<div class="s5-cmp-dd-option' + (selected ? ' selected' : '') + '" data-key="' + attr(key) + '" data-search="' + attr(pr._searchKey) + '" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;cursor:pointer;background:' + (selected ? sideColor + '18' : 'transparent') + ';border:1px solid ' + (selected ? sideColor + '44' : 'transparent') + ';margin-bottom:3px">' +
-          '<span style="min-width:0;flex:1"><span class="s5-product-data-text" data-i18n-preserve style="display:block;font-size:12px;font-weight:850;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(name) + '</span>' +
-          (sku ? skuCopyHtml(sku, { block: true, style: 'font-size:10px;color:rgba(255,255,255,0.38);font-weight:700;margin-top:1px' }) : '') + '</span>' +
+        return '<div class="s5-cmp-dd-option' + (selected ? ' selected' : '') + '" data-key="' + attr(key) + '" data-search="' + attr(pr._searchKey) + '" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--dash-radius-sm);cursor:pointer;background:' + (selected ? sideColor + '18' : 'transparent') + ';border:1px solid ' + (selected ? sideColor + '44' : 'transparent') + ';margin-bottom:3px">' +
+          '<span style="min-width:0;flex:1"><span class="s5-product-data-text" data-i18n-preserve style="display:block;font-size:var(--type-label);font-weight:var(--weight-bold);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(name) + '</span>' +
+          (sku ? skuCopyHtml(sku, { block: true, style: 'font-size:var(--type-micro);color:rgba(255,255,255,0.38);font-weight:var(--weight-bold);margin-top:1px' }) : '') + '</span>' +
           (selected ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="' + sideColor + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '') +
         '</div>';
       }).join('');
       return '<div class="s5-cmp-dd-wrap" data-side="' + side + '" style="margin-bottom:14px;position:relative">' +
-        '<div style="font-size:10px;font-weight:950;color:' + sideColor + ';margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px">' + label + '</div>' +
-        '<div role="button" tabindex="0" class="s5-cmp-dd-trigger" data-side="' + side + '" style="width:100%;min-height:44px;border-radius:11px;border:1px solid ' + (product ? sideColor + '55' : 'rgba(255,255,255,0.12)') + ';background:' + (product ? 'rgba(255,255,255,0.055)' : 'rgba(255,255,255,0.035)') + ';color:#fff;padding:0 12px;font-size:12px;font-weight:750;font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:10px;text-align:start;box-sizing:border-box;outline:none">' +
-          (product ? '<span style="width:28px;height:28px;border-radius:8px;flex-shrink:0;background:' + sideColor + '22;border:1px solid ' + sideColor + '55;color:' + sideColor + ';display:flex;align-items:center;justify-content:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>' : '<span style="width:28px;height:28px;border-radius:8px;flex-shrink:0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.3);display:flex;align-items:center;justify-content:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>') +
+        '<div style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:' + sideColor + ';margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px">' + label + '</div>' +
+        '<div role="button" tabindex="0" class="s5-cmp-dd-trigger" data-side="' + side + '" style="width:100%;min-height:44px;border-radius:var(--dash-radius-md);border:1px solid ' + (product ? sideColor + '55' : 'rgba(255,255,255,0.12)') + ';background:' + (product ? 'rgba(255,255,255,0.055)' : 'rgba(255,255,255,0.035)') + ';color:#fff;padding:0 12px;font-size:var(--type-label);font-weight:var(--weight-bold);font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:10px;text-align:start;box-sizing:border-box;outline:none">' +
+          (product ? '<span style="width:28px;height:28px;border-radius:var(--dash-radius-sm);flex-shrink:0;background:' + sideColor + '22;border:1px solid ' + sideColor + '55;color:' + sideColor + ';display:flex;align-items:center;justify-content:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>' : '<span style="width:28px;height:28px;border-radius:var(--dash-radius-sm);flex-shrink:0;background:rgba(255,255,255,0.05);border:1px solid var(--dash-border-soft);color:rgba(255,255,255,0.3);display:flex;align-items:center;justify-content:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>') +
           triggerInner +
           '<svg class="s5-cmp-dd-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:rgba(255,255,255,0.35)"><polyline points="6 9 12 15 18 9"/></svg>' +
         '</div>' +
-        '<div class="s5-cmp-dd-panel" data-side="' + side + '" style="display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:99999;background:#0d1526;border:1px solid rgba(255,255,255,0.13);border-radius:14px;overflow:hidden;flex-direction:column;max-height:min(320px,42vh)">' +
-          '<div style="padding:10px 10px 8px;border-bottom:1px solid rgba(255,255,255,0.07)"><input type="text" class="s5-cmp-dd-search" placeholder="' + attr(placeholder) + '" style="width:100%;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:#fff;padding:0 10px;font-size:12px;font-weight:750;font-family:inherit;outline:none;box-sizing:border-box;direction:' + (isAr ? 'rtl' : 'ltr') + '"></div>' +
+        '<div class="s5-cmp-dd-panel" data-side="' + side + '" style="display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:99999;background:#0d1526;border:1px solid rgba(255,255,255,0.13);border-radius:var(--dash-radius-lg);overflow:hidden;flex-direction:column;max-height:min(320px,42vh)">' +
+          '<div style="padding:10px 10px 8px;border-bottom:1px solid rgba(255,255,255,0.07)"><input type="text" class="s5-cmp-dd-search" placeholder="' + attr(placeholder) + '" style="width:100%;height:36px;border-radius:var(--dash-radius-sm);border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:#fff;padding:0 10px;font-size:var(--type-label);font-weight:var(--weight-bold);font-family:inherit;outline:none;box-sizing:border-box;direction:' + (isAr ? 'rtl' : 'ltr') + '"></div>' +
           '<div class="s5-cmp-dd-list" style="max-height:220px;overflow-y:auto;padding:6px">' + options + '</div>' +
         '</div>' +
       '</div>';
@@ -4377,10 +4409,10 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         : '';
       return '<div class="s5-compare-metric' + cls + '" style="' + styleVars + '">' +
         '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">' +
-          '<div style="font-size:9px;color:rgba(255,255,255,0.42);font-weight:900;line-height:1.3;text-transform:uppercase;letter-spacing:.3px">' + metric.label + dangerBadge(metric, product) + '</div>' +
-          '<div style="display:flex;align-items:center;gap:2px"><div style="font-size:14px;color:' + (danger ? '#ef4444' : (currentLoses ? '#f59e0b' : (currentWins ? winColor : '#fff'))) + ';font-weight:950;text-align:end;line-height:1.25;overflow-wrap:anywhere">' + metric.fmt(product) + '</div>' + (currentWins && !danger ? winnerCrown() : '') + '</div>' +
+          '<div style="font-size:var(--type-micro);color:rgba(255,255,255,0.42);font-weight:var(--weight-bold);line-height:1.3;text-transform:uppercase;letter-spacing:.3px">' + metric.label + dangerBadge(metric, product) + '</div>' +
+          '<div style="display:flex;align-items:center;gap:2px"><div style="font-size:var(--type-body);color:' + (danger ? '#ef4444' : (currentLoses ? '#f59e0b' : (currentWins ? winColor : '#fff'))) + ';font-weight:var(--weight-bold);text-align:end;line-height:1.25;overflow-wrap:anywhere">' + metric.fmt(product) + '</div>' + (currentWins && !danger ? winnerCrown() : '') + '</div>' +
         '</div>' +
-        (metric.compare === 'none' ? '' : '<div style="height:5px;background:rgba(255,255,255,0.07);border-radius:99px;overflow:hidden;margin-top:7px"><div style="height:100%;width:' + barWidth + '%;background:' + barColor + ';border-radius:99px"></div></div>') +
+        (metric.compare === 'none' ? '' : '<div style="height:5px;background:rgba(255,255,255,0.07);border-radius:var(--radius-pill);overflow:hidden;margin-top:7px"><div style="height:100%;width:' + barWidth + '%;background:' + barColor + ';border-radius:var(--radius-pill)"></div></div>') +
       '</div>';
     }
     function tabsHTML() {
@@ -4390,7 +4422,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       ];
       return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">' + tabs.map(function (tab) {
         var active = compareState.mode === tab.id;
-        return '<button type="button" class="s5-compare-tab" data-mode="' + tab.id + '" style="border:1px solid ' + (active ? 'rgba(245,158,11,0.55)' : 'rgba(255,255,255,0.10)') + ';background:' + (active ? 'rgba(245,158,11,0.14)' : 'rgba(255,255,255,0.04)') + ';color:' + (active ? '#fbbf24' : 'rgba(255,255,255,0.62)') + ';border-radius:10px;padding:7px 11px;font-size:11px;font-weight:900;font-family:inherit;cursor:pointer">' + tab.label + '</button>';
+        return '<button type="button" class="s5-compare-tab" data-mode="' + tab.id + '" style="border:1px solid ' + (active ? 'rgba(245,158,11,0.55)' : 'rgba(255,255,255,0.10)') + ';background:' + (active ? 'rgba(245,158,11,0.14)' : 'rgba(255,255,255,0.04)') + ';color:' + (active ? '#fbbf24' : 'rgba(255,255,255,0.62)') + ';border-radius:var(--dash-radius-md);padding:7px 11px;font-size:var(--type-caption);font-weight:var(--weight-bold);font-family:inherit;cursor:pointer">' + tab.label + '</button>';
       }).join('') + '</div>';
     }
     function scenarioSelectorHTML(product) {
@@ -4398,23 +4430,23 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       return '<div class="s5-compare-card" style="margin-bottom:12px">' +
         '<div style="display:grid;grid-template-columns:minmax(240px,1fr) minmax(260px,auto);gap:12px;align-items:end">' +
           '<div>' + selectorHTML('left', product) + '</div>' +
-          '<div style="border:1px solid rgba(20,184,166,0.22);background:rgba(20,184,166,0.075);border-radius:14px;padding:10px 11px">' +
-            '<div style="font-size:9px;color:#5eead4;font-weight:950;text-transform:uppercase;letter-spacing:.4px;margin-bottom:7px">' + s5Txt('Expected NDR period', 'فترة NDR المتوقعة') + '</div>' +
+          '<div style="border:1px solid rgba(20,184,166,0.22);background:rgba(20,184,166,0.075);border-radius:var(--dash-radius-lg);padding:10px 11px">' +
+            '<div style="font-size:var(--type-micro);color:#5eead4;font-weight:var(--weight-bold);text-transform:uppercase;letter-spacing:.4px;margin-bottom:7px">' + s5Txt('Expected NDR period', 'فترة NDR المتوقعة') + '</div>' +
             '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
-              '<button type="button" class="s5-expected-range-date" data-edge="from" title="' + attr(s5Txt('Expected NDR from date', 'بداية NDR المتوقعة')) + '" style="border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.20);color:#fff;border-radius:10px;padding:8px 10px;font-size:12px;font-weight:900;font-family:inherit;cursor:pointer;min-width:82px;text-align:center">' + esc(compareShortDate(range.dateFrom || range.from)) + '</button>' +
-              '<span style="font-size:11px;color:rgba(255,255,255,0.35);font-weight:900">' + s5Txt('to', 'إلى') + '</span>' +
-              '<button type="button" class="s5-expected-range-date" data-edge="to" title="' + attr(s5Txt('Expected NDR to date', 'نهاية NDR المتوقعة')) + '" style="border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.20);color:#fff;border-radius:10px;padding:8px 10px;font-size:12px;font-weight:900;font-family:inherit;cursor:pointer;min-width:82px;text-align:center">' + esc(compareShortDate(range.dateTo || range.to)) + '</button>' +
+              '<button type="button" class="s5-expected-range-date" data-edge="from" title="' + attr(s5Txt('Expected NDR from date', 'بداية NDR المتوقعة')) + '" style="border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.20);color:#fff;border-radius:var(--dash-radius-md);padding:8px 10px;font-size:var(--type-label);font-weight:var(--weight-bold);font-family:inherit;cursor:pointer;min-width:82px;text-align:center">' + esc(compareShortDate(range.dateFrom || range.from)) + '</button>' +
+              '<span style="font-size:var(--type-caption);color:rgba(255,255,255,0.35);font-weight:var(--weight-bold)">' + s5Txt('to', 'إلى') + '</span>' +
+              '<button type="button" class="s5-expected-range-date" data-edge="to" title="' + attr(s5Txt('Expected NDR to date', 'نهاية NDR المتوقعة')) + '" style="border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.20);color:#fff;border-radius:var(--dash-radius-md);padding:8px 10px;font-size:var(--type-label);font-weight:var(--weight-bold);font-family:inherit;cursor:pointer;min-width:82px;text-align:center">' + esc(compareShortDate(range.dateTo || range.to)) + '</button>' +
             '</div>' +
           '</div>' +
         '</div>' +
-        '<div style="font-size:11px;line-height:1.65;color:rgba(255,255,255,0.48);font-weight:700;margin-top:10px">' +
+        '<div style="font-size:var(--type-caption);line-height:1.65;color:rgba(255,255,255,0.48);font-weight:var(--weight-bold);margin-top:10px">' +
           s5Txt('Same product, two calculation cycles. Actual uses the current dashboard product metrics; Expected uses the selected Expected NDR period without switching the whole dashboard.', 'نفس المنتج بدورتين حساب. الفعلي يستخدم مؤشرات المنتج الحالية، والمتوقع يستخدم فترة NDR المحددة بدون تغيير لوحة التحكم كلها.') +
         '</div>' +
       '</div>';
     }
     function scenarioColumnHTML(title, color, product, other, isExpected) {
       if (!product) {
-        return '<div class="s5-compare-card" style="border-style:dashed;min-height:360px;display:flex;align-items:center;justify-content:center;text-align:center;color:rgba(255,255,255,0.32);font-size:13px;font-weight:800">' +
+        return '<div class="s5-compare-card" style="border-style:dashed;min-height:360px;display:flex;align-items:center;justify-content:center;text-align:center;color:rgba(255,255,255,0.32);font-size:var(--type-control);font-weight:var(--weight-bold)">' +
           s5Txt('Choose a product to load metrics', 'Choose a product to load metrics') +
         '</div>';
       }
@@ -4429,17 +4461,17 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       });
       var sections = order.map(function (group) {
         return '<div style="display:flex;align-items:center;gap:6px;margin:14px 0 8px">' +
-          '<div style="width:3px;height:12px;border-radius:99px;background:' + color + '"></div>' +
-          '<div style="font-size:9px;font-weight:950;color:' + color + ';text-transform:uppercase;letter-spacing:.6px">' + group + '</div>' +
+          '<div style="width:3px;height:12px;border-radius:var(--radius-pill);background:' + color + '"></div>' +
+          '<div style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:' + color + ';text-transform:uppercase;letter-spacing:.6px">' + group + '</div>' +
         '</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">' +
           groups[group].map(function (metric) { return metricHTML(isExpected ? 'right' : 'left', product, other, metric); }).join('') +
         '</div>';
       }).join('');
       return '<div class="s5-compare-card">' +
-        '<div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:' + color + '10;border:1px solid ' + color + '44;margin-bottom:4px">' +
-          '<div style="width:36px;height:36px;border-radius:10px;flex-shrink:0;background:' + color + '22;border:1px solid ' + color + '55;color:' + color + ';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:950">' + (isExpected ? 'EXP' : 'ACT') + '</div>' +
-          '<div style="min-width:0"><div style="font-size:13px;font-weight:950;color:#fff">' + title + '</div>' +
-          '<div data-i18n-preserve style="font-size:10px;color:rgba(255,255,255,0.38);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(product.name || '') + (product.sku ? ' - ' + skuCopyHtml(product.sku, { style: 'font-size:10px;color:rgba(255,255,255,0.38);font-weight:700' }) : '') + '</div></div>' +
+        '<div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:var(--dash-radius-md);background:' + color + '10;border:1px solid ' + color + '44;margin-bottom:4px">' +
+          '<div style="width:36px;height:36px;border-radius:var(--dash-radius-md);flex-shrink:0;background:' + color + '22;border:1px solid ' + color + '55;color:' + color + ';display:flex;align-items:center;justify-content:center;font-size:var(--type-control);font-weight:var(--weight-bold)">' + (isExpected ? 'EXP' : 'ACT') + '</div>' +
+          '<div style="min-width:0"><div style="font-size:var(--type-control);font-weight:var(--weight-bold);color:#fff">' + title + '</div>' +
+          '<div data-i18n-preserve style="font-size:var(--type-micro);color:rgba(255,255,255,0.38);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(product.name || '') + (product.sku ? ' - ' + skuCopyHtml(product.sku, { style: 'font-size:var(--type-micro);color:rgba(255,255,255,0.38);font-weight:var(--weight-bold)' }) : '') + '</div></div>' +
         '</div>' +
         sections +
       '</div>';
@@ -4449,7 +4481,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       if (!product) {
         return '<div class="s5-compare-card" style="border-style:dashed">' +
           selectorHTML(side, null) +
-          '<div style="min-height:300px;display:flex;align-items:center;justify-content:center;text-align:center;color:rgba(255,255,255,0.32);font-size:13px;font-weight:800">' +
+          '<div style="min-height:300px;display:flex;align-items:center;justify-content:center;text-align:center;color:rgba(255,255,255,0.32);font-size:var(--type-control);font-weight:var(--weight-bold)">' +
             s5Txt('Choose a product to load metrics', 'اختر منتجا لعرض المؤشرات') +
           '</div>' +
         '</div>';
@@ -4465,18 +4497,18 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       });
       var sections = order.map(function (group) {
         return '<div style="display:flex;align-items:center;gap:6px;margin:14px 0 8px">' +
-          '<div style="width:3px;height:12px;border-radius:99px;background:' + sideColor + '"></div>' +
-          '<div style="font-size:9px;font-weight:950;color:' + sideColor + ';text-transform:uppercase;letter-spacing:.6px">' + group + '</div>' +
+          '<div style="width:3px;height:12px;border-radius:var(--radius-pill);background:' + sideColor + '"></div>' +
+          '<div style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:' + sideColor + ';text-transform:uppercase;letter-spacing:.6px">' + group + '</div>' +
         '</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">' +
           groups[group].map(function (metric) { return metricHTML(side, product, other, metric); }).join('') +
         '</div>';
       }).join('');
       return '<div class="s5-compare-card">' +
         selectorHTML(side, product) +
-        '<div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:rgba(0,0,0,0.18);border:1px solid rgba(255,255,255,0.06);margin-bottom:4px">' +
-          '<div style="width:36px;height:36px;border-radius:10px;flex-shrink:0;background:' + sideColor + '22;border:1px solid ' + sideColor + '55;color:' + sideColor + ';display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:950">#' + cmpNum(product.rank) + '</div>' +
-          '<div style="min-width:0"><div data-i18n-preserve style="font-size:13px;font-weight:950;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(product.name || '') + '</div>' +
-          skuCopyHtml(product.sku || '', { emptyText: '-', block: true, style: 'font-size:10px;color:rgba(255,255,255,0.38);margin-top:2px;font-weight:700' }) + '</div>' +
+        '<div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:var(--dash-radius-md);background:rgba(0,0,0,0.18);border:1px solid rgba(255,255,255,0.06);margin-bottom:4px">' +
+          '<div style="width:36px;height:36px;border-radius:var(--dash-radius-md);flex-shrink:0;background:' + sideColor + '22;border:1px solid ' + sideColor + '55;color:' + sideColor + ';display:flex;align-items:center;justify-content:center;font-size:var(--type-body);font-weight:var(--weight-bold)">#' + cmpNum(product.rank) + '</div>' +
+          '<div style="min-width:0"><div data-i18n-preserve style="font-size:var(--type-control);font-weight:var(--weight-bold);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(product.name || '') + '</div>' +
+          skuCopyHtml(product.sku || '', { emptyText: '-', block: true, style: 'font-size:var(--type-micro);color:rgba(255,255,255,0.38);margin-top:2px;font-weight:var(--weight-bold)' }) + '</div>' +
         '</div>' +
         sections +
       '</div>';
@@ -4492,29 +4524,29 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       var sv = scenarioVerdict(actual, expected, expectedLoading);
       var productsBodyHtml = '<div style="padding:18px 20px 20px"><div class="s5-compare-grid">' +
         columnHTML('left', left, right) +
-        '<div class="s5-compare-divider" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:rgba(255,255,255,0.32);align-self:stretch"><div class="s5-compare-divider-line" style="width:1px;flex:1;background:linear-gradient(180deg,transparent,rgba(245,158,11,0.45),transparent)"></div><div style="width:34px;height:34px;border-radius:50%;border:1px solid rgba(245,158,11,0.32);background:rgba(245,158,11,0.10);color:#fbbf24;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:950;flex-shrink:0">VS</div><div class="s5-compare-divider-line" style="width:1px;flex:1;background:linear-gradient(180deg,transparent,rgba(20,184,166,0.45),transparent)"></div></div>' +
+        '<div class="s5-compare-divider" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:rgba(255,255,255,0.32);align-self:stretch"><div class="s5-compare-divider-line" style="width:1px;flex:1;background:linear-gradient(180deg,transparent,rgba(245,158,11,0.45),transparent)"></div><div style="width:34px;height:34px;border-radius:50%;border:1px solid rgba(245,158,11,0.32);background:rgba(245,158,11,0.10);color:#fbbf24;display:flex;align-items:center;justify-content:center;font-size:var(--type-micro);font-weight:var(--weight-bold);flex-shrink:0">VS</div><div class="s5-compare-divider-line" style="width:1px;flex:1;background:linear-gradient(180deg,transparent,rgba(20,184,166,0.45),transparent)"></div></div>' +
         columnHTML('right', right, left) +
-        '</div><div class="s5-compare-verdict" style="margin-top:16px;border-radius:18px;border:1px solid ' + v.color + '66;background:' + v.color + '12;padding:18px 20px;display:flex;align-items:flex-start;gap:13px">' +
-        '<div style="width:38px;height:38px;border-radius:12px;background:' + v.color + '22;border:1px solid ' + v.color + '66;color:' + v.color + ';display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>' +
-        '<div><div style="font-size:15px;font-weight:950;color:#fff;margin-bottom:5px">' + v.title + '</div><div data-i18n-preserve style="font-size:12px;line-height:1.75;color:rgba(255,255,255,0.72);font-weight:700">' + v.text + '</div></div>' +
+        '</div><div class="s5-compare-verdict" style="margin-top:16px;border-radius:var(--dash-radius-xl);border:1px solid ' + v.color + '66;background:' + v.color + '12;padding:18px 20px;display:flex;align-items:flex-start;gap:13px">' +
+        '<div style="width:38px;height:38px;border-radius:var(--dash-radius-md);background:' + v.color + '22;border:1px solid ' + v.color + '66;color:' + v.color + ';display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>' +
+        '<div><div style="font-size:var(--type-component-title);font-weight:var(--weight-bold);color:#fff;margin-bottom:5px">' + v.title + '</div><div data-i18n-preserve style="font-size:var(--type-label);line-height:1.75;color:rgba(255,255,255,0.72);font-weight:var(--weight-bold)">' + v.text + '</div></div>' +
         '</div></div>';
       var scenarioBodyHtml = '<div style="padding:18px 20px 20px">' +
         scenarioSelectorHTML(left) +
         '<div class="s5-compare-grid">' +
         scenarioColumnHTML(s5Txt('Actual cycle', 'الدورة الفعلية'), '#f59e0b', actual, expected, false) +
-        '<div class="s5-compare-divider" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:rgba(255,255,255,0.32);align-self:stretch"><div class="s5-compare-divider-line" style="width:1px;flex:1;background:linear-gradient(180deg,transparent,rgba(245,158,11,0.45),transparent)"></div><div style="width:34px;height:34px;border-radius:50%;border:1px solid rgba(245,158,11,0.32);background:rgba(245,158,11,0.10);color:#fbbf24;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:950;flex-shrink:0">VS</div><div class="s5-compare-divider-line" style="width:1px;flex:1;background:linear-gradient(180deg,transparent,rgba(20,184,166,0.45),transparent)"></div></div>' +
+        '<div class="s5-compare-divider" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:rgba(255,255,255,0.32);align-self:stretch"><div class="s5-compare-divider-line" style="width:1px;flex:1;background:linear-gradient(180deg,transparent,rgba(245,158,11,0.45),transparent)"></div><div style="width:34px;height:34px;border-radius:50%;border:1px solid rgba(245,158,11,0.32);background:rgba(245,158,11,0.10);color:#fbbf24;display:flex;align-items:center;justify-content:center;font-size:var(--type-micro);font-weight:var(--weight-bold);flex-shrink:0">VS</div><div class="s5-compare-divider-line" style="width:1px;flex:1;background:linear-gradient(180deg,transparent,rgba(20,184,166,0.45),transparent)"></div></div>' +
         scenarioColumnHTML(s5Txt('Expected NDR cycle', 'دورة NDR المتوقعة'), '#14b8a6', expected, actual, true) +
-        '</div><div class="s5-compare-verdict" style="margin-top:16px;border-radius:18px;border:1px solid ' + sv.color + '66;background:' + sv.color + '12;padding:18px 20px;display:flex;align-items:flex-start;gap:13px">' +
-        '<div style="width:38px;height:38px;border-radius:12px;background:' + sv.color + '22;border:1px solid ' + sv.color + '66;color:' + sv.color + ';display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>' +
-        '<div><div style="font-size:15px;font-weight:950;color:#fff;margin-bottom:5px">' + sv.title + '</div><div style="font-size:12px;line-height:1.75;color:rgba(255,255,255,0.72);font-weight:700">' + sv.text + '</div></div>' +
+        '</div><div class="s5-compare-verdict" style="margin-top:16px;border-radius:var(--dash-radius-xl);border:1px solid ' + sv.color + '66;background:' + sv.color + '12;padding:18px 20px;display:flex;align-items:flex-start;gap:13px">' +
+        '<div style="width:38px;height:38px;border-radius:var(--dash-radius-md);background:' + sv.color + '22;border:1px solid ' + sv.color + '66;color:' + sv.color + ';display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>' +
+        '<div><div style="font-size:var(--type-component-title);font-weight:var(--weight-bold);color:#fff;margin-bottom:5px">' + sv.title + '</div><div style="font-size:var(--type-label);line-height:1.75;color:rgba(255,255,255,0.72);font-weight:var(--weight-bold)">' + sv.text + '</div></div>' +
         '</div></div>';
       var bodyHtml = compareState.mode === 'ndr' ? scenarioBodyHtml : productsBodyHtml;
-      return '<div class="s5-compare-modal-panel" style="width:min(1180px,96vw);max-height:92vh;overflow:auto;border-radius:22px;background:#0b1120;border:1px solid rgba(255,255,255,0.11);position:relative">' +
-        '<div style="position:sticky;top:0;z-index:5;padding:18px 22px;border-bottom:1px solid rgba(255,255,255,0.075);background:#0b1120;display:flex;align-items:center;justify-content:space-between;gap:16px;border-radius:22px 22px 0 0">' +
-          '<div style="display:flex;align-items:center;gap:12px"><div style="width:42px;height:42px;border-radius:13px;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.35);color:#fbbf24;display:flex;align-items:center;justify-content:center"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 7h14"/><path d="M6 7l-4 7h8L6 7z"/><path d="M18 7l-4 7h8l-4-7z"/></svg></div>' +
-          '<div><div style="font-size:18px;font-weight:950;color:#fff">' + s5Txt('Product Comparison', 'مقارنة المنتجات') + '</div><div style="font-size:11px;color:rgba(255,255,255,0.38);font-weight:700;margin-top:3px">' + s5Txt('Volumes, rates, financials, and scale verdict', 'الحجم والنسب والماليات وحكم الأداء') + '</div></div></div>' +
+      return '<div class="s5-compare-modal-panel" style="width:min(1180px,96vw);max-height:92vh;overflow:auto;border-radius:var(--dash-radius-xl);background:var(--dash-surface);border:1px solid rgba(255,255,255,0.11);position:relative">' +
+        '<div style="position:sticky;top:0;z-index:5;padding:18px 22px;border-bottom:1px solid rgba(255,255,255,0.075);background:var(--dash-surface);display:flex;align-items:center;justify-content:space-between;gap:16px;border-radius:var(--dash-radius-xl) 22px 0 0">' +
+          '<div style="display:flex;align-items:center;gap:12px"><div style="width:42px;height:42px;border-radius:var(--dash-radius-lg);background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.35);color:#fbbf24;display:flex;align-items:center;justify-content:center"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 7h14"/><path d="M6 7l-4 7h8L6 7z"/><path d="M18 7l-4 7h8l-4-7z"/></svg></div>' +
+          '<div><div style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff">' + s5Txt('Product Comparison', 'مقارنة المنتجات') + '</div><div style="font-size:var(--type-caption);color:rgba(255,255,255,0.38);font-weight:var(--weight-bold);margin-top:3px">' + s5Txt('Volumes, rates, financials, and scale verdict', 'الحجم والنسب والماليات وحكم الأداء') + '</div></div></div>' +
           tabsHTML() +
-          '<button id="s5-compare-close" style="width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.65);cursor:pointer;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;font-family:inherit">&times;</button>' +
+          '<button id="s5-compare-close" style="width:36px;height:36px;border-radius:var(--dash-radius-md);border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.65);cursor:pointer;font-size:var(--type-metric-sm);line-height:1;display:flex;align-items:center;justify-content:center;font-family:var(--font-ui);</button>' +
         '</div>' +
         bodyHtml +
       '</div>';
@@ -4736,17 +4768,34 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     /* Create modal overlay once */
     var MODAL_ID = 's5-product-modal';
     var existingModal = document.getElementById(MODAL_ID);
-    if (existingModal) existingModal.remove();
+    var reuseVisibleModal = existingModal &&
+      existingModal.style.display !== 'none' &&
+      existingModal.dataset &&
+      existingModal.dataset.productKey;
+    if (existingModal && !reuseVisibleModal) existingModal.remove();
 
-    var modal = document.createElement('div');
+    var modal = reuseVisibleModal ? existingModal : document.createElement('div');
+    currentModalProductKey = reuseVisibleModal ? existingModal.dataset.productKey : null;
     modal.id = MODAL_ID;
     modal.className = 'dash-overlay-scope';
     modal.style.cssText = [
       'position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;',
       'background:rgba(0,0,0,0.72);',
-      'font-family:Cairo,sans-serif;direction:' + (isAr ? 'rtl' : 'ltr') + ';'
+      'font-family:var(--font-ui);direction:' + (isAr ? 'rtl' : 'ltr') + ';'
     ].join('');
-    document.body.appendChild(modal);
+    if (!modal.parentNode) document.body.appendChild(modal);
+
+    function shouldPreserveVisibleModal() {
+      var shell = document.getElementById('db-shell-mount');
+      var dashboardPage = document.getElementById('page-dashboard');
+      return !!(modal &&
+        modal.style.display !== 'none' &&
+        currentModalProductKey &&
+        shell &&
+        shell._dashboardActiveSection === 'products' &&
+        dashboardPage &&
+        dashboardPage.classList.contains('active'));
+    }
 
     function pct(n, d) { return (+(n || 0)).toFixed(d != null ? d : 1) + '%'; }
     function num(n)     { return Math.round(n || 0).toLocaleString('en-US'); }
@@ -4792,15 +4841,15 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         pageEntries.forEach(function (c) {
           var barW = Math.min(100, Math.round(c.orders / (cityEntries[0] && cityEntries[0].orders || 1) * 100));
           cityRows += '<div style="display:grid;grid-template-columns:1fr 60px 60px 70px;gap:8px;align-items:center;' +
-            'padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);margin-bottom:4px;">' +
+            'padding:8px 10px;border-radius:var(--dash-radius-sm);background:rgba(255,255,255,0.03);margin-bottom:4px;">' +
             '<div>' +
-              '<div style="font-size:12px;font-weight:800;color:#fff;margin-bottom:3px">' + esc(c.name) + '</div>' +
+              '<div style="font-size:var(--type-label);font-weight:var(--weight-bold);color:#fff;margin-bottom:3px">' + esc(c.name) + '</div>' +
               '<div style="height:3px;background:rgba(255,255,255,0.06);border-radius:3px">' +
                 '<div style="height:100%;width:' + barW + '%;background:linear-gradient(90deg,#7c3aed,#14b8a6);border-radius:3px"></div>' +
               '</div>' +
             '</div>' +
-            '<div style="text-align:center;font-size:12px;font-weight:700;color:rgba(255,255,255,0.7)">' + num(c.orders) + '</div>' +
-            '<div style="text-align:center;font-size:12px;font-weight:800;color:' + ndrColor(c.ndr) + '">' + pct(c.ndr) + '</div>' +
+            '<div style="text-align:center;font-size:var(--type-label);font-weight:var(--weight-bold);color:rgba(255,255,255,0.7)">' + num(c.orders) + '</div>' +
+            '<div style="text-align:center;font-size:var(--type-label);font-weight:var(--weight-bold);color:' + ndrColor(c.ndr) + '">' + pct(c.ndr) + '</div>' +
             '<div style="text-align:center">' + sb(c.scalingScore, 'scale') + '</div>' +
           '</div>';
         });
@@ -4822,10 +4871,10 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         p.cityBreakdown.slice(0, 8).forEach(function (c) {
           var orders = Number(c.count || c.orders || 0);
           var cityNdr = Number(c.ndr || 0);
-          cityRows += '<div style="display:grid;grid-template-columns:1fr 60px 60px 70px;gap:8px;align-items:center;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);margin-bottom:4px;">' +
-            '<div style="font-size:12px;font-weight:800;color:#fff">' + esc(c.name || '') + '</div>' +
-            '<div style="text-align:center;font-size:12px;font-weight:700;color:rgba(255,255,255,0.7)">' + num(orders) + '</div>' +
-            '<div style="text-align:center;font-size:12px;font-weight:800;color:' + ndrColor(cityNdr) + '">' + pct(cityNdr) + '</div>' +
+          cityRows += '<div style="display:grid;grid-template-columns:1fr 60px 60px 70px;gap:8px;align-items:center;padding:8px 10px;border-radius:var(--dash-radius-sm);background:rgba(255,255,255,0.03);margin-bottom:4px;">' +
+            '<div style="font-size:var(--type-label);font-weight:var(--weight-bold);color:#fff">' + esc(c.name || '') + '</div>' +
+            '<div style="text-align:center;font-size:var(--type-label);font-weight:var(--weight-bold);color:rgba(255,255,255,0.7)">' + num(orders) + '</div>' +
+            '<div style="text-align:center;font-size:var(--type-label);font-weight:var(--weight-bold);color:' + ndrColor(cityNdr) + '">' + pct(cityNdr) + '</div>' +
             '<div style="text-align:center">' + sb(c.scalingScore || 0, 'scale') + '</div>' +
           '</div>';
         });
@@ -4843,19 +4892,19 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           var barW = Math.round(c / maxPiece * 100);
           var pct2 = c > 0 ? (c / totalPieces * 100).toFixed(1) + '%' : '-';
           return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">' +
-            '<span style="min-width:24px;font-size:13px;font-weight:900;color:#f59e0b;text-align:center">' + esc(item.qty) + 'x</span>' +
+            '<span style="min-width:24px;font-size:var(--type-control);font-weight:var(--weight-bold);color:#f59e0b;text-align:center">' + esc(item.qty) + 'x</span>' +
             '<div style="flex:1">' +
               '<div style="height:5px;background:rgba(255,255,255,0.07);border-radius:5px;overflow:hidden">' +
                 '<div style="height:100%;width:' + barW + '%;background:linear-gradient(90deg,#a855f7,#14b8a6);border-radius:5px"></div>' +
               '</div>' +
             '</div>' +
-            '<span style="min-width:36px;text-align:right;font-size:11px;font-weight:700;color:rgba(255,255,255,0.65)">' + num(c) + '</span>' +
-            '<span style="min-width:38px;text-align:right;font-size:11px;color:rgba(255,255,255,0.35)">' + pct2 + '</span>' +
-            '<span style="min-width:44px;text-align:right;font-size:11px;color:' + ndrColor(ndrV) + '">' + pct(ndrV) + '</span>' +
+            '<span style="min-width:36px;text-align:right;font-size:var(--type-caption);font-weight:var(--weight-bold);color:rgba(255,255,255,0.65)">' + num(c) + '</span>' +
+            '<span style="min-width:38px;text-align:right;font-size:var(--type-caption);color:rgba(255,255,255,0.35)">' + pct2 + '</span>' +
+            '<span style="min-width:44px;text-align:right;font-size:var(--type-caption);color:' + ndrColor(ndrV) + '">' + pct(ndrV) + '</span>' +
           '</div>';
         }).join('');
       } else if (p._backendProduct) {
-        piecesHtml = '<div style="color:rgba(255,255,255,0.25);font-size:12px;font-style:italic;padding:8px 0">' +
+        piecesHtml = '<div style="color:rgba(255,255,255,0.25);font-size:var(--type-label);font-style:italic;padding:8px 0">' +
           s5Txt('Loading details\u2026', 'جار التحميل\u2026') + '</div>';
       }
 
@@ -4866,18 +4915,18 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           var topCities = (item.cities || []).slice(0, 3).map(function (c) {
             return '<div style="display:flex;justify-content:space-between;align-items:center;' +
               'padding:3px 6px;border-radius:5px;background:rgba(255,255,255,0.02);margin-bottom:2px;">' +
-              '<span style="font-size:11px;color:rgba(255,255,255,0.7)">' + esc(c.name) + '</span>' +
-              '<span style="font-size:11px;font-weight:700;color:#f59e0b">' + num(c.count || c.statusTotalCount) + '</span>' +
+              '<span style="font-size:var(--type-caption);color:rgba(255,255,255,0.7)">' + esc(c.name) + '</span>' +
+              '<span style="font-size:var(--type-caption);font-weight:var(--weight-bold);color:#f59e0b">' + num(c.count || c.statusTotalCount) + '</span>' +
             '</div>';
           }).join('');
-          return '<div style="padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.025);' +
+          return '<div style="padding:10px 12px;border-radius:var(--dash-radius-md);background:rgba(255,255,255,0.025);' +
             'border:1px solid rgba(255,255,255,0.05);margin-bottom:8px;">' +
-            '<div style="font-size:12px;font-weight:900;color:#f59e0b;margin-bottom:6px">' + esc(item.qty) + 'x</div>' +
+            '<div style="font-size:var(--type-label);font-weight:var(--weight-bold);color:#f59e0b;margin-bottom:6px">' + esc(item.qty) + 'x</div>' +
             topCities +
           '</div>';
         }).join('');
       } else if (p._backendProduct) {
-        qtyCityHtml = '<div style="color:rgba(255,255,255,0.25);font-size:12px;font-style:italic;padding:8px 0">' +
+        qtyCityHtml = '<div style="color:rgba(255,255,255,0.25);font-size:var(--type-label);font-style:italic;padding:8px 0">' +
           s5Txt('Loading details\u2026', 'جار التحميل\u2026') + '</div>';
       }
 
@@ -4897,12 +4946,12 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       var funnelRows = funnel.map(function (f) {
         var barW = Math.round((f.count / (f.base || rawTotal)) * 100);
         return '<div style="margin-bottom:8px">' +
-          '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">' +
+          '<div style="display:flex;justify-content:space-between;font-size:var(--type-caption);margin-bottom:3px;">' +
             '<span style="color:' + (_fIsLight ? 'rgba(30,10,60,0.6)' : 'rgba(255,255,255,0.55)') + '">' + f.label + '</span>' +
-            '<span style="font-weight:700;color:' + (_fIsLight ? 'rgba(15,5,30,0.9)' : '#fff') + '">' + num(f.count) + ' <span style="color:' + (_fIsLight ? 'rgba(15,5,30,0.45)' : 'rgba(255,255,255,0.35)') + ';font-weight:500">(' + barW + '%)</span></span>' +
+            '<span style="font-weight:var(--weight-bold);color:' + (_fIsLight ? 'rgba(15,5,30,0.9)' : '#fff') + '">' + num(f.count) + ' <span style="color:' + (_fIsLight ? 'rgba(15,5,30,0.45)' : 'rgba(255,255,255,0.35)') + ';font-weight:var(--weight-medium)">(' + barW + '%)</span></span>' +
           '</div>' +
-          '<div style="height:6px;background:' + (_fIsLight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.06)') + ';border-radius:6px;overflow:hidden">' +
-            '<div style="height:100%;width:' + barW + '%;background:' + f.color + ';border-radius:6px"></div>' +
+          '<div style="height:6px;background:' + (_fIsLight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.06)') + ';border-radius:var(--dash-radius-sm);overflow:hidden">' +
+            '<div style="height:100%;width:' + barW + '%;background:' + f.color + ';border-radius:var(--dash-radius-sm)"></div>' +
           '</div>' +
         '</div>';
       }).join('');
@@ -4914,29 +4963,29 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       var pendingVal = typeof p.pendingPct === 'number' ? p.pendingPct : 0;
 
       var cityLoadingPlaceholder = p._backendProduct && !cityRows
-        ? '<div style="color:rgba(255,255,255,0.25);font-size:12px;font-style:italic;padding:8px 0">' +
+        ? '<div style="color:rgba(255,255,255,0.25);font-size:var(--type-label);font-style:italic;padding:8px 0">' +
           s5Txt('Loading city data\u2026', 'جار تحميل بيانات المدن\u2026') + '</div>'
-        : '<div style="color:rgba(255,255,255,0.25);font-size:12px;padding:20px 0">' + s5Txt('No geographical data available', 'لا توجد بيانات جغرافية متاحة') + '</div>';
+        : '<div style="color:rgba(255,255,255,0.25);font-size:var(--type-label);padding:20px 0">' + s5Txt('No geographical data available', 'لا توجد بيانات جغرافية متاحة') + '</div>';
 
-      return '<div style="background:#0c1121;border:1px solid rgba(255,255,255,0.1);border-radius:22px;' +
+      return '<div style="background:#0c1121;border:1px solid rgba(255,255,255,0.1);border-radius:var(--dash-radius-xl);' +
         'width:min(1040px,96vw);max-height:90vh;overflow-y:auto;position:relative;">' +
 
         /* Header */
         '<div style="padding:24px 28px 20px;border-bottom:1px solid rgba(255,255,255,0.07);' +
           'display:flex;align-items:flex-start;justify-content:space-between;gap:16px;' +
-          'position:sticky;top:0;background:#0c1121;z-index:10;border-radius:22px 22px 0 0;">' +
+          'position:sticky;top:0;background:#0c1121;z-index:10;border-radius:var(--dash-radius-xl) 22px 0 0;">' +
           '<div style="display:flex;align-items:center;gap:14px;">' +
-            '<div style="width:46px;height:46px;border-radius:14px;background:rgba(124,58,237,0.15);' +
+            '<div style="width:46px;height:46px;border-radius:var(--dash-radius-lg);background:rgba(124,58,237,0.15);' +
               'border:1px solid rgba(124,58,237,0.3);display:flex;align-items:center;justify-content:center;">' +
               '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2" stroke-linecap="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>' +
             '</div>' +
             '<div>' +
-              '<div data-i18n-preserve style="font-size:18px;font-weight:900;color:#fff">' + esc(p.name || s5Txt('product', 'منتج')) + '</div>' +
-              '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:3px;display:flex;align-items:center;gap:7px;flex-wrap:wrap">' + skuCopyHtml(p.sku || '', { emptyText: '-', style: 'font-size:11px;color:rgba(255,255,255,0.4);font-weight:700' }) + '<span>· ' + s5Txt('Rank #', 'رتبة #') + esc(p.rank || '-') + '</span></div>' +
+              '<div data-i18n-preserve style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff">' + esc(p.name || s5Txt('product', 'منتج')) + '</div>' +
+              '<div style="font-size:var(--type-caption);color:var(--dash-text-faint);margin-top:3px;display:flex;align-items:center;gap:7px;flex-wrap:wrap">' + skuCopyHtml(p.sku || '', { emptyText: '-', style: 'font-size:var(--type-caption);color:var(--dash-text-faint);font-weight:var(--weight-bold)' }) + '<span>· ' + s5Txt('Rank #', 'رتبة #') + esc(p.rank || '-') + '</span></div>' +
             '</div>' +
           '</div>' +
-          '<button id="s5-modal-close" style="background:rgba(255,255,255,0.07);border:none;color:rgba(255,255,255,0.6);' +
-            'font-size:18px;width:34px;height:34px;border-radius:10px;cursor:pointer;flex-shrink:0;' +
+          '<button id="s5-modal-close" style="background:rgba(255,255,255,0.07);border:none;color:var(--dash-text-muted);' +
+            'font-size:var(--type-section-title);width:34px;height:34px;border-radius:var(--dash-radius-md);cursor:pointer;flex-shrink:0;' +
             'display:flex;align-items:center;justify-content:center;font-family:inherit;' +
             'line-height:1;">x</button>' +
         '</div>' +
@@ -4957,9 +5006,9 @@ function renderSection5Hydrated(mountEl, data, ctx) {
             { label: p5Txt('breakEven'), value: productMoney(p.breakEvenCpa), color: '#f59e0b', badge: null, help: p5Txt('breakEvenHelp') },
             { label: p5Txt('pnl'), value: productMoney(p.profitLoss), color: p.profitLoss >= 0 ? '#00e676' : '#ef4444', badge: null, help: p5Txt('pnlHelp') },
           ].map(function (k) {
-            return '<div' + (k.help ? ' title="' + attr(k.help) + '"' : '') + ' style="background:#0b1423;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px 10px;text-align:center">' +
-              '<div style="font-size:' + (k.badge ? '0' : (k.help ? '13' : '18')) + 'px;font-weight:900;color:' + k.color + ';line-height:1;margin-bottom:6px;white-space:nowrap">' + k.value + (k.badge || '') + '</div>' +
-              '<div style="font-size:10px;color:rgba(255,255,255,0.38);font-weight:700">' + k.label + '</div>' +
+            return '<div' + (k.help ? ' title="' + attr(k.help) + '"' : '') + ' style="background:#0b1423;border:1px solid rgba(255,255,255,0.06);border-radius:var(--dash-radius-md);padding:14px 10px;text-align:center">' +
+              '<div style="font-size:' + (k.badge ? '0' : (k.help ? '13' : '18')) + 'px;font-weight:var(--weight-bold);color:' + k.color + ';line-height:1;margin-bottom:6px;white-space:nowrap">' + k.value + (k.badge || '') + '</div>' +
+              '<div style="font-size:var(--type-micro);color:rgba(255,255,255,0.38);font-weight:var(--weight-bold)">' + k.label + '</div>' +
             '</div>';
           }).join('') +
         '</div>' +
@@ -4968,8 +5017,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         '<div class="s5-modal-analysis-grid" style="padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:20px;">' +
 
           /* Funnel */
-          '<div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;padding:16px 18px;">' +
-            '<div style="font-size:12px;font-weight:800;color:rgba(255,255,255,0.45);margin-bottom:14px;display:flex;align-items:center;gap:6px;">' +
+          '<div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:var(--dash-radius-lg);padding:16px 18px;">' +
+            '<div style="font-size:var(--type-label);font-weight:var(--weight-bold);color:rgba(255,255,255,0.45);margin-bottom:14px;display:flex;align-items:center;gap:6px;">' +
               '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 3H2l8 9.46V19l4 2V12.46L22 3z"/></svg>' +
               s5Txt('Order Funnel', 'مسار الطلبات') +
             '</div>' +
@@ -4977,8 +5026,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           '</div>' +
 
           /* City breakdown */
-          '<div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;padding:16px 18px;">' +
-            '<div style="font-size:12px;font-weight:800;color:rgba(255,255,255,0.45);margin-bottom:14px;display:flex;align-items:center;gap:6px;">' +
+          '<div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:var(--dash-radius-lg);padding:16px 18px;">' +
+            '<div style="font-size:var(--type-label);font-weight:var(--weight-bold);color:rgba(255,255,255,0.45);margin-bottom:14px;display:flex;align-items:center;gap:6px;">' +
               '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>' +
               s5Txt('Top Cities', 'أبرز المدن') +
             '</div>' +
@@ -4986,8 +5035,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           '</div>' +
 
           /* Quantity Distribution */
-          '<div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;padding:16px 18px;">' +
-            '<div style="font-size:12px;font-weight:800;color:rgba(255,255,255,0.45);margin-bottom:14px;display:flex;align-items:center;gap:6px;">' +
+          '<div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:var(--dash-radius-lg);padding:16px 18px;">' +
+            '<div style="font-size:var(--type-label);font-weight:var(--weight-bold);color:rgba(255,255,255,0.45);margin-bottom:14px;display:flex;align-items:center;gap:6px;">' +
               '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="6" height="18"/><rect x="9" y="8" width="6" height="13"/><rect x="16" y="13" width="6" height="8"/></svg>' +
               s5Txt('Quantity Distribution', 'توزيع الكميات') +
             '</div>' +
@@ -4995,8 +5044,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           '</div>' +
 
           /* Top Cities by Quantity */
-          '<div class="s5-modal-analysis-wide" style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:14px;padding:16px 18px;">' +
-            '<div style="font-size:12px;font-weight:800;color:rgba(255,255,255,0.45);margin-bottom:14px;display:flex;align-items:center;gap:6px;">' +
+          '<div class="s5-modal-analysis-wide" style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:var(--dash-radius-lg);padding:16px 18px;">' +
+            '<div style="font-size:var(--type-label);font-weight:var(--weight-bold);color:rgba(255,255,255,0.45);margin-bottom:14px;display:flex;align-items:center;gap:6px;">' +
               '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' +
               s5Txt('Top Cities by Quantity', 'أبرز المدن حسب الكمية') +
             '</div>' +
@@ -5018,6 +5067,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     function refreshModal() {
       var p = PRODUCT_BY_KEY[currentModalProductKey] || null;
       if (!p) return;
+      if (!modal.parentNode && shouldPreserveVisibleModal()) document.body.appendChild(modal);
       modal.innerHTML = modalHTML(p);
       bindModalCityPagination();
       var closeBtn = modal.querySelector('#s5-modal-close');
@@ -5073,9 +5123,10 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
       // Show the overlay immediately (feels instant) then paint content on next frame
       modal.style.display = 'flex';
+      modal.dataset.productKey = productKey;
       document.body.style.overflow = 'hidden';
       // Show a lightweight skeleton so the modal appears open right away
-      modal.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;width:min(1040px,96vw);height:220px;background:#0c1121;border:1px solid rgba(255,255,255,0.1);border-radius:22px"><div style="width:32px;height:32px;border:3px solid rgba(255,255,255,0.08);border-top-color:#a855f7;border-radius:50%;animation:s5spin 0.6s linear infinite"></div></div>';
+      modal.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;width:min(1040px,96vw);height:220px;background:#0c1121;border:1px solid rgba(255,255,255,0.1);border-radius:var(--dash-radius-xl)"><div style="width:32px;height:32px;border:3px solid rgba(255,255,255,0.08);border-top-color:#a855f7;border-radius:50%;animation:s5spin 0.6s linear infinite"></div></div>';
 
       requestAnimationFrame(function () {
         requestAnimationFrame(function () {
@@ -5095,6 +5146,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
     function closeModal() {
       modal.style.display = 'none';
+      delete modal.dataset.productKey;
       document.body.style.overflow = '';
     }
 
@@ -5127,18 +5179,19 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     /* Expose globally so city drawer can open it */
     window.openProductModal = openModal;
     window.s5BindProductModalRows = bindModalRows;
+    if (currentModalProductKey && modal.style.display !== 'none') refreshModal();
 
     var modalObserver = new MutationObserver(function () {
       if (!document.body.contains(mountEl)) {
         document.removeEventListener('keydown', onModalKeydown);
-        if (modal.parentNode) modal.remove();
+        if (!shouldPreserveVisibleModal() && modal.parentNode) modal.remove();
         modalObserver.disconnect();
       }
     });
     if (mountEl.parentNode) modalObserver.observe(mountEl.parentNode, { childList: true });
     addProductCleanup(function () {
       document.removeEventListener('keydown', onModalKeydown);
-      if (modal.parentNode) modal.remove();
+      if (!shouldPreserveVisibleModal() && modal.parentNode) modal.remove();
       modalObserver.disconnect();
     });
   })();

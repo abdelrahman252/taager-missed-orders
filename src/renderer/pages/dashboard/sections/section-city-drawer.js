@@ -88,7 +88,7 @@
 
   function badge(score, type) {
     if (window.scoreBadge) return window.scoreBadge(score, type);
-    return '<span style="padding:2px 8px;border-radius:6px;font-size:10px;font-weight:800;background:#7c3aed22;color:#a855f7;border:1px solid #a855f744">' + (score || 0) + '</span>';
+    return '<span style="padding:2px 8px;border-radius:var(--dash-radius-sm);font-size:var(--type-micro);font-weight:var(--weight-semibold);background:#7c3aed22;color:#a855f7;border:1px solid #a855f744">' + (score || 0) + '</span>';
   }
 
   /* ── Province chip ───────────────────────────────────────────────────────── */
@@ -97,7 +97,7 @@
     var id   = provinceId || 'other';
     var meta = (pm && pm[id]) || (pm && pm['other']) || { color: '#64748b', name: id };
     return '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;' +
-      'border-radius:20px;font-size:10px;font-weight:700;' +
+      'border-radius:var(--dash-radius-xl);font-size:var(--type-micro);font-weight:var(--weight-semibold);' +
       'background:' + meta.color + '18;color:' + meta.color + ';border:1px solid ' + meta.color + '44;">' +
       '<span style="width:5px;height:5px;border-radius:50%;background:' + meta.color + ';flex-shrink:0"></span>' +
       meta.name + '</span>';
@@ -112,17 +112,17 @@
   /* ── KPI card (premium) ────────────────────────────────────────── */
   function kpiCell(label, valueHTML, accent, icon) {
     accent = accent || (_il() ? 'rgba(15,5,30,0.85)' : 'rgba(255,255,255,0.85)'); /* theme-aware default */
-    var iconHtml = icon ? '<span style="font-size:14px;opacity:0.8">' + icon + '</span>' : '';
+    var iconHtml = icon ? '<span style="font-size:var(--type-body);opacity:0.8">' + icon + '</span>' : '';
     return '<div style="background:'+(_il()?'linear-gradient(145deg,rgba(0,0,0,0.03),rgba(0,0,0,0.01))':'linear-gradient(145deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01))')+';border:1px solid '+(_il()?'rgba(0,0,0,0.09)':'rgba(255,255,255,0.06)')+';' +
-      'border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;box-shadow:0 4px 12px rgba(0,0,0,0.1);transition:transform 0.2s">' +
-      '<div style="display:flex;align-items:center;gap:6px;font-size:10px;color:'+(_il()?'rgba(30,10,60,0.5)':'rgba(255,255,255,0.45)')+';font-weight:700">' + iconHtml + label + '</div>' +
-      '<div style="font-size:16px;font-weight:900;color:' + accent + ';line-height:1">' + valueHTML + window.supposedBadgeHtml(label) + '</div>' +
+      'border-radius:var(--dash-radius-md);padding:10px 12px;display:flex;flex-direction:column;gap:4px;box-shadow:0 4px 12px rgba(0,0,0,0.1);transition:transform 0.2s">' +
+      '<div style="display:flex;align-items:center;gap:6px;font-size:var(--type-micro);color:'+(_il()?'rgba(30,10,60,0.5)':'rgba(255,255,255,0.45)')+';font-weight:var(--weight-semibold)">' + iconHtml + label + '</div>' +
+      '<div style="font-size:var(--type-subtitle);font-weight:var(--weight-semibold);color:' + accent + ';line-height:1">' + valueHTML + window.supposedBadgeHtml(label) + '</div>' +
     '</div>';
   }
 
   /* ── Section header ──────────────────────────────────────────────────────── */
   function sectionHead(title) {
-    return '<div style="font-size:11px;font-weight:800;color:'+(_il()?'rgba(30,10,60,0.45)':'rgba(255,255,255,0.35)')+';' +
+    return '<div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:'+(_il()?'rgba(30,10,60,0.45)':'rgba(255,255,255,0.35)')+';' +
       'letter-spacing:0.08em;text-transform:uppercase;margin:14px 0 8px;">' + title + '</div>';
   }
 
@@ -141,7 +141,7 @@
       /* Close button */
       '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">' +
         '<div>' +
-          '<div style="font-size:22px;font-weight:900;color:'+(_il()?'#1e0a3c':'#fff')+';letter-spacing:-0.5px;margin-bottom:6px">' + cityName + '</div>' +
+          '<div style="font-size:var(--type-metric-sm);font-weight:var(--weight-semibold);color:'+(_il()?'#1e0a3c':'#fff')+';letter-spacing:-0.5px;margin-bottom:6px">' + cityName + '</div>' +
           '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
             provinceChip(provinceId) +
             '<div class="cool-tooltip" data-tooltip="' + sTx('Index reflecting the risk level of the region based on returns and pending amounts', 'مؤشر يعكس مدى خطورة المنطقة بناءً على المرتجعات والمبالغ المعلقة') + '">' + badge(riskScore, 'risk') + '</div>' +
@@ -150,8 +150,8 @@
         '</div>' +
         // '<button id="city-drawer-close" onclick="window.CityIntelligenceDrawer.close()" style="' +
         //   'width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,0.12);' +
-        //   'background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.6);cursor:pointer;' +
-        //   'font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;' +
+        //   'background:rgba(255,255,255,0.05);color:var(--dash-text-muted);cursor:pointer;' +
+        //   'font-size:var(--type-subtitle);display:flex;align-items:center;justify-content:center;flex-shrink:0;' +
         //   'transition:background 0.2s;font-family:inherit;" ' +
         //   'onmouseenter="this.style.background=\'rgba(255,255,255,0.1)\'" ' +
         //   'onmouseleave="this.style.background=\'rgba(255,255,255,0.05)\'">✕</button>' +
@@ -160,7 +160,7 @@
   }
 
   function renderKpiGrid(cityData) {
-    if (!cityData) return '<div style="padding:16px;color:'+(_il()?'rgba(30,10,60,0.4)':'rgba(255,255,255,0.3)')+';font-size:13px">' + tx('No data', 'لا توجد بيانات') + '</div>';
+    if (!cityData) return '<div style="padding:16px;color:'+(_il()?'rgba(30,10,60,0.4)':'rgba(255,255,255,0.3)')+';font-size:var(--type-control)">' + tx('No data', 'لا توجد بيانات') + '</div>';
 
     var orders      = window.DashboardOrderMetrics
       ? window.DashboardOrderMetrics.netOrders(cityData)
@@ -211,7 +211,7 @@
     if (!productMap || Object.keys(productMap).length === 0) {
       return '<div style="padding:0 22px;">' +
         sectionHead(sTx('Products in this City', 'المنتجات في هذه المدينة')) +
-        '<div style="color:'+(_il()?'rgba(15,5,30,0.4)':'rgba(255,255,255,0.3)')+';font-size:12px;padding:8px 0">' + sTx('No product data available', 'لا توجد بيانات منتجات') + '</div>' +
+        '<div style="color:'+(_il()?'rgba(15,5,30,0.4)':'rgba(255,255,255,0.3)')+';font-size:var(--type-label);padding:8px 0">' + sTx('No product data available', 'لا توجد بيانات منتجات') + '</div>' +
       '</div>';
     }
 
@@ -246,10 +246,10 @@
       var shortName = truncateText(fullName, 40);
       var shortSku  = truncateText(e.sku, 28);
 
-      var nameLine = '<div style="font-size:11px;font-weight:700;color:'+(_il()?'rgba(15,5,30,0.9)':'rgba(255,255,255,0.9)')+';' +
+      var nameLine = '<div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:'+(_il()?'rgba(15,5,30,0.9)':'rgba(255,255,255,0.9)')+';' +
         'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;' +
         'text-align:' + align + ';" title="' + esc(fullName) + '">' + esc(shortName) + '</div>';
-      var skuStyle = 'font-size:9px;font-weight:600;color:'+(_il()?'rgba(15,5,30,0.35)':'rgba(255,255,255,0.35)')+';' +
+      var skuStyle = 'font-size:var(--type-micro);font-weight:var(--weight-semibold);color:'+(_il()?'rgba(15,5,30,0.35)':'rgba(255,255,255,0.35)')+';' +
         'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;' +
         'margin-top:1px;direction:ltr;text-align:' + align + ';';
       var skuLine = (e.name && e.sku && e.name !== e.sku)
@@ -273,19 +273,19 @@
           nameLine + skuLine +
         '</div>' +
         /* col 2 — orders */
-        '<div style="font-size:11px;font-weight:600;color:'+(_il()?'rgba(15,5,30,0.6)':'rgba(255,255,255,0.55)')+';text-align:center;white-space:nowrap">' + num(e.orders) + '</div>' +
+        '<div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:'+(_il()?'rgba(15,5,30,0.6)':'rgba(255,255,255,0.55)')+';text-align:center;white-space:nowrap">' + num(e.orders) + '</div>' +
         /* col 3 — NDR + DR stacked */
         '<div style="display:flex;flex-direction:column;align-items:center;gap:1px">' +
-          '<div style="font-size:9.5px;font-weight:800;color:' + nc + ';white-space:nowrap">' +
-            pct(e.ndrPct) + '<span style="font-size:7.5px;opacity:0.55;margin-left:1px">NDR</span>' +
+          '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:' + nc + ';white-space:nowrap">' +
+            pct(e.ndrPct) + '<span style="font-size:var(--type-micro);opacity:0.55;margin-left:1px">NDR</span>' +
           '</div>' +
-          '<div style="font-size:9.5px;font-weight:800;color:' + dc + ';white-space:nowrap">' +
-            pct(e.drPct) + '<span style="font-size:7.5px;opacity:0.55;margin-left:1px">DR</span>' +
+          '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:' + dc + ';white-space:nowrap">' +
+            pct(e.drPct) + '<span style="font-size:var(--type-micro);opacity:0.55;margin-left:1px">DR</span>' +
           '</div>' +
         '</div>' +
         /* col 4 — Taager profit */
-        '<div style="font-size:10.5px;font-weight:700;color:#00e676;text-align:center;white-space:nowrap;" title="' + esc(sar(e.commission)) + '">' +
-          commStr + '<span style="font-size:7.5px;opacity:0.55;margin-left:1px">' + (window.dashboardActiveCurrency || 'SAR') + '</span>' + window.supposedBadgeHtml('profit') +
+        '<div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:#00e676;text-align:center;white-space:nowrap;" title="' + esc(sar(e.commission)) + '">' +
+          commStr + '<span style="font-size:var(--type-micro);opacity:0.55;margin-left:1px">' + (window.dashboardActiveCurrency || 'SAR') + '</span>' + window.supposedBadgeHtml('profit') +
         '</div>' +
         /* col 5 — risk badge */
         '<div style="display:flex;justify-content:center;align-items:center;overflow:hidden;min-width:0;">' +
@@ -303,18 +303,18 @@
         '<input type="text" id="drawer-product-search" ' +
           'placeholder="' + sTx('Search by product name or code...', 'ابحث باسم المنتج أو الرمز...') + '" ' +
           'style="width:100%;box-sizing:border-box;background:'+(_il()?'rgba(0,0,0,0.04)':'rgba(255,255,255,0.05)')+';' +
-          'border:1px solid '+(_il()?'rgba(0,0,0,0.12)':'rgba(255,255,255,0.1)')+';border-radius:8px;padding:7px 12px;' +
-          'color:'+(_il()?'#1e0a3c':'#fff')+';font-size:11px;outline:none;font-family:inherit;">' +
+          'border:1px solid '+(_il()?'rgba(0,0,0,0.12)':'rgba(255,255,255,0.1)')+';border-radius:var(--dash-radius-sm);padding:7px 12px;' +
+          'color:'+(_il()?'#1e0a3c':'#fff')+';font-size:var(--type-caption);outline:none;font-family:inherit;">' +
       '</div>' +
       /* column headers — must match COLS exactly */
       '<div style="display:grid;grid-template-columns:' + COLS + ';gap:6px;width:100%;box-sizing:border-box;' +
         'padding:0 0 5px;border-bottom:1px solid '+(_il()?'rgba(0,0,0,0.10)':'rgba(255,255,255,0.08)')+';">' +
-        '<div style="font-size:9.5px;font-weight:700;color:'+(_il()?'rgba(30,10,60,0.4)':'rgba(255,255,255,0.28)')+';text-align:' + align + ';letter-spacing:0.04em">' + sTx('PRODUCT', 'المنتج') + '</div>' +
-        '<div style="font-size:9.5px;font-weight:700;color:'+(_il()?'rgba(30,10,60,0.4)':'rgba(255,255,255,0.28)')+';text-align:center;letter-spacing:0.04em">' + sTx('ORDERS', 'طلبات') + '</div>' +
-        '<div style="font-size:9.5px;font-weight:700;color:'+(_il()?'rgba(30,10,60,0.4)':'rgba(255,255,255,0.28)')+';text-align:center;letter-spacing:0.04em">' + sTx('NDR/DR', 'التسليم') + '</div>' +
+        '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:'+(_il()?'rgba(30,10,60,0.4)':'rgba(255,255,255,0.28)')+';text-align:' + align + ';letter-spacing:0.04em">' + sTx('PRODUCT', 'المنتج') + '</div>' +
+        '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:'+(_il()?'rgba(30,10,60,0.4)':'rgba(255,255,255,0.28)')+';text-align:center;letter-spacing:0.04em">' + sTx('ORDERS', 'طلبات') + '</div>' +
+        '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:'+(_il()?'rgba(30,10,60,0.4)':'rgba(255,255,255,0.28)')+';text-align:center;letter-spacing:0.04em">' + sTx('NDR/DR', 'التسليم') + '</div>' +
         // Taager dashboard/status/NDR migration: the COMM column is Taager profit.
-        '<div style="font-size:9.5px;font-weight:700;color:'+(_il()?'rgba(30,10,60,0.4)':'rgba(255,255,255,0.28)')+';text-align:center;letter-spacing:0.04em">' + sTx('PROFIT', 'ربح تاجر') + '</div>' +
-        '<div style="font-size:9.5px;font-weight:700;color:'+(_il()?'rgba(30,10,60,0.4)':'rgba(255,255,255,0.28)')+';text-align:center;letter-spacing:0.04em">' + sTx('RISK', 'خطر') + '</div>' +
+        '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:'+(_il()?'rgba(30,10,60,0.4)':'rgba(255,255,255,0.28)')+';text-align:center;letter-spacing:0.04em">' + sTx('PROFIT', 'ربح تاجر') + '</div>' +
+        '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:'+(_il()?'rgba(30,10,60,0.4)':'rgba(255,255,255,0.28)')+';text-align:center;letter-spacing:0.04em">' + sTx('RISK', 'خطر') + '</div>' +
       '</div>' +
       '<div class="dash-scroll" style="max-height:160px;overflow-y:auto;overflow-x:hidden;">' +
         rows +
@@ -336,7 +336,7 @@
       return '<div style="padding:0 22px;">' +
         sectionHead(sTx('Payment Intelligence', 'ذكاء الدفع')) +
         '<div style="background:'+(_il()?'rgba(0,0,0,0.03)':'rgba(255,255,255,0.02)')+';border:1px solid '+(_il()?'rgba(0,0,0,0.08)':'rgba(255,255,255,0.06)')+';' +
-          'border-radius:10px;padding:14px;color:'+(_il()?'rgba(30,10,60,0.45)':'rgba(255,255,255,0.3)')+';font-size:12px;text-align:center">' +
+          'border-radius:var(--dash-radius-md);padding:14px;color:'+(_il()?'rgba(30,10,60,0.45)':'rgba(255,255,255,0.3)')+';font-size:var(--type-label);text-align:center">' +
           sTx('Prepaid payment-method data is not available. Enable EasyOrders enrichment to compare prepaid and COD for this city.', 'بيانات طريقة الدفع المسبق غير متوفرة. فعّل إثراء EasyOrders لمقارنة الدفع المسبق و COD لهذه المدينة.') +
         '</div>' +
       '</div>';
@@ -368,30 +368,30 @@
     function payBar(label, pct2, ndrVal, color) {
       return '<div style="margin-bottom:12px">' +
         '<div style="display:flex;justify-content:space-between;margin-bottom:4px">' +
-          '<span style="font-size:11px;font-weight:700;color:'+(_il()?'rgba(15,5,30,0.75)':'rgba(255,255,255,0.7)')+'">' + label + '</span>' +
-          '<span style="font-size:11px;color:' + ndrColor(ndrVal) + ';font-weight:700">NDR ' + pct(ndrVal) + '</span>' +
+          '<span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:'+(_il()?'rgba(15,5,30,0.75)':'rgba(255,255,255,0.7)')+'">' + label + '</span>' +
+          '<span style="font-size:var(--type-caption);color:' + ndrColor(ndrVal) + ';font-weight:var(--weight-semibold)">NDR ' + pct(ndrVal) + '</span>' +
         '</div>' +
         '<div style="height:6px;border-radius:3px;background:'+(_il()?'rgba(0,0,0,0.09)':'rgba(255,255,255,0.06)')+';overflow:hidden">' +
           '<div style="height:100%;width:' + Math.round(pct2) + '%;background:' + color + ';border-radius:3px;transition:width 0.5s ease"></div>' +
         '</div>' +
-        '<div style="font-size:10px;color:'+(_il()?'rgba(15,5,30,0.4)':'rgba(255,255,255,0.3)')+';margin-top:3px">' + pct(pct2) + ' ' + sTx('of orders', 'من الطلبات') + '</div>' +
+        '<div style="font-size:var(--type-micro);color:'+(_il()?'rgba(15,5,30,0.4)':'rgba(255,255,255,0.3)')+';margin-top:3px">' + pct(pct2) + ' ' + sTx('of orders', 'من الطلبات') + '</div>' +
       '</div>';
     }
 
     var deltaHtml = deltaBetter
-      ? '<div style="background:#00e67618;border:1px solid #00e67633;border-radius:10px;padding:10px 14px;' +
-          'font-size:12px;font-weight:700;color:#00e676;margin-top:8px;">' +
+      ? '<div style="background:#00e67618;border:1px solid #00e67633;border-radius:var(--dash-radius-md);padding:10px 14px;' +
+          'font-size:var(--type-label);font-weight:var(--weight-semibold);color:#00e676;margin-top:8px;">' +
           '✅ ' + sTx('Prepaid delivers better by ', 'الدفع المسبق يسلّم أفضل بـ ') + pct(Math.abs(delta)) + sTx(' in this city', ' في هذه المدينة') +
         '</div>'
       : '<div style="background:'+(_il()?'rgba(0,0,0,0.03)':'rgba(255,255,255,0.03)')+';border:1px solid '+(_il()?'rgba(0,0,0,0.08)':'rgba(255,255,255,0.06)')+';' +
-          'border-radius:10px;padding:10px 14px;font-size:12px;color:'+(_il()?'rgba(15,5,30,0.5)':'rgba(255,255,255,0.4)')+';margin-top:8px;">' +
+          'border-radius:var(--dash-radius-md);padding:10px 14px;font-size:var(--type-label);color:'+(_il()?'rgba(15,5,30,0.5)':'rgba(255,255,255,0.4)')+';margin-top:8px;">' +
           sTx('No notable difference between payment methods', 'لا فارق ملحوظ بين طرق الدفع') +
         '</div>';
 
     return '<div style="padding:0 22px;">' +
       sectionHead(sTx('Payment Intelligence', 'ذكاء الدفع')) +
       '<div style="background:'+(_il()?'rgba(0,0,0,0.03)':'rgba(255,255,255,0.02)')+';border:1px solid '+(_il()?'rgba(0,0,0,0.08)':'rgba(255,255,255,0.06)')+';' +
-        'border-radius:12px;padding:14px;">' +
+        'border-radius:var(--dash-radius-md);padding:14px;">' +
         payBar(sTx('Prepaid', 'دفع مسبق'), prepaidPct, prepaidNdr, '#3b82f6') +
         payBar('COD', codPct, codNdr, '#f59e0b') +
         deltaHtml +
@@ -425,9 +425,9 @@
       });
     }
     
-    var btnBase = 'background:transparent;border:1px solid '+(_il()?'rgba(0,0,0,0.15)':'rgba(255,255,255,0.1)')+';color:'+(_il()?'rgba(30,10,60,0.55)':'rgba(255,255,255,0.45)')+';border-radius:6px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;transition:all 0.15s;cursor:pointer;';
-    var activeBase = 'background:rgba(124,58,237,0.22);border:1px solid rgba(124,58,237,0.55);color:#a855f7;border-radius:6px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;';
-    var disabledBase = 'background:transparent;border:1px solid '+(_il()?'rgba(0,0,0,0.07)':'rgba(255,255,255,0.05)')+';color:'+(_il()?'rgba(30,10,60,0.25)':'rgba(255,255,255,0.2)')+';border-radius:6px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:not-allowed;';
+    var btnBase = 'background:transparent;border:1px solid '+(_il()?'rgba(0,0,0,0.15)':'rgba(255,255,255,0.1)')+';color:'+(_il()?'rgba(30,10,60,0.55)':'rgba(255,255,255,0.45)')+';border-radius:var(--dash-radius-sm);width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:var(--type-label);font-weight:var(--weight-semibold);transition:all 0.15s;cursor:pointer;';
+    var activeBase = 'background:rgba(124,58,237,0.22);border:1px solid rgba(124,58,237,0.55);color:#a855f7;border-radius:var(--dash-radius-sm);width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:var(--type-label);font-weight:var(--weight-semibold);';
+    var disabledBase = 'background:transparent;border:1px solid '+(_il()?'rgba(0,0,0,0.07)':'rgba(255,255,255,0.05)')+';color:'+(_il()?'rgba(30,10,60,0.25)':'rgba(255,255,255,0.2)')+';border-radius:var(--dash-radius-sm);width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:var(--type-label);cursor:not-allowed;';
 
     var html = '<div style="display:flex;justify-content:center;align-items:center;gap:6px;margin-top:14px;padding-top:14px;border-top:1px solid '+(_il()?'rgba(0,0,0,0.08)':'rgba(255,255,255,0.06)')+';">';
     
@@ -447,7 +447,7 @@
     if (startPage > 1) {
       html += '<button class="' + typeClass + '" data-page="1" style="' + btnBase + '" onmouseover="this.style.background=\'rgba(124,58,237,0.08)\'" onmouseout="this.style.background=\'transparent\'">1</button>';
       if (startPage > 2) {
-        html += '<span style="color:'+(_il()?'rgba(30,10,60,0.45)':'rgba(255,255,255,0.45)')+';font-size:12px;display:flex;align-items:end;padding-bottom:4px;">...</span>';
+        html += '<span style="color:'+(_il()?'rgba(30,10,60,0.45)':'rgba(255,255,255,0.45)')+';font-size:var(--type-label);display:flex;align-items:end;padding-bottom:4px;">...</span>';
       }
     }
 
@@ -461,7 +461,7 @@
 
     if (endPage < totalPages) {
       if (endPage < totalPages - 1) {
-        html += '<span style="color:'+(_il()?'rgba(30,10,60,0.45)':'rgba(255,255,255,0.45)')+';font-size:12px;display:flex;align-items:end;padding-bottom:4px;">...</span>';
+        html += '<span style="color:'+(_il()?'rgba(30,10,60,0.45)':'rgba(255,255,255,0.45)')+';font-size:var(--type-label);display:flex;align-items:end;padding-bottom:4px;">...</span>';
       }
       html += '<button class="' + typeClass + '" data-page="' + totalPages + '" style="' + btnBase + '" onmouseover="this.style.background=\'rgba(124,58,237,0.08)\'" onmouseout="this.style.background=\'transparent\'">' + totalPages + '</button>';
     }
@@ -484,7 +484,7 @@
     var pageSize = drawerInsightsState.pageSize;
 
     if (items.length === 0) {
-      container.innerHTML = '<div style="color:'+(_il()?'rgba(30,10,60,0.35)':'rgba(255,255,255,0.25)')+';font-size:12px;padding:8px 0;text-align:center">' +
+      container.innerHTML = '<div style="color:'+(_il()?'rgba(30,10,60,0.35)':'rgba(255,255,255,0.25)')+';font-size:var(--type-label);padding:8px 0;text-align:center">' +
           sTx('No insights for this city', 'لا توجد رؤى خاصة بهذه المدينة') +
         '</div>';
       return;
@@ -507,20 +507,20 @@
       var confidence = ins.confidence || (ins.metric && ins.metric.orders >= 30 ? 'strong' : (ins.metric && ins.metric.orders >= 15 ? 'developing' : 'limited'));
       var evidence = Array.isArray(ins.evidence) ? ins.evidence.filter(Boolean) : [];
       var evidenceHtml = evidence.length
-        ? '<div style="font-size:10px;font-weight:700;color:'+(_il()?'rgba(15,5,30,0.45)':'rgba(255,255,255,0.38)')+';line-height:1.5;margin-bottom:6px;text-align:' + align + ';">' + evidence.slice(0, 2).join(' · ') + '</div>'
+        ? '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:'+(_il()?'rgba(15,5,30,0.45)':'rgba(255,255,255,0.38)')+';line-height:1.5;margin-bottom:6px;text-align:' + align + ';">' + evidence.slice(0, 2).join(' · ') + '</div>'
         : '';
-      return '<div style="display:flex;gap:12px;padding:14px;border-radius:12px;margin-bottom:10px;' +
+      return '<div style="display:flex;gap:12px;padding:14px;border-radius:var(--dash-radius-md);margin-bottom:10px;' +
         'background:' + bg + ';border:1px solid ' + border + ';box-shadow:0 4px 12px rgba(0,0,0,0.1)">' +
-        '<div style="font-size:18px;flex-shrink:0">' + insightIcon(ins.type) + '</div>' +
+        '<div style="font-size:var(--type-section-title);flex-shrink:0">' + insightIcon(ins.type) + '</div>' +
         '<div style="flex:1;min-width:0">' +
-          '<div style="font-size:13px;font-weight:800;color:' + pc + ';margin-bottom:4px;text-align:' + align + ';">' + (ins.title || '') + '</div>' +
+          '<div style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:' + pc + ';margin-bottom:4px;text-align:' + align + ';">' + (ins.title || '') + '</div>' +
           '<div style="display:flex;gap:6px;justify-content:' + (align === 'right' ? 'flex-end' : 'flex-start') + ';margin-bottom:6px;flex-wrap:wrap">' +
-            '<span style="font-size:9px;font-weight:800;text-transform:uppercase;color:' + pc + ';background:' + pc + '18;border:1px solid ' + pc + '33;border-radius:999px;padding:2px 7px;">' + trust + '</span>' +
-            '<span style="font-size:9px;font-weight:700;text-transform:uppercase;color:'+(_il()?'rgba(15,5,30,0.45)':'rgba(255,255,255,0.42)')+';background:'+(_il()?'rgba(15,5,30,0.04)':'rgba(255,255,255,0.035)')+';border:1px solid '+(_il()?'rgba(15,5,30,0.08)':'rgba(255,255,255,0.06)')+';border-radius:999px;padding:2px 7px;">' + confidence + '</span>' +
+            '<span style="font-size:var(--type-micro);font-weight:var(--weight-semibold);text-transform:uppercase;color:' + pc + ';background:' + pc + '18;border:1px solid ' + pc + '33;border-radius:var(--radius-pill);padding:2px 7px;">' + trust + '</span>' +
+            '<span style="font-size:var(--type-micro);font-weight:var(--weight-semibold);text-transform:uppercase;color:'+(_il()?'rgba(15,5,30,0.45)':'rgba(255,255,255,0.42)')+';background:'+(_il()?'rgba(15,5,30,0.04)':'rgba(255,255,255,0.035)')+';border:1px solid '+(_il()?'rgba(15,5,30,0.08)':'rgba(255,255,255,0.06)')+';border-radius:var(--radius-pill);padding:2px 7px;">' + confidence + '</span>' +
           '</div>' +
-          '<div style="font-size:11px;font-weight:600;color:'+(_il()?'rgba(15,5,30,0.7)':'rgba(255,255,255,0.7)')+';line-height:1.6;margin-bottom:6px;text-align:' + align + ';">' + (ins.body || '') + '</div>' +
+          '<div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:'+(_il()?'rgba(15,5,30,0.7)':'rgba(255,255,255,0.7)')+';line-height:1.6;margin-bottom:6px;text-align:' + align + ';">' + (ins.body || '') + '</div>' +
           evidenceHtml +
-          (ins.recommendation ? '<div style="font-size:10px;font-weight:700;color:'+(_il()?'rgba(15,5,30,0.5)':'rgba(255,255,255,0.4)')+';display:flex;align-items:flex-start;gap:4px;justify-content:flex-start;direction:' + cardDir + ';"><span style="color:' + pc + '">↳</span>' + ins.recommendation + '</div>' : '') +
+          (ins.recommendation ? '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:'+(_il()?'rgba(15,5,30,0.5)':'rgba(255,255,255,0.4)')+';display:flex;align-items:flex-start;gap:4px;justify-content:flex-start;direction:' + cardDir + ';"><span style="color:' + pc + '">↳</span>' + ins.recommendation + '</div>' : '') +
         '</div>' +
       '</div>';
     }).join('');

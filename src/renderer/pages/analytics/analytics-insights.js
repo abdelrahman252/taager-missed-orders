@@ -58,7 +58,7 @@ function renderInsightsPanel(container, runs, dateRange, allRuns) {
           </div>
         </div>
         <div class="insights-empty">
-          <div style="font-size:28px;margin-bottom:8px">🔍</div>
+          <div style="font-size:var(--type-page-title);margin-bottom:8px">🔍</div>
           ${window.t_anl('insights.emptyHint')}
         </div>
       </div>`;
@@ -77,7 +77,7 @@ function renderInsightsPanel(container, runs, dateRange, allRuns) {
         <div class="insights-panel-title">
           <span class="insights-panel-title-icon">✨</span> ${window.t_anl('insights.title')}
         </div>
-        <span style="font-size:11px;color:var(--text3)">${window.t_anl('insights.count', { count: insights.length })}</span>
+        <span style="font-size:var(--type-caption);color:var(--text3)">${window.t_anl('insights.count', { count: insights.length })}</span>
       </div>
       <div class="insights-list">
         ${visibleInsights.map(i => _insightItemHtml(i)).join("")}
@@ -309,12 +309,12 @@ function _insightItemHtml(insight) {
     ? window.TaagerSmartInsights.trustLabel(insight.trust || "measured")
     : "Measured";
   const evidence = Array.isArray(insight.evidence) && insight.evidence.length
-    ? `<div class="insight-evidence" style="font-size:10px;color:var(--text3);margin-top:4px">${insight.evidence.slice(0, 2).join(" · ")}</div>`
+    ? `<div class="insight-evidence" style="font-size:var(--type-micro);color:var(--text3);margin-top:4px">${insight.evidence.slice(0, 2).join(" · ")}</div>`
     : "";
   return `
     <div class="insight-item ${insight.type}">
       <span class="insight-icon">${insight.icon}</span>
-      <div class="insight-text"><span style="font-size:9px;font-weight:800;text-transform:uppercase;color:var(--text3);margin-inline-end:6px">${trust}</span>${insight.text}${evidence}</div>
+      <div class="insight-text"><span style="font-size:var(--type-micro);font-weight:var(--weight-semibold);text-transform:uppercase;color:var(--text3);margin-inline-end:6px">${trust}</span>${insight.text}${evidence}</div>
     </div>`;
 }
 
@@ -380,7 +380,7 @@ function renderActivityTimeline(container, runs, pageNum) {
         <div class="timeline-panel-title">
           <span>📋</span> ${window.t_anl('timeline.title')}
         </div>
-        <span style="font-size:11px;color:var(--text3)">${window.t_anl('timeline.eventsCount', { count: events.length })}</span>
+        <span style="font-size:var(--type-caption);color:var(--text3)">${window.t_anl('timeline.eventsCount', { count: events.length })}</span>
       </div>
       <div class="timeline-list">
         ${itemsHtml}

@@ -1,4 +1,4 @@
-﻿// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // section4-cod.js  —  Task 4: تحصيل COD
 // Vanilla-JS port of Section4.jsx + sub-components.
 // Depends on: dashboard-shared.js (animateNumber, icon, formatSAR, sparklineSvg)
@@ -42,10 +42,10 @@ window.renderSection4 = function (mountEl, data, ctx) {
     if (window.dashboardSkuCopyHtml) {
       return window.dashboardSkuCopyHtml(value || "", {
         emptyText: "-",
-        style: "font-family:Consolas,monospace;color:" + color + ";font-weight:700"
+        style: "font-family:var(--font-mono);color:" + color + ";font-weight:var(--weight-bold)"
       });
     }
-    return '<span style="font-family:Consolas,monospace;color:' + color + '">' + esc(value || "-") + "</span>";
+    return '<span style="font-family:var(--font-mono);color:' + color + '">' + esc(value || "-") + "</span>";
   }
 
   const fmtSAR =
@@ -372,7 +372,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
     const iconHTML =
       variant === "icon" && iconType
         ? `<div style="
-            width:36px;height:36px;border-radius:12px;flex-shrink:0;
+            width:36px;height:36px;border-radius:var(--dash-radius-md);flex-shrink:0;
             display:flex;align-items:center;justify-content:center;
             background:${color}1a;border:1px solid ${color}55;
             box-shadow:0 0 12px ${color}66,inset 0 0 8px ${color}33">
@@ -386,7 +386,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
           s4Txt(" active undelivered orders", " طلب نشط لم يتم تسليمه")
         : subtitle;
     const subtitleHTML = subtitleText
-      ? `<div style="font-size:11px;color:rgba(255,255,255,0.45);margin-top:6px;text-align:${isAr ? "right" : "left"}">${subtitleText}</div>`
+      ? `<div style="font-size:var(--type-caption);color:rgba(255,255,255,0.45);margin-top:6px;text-align:${isAr ? "right" : "left"}">${subtitleText}</div>`
       : "";
 
     const deltaHTML =
@@ -394,15 +394,15 @@ window.renderSection4 = function (mountEl, data, ctx) {
         ? `<div style="display:flex;align-items:center;gap:8px;margin-top:10px;justify-content:${isAr ? "flex-end" : "flex-start"};flex-direction:${isAr ? "row-reverse" : "row"}">
            ${
              variant === "sparkline"
-               ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:9999px;
-                  font-size:11px;font-weight:700;background:${deltaColor}1a;border:1px solid ${deltaColor}55;color:${deltaColor}">
+               ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--radius-pill);
+                  font-size:var(--type-caption);font-weight:var(--weight-semibold);background:${deltaColor}1a;border:1px solid ${deltaColor}55;color:${deltaColor}">
                   ${arrow} ${Math.abs(delta).toFixed(1)}%
                 </span>`
-               : `<span style="font-size:11px;font-weight:700;color:${deltaColor};display:flex;align-items:center;gap:4px">
+               : `<span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:${deltaColor};display:flex;align-items:center;gap:4px">
                   ${arrow} ${Math.abs(delta).toFixed(1)}%
                 </span>`
            }
-           <span style="font-size:10px;color:rgba(255,255,255,0.4)">
+           <span style="font-size:var(--type-micro);color:var(--dash-text-faint)">
              ${deltaIsImprovement ? s4Txt("Improved from previous month", "تحسن عن الشهر السابق") : s4Txt("Compared with previous month", "مقارنة بالشهر السابق")}
            </span>
          </div>`
@@ -417,19 +417,19 @@ window.renderSection4 = function (mountEl, data, ctx) {
 
     return `
       <div class="fade-up" class="s4-statcard" style="
-          background:rgba(255,255,255,0.02);border-radius:16px;padding:24px;position:relative;overflow:hidden;
+          background:rgba(255,255,255,0.02);border-radius:var(--dash-radius-xl);padding:24px;position:relative;overflow:hidden;
           border:1px solid rgba(255,255,255,0.05);
           transition:transform 0.2s">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;
                     flex-direction:row;margin-bottom:${variant === "icon" ? "12px" : "8px"}">
-          <div style="font-size:14px;font-weight:700;color:#fff;text-align:${isAr ? "right" : "left"}">
+          <div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#fff;text-align:${isAr ? "right" : "left"}">
             ${displayLabel}
           </div>
           ${iconHTML}
         </div>
         <div style="display:flex;align-items:baseline;gap:8px;justify-content:${isAr ? "flex-end" : "flex-start"};flex-direction:${isAr ? "row" : "row-reverse"}">
-          ${unit ? `<span style="font-size:14px;font-weight:700;color:${color}">${unit}</span>` : ""}
-          <span id="${id}" style="font-size:${variant === "sparkline" ? "42px" : "28px"};font-weight:900;color:${variant === "sparkline" ? color : "#fff"};line-height:1;
+          ${unit ? `<span style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:${color}">${unit}</span>` : ""}
+          <span id="${id}" style="font-size:${variant === "sparkline" ? "42px" : "28px"};font-weight:var(--weight-bold);color:${variant === "sparkline" ? color : "#fff"};line-height:1;
                                   letter-spacing:-1px;text-shadow:${variant === "sparkline" ? "0 0 20px " + color + "66" : "none"}">0</span>
         </div>
         ${subtitleHTML}
@@ -492,21 +492,21 @@ window.renderSection4 = function (mountEl, data, ctx) {
           s4Txt(" active orders", " طلب نشط");
       }
       return `<div class="fade-up" style="display:flex;flex-direction:column;align-items:${align};min-width:0;animation-delay:400ms">
-        <div style="font-size:12px;font-weight:800;color:${color}">${label}</div>
+        <div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:${color}">${label}</div>
         <div style="display:flex;align-items:baseline;gap:4px;flex-direction:${isAr ? "row" : "row-reverse"}">
-          <span style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.4)">${unit}</span>
-          <span style="font-size:18px;font-weight:900;color:#fff">${Number(value).toLocaleString("en-US", { minimumFractionDigits: value % 1 === 0 ? 0 : 1, maximumFractionDigits: 1 })}</span>
+          <span style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:var(--dash-text-faint)">${unit}</span>
+          <span style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff">${Number(value).toLocaleString("en-US", { minimumFractionDigits: value % 1 === 0 ? 0 : 1, maximumFractionDigits: 1 })}</span>
         </div>
-        <div style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.4)">${pct}</div>
+        <div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:var(--dash-text-faint)">${pct}</div>
       </div>`;
     }
 
     return `
       <div class="fade-up" style="animation-delay:200ms;
-          background:#0b1120;border:1px solid rgba(255,255,255,0.1);
-          border-radius:16px;padding:24px;display:flex;flex-direction:column;align-items:center;
+          background:var(--dash-surface);border:1px solid rgba(255,255,255,0.1);
+          border-radius:var(--dash-radius-xl);padding:24px;display:flex;flex-direction:column;align-items:center;
           box-shadow:inset 0 0 40px rgba(0,0,0,0.5)">
-        <div style="width:100%;font-size:16px;font-weight:800;color:#fff;margin-bottom:24px;text-align:${isAr ? "right" : "left"}">
+        <div style="width:100%;font-size:var(--type-subtitle);font-weight:var(--weight-semibold);color:#fff;margin-bottom:24px;text-align:${isAr ? "right" : "left"}">
           ${s4Txt("COD Collection Overview", "نظرة عامة على التحصيل")}
         </div>
         
@@ -536,10 +536,10 @@ window.renderSection4 = function (mountEl, data, ctx) {
 
             <!-- Center metrics -->
             <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
-              <div style="font-size:14px;font-weight:800;color:#fff">DR</div>
-              <div style="font-size:42px;font-weight:900;color:#fff;line-height:1;letter-spacing:-1px;margin:4px 0">${D.drPct.toFixed(1)}</div>
-              <div style="font-size:16px;font-weight:700;color:rgba(255,255,255,0.6)">%</div>
-              <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.3);margin-top:8px">${D.drDeliveredOrders.toLocaleString("en-US")} / ${D.drBaseOrders.toLocaleString("en-US")} ${s4Txt("delivered", "مسلمة")}</div>
+              <div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#fff">DR</div>
+              <div style="font-size:var(--type-hero);font-weight:var(--weight-bold);color:#fff;line-height:1;letter-spacing:-1px;margin:4px 0">${D.drPct.toFixed(1)}</div>
+              <div style="font-size:var(--type-subtitle);font-weight:var(--weight-semibold);color:var(--dash-text-muted)">%</div>
+              <div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.3);margin-top:8px">${D.drDeliveredOrders.toLocaleString("en-US")} / ${D.drBaseOrders.toLocaleString("en-US")} ${s4Txt("delivered", "مسلمة")}</div>
             </div>
           </div>
         
@@ -677,11 +677,11 @@ window.renderSection4 = function (mountEl, data, ctx) {
           ${svgIcon(ins.iconType, 18, ins.color)}
         </div>
         <div style="flex:1;text-align:${isAr ? "right" : "left"}">
-          <div style="font-size:14px;font-weight:800;margin-bottom:6px;
+          <div style="font-size:var(--type-body);font-weight:var(--weight-semibold);margin-bottom:6px;
                       color:${ins.color};">
             ${ins.title}
           </div>
-          <div style="font-size:11px;color:rgba(255,255,255,0.6);line-height:1.6">
+          <div style="font-size:var(--type-caption);color:var(--dash-text-muted);line-height:1.6">
             ${ins.body}
           </div>
         </div>
@@ -691,19 +691,19 @@ window.renderSection4 = function (mountEl, data, ctx) {
 
     return `
       <div class="fade-up" style="
-          background:#0b1120;border:1px solid rgba(255,255,255,0.1);
-          border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:14px">
+          background:var(--dash-surface);border:1px solid rgba(255,255,255,0.1);
+          border-radius:var(--dash-radius-xl);padding:20px;display:flex;flex-direction:column;gap:14px">
         <div style="display:flex;align-items:center;gap:10px;justify-content:${isAr ? "flex-end" : "flex-start"};
                     flex-direction:${isAr ? "row" : "row-reverse"};margin-bottom:4px">
-          <span style="font-size:18px;color:#a855f7;text-shadow:0 0 12px rgba(168,85,247,0.6)">✦</span>
-          <span style="font-size:18px;font-weight:800;color:#fff">${s4Txt("Quick Insights", "رؤى سريعة")}</span>
+          <span style="font-size:var(--type-section-title);color:#a855f7;text-shadow:0 0 12px rgba(168,85,247,0.6)">✦</span>
+          <span style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff">${s4Txt("Quick Insights", "رؤى سريعة")}</span>
         </div>
         ${insightsHTML}
         <div class="fade-up" style="animation-delay:600ms;padding:12px;
             background:rgba(255,255,255,0.05);
-            border:1px dashed rgba(168,85,247,0.3);border-radius:12px;text-align:${isAr ? "right" : "left"};margin-top:4px">
-          <div style="font-size:12px;font-weight:800;color:#a855f7;margin-bottom:4px">${s4Txt("Tip", "نصيحة")}</div>
-          <div style="font-size:11px;color:rgba(255,255,255,0.6);line-height:1.6">
+            border:1px dashed rgba(168,85,247,0.3);border-radius:var(--dash-radius-md);text-align:${isAr ? "right" : "left"};margin-top:4px">
+          <div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:#a855f7;margin-bottom:4px">${s4Txt("Tip", "نصيحة")}</div>
+          <div style="font-size:var(--type-caption);color:var(--dash-text-muted);line-height:1.6">
             ${s4Txt("Communicate with couriers to speed up the delivery of outstanding payments.", "تواصل مع شركات الشحن لتسريع تسليم المدفوعات المستحقة.")}
           </div>
         </div>
@@ -744,12 +744,12 @@ window.renderSection4 = function (mountEl, data, ctx) {
     if (pm.length < 2) {
       return `
         <div class="fade-up" style="animation-delay:200ms;
-            background:#0b1120;border:1px solid rgba(255,255,255,0.1);
-            border-radius:16px;padding:24px;display:flex;flex-direction:column;justify-content:center;min-height:230px">
-          <div style="font-size:18px;font-weight:800;color:#fff;margin-bottom:12px;text-align:${isAr ? "right" : "left"}">
+            background:var(--dash-surface);border:1px solid rgba(255,255,255,0.1);
+            border-radius:var(--dash-radius-xl);padding:24px;display:flex;flex-direction:column;justify-content:center;min-height:230px">
+          <div style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff;margin-bottom:12px;text-align:${isAr ? "right" : "left"}">
             ${s4Txt("Payment Methods", "طرق الدفع")}
           </div>
-          <div style="font-size:13px;color:rgba(255,255,255,0.45);line-height:1.8;text-align:${isAr ? "right" : "left"}">
+          <div style="font-size:var(--type-control);color:rgba(255,255,255,0.45);line-height:1.8;text-align:${isAr ? "right" : "left"}">
             ${s4Txt("No detailed payment data available in current snapshot.", "لا توجد بيانات دفع مفصلة في لقطة Dashboard الحالية.")}
           </div>
         </div>`;
@@ -757,9 +757,9 @@ window.renderSection4 = function (mountEl, data, ctx) {
 
     return `
       <div class="fade-up" style="animation-delay:200ms;
-          background:#0b1120;border:1px solid rgba(255,255,255,0.1);
-          border-radius:16px;padding:24px;display:flex;flex-direction:column">
-        <div style="font-size:18px;font-weight:800;color:#fff;margin-bottom:16px;text-align:${isAr ? "right" : "left"}">
+          background:var(--dash-surface);border:1px solid rgba(255,255,255,0.1);
+          border-radius:var(--dash-radius-xl);padding:24px;display:flex;flex-direction:column">
+        <div style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff;margin-bottom:16px;text-align:${isAr ? "right" : "left"}">
           ${s4Txt("Payment Methods", "طرق الدفع")}
         </div>
         <div class="s4-payment-row" style="display:flex;flex-direction:${isAr ? "row" : "row-reverse"};align-items:center;gap:28px;flex:1">
@@ -773,9 +773,9 @@ window.renderSection4 = function (mountEl, data, ctx) {
                   gap:10px;flex-direction:${isAr ? "row" : "row-reverse"};width:100%">
                 <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;
                              background:${m.color};box-shadow:0 0 8px ${m.color}"></span>
-                <span style="font-size:14px;color:rgba(255,255,255,0.9);font-weight:500;
+                <span style="font-size:var(--type-body);color:rgba(255,255,255,0.9);font-weight:var(--weight-medium);
                              white-space:nowrap">${paymentLabel(m)}</span>
-                <span style="font-size:18px;font-weight:700;margin-${isAr ? "left" : "right"}:auto;
+                <span style="font-size:var(--type-section-title);font-weight:var(--weight-bold);margin-${isAr ? "left" : "right"}:auto;
                              color:${m.color};text-shadow:0 0 10px ${m.color}66">
                   ${m.value}%
                 </span>
@@ -786,8 +786,8 @@ window.renderSection4 = function (mountEl, data, ctx) {
                 margin-top:4px;padding-top:16px;
                 display:flex;align-items:center;justify-content:space-between;
                 flex-direction:${isAr ? "row" : "row-reverse"};width:100%;border-top:1px solid rgba(255,255,255,0.06)">
-              <span style="font-size:13px;color:rgba(255,255,255,0.6)">${s4Txt("Total Transactions", "إجمالي المعاملات")}</span>
-              <span style="font-size:15px;color:#fff;font-weight:700;letter-spacing:1px">${D.deliveredCount.toLocaleString("en-US")} ${s4Txt("orders", "طلب")}</span>
+              <span style="font-size:var(--type-control);color:var(--dash-text-muted)">${s4Txt("Total Transactions", "إجمالي المعاملات")}</span>
+              <span style="font-size:var(--type-component-title);color:#fff;font-weight:var(--weight-semibold);letter-spacing:1px">${D.deliveredCount.toLocaleString("en-US")} ${s4Txt("orders", "طلب")}</span>
             </div>
           </div>
 
@@ -814,7 +814,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
                              filter:drop-shadow(0 0 6px ${pm[1].color})"/>
             </svg>
             <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">
-              <div style="width:40px;height:40px;border-radius:12px;
+              <div style="width:40px;height:40px;border-radius:var(--dash-radius-md);
                           background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);
                           display:flex;align-items:center;justify-content:center">
                 ${svgIcon("banknote", 20, "#3b82f6")}
@@ -879,8 +879,8 @@ window.renderSection4 = function (mountEl, data, ctx) {
             `<ellipse cx="${p.x}" cy="${p.y}" rx="${p.rx || 38}" ry="${p.ry || 28}" fill="url(#${miniId}_glow_${p.id})" clip-path="url(#${miniId}_clip)" opacity=".92"/>`
           ).join("");
           const label = window.TaagerCountry && window.TaagerCountry.label ? window.TaagerCountry.label(code) : code.toUpperCase();
-          return `<div style="border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:9px;background:rgba(255,255,255,.025)">
-            <div style="display:flex;justify-content:space-between;gap:8px;color:#fff;font-size:10px;font-weight:800"><span>${esc(label)}</span><span>${Number(group.nativeAmountDue || 0).toLocaleString("en-US")} ${esc(group.currency || "")}</span></div>
+          return `<div style="border:1px solid rgba(255,255,255,.08);border-radius:var(--dash-radius-md);padding:9px;background:rgba(255,255,255,.025)">
+            <div style="display:flex;justify-content:space-between;gap:8px;color:#fff;font-size:var(--type-micro);font-weight:var(--weight-semibold)"><span>${esc(label)}</span><span>${Number(group.nativeAmountDue || 0).toLocaleString("en-US")} ${esc(group.currency || "")}</span></div>
             <svg class="dash-country-map dash-country-map--compact" viewBox="${window.TaagerGeo && window.TaagerGeo.viewBox ? window.TaagerGeo.viewBox(code) : "0 0 400 340"}" style="width:100%;height:130px">
               <defs><clipPath id="${miniId}_clip"><path d="${miniShape.outline}"/></clipPath>${fastMapPaint ? "" : `<filter id="${miniId}_shadow" x="-25%" y="-25%" width="150%" height="170%"><feDropShadow dx="0" dy="7" stdDeviation="6" flood-color="#020617" flood-opacity=".65"/></filter>`}${miniGlowDefs}</defs>
               <path d="${miniShape.outline}" fill="rgba(20,184,166,.09)" stroke="rgba(20,184,166,.55)" stroke-width="2"${fastMapPaint ? "" : ` filter="url(#${miniId}_shadow)"`}/>
@@ -897,25 +897,25 @@ window.renderSection4 = function (mountEl, data, ctx) {
         return `
       <div style="
           display:grid;grid-template-columns:1.4fr 1fr 1.1fr 0.9fr 1fr;
-          align-items:center;padding:12px 14px;font-size:13px;gap:6px;
+          align-items:center;padding:12px 14px;font-size:var(--type-control);gap:6px;
           flex-direction:row;
           ${i < D.cities.length - 1 ? "border-bottom:1px solid rgba(255,255,255,0.05)" : ""}">
         <div style="display:flex;align-items:center;gap:8px;justify-content:flex-start;flex-direction:row;min-width:0;">
-          <span style="color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(c.name)}">${esc(c.name)}</span>
-          <div style="width:22px;height:4px;border-radius:9999px;
+          <span style="color:#fff;font-weight:var(--weight-semibold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(c.name)}">${esc(c.name)}</span>
+          <div style="width:22px;height:4px;border-radius:var(--radius-pill);
                       background:rgba(20,184,166,0.2);overflow:hidden;flex-shrink:0;margin-left:4px">
             <div class="s4-city-bar" data-pct="${c.pct}"
                  style="height:100%;width:${Math.max(0, Math.min(100, Number(c.pct || 0)))}%;background:#14b8a6;"></div>
           </div>
         </div>
-        <div style="color:rgba(255,255,255,0.9);text-align:right;font-weight:600">
+        <div style="color:rgba(255,255,255,0.9);text-align:right;font-weight:var(--weight-semibold)">
           ${c.due.toLocaleString("en-US")}
         </div>
         <div style="color:rgba(255,255,255,0.9);text-align:right">
           ${c.collected.toLocaleString("en-US")}
         </div>
-        <div style="color:#ef4444;text-align:right;font-weight:700">${c.gap.toLocaleString("en-US")}</div>
-        <div style="color:${cityRateColor};text-align:right;font-weight:700;
+        <div style="color:#ef4444;text-align:right;font-weight:var(--weight-bold)">${c.gap.toLocaleString("en-US")}</div>
+        <div style="color:${cityRateColor};text-align:right;font-weight:var(--weight-bold);
                     text-shadow:0 0 8px ${cityRateColor}55">
           ${c.pct.toFixed(1)}%
         </div>
@@ -985,12 +985,12 @@ window.renderSection4 = function (mountEl, data, ctx) {
 
     return `
       <div class="fade-up" style="animation-delay:200ms;
-          background:#0b1120;border:1px solid rgba(255,255,255,0.1);
-          border-radius:16px;padding:24px">
+          background:var(--dash-surface);border:1px solid rgba(255,255,255,0.1);
+          border-radius:var(--dash-radius-xl);padding:24px">
         <div style="display:flex;align-items:center;gap:10px;justify-content:${isAr ? "flex-end" : "flex-start"};
                     margin-bottom:16px;flex-direction:${isAr ? "row" : "row-reverse"}">
           ${svgIcon("mapPin", 18, "#14b8a6")}
-          <span style="font-size:18px;font-weight:800;color:#fff">${s4Txt("DR & Collection Breakdown by City", "تفصيل DR والتحصيل حسب المدينة")}</span>
+          <span style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff">${s4Txt("DR & Collection Breakdown by City", "تفصيل DR والتحصيل حسب المدينة")}</span>
         </div>
         ${mixedMaps}
         <div class="s4-map-row" style="display:flex;flex-direction:row;gap:24px;align-items:stretch">
@@ -1008,14 +1008,14 @@ window.renderSection4 = function (mountEl, data, ctx) {
               border: 1px solid ${tooltipBorder};
               min-width: 220px;
               padding: 12px 15px;
-              border-radius: 11px;
+              border-radius:var(--dash-radius-md);
               box-shadow: 0 8px 24px rgba(0,0,0,0.42);
               z-index: 100;
               transform: translate3d(-9999px, -9999px, 0);
               will-change: transform, opacity;
               contain: layout paint;
               color: ${tooltipText};
-              font-size: 13px;
+              font-size:var(--type-control);
               white-space: nowrap;
               text-align: ${isAr ? "right" : "left"};
               direction: ${isAr ? "rtl" : "ltr"};
@@ -1053,7 +1053,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
           <div class="s4-table-scroll" style="flex:1;min-width:0;overflow-x:auto">
             <div style="min-width:420px">
               <div style="display:grid;grid-template-columns:1.4fr 1fr 1.1fr 0.9fr 1fr;
-                          padding:10px 14px;font-size:11px;font-weight:700;
+                          padding:10px 14px;font-size:var(--type-caption);font-weight:var(--weight-semibold);
                           color:rgba(255,255,255,0.45);
                           border-bottom:1px solid rgba(255,255,255,0.05);
                           gap:6px;flex-direction:${isAr ? "row" : "row-reverse"};text-align:${isAr ? "right" : "left"}">
@@ -1066,10 +1066,10 @@ window.renderSection4 = function (mountEl, data, ctx) {
               ${citiesRows}
               <button id="s4-cities-btn" style="
                   margin-top:16px;width:100%;display:flex;align-items:center;
-                  justify-content:center;gap:8px;padding:12px;border-radius:12px;
+                  justify-content:center;gap:8px;padding:12px;border-radius:var(--dash-radius-md);
                   background:linear-gradient(135deg, rgba(20,184,166,0.1), rgba(37,99,235,0.1));
                   border:1px solid rgba(20,184,166,0.25);
-                  color:#14b8a6;font-size:13px;font-weight:800;
+                  color:#14b8a6;font-size:var(--type-control);font-weight:var(--weight-semibold);
                   cursor:pointer;flex-direction:${isAr ? "row" : "row-reverse"};
                   box-shadow:0 4px 14px rgba(0,0,0,0.2);
                   transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1113,13 +1113,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
       var color = refs >= 10 ? "#00e676" : refs >= 2 ? "#f59e0b" : "#f43f5e";
       var label = refs >= 10 ? "High" : refs >= 2 ? "Medium" : "Low";
       return (
-        '<span style="display:inline-flex;justify-content:center;min-width:64px;padding:4px 8px;border-radius:999px;background:' +
+        '<span style="display:inline-flex;justify-content:center;min-width:64px;padding:4px 8px;border-radius:var(--radius-pill);background:' +
         color +
         "18;border:1px solid " +
         color +
         "45;color:" +
         color +
-        ';font-size:11px;font-weight:800">' +
+        ';font-size:var(--type-caption);font-weight:var(--weight-semibold)">' +
         label +
         "</span>"
       );
@@ -1130,13 +1130,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
         color +
         "12;border:1px solid " +
         color +
-        '35;border-radius:12px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">' +
-        '<div style="min-width:0;text-align:right"><div style="font-size:11px;color:rgba(255,255,255,0.48);font-weight:700;margin-bottom:5px">' +
+        '35;border-radius:var(--dash-radius-md);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">' +
+        '<div style="min-width:0;text-align:right"><div style="font-size:var(--type-caption);color:rgba(255,255,255,0.48);font-weight:var(--weight-semibold);margin-bottom:5px">' +
         label +
-        '</div><div style="font-size:11px;color:rgba(255,255,255,0.36);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
+        '</div><div style="font-size:var(--type-caption);color:rgba(255,255,255,0.36);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
         sub +
         "</div></div>" +
-        '<div style="font-size:24px;line-height:1;font-weight:900;color:' +
+        '<div style="font-size:var(--type-metric);line-height:1;font-weight:var(--weight-semibold);color:' +
         color +
         ';font-variant-numeric:tabular-nums;white-space:nowrap">' +
         value +
@@ -1147,20 +1147,20 @@ window.renderSection4 = function (mountEl, data, ctx) {
     function filledRows(rows) {
       rows = rows || [];
       if (!rows.length)
-        return '<tr><td colspan="9" style="padding:26px;text-align:center;color:rgba(255,255,255,0.5)">No filled orders</td></tr>';
+        return '<tr><td colspan="9" style="padding:26px;text-align:center;color:var(--dash-text-faint)">No filled orders</td></tr>';
       return rows
         .slice(0, 7)
         .map(function (r) {
           return (
             "<tr>" +
             cell(
-              '<span style="color:#60a5fa;font-weight:800">#' +
+              '<span style="color:#60a5fa;font-weight:var(--weight-bold)">#' +
                 esc(r.order || "-") +
                 "</span>",
               "white-space:nowrap",
             ) +
             cell(
-              '<div style="max-width:420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;font-weight:700" title="' +
+              '<div style="max-width:420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;font-weight:var(--weight-bold)" title="' +
                 esc(r.product || "-") +
                 '">' +
                 esc(r.product || "-") +
@@ -1171,13 +1171,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
               "white-space:nowrap",
             ) +
             cell(
-              '<span style="font-weight:800;color:#fff">' +
+              '<span style="font-weight:var(--weight-bold);color:#fff">' +
                 esc(r.qty || 1) +
                 "</span>",
               "text-align:center",
             ) +
             cell(
-              '<span style="font-weight:900;color:#fff">' +
+              '<span style="font-weight:var(--weight-bold);color:#fff">' +
                 money(r.amount) +
                 "</span>",
               "white-space:nowrap",
@@ -1188,7 +1188,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
                   window._kbotTheme) === "light"
                   ? "rgba(54,4,83,0.75)"
                   : "#cbd5e1") +
-                ';font-weight:800">' +
+                ';font-weight:var(--weight-bold)">' +
                 Number(r.referenceCount || 0).toLocaleString("en-US") +
                 "</span>",
               "text-align:center",
@@ -1203,13 +1203,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
                   window._kbotTheme) === "light"
                   ? "rgba(30,10,60,0.85)"
                   : "#e2e8f0") +
-                ';font-weight:700">' +
+                ';font-weight:var(--weight-bold)">' +
                 esc(r.customerName || "-") +
                 "</span>",
               "white-space:nowrap",
             ) +
             cell(
-              '<span style="font-family:Consolas,monospace;color:' +
+              '<span style="font-family:var(--font-mono);color:' +
                 ((document.documentElement.getAttribute("data-theme") ||
                   window._kbotTheme) === "light"
                   ? "rgba(29,78,216,0.85)"
@@ -1227,20 +1227,20 @@ window.renderSection4 = function (mountEl, data, ctx) {
     function unfilledRows(rows) {
       rows = rows || [];
       if (!rows.length)
-        return '<tr><td colspan="8" style="padding:26px;text-align:center;color:rgba(255,255,255,0.5)">No unfilled orders</td></tr>';
+        return '<tr><td colspan="8" style="padding:26px;text-align:center;color:var(--dash-text-faint)">No unfilled orders</td></tr>';
       return rows
         .slice(0, 7)
         .map(function (r) {
           return (
             "<tr>" +
             cell(
-              '<span style="color:#60a5fa;font-weight:800">#' +
+              '<span style="color:#60a5fa;font-weight:var(--weight-bold)">#' +
                 esc(r.order || "-") +
                 "</span>",
               "white-space:nowrap",
             ) +
             cell(
-              '<div style="max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;font-weight:700" title="' +
+              '<div style="max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;font-weight:var(--weight-bold)" title="' +
                 esc(r.product || "-") +
                 '">' +
                 esc(r.product || "-") +
@@ -1251,17 +1251,17 @@ window.renderSection4 = function (mountEl, data, ctx) {
               "white-space:nowrap",
             ) +
             cell(
-              '<span style="font-weight:800;color:#fff">' +
+              '<span style="font-weight:var(--weight-bold);color:#fff">' +
                 esc(r.qty || 1) +
                 "</span>",
               "text-align:center",
             ) +
             cell(
-              '<span style="display:inline-flex;padding:4px 9px;border-radius:999px;background:rgba(244,63,94,0.14);border:1px solid rgba(244,63,94,0.35);color:#fb7185;font-weight:900">0 ' + activeCurrency + '</span>',
+              '<span style="display:inline-flex;padding:4px 9px;border-radius:var(--radius-pill);background:rgba(244,63,94,0.14);border:1px solid rgba(244,63,94,0.35);color:#fb7185;font-weight:var(--weight-bold)">0 ' + activeCurrency + '</span>',
               "white-space:nowrap",
             ) +
             cell(
-              '<span style="color:#fda4af;font-weight:700">' +
+              '<span style="color:#fda4af;font-weight:var(--weight-bold)">' +
                 esc(r.reason || "No SKU+qty reference amount found") +
                 "</span>",
             ) +
@@ -1271,13 +1271,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
                   window._kbotTheme) === "light"
                   ? "rgba(30,10,60,0.85)"
                   : "#e2e8f0") +
-                ';font-weight:700">' +
+                ';font-weight:var(--weight-bold)">' +
                 esc(r.customerName || "-") +
                 "</span>",
               "white-space:nowrap",
             ) +
             cell(
-              '<span style="font-family:Consolas,monospace;color:' +
+              '<span style="font-family:var(--font-mono);color:' +
                 ((document.documentElement.getAttribute("data-theme") ||
                   window._kbotTheme) === "light"
                   ? "rgba(29,78,216,0.85)"
@@ -1296,10 +1296,10 @@ window.renderSection4 = function (mountEl, data, ctx) {
       (report.filledRows || []).length.toLocaleString("en-US") + " rows";
     var unfilledLimitText =
       (report.unfilledRows || []).length.toLocaleString("en-US") + " rows";
-    return `<div class="fade-up" style="margin-top:18px;background:#0b1120;border:1px solid rgba(96,165,250,0.16);border-radius:16px;padding:22px;box-shadow:0 18px 60px rgba(0,0,0,0.18)">
+    return `<div class="fade-up" style="margin-top:18px;background:var(--dash-surface);border:1px solid rgba(96,165,250,0.16);border-radius:var(--dash-radius-xl);padding:22px;box-shadow:0 18px 60px rgba(0,0,0,0.18)">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px">
-        <div style="font-size:18px;font-weight:900;color:#fff">${s4Txt("Collection Amount Fill Report", "تقرير تعبئة المطلوب تحصيله")}</div>
-        <div style="font-size:12px;color:rgba(255,255,255,0.55)">${s4Txt("Delivered only", "المسلمة فقط")}</div>
+        <div style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff">${s4Txt("Collection Amount Fill Report", "تقرير تعبئة المطلوب تحصيله")}</div>
+        <div style="font-size:var(--type-label);color:rgba(255,255,255,0.55)">${s4Txt("Delivered only", "المسلمة فقط")}</div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:18px">
         ${metricCard(s4Txt("Missing", "فارغ"), report.totalMissing.toLocaleString("en-US"), "Delivered rows", "#94a3b8")}
@@ -1308,21 +1308,21 @@ window.renderSection4 = function (mountEl, data, ctx) {
         ${metricCard(s4Txt("Fill rate", "Fill rate"), Number(report.fillRate || 0).toFixed(1) + "%", "Auto repair success", "#3b82f6")}
       </div>
       <div style="margin-bottom:14px;position:relative">
-        <span style="position:absolute;right:14px;top:50%;transform:translateY(-50%);color:#64748b;font-size:12px">🔍</span>
-        <input id="s4-repair-search" type="text" placeholder="${s4Txt("Search by order, product, SKU, customer name, phone or reason", "ابحث بالاوردر، المنتج، SKU، اسم العميل، الهاتف أو السبب")}" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:12px;padding:11px 38px 11px 14px;color:#fff;font-family:inherit;font-size:13px;outline:none; text-align:right" autocomplete="off" spellcheck="false">
+        <span style="position:absolute;right:14px;top:50%;transform:translateY(-50%);color:#64748b;font-size:var(--type-label)">🔍</span>
+        <input id="s4-repair-search" type="text" placeholder="${s4Txt("Search by order, product, SKU, customer name, phone or reason", "ابحث بالاوردر، المنتج، SKU، اسم العميل، الهاتف أو السبب")}" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:var(--dash-radius-md);padding:11px 38px 11px 14px;color:#fff;font-family:inherit;font-size:var(--type-control);outline:none; text-align:right" autocomplete="off" spellcheck="false">
       </div>
       <div style="display:flex;flex-direction:column;gap:14px;align-items:stretch">
-        <div style="min-width:0;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.07);border-radius:14px;overflow:hidden">
+        <div style="min-width:0;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.07);border-radius:var(--dash-radius-lg);overflow:hidden">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.07)">
-            <div style="font-size:14px;font-weight:900;color:#00e676">${s4Txt("Filled orders", "الطلبات المعبأة")}</div><div style="font-size:11px;color:rgba(255,255,255,0.45);font-weight:700">${filledLimitText}</div>
+            <div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#00e676">${s4Txt("Filled orders", "الطلبات المعبأة")}</div><div style="font-size:var(--type-caption);color:rgba(255,255,255,0.45);font-weight:var(--weight-semibold)">${filledLimitText}</div>
           </div>
-          <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:1080px;font-size:12px;text-align:right"><thead style="background:#111827"><tr style="color:#8892a4;text-transform:uppercase;letter-spacing:0;font-size:10px"><th data-s4-sort-table="filled" data-s4-sort-key="order" style="padding:11px 14px;cursor:pointer">${s4Txt("Order ↕", "الطلب ↕")}</th><th data-s4-sort-table="filled" data-s4-sort-key="product" style="padding:11px 14px;cursor:pointer">${s4Txt("Product ↕", "المنتج ↕")}</th><th data-s4-sort-table="filled" data-s4-sort-key="sku" style="padding:11px 14px;cursor:pointer">${s4Txt("SKU ↕", "SKU ↕")}</th><th data-s4-sort-table="filled" data-s4-sort-key="qty" style="padding:11px 14px;text-align:center;cursor:pointer">${s4Txt("Qty ↕", "الكمية ↕")}</th><th data-s4-sort-table="filled" data-s4-sort-key="amount" style="padding:11px 14px;cursor:pointer">${s4Txt("Amount ↕", "المبلغ ↕")}</th><th data-s4-sort-table="filled" data-s4-sort-key="refs" title="Refs = number of other rows in the sheet with the same SKU + quantity used to choose the filled amount. More refs means higher confidence." style="padding:11px 14px;text-align:center;cursor:pointer">${s4Txt("Refs (?) ↕", "المرجع (?) ↕")}</th><th data-s4-sort-table="filled" data-s4-sort-key="confidence" style="padding:11px 14px;text-align:center;cursor:pointer">${s4Txt("Confidence ↕", "الثقة ↕")}</th><th style="padding:11px 14px">${s4Txt("Customer", "العميل")}</th><th style="padding:11px 14px">${s4Txt("Phone", "الهاتف")}</th></tr></thead><tbody id="s4-filled-report-body">${filledRows(report.filledRows)}</tbody></table></div><div id="s4-filled-pagination" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-top:1px solid rgba(255,255,255,0.07);flex-direction:row-reverse"></div>
+          <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:1080px;font-size:var(--type-label);text-align:right"><thead style="background:#111827"><tr style="color:#8892a4;text-transform:uppercase;letter-spacing:0;font-size:var(--type-micro)"><th data-s4-sort-table="filled" data-s4-sort-key="order" style="padding:11px 14px;cursor:pointer">${s4Txt("Order ↕", "الطلب ↕")}</th><th data-s4-sort-table="filled" data-s4-sort-key="product" style="padding:11px 14px;cursor:pointer">${s4Txt("Product ↕", "المنتج ↕")}</th><th data-s4-sort-table="filled" data-s4-sort-key="sku" style="padding:11px 14px;cursor:pointer">${s4Txt("SKU ↕", "SKU ↕")}</th><th data-s4-sort-table="filled" data-s4-sort-key="qty" style="padding:11px 14px;text-align:center;cursor:pointer">${s4Txt("Qty ↕", "الكمية ↕")}</th><th data-s4-sort-table="filled" data-s4-sort-key="amount" style="padding:11px 14px;cursor:pointer">${s4Txt("Amount ↕", "المبلغ ↕")}</th><th data-s4-sort-table="filled" data-s4-sort-key="refs" title="Refs = number of other rows in the sheet with the same SKU + quantity used to choose the filled amount. More refs means higher confidence." style="padding:11px 14px;text-align:center;cursor:pointer">${s4Txt("Refs (?) ↕", "المرجع (?) ↕")}</th><th data-s4-sort-table="filled" data-s4-sort-key="confidence" style="padding:11px 14px;text-align:center;cursor:pointer">${s4Txt("Confidence ↕", "الثقة ↕")}</th><th style="padding:11px 14px">${s4Txt("Customer", "العميل")}</th><th style="padding:11px 14px">${s4Txt("Phone", "الهاتف")}</th></tr></thead><tbody id="s4-filled-report-body">${filledRows(report.filledRows)}</tbody></table></div><div id="s4-filled-pagination" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-top:1px solid rgba(255,255,255,0.07);flex-direction:row-reverse"></div>
         </div>
-        <div style="min-width:0;background:rgba(244,63,94,0.045);border:1px solid rgba(244,63,94,0.20);border-radius:14px;overflow:hidden">
+        <div style="min-width:0;background:rgba(244,63,94,0.045);border:1px solid rgba(244,63,94,0.20);border-radius:var(--dash-radius-lg);overflow:hidden">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid rgba(244,63,94,0.18)">
-            <div style="font-size:14px;font-weight:900;color:#fb7185">${s4Txt("Unfilled orders", "الطلبات غير المعبأة")}</div><div style="font-size:11px;color:rgba(255,255,255,0.45);font-weight:700">${unfilledLimitText}</div>
+            <div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#fb7185">${s4Txt("Unfilled orders", "الطلبات غير المعبأة")}</div><div style="font-size:var(--type-caption);color:rgba(255,255,255,0.45);font-weight:var(--weight-semibold)">${unfilledLimitText}</div>
           </div>
-          <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:820px;font-size:12px;text-align:right"><thead style="background:#1a111a"><tr style="color:#9ca3af;text-transform:uppercase;font-size:10px"><th data-s4-sort-table="unfilled" data-s4-sort-key="order" style="padding:11px 14px;cursor:pointer">${s4Txt("Order ↕", "الطلب ↕")}</th><th data-s4-sort-table="unfilled" data-s4-sort-key="product" style="padding:11px 14px;cursor:pointer">${s4Txt("Product ↕", "المنتج ↕")}</th><th data-s4-sort-table="unfilled" data-s4-sort-key="sku" style="padding:11px 14px;cursor:pointer">${s4Txt("SKU ↕", "SKU ↕")}</th><th data-s4-sort-table="unfilled" data-s4-sort-key="qty" style="padding:11px 14px;text-align:center;cursor:pointer">${s4Txt("Qty ↕", "الكمية ↕")}</th><th data-s4-sort-table="unfilled" data-s4-sort-key="amount" style="padding:11px 14px;cursor:pointer">${s4Txt("Counted ↕", "المبلغ المحتسب ↕")}</th><th data-s4-sort-table="unfilled" data-s4-sort-key="reason" style="padding:11px 14px;cursor:pointer">${s4Txt("Reason ↕", "السبب ↕")}</th><th style="padding:11px 14px">${s4Txt("Customer", "العميل")}</th><th style="padding:11px 14px">${s4Txt("Phone", "الهاتف")}</th></tr></thead><tbody id="s4-unfilled-report-body">${unfilledRows(report.unfilledRows)}</tbody></table></div><div id="s4-unfilled-pagination" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-top:1px solid rgba(244,63,94,0.18);flex-direction:row-reverse"></div>
+          <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:820px;font-size:var(--type-label);text-align:right"><thead style="background:#1a111a"><tr style="color:#9ca3af;text-transform:uppercase;font-size:var(--type-micro)"><th data-s4-sort-table="unfilled" data-s4-sort-key="order" style="padding:11px 14px;cursor:pointer">${s4Txt("Order ↕", "الطلب ↕")}</th><th data-s4-sort-table="unfilled" data-s4-sort-key="product" style="padding:11px 14px;cursor:pointer">${s4Txt("Product ↕", "المنتج ↕")}</th><th data-s4-sort-table="unfilled" data-s4-sort-key="sku" style="padding:11px 14px;cursor:pointer">${s4Txt("SKU ↕", "SKU ↕")}</th><th data-s4-sort-table="unfilled" data-s4-sort-key="qty" style="padding:11px 14px;text-align:center;cursor:pointer">${s4Txt("Qty ↕", "الكمية ↕")}</th><th data-s4-sort-table="unfilled" data-s4-sort-key="amount" style="padding:11px 14px;cursor:pointer">${s4Txt("Counted ↕", "المبلغ المحتسب ↕")}</th><th data-s4-sort-table="unfilled" data-s4-sort-key="reason" style="padding:11px 14px;cursor:pointer">${s4Txt("Reason ↕", "السبب ↕")}</th><th style="padding:11px 14px">${s4Txt("Customer", "العميل")}</th><th style="padding:11px 14px">${s4Txt("Phone", "الهاتف")}</th></tr></thead><tbody id="s4-unfilled-report-body">${unfilledRows(report.unfilledRows)}</tbody></table></div><div id="s4-unfilled-pagination" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-top:1px solid rgba(244,63,94,0.18);flex-direction:row-reverse"></div>
         </div>
       </div>
     </div>`;
@@ -1358,13 +1358,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
       var color = refs >= 10 ? "#00e676" : refs >= 2 ? "#f59e0b" : "#f43f5e";
       var label = refs >= 10 ? "High" : refs >= 2 ? "Medium" : "Low";
       return (
-        '<span style="display:inline-flex;justify-content:center;min-width:64px;padding:4px 8px;border-radius:999px;background:' +
+        '<span style="display:inline-flex;justify-content:center;min-width:64px;padding:4px 8px;border-radius:var(--radius-pill);background:' +
         color +
         "18;border:1px solid " +
         color +
         "45;color:" +
         color +
-        ';font-size:11px;font-weight:800">' +
+        ';font-size:var(--type-caption);font-weight:var(--weight-semibold)">' +
         label +
         "</span>"
       );
@@ -1375,13 +1375,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
         color +
         "12;border:1px solid " +
         color +
-        '35;border-radius:12px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">' +
-        '<div style="min-width:0;text-align:right"><div style="font-size:11px;color:rgba(255,255,255,0.48);font-weight:700;margin-bottom:5px">' +
+        '35;border-radius:var(--dash-radius-md);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">' +
+        '<div style="min-width:0;text-align:right"><div style="font-size:var(--type-caption);color:rgba(255,255,255,0.48);font-weight:var(--weight-semibold);margin-bottom:5px">' +
         label +
-        '</div><div style="font-size:11px;color:rgba(255,255,255,0.36);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
+        '</div><div style="font-size:var(--type-caption);color:rgba(255,255,255,0.36);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
         sub +
         "</div></div>" +
-        '<div style="font-size:24px;line-height:1;font-weight:900;color:' +
+        '<div style="font-size:var(--type-metric);line-height:1;font-weight:var(--weight-semibold);color:' +
         color +
         ';font-variant-numeric:tabular-nums;white-space:nowrap">' +
         value +
@@ -1392,20 +1392,20 @@ window.renderSection4 = function (mountEl, data, ctx) {
     function filledRows(rows) {
       rows = rows || [];
       if (!rows.length)
-        return '<tr><td colspan="9" style="padding:26px;text-align:center;color:rgba(255,255,255,0.5)">No filled orders</td></tr>';
+        return '<tr><td colspan="9" style="padding:26px;text-align:center;color:var(--dash-text-faint)">No filled orders</td></tr>';
       return rows
         .slice(0, 7)
         .map(function (r) {
           return (
             "<tr>" +
             cell(
-              '<span style="color:#60a5fa;font-weight:800">#' +
+              '<span style="color:#60a5fa;font-weight:var(--weight-bold)">#' +
                 esc(r.order || "-") +
                 "</span>",
               "white-space:nowrap",
             ) +
             cell(
-              '<div style="max-width:420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;font-weight:700" title="' +
+              '<div style="max-width:420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;font-weight:var(--weight-bold)" title="' +
                 esc(r.product || "-") +
                 '">' +
                 esc(r.product || "-") +
@@ -1416,13 +1416,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
               "white-space:nowrap",
             ) +
             cell(
-              '<span style="font-weight:800;color:#fff">' +
+              '<span style="font-weight:var(--weight-bold);color:#fff">' +
                 esc(r.qty || 1) +
                 "</span>",
               "text-align:center",
             ) +
             cell(
-              '<span style="font-weight:900;color:#fff">' +
+              '<span style="font-weight:var(--weight-bold);color:#fff">' +
                 money(r.amount) +
                 "</span>",
               "white-space:nowrap",
@@ -1433,7 +1433,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
                   window._kbotTheme) === "light"
                   ? "rgba(54,4,83,0.75)"
                   : "#cbd5e1") +
-                ';font-weight:800">' +
+                ';font-weight:var(--weight-bold)">' +
                 Number(r.referenceCount || 0).toLocaleString("en-US") +
                 "</span>",
               "text-align:center",
@@ -1448,13 +1448,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
                   window._kbotTheme) === "light"
                   ? "rgba(30,10,60,0.85)"
                   : "#e2e8f0") +
-                ';font-weight:700">' +
+                ';font-weight:var(--weight-bold)">' +
                 esc(r.customerName || "-") +
                 "</span>",
               "white-space:nowrap",
             ) +
             cell(
-              '<span style="font-family:Consolas,monospace;color:' +
+              '<span style="font-family:var(--font-mono);color:' +
                 ((document.documentElement.getAttribute("data-theme") ||
                   window._kbotTheme) === "light"
                   ? "rgba(29,78,216,0.85)"
@@ -1472,20 +1472,20 @@ window.renderSection4 = function (mountEl, data, ctx) {
     function unfilledRows(rows) {
       rows = rows || [];
       if (!rows.length)
-        return '<tr><td colspan="8" style="padding:26px;text-align:center;color:rgba(255,255,255,0.5)">No unfilled orders</td></tr>';
+        return '<tr><td colspan="8" style="padding:26px;text-align:center;color:var(--dash-text-faint)">No unfilled orders</td></tr>';
       return rows
         .slice(0, 7)
         .map(function (r) {
           return (
             "<tr>" +
             cell(
-              '<span style="color:#60a5fa;font-weight:800">#' +
+              '<span style="color:#60a5fa;font-weight:var(--weight-bold)">#' +
                 esc(r.order || "-") +
                 "</span>",
               "white-space:nowrap",
             ) +
             cell(
-              '<div style="max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;font-weight:700" title="' +
+              '<div style="max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;font-weight:var(--weight-bold)" title="' +
                 esc(r.product || "-") +
                 '">' +
                 esc(r.product || "-") +
@@ -1496,17 +1496,17 @@ window.renderSection4 = function (mountEl, data, ctx) {
               "white-space:nowrap",
             ) +
             cell(
-              '<span style="font-weight:800;color:#fff">' +
+              '<span style="font-weight:var(--weight-bold);color:#fff">' +
                 esc(r.qty || 1) +
                 "</span>",
               "text-align:center",
             ) +
             cell(
-              '<span style="display:inline-flex;padding:4px 9px;border-radius:999px;background:rgba(244,63,94,0.14);border:1px solid rgba(244,63,94,0.35);color:#fb7185;font-weight:900">0 ' + activeCurrency + '</span>',
+              '<span style="display:inline-flex;padding:4px 9px;border-radius:var(--radius-pill);background:rgba(244,63,94,0.14);border:1px solid rgba(244,63,94,0.35);color:#fb7185;font-weight:var(--weight-bold)">0 ' + activeCurrency + '</span>',
               "white-space:nowrap",
             ) +
             cell(
-              '<span style="color:#fda4af;font-weight:700">' +
+              '<span style="color:#fda4af;font-weight:var(--weight-bold)">' +
                 esc(r.reason || "No SKU+qty reference price found") +
                 "</span>",
             ) +
@@ -1516,13 +1516,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
                   window._kbotTheme) === "light"
                   ? "rgba(30,10,60,0.85)"
                   : "#e2e8f0") +
-                ';font-weight:700">' +
+                ';font-weight:var(--weight-bold)">' +
                 esc(r.customerName || "-") +
                 "</span>",
               "white-space:nowrap",
             ) +
             cell(
-              '<span style="font-family:Consolas,monospace;color:' +
+              '<span style="font-family:var(--font-mono);color:' +
                 ((document.documentElement.getAttribute("data-theme") ||
                   window._kbotTheme) === "light"
                   ? "rgba(29,78,216,0.85)"
@@ -1541,10 +1541,10 @@ window.renderSection4 = function (mountEl, data, ctx) {
       (report.filledRows || []).length.toLocaleString("en-US") + " rows";
     var unfilledLimitText =
       (report.unfilledRows || []).length.toLocaleString("en-US") + " rows";
-    return `<div class="fade-up" style="margin-top:18px;background:#0b1120;border:1px solid rgba(96,165,250,0.16);border-radius:16px;padding:22px;box-shadow:0 18px 60px rgba(0,0,0,0.18)">
+    return `<div class="fade-up" style="margin-top:18px;background:var(--dash-surface);border:1px solid rgba(96,165,250,0.16);border-radius:var(--dash-radius-xl);padding:22px;box-shadow:0 18px 60px rgba(0,0,0,0.18)">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px">
-        <div style="font-size:18px;font-weight:900;color:#fff">${s4Txt("Total Sales Amount Fill Report", "تقرير تعبئة المبيعات الإجمالية")}</div>
-        <div style="font-size:12px;color:rgba(255,255,255,0.55)">${s4Txt("All orders", "جميع الطلبات")}</div>
+        <div style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff">${s4Txt("Total Sales Amount Fill Report", "تقرير تعبئة المبيعات الإجمالية")}</div>
+        <div style="font-size:var(--type-label);color:rgba(255,255,255,0.55)">${s4Txt("All orders", "جميع الطلبات")}</div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:18px">
         ${metricCard(s4Txt("Missing", "فارغ"), report.totalMissing.toLocaleString("en-US"), "All orders rows", "#94a3b8")}
@@ -1553,21 +1553,21 @@ window.renderSection4 = function (mountEl, data, ctx) {
         ${metricCard(s4Txt("Fill rate", "Fill rate"), Number(report.fillRate || 0).toFixed(1) + "%", "Auto repair success", "#3b82f6")}
       </div>
       <div style="margin-bottom:14px;position:relative">
-        <span style="position:absolute;right:14px;top:50%;transform:translateY(-50%);color:#64748b;font-size:12px">🔍</span>
-        <input id="s4-sales-repair-search" type="text" placeholder="${s4Txt("Search by order, product, SKU, customer name, phone or reason", "ابحث بالاوردر، المنتج، SKU، اسم العميل، الهاتف أو السبب")}" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:12px;padding:11px 38px 11px 14px;color:#fff;font-family:inherit;font-size:13px;outline:none; text-align:right" autocomplete="off" spellcheck="false">
+        <span style="position:absolute;right:14px;top:50%;transform:translateY(-50%);color:#64748b;font-size:var(--type-label)">🔍</span>
+        <input id="s4-sales-repair-search" type="text" placeholder="${s4Txt("Search by order, product, SKU, customer name, phone or reason", "ابحث بالاوردر، المنتج، SKU، اسم العميل، الهاتف أو السبب")}" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:var(--dash-radius-md);padding:11px 38px 11px 14px;color:#fff;font-family:inherit;font-size:var(--type-control);outline:none; text-align:right" autocomplete="off" spellcheck="false">
       </div>
       <div style="display:flex;flex-direction:column;gap:14px;align-items:stretch">
-        <div style="min-width:0;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.07);border-radius:14px;overflow:hidden">
+        <div style="min-width:0;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.07);border-radius:var(--dash-radius-lg);overflow:hidden">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.07)">
-            <div style="font-size:14px;font-weight:900;color:#00e676">${s4Txt("Filled sales orders", "مبيعات الطلبات المعبأة")}</div><div style="font-size:11px;color:rgba(255,255,255,0.45);font-weight:700">${filledLimitText}</div>
+            <div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#00e676">${s4Txt("Filled sales orders", "مبيعات الطلبات المعبأة")}</div><div style="font-size:var(--type-caption);color:rgba(255,255,255,0.45);font-weight:var(--weight-semibold)">${filledLimitText}</div>
           </div>
-          <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:1080px;font-size:12px;text-align:right"><thead style="background:#111827"><tr style="color:#8892a4;text-transform:uppercase;letter-spacing:0;font-size:10px"><th data-s4-sales-sort-table="filled" data-s4-sales-sort-key="order" style="padding:11px 14px;cursor:pointer">${s4Txt("Order ↕", "الطلب ↕")}</th><th data-s4-sales-sort-table="filled" data-s4-sales-sort-key="product" style="padding:11px 14px;cursor:pointer">${s4Txt("Product ↕", "المنتج ↕")}</th><th data-s4-sales-sort-table="filled" data-s4-sales-sort-key="sku" style="padding:11px 14px;cursor:pointer">${s4Txt("SKU ↕", "SKU ↕")}</th><th data-s4-sales-sort-table="filled" data-s4-sales-sort-key="qty" style="padding:11px 14px;text-align:center;cursor:pointer">${s4Txt("Qty ↕", "الكمية ↕")}</th><th data-s4-sales-sort-table="filled" data-s4-sales-sort-key="amount" style="padding:11px 14px;cursor:pointer">${s4Txt("Amount ↕", "المبلغ ↕")}</th><th data-s4-sales-sort-table="filled" data-s4-sales-sort-key="refs" title="Refs = number of other rows in the sheet with the same SKU + quantity used to choose the filled amount. More refs means higher confidence." style="padding:11px 14px;text-align:center;cursor:pointer">${s4Txt("Refs (?) ↕", "المرجع (?) ↕")}</th><th data-s4-sales-sort-table="filled" data-s4-sales-sort-key="confidence" style="padding:11px 14px;text-align:center;cursor:pointer">${s4Txt("Confidence ↕", "الثقة ↕")}</th><th style="padding:11px 14px">${s4Txt("Customer", "العميل")}</th><th style="padding:11px 14px">${s4Txt("Phone", "الهاتف")}</th></tr></thead><tbody id="s4-sales-filled-report-body">${filledRows(report.filledRows)}</tbody></table></div><div id="s4-sales-filled-pagination" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-top:1px solid rgba(255,255,255,0.07);flex-direction:row-reverse"></div>
+          <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:1080px;font-size:var(--type-label);text-align:right"><thead style="background:#111827"><tr style="color:#8892a4;text-transform:uppercase;letter-spacing:0;font-size:var(--type-micro)"><th data-s4-sales-sort-table="filled" data-s4-sales-sort-key="order" style="padding:11px 14px;cursor:pointer">${s4Txt("Order ↕", "الطلب ↕")}</th><th data-s4-sales-sort-table="filled" data-s4-sales-sort-key="product" style="padding:11px 14px;cursor:pointer">${s4Txt("Product ↕", "المنتج ↕")}</th><th data-s4-sales-sort-table="filled" data-s4-sales-sort-key="sku" style="padding:11px 14px;cursor:pointer">${s4Txt("SKU ↕", "SKU ↕")}</th><th data-s4-sales-sort-table="filled" data-s4-sales-sort-key="qty" style="padding:11px 14px;text-align:center;cursor:pointer">${s4Txt("Qty ↕", "الكمية ↕")}</th><th data-s4-sales-sort-table="filled" data-s4-sales-sort-key="amount" style="padding:11px 14px;cursor:pointer">${s4Txt("Amount ↕", "المبلغ ↕")}</th><th data-s4-sales-sort-table="filled" data-s4-sales-sort-key="refs" title="Refs = number of other rows in the sheet with the same SKU + quantity used to choose the filled amount. More refs means higher confidence." style="padding:11px 14px;text-align:center;cursor:pointer">${s4Txt("Refs (?) ↕", "المرجع (?) ↕")}</th><th data-s4-sales-sort-table="filled" data-s4-sales-sort-key="confidence" style="padding:11px 14px;text-align:center;cursor:pointer">${s4Txt("Confidence ↕", "الثقة ↕")}</th><th style="padding:11px 14px">${s4Txt("Customer", "العميل")}</th><th style="padding:11px 14px">${s4Txt("Phone", "الهاتف")}</th></tr></thead><tbody id="s4-sales-filled-report-body">${filledRows(report.filledRows)}</tbody></table></div><div id="s4-sales-filled-pagination" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-top:1px solid rgba(255,255,255,0.07);flex-direction:row-reverse"></div>
         </div>
-        <div style="min-width:0;background:rgba(244,63,94,0.045);border:1px solid rgba(244,63,94,0.20);border-radius:14px;overflow:hidden">
+        <div style="min-width:0;background:rgba(244,63,94,0.045);border:1px solid rgba(244,63,94,0.20);border-radius:var(--dash-radius-lg);overflow:hidden">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid rgba(244,63,94,0.18)">
-            <div style="font-size:14px;font-weight:900;color:#fb7185">${s4Txt("Unfilled sales orders", "مبيعات الطلبات غير المعبأة")}</div><div style="font-size:11px;color:rgba(255,255,255,0.45);font-weight:700">${unfilledLimitText}</div>
+            <div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#fb7185">${s4Txt("Unfilled sales orders", "مبيعات الطلبات غير المعبأة")}</div><div style="font-size:var(--type-caption);color:rgba(255,255,255,0.45);font-weight:var(--weight-semibold)">${unfilledLimitText}</div>
           </div>
-          <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:820px;font-size:12px;text-align:right"><thead style="background:#1a111a"><tr style="color:#9ca3af;text-transform:uppercase;font-size:10px"><th data-s4-sales-sort-table="unfilled" data-s4-sales-sort-key="order" style="padding:11px 14px;cursor:pointer">${s4Txt("Order ↕", "الطلب ↕")}</th><th data-s4-sales-sort-table="unfilled" data-s4-sales-sort-key="product" style="padding:11px 14px;cursor:pointer">${s4Txt("Product ↕", "المنتج ↕")}</th><th data-s4-sales-sort-table="unfilled" data-s4-sales-sort-key="sku" style="padding:11px 14px;cursor:pointer">${s4Txt("SKU ↕", "SKU ↕")}</th><th data-s4-sales-sort-table="unfilled" data-s4-sales-sort-key="qty" style="padding:11px 14px;text-align:center;cursor:pointer">${s4Txt("Qty ↕", "الكمية ↕")}</th><th data-s4-sales-sort-table="unfilled" data-s4-sales-sort-key="amount" style="padding:11px 14px;cursor:pointer">${s4Txt("Counted ↕", "المبلغ المحتسب ↕")}</th><th data-s4-sales-sort-table="unfilled" data-s4-sales-sort-key="reason" style="padding:11px 14px;cursor:pointer">${s4Txt("Reason ↕", "السبب ↕")}</th><th style="padding:11px 14px">${s4Txt("Customer", "العميل")}</th><th style="padding:11px 14px">${s4Txt("Phone", "الهاتف")}</th></tr></thead><tbody id="s4-sales-unfilled-report-body">${unfilledRows(report.unfilledRows)}</tbody></table></div><div id="s4-sales-unfilled-pagination" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-top:1px solid rgba(244,63,94,0.18);flex-direction:row-reverse"></div>
+          <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:820px;font-size:var(--type-label);text-align:right"><thead style="background:#1a111a"><tr style="color:#9ca3af;text-transform:uppercase;font-size:var(--type-micro)"><th data-s4-sales-sort-table="unfilled" data-s4-sales-sort-key="order" style="padding:11px 14px;cursor:pointer">${s4Txt("Order ↕", "الطلب ↕")}</th><th data-s4-sales-sort-table="unfilled" data-s4-sales-sort-key="product" style="padding:11px 14px;cursor:pointer">${s4Txt("Product ↕", "المنتج ↕")}</th><th data-s4-sales-sort-table="unfilled" data-s4-sales-sort-key="sku" style="padding:11px 14px;cursor:pointer">${s4Txt("SKU ↕", "SKU ↕")}</th><th data-s4-sales-sort-table="unfilled" data-s4-sales-sort-key="qty" style="padding:11px 14px;text-align:center;cursor:pointer">${s4Txt("Qty ↕", "الكمية ↕")}</th><th data-s4-sales-sort-table="unfilled" data-s4-sales-sort-key="amount" style="padding:11px 14px;cursor:pointer">${s4Txt("Counted ↕", "المبلغ المحتسب ↕")}</th><th data-s4-sales-sort-table="unfilled" data-s4-sales-sort-key="reason" style="padding:11px 14px;cursor:pointer">${s4Txt("Reason ↕", "السبب ↕")}</th><th style="padding:11px 14px">${s4Txt("Customer", "العميل")}</th><th style="padding:11px 14px">${s4Txt("Phone", "الهاتف")}</th></tr></thead><tbody id="s4-sales-unfilled-report-body">${unfilledRows(report.unfilledRows)}</tbody></table></div><div id="s4-sales-unfilled-pagination" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-top:1px solid rgba(244,63,94,0.18);flex-direction:row-reverse"></div>
         </div>
       </div>
     </div>`;
@@ -1576,8 +1576,8 @@ window.renderSection4 = function (mountEl, data, ctx) {
   // ── ASSEMBLE full section HTML ───────────────────────────────────────────
   mountEl.innerHTML = `
     <div class="s4-body dash-scroll" dir="${isAr ? "rtl" : "ltr"}" style="
-        flex:1;overflow-y:auto;background:#080b12;display:flex;
-        flex-direction:column;color:#fff;font-family:'Cairo',sans-serif">
+        flex:1;overflow-y:auto;background:var(--dash-bg);display:flex;
+        flex-direction:column;color:#fff;font-family:var(--font-ui);">
       <style>
         .s4-body .fade-up{animation:none!important}
         .s4-body .s4-city-dot,.s4-body .s4-region-shape{transition:opacity .12s ease}
@@ -1587,12 +1587,12 @@ window.renderSection4 = function (mountEl, data, ctx) {
       <!-- Page header -->
       <div style="padding:28px 32px 16px;text-align:center">
         <h1 class="fade-up" style="
-            font-size:30px;font-weight:900;color:#fff;margin:0;
+            font-size:var(--type-page-title);font-weight:var(--weight-bold);color:#fff;margin:0;
             animation-delay:0ms">
           ${s4Txt("COD Collection Tracking", "تتبع تحصيل COD")}
         </h1>
         <div class="fade-up" style="
-            display:flex;align-items:center;gap:6px;font-size:12px;
+            display:flex;align-items:center;gap:6px;font-size:var(--type-label);
             color:rgba(255,255,255,0.45);margin-top:8px;justify-content:center;
             flex-direction:${isAr ? "row" : "row-reverse"};animation-delay:100ms">
           ${s4Txt("Total amounts for delivered orders only", "إجمالي المبالغ للطلبات المُسلَمة فقط")}
@@ -1763,13 +1763,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
       var color = refs >= 10 ? "#00e676" : refs >= 2 ? "#f59e0b" : "#f43f5e";
       var label = refs >= 10 ? "High" : refs >= 2 ? "Medium" : "Low";
       return (
-        '<span style="display:inline-flex;justify-content:center;min-width:64px;padding:4px 8px;border-radius:999px;background:' +
+        '<span style="display:inline-flex;justify-content:center;min-width:64px;padding:4px 8px;border-radius:var(--radius-pill);background:' +
         color +
         "18;border:1px solid " +
         color +
         "45;color:" +
         color +
-        ';font-size:11px;font-weight:800">' +
+        ';font-size:var(--type-caption);font-weight:var(--weight-semibold)">' +
         label +
         "</span>"
       );
@@ -1806,13 +1806,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
       return (
         "<tr>" +
         cell(
-          '<span style="color:#60a5fa;font-weight:800">#' +
+          '<span style="color:#60a5fa;font-weight:var(--weight-bold)">#' +
             esc(r.order || "-") +
             "</span>",
           "white-space:nowrap",
         ) +
         cell(
-          '<div style="max-width:640px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;font-weight:700" title="' +
+          '<div style="max-width:640px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;font-weight:var(--weight-bold)" title="' +
             esc(r.product || "-") +
             '">' +
             esc(r.product || "-") +
@@ -1823,13 +1823,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
           "white-space:nowrap",
         ) +
         cell(
-          '<span style="font-weight:800;color:#fff">' +
+          '<span style="font-weight:var(--weight-bold);color:#fff">' +
             esc(r.qty || 1) +
             "</span>",
           "text-align:center",
         ) +
         cell(
-          '<span style="font-weight:900;color:#fff">' +
+          '<span style="font-weight:var(--weight-bold);color:#fff">' +
             money(r.amount) +
             "</span>",
           "white-space:nowrap",
@@ -1842,7 +1842,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
               window._kbotTheme) === "light"
               ? "rgba(54,4,83,0.75)"
               : "#cbd5e1") +
-            ";font-weight:800;text-decoration:underline dotted " +
+            ";font-weight:var(--weight-bold);text-decoration:underline dotted " +
             ((document.documentElement.getAttribute("data-theme") ||
               window._kbotTheme) === "light"
               ? "rgba(54,4,83,0.45)"
@@ -1862,13 +1862,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
               window._kbotTheme) === "light"
               ? "rgba(30,10,60,0.85)"
               : "#e2e8f0") +
-            ';font-weight:700">' +
+            ';font-weight:var(--weight-bold)">' +
             esc(r.customerName || "-") +
             "</span>",
           "white-space:nowrap",
         ) +
         cell(
-          '<span style="font-family:Consolas,monospace;color:' +
+          '<span style="font-family:var(--font-mono);color:' +
             ((document.documentElement.getAttribute("data-theme") ||
               window._kbotTheme) === "light"
               ? "rgba(29,78,216,0.85)"
@@ -1885,13 +1885,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
       return (
         "<tr>" +
         cell(
-          '<span style="color:#60a5fa;font-weight:800">#' +
+          '<span style="color:#60a5fa;font-weight:var(--weight-bold)">#' +
             esc(r.order || "-") +
             "</span>",
           "white-space:nowrap",
         ) +
         cell(
-          '<div style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;font-weight:700" title="' +
+          '<div style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;font-weight:var(--weight-bold)" title="' +
             esc(r.product || "-") +
             '">' +
             esc(r.product || "-") +
@@ -1902,17 +1902,17 @@ window.renderSection4 = function (mountEl, data, ctx) {
           "white-space:nowrap",
         ) +
         cell(
-          '<span style="font-weight:800;color:#fff">' +
+          '<span style="font-weight:var(--weight-bold);color:#fff">' +
             esc(r.qty || 1) +
             "</span>",
           "text-align:center;white-space:nowrap",
         ) +
         cell(
-          '<span style="display:inline-flex;padding:4px 9px;border-radius:999px;background:rgba(244,63,94,0.14);border:1px solid rgba(244,63,94,0.35);color:#fb7185;font-weight:900">0 ' + activeCurrency + '</span>',
+          '<span style="display:inline-flex;padding:4px 9px;border-radius:var(--radius-pill);background:rgba(244,63,94,0.14);border:1px solid rgba(244,63,94,0.35);color:#fb7185;font-weight:var(--weight-bold)">0 ' + activeCurrency + '</span>',
           "white-space:nowrap",
         ) +
         cell(
-          '<div style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fda4af;font-weight:700" title="' +
+          '<div style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fda4af;font-weight:var(--weight-bold)" title="' +
             esc(r.reason || "No SKU+qty reference amount found") +
             '">' +
             esc(r.reason || "No SKU+qty reference amount found") +
@@ -1924,14 +1924,14 @@ window.renderSection4 = function (mountEl, data, ctx) {
               window._kbotTheme) === "light"
               ? "rgba(30,10,60,0.85)"
               : "#e2e8f0") +
-            ';font-weight:700" title="' +
+            ';font-weight:var(--weight-bold)" title="' +
             esc(r.customerName || "-") +
             '">' +
             esc(r.customerName || "-") +
             "</div>",
         ) +
         cell(
-          '<span style="color:rgba(255,255,255,0.6);font-weight:600">' +
+          '<span style="color:var(--dash-text-muted);font-weight:var(--weight-semibold)">' +
             esc(r.phone || "-") +
             "</span>",
           "white-space:nowrap",
@@ -1960,7 +1960,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
         '" ' +
         (disabled ? "disabled" : "") +
         ' style="' +
-        "min-width:34px;height:32px;border-radius:8px;border:1px solid " +
+        "min-width:34px;height:32px;border-radius:var(--dash-radius-sm);border:1px solid " +
         (active ? "rgba(59,130,246,0.7)" : "rgba(255,255,255,0.10)") +
         ";" +
         "background:" +
@@ -1968,7 +1968,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
         ";" +
         "color:" +
         (disabled ? "rgba(255,255,255,0.28)" : "#e5e7eb") +
-        ";font-weight:800;cursor:" +
+        ";font-weight:var(--weight-bold);cursor:" +
         (disabled ? "not-allowed" : "pointer") +
         ';font-family:inherit">' +
         esc(label) +
@@ -1985,7 +1985,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
       for (var p = startPage; p <= endPage; p++)
         pages.push(pageButton(table, p, p, false, p === current));
       el.innerHTML =
-        '<div style="color:rgba(255,255,255,0.48);font-size:11px;font-weight:700">' +
+        '<div style="color:rgba(255,255,255,0.48);font-size:var(--type-caption);font-weight:var(--weight-semibold)">' +
         info.start.toLocaleString("en-US") +
         "-" +
         info.end.toLocaleString("en-US") +
@@ -2010,10 +2010,10 @@ window.renderSection4 = function (mountEl, data, ctx) {
       );
       filledBody.innerHTML = filledInfo.rows.length
         ? filledInfo.rows.map(renderFilledRow).join("")
-        : '<tr><td colspan="9" style="padding:26px;text-align:center;color:rgba(255,255,255,0.5)">No filled orders match this search</td></tr>';
+        : '<tr><td colspan="9" style="padding:26px;text-align:center;color:var(--dash-text-faint)">No filled orders match this search</td></tr>';
       unfilledBody.innerHTML = unfilledInfo.rows.length
         ? unfilledInfo.rows.map(renderUnfilledRow).join("")
-        : '<tr><td colspan="8" style="padding:26px;text-align:center;color:rgba(255,255,255,0.5)">No unfilled orders match this search</td></tr>';
+        : '<tr><td colspan="8" style="padding:26px;text-align:center;color:var(--dash-text-faint)">No unfilled orders match this search</td></tr>';
       renderPagination("filled", filledInfo);
       renderPagination("unfilled", unfilledInfo);
     }
@@ -2120,13 +2120,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
       var color = refs >= 10 ? "#00e676" : refs >= 2 ? "#f59e0b" : "#f43f5e";
       var label = refs >= 10 ? "High" : refs >= 2 ? "Medium" : "Low";
       return (
-        '<span style="display:inline-flex;justify-content:center;min-width:64px;padding:4px 8px;border-radius:999px;background:' +
+        '<span style="display:inline-flex;justify-content:center;min-width:64px;padding:4px 8px;border-radius:var(--radius-pill);background:' +
         color +
         "18;border:1px solid " +
         color +
         "45;color:" +
         color +
-        ';font-size:11px;font-weight:800">' +
+        ';font-size:var(--type-caption);font-weight:var(--weight-semibold)">' +
         label +
         "</span>"
       );
@@ -2163,13 +2163,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
       return (
         "<tr>" +
         cell(
-          '<span style="color:#60a5fa;font-weight:800">#' +
+          '<span style="color:#60a5fa;font-weight:var(--weight-bold)">#' +
             esc(r.order || "-") +
             "</span>",
           "white-space:nowrap",
         ) +
         cell(
-          '<div style="max-width:640px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;font-weight:700" title="' +
+          '<div style="max-width:640px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;font-weight:var(--weight-bold)" title="' +
             esc(r.product || "-") +
             '">' +
             esc(r.product || "-") +
@@ -2180,13 +2180,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
           "white-space:nowrap",
         ) +
         cell(
-          '<span style="font-weight:800;color:#fff">' +
+          '<span style="font-weight:var(--weight-bold);color:#fff">' +
             esc(r.qty || 1) +
             "</span>",
           "text-align:center",
         ) +
         cell(
-          '<span style="font-weight:900;color:#fff">' +
+          '<span style="font-weight:var(--weight-bold);color:#fff">' +
             money(r.amount) +
             "</span>",
           "white-space:nowrap",
@@ -2199,7 +2199,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
               window._kbotTheme) === "light"
               ? "rgba(54,4,83,0.75)"
               : "#cbd5e1") +
-            ";font-weight:800;text-decoration:underline dotted " +
+            ";font-weight:var(--weight-bold);text-decoration:underline dotted " +
             ((document.documentElement.getAttribute("data-theme") ||
               window._kbotTheme) === "light"
               ? "rgba(54,4,83,0.45)"
@@ -2219,13 +2219,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
               window._kbotTheme) === "light"
               ? "rgba(30,10,60,0.85)"
               : "#e2e8f0") +
-            ';font-weight:700">' +
+            ';font-weight:var(--weight-bold)">' +
             esc(r.customerName || "-") +
             "</span>",
           "white-space:nowrap",
         ) +
         cell(
-          '<span style="font-family:Consolas,monospace;color:' +
+          '<span style="font-family:var(--font-mono);color:' +
             ((document.documentElement.getAttribute("data-theme") ||
               window._kbotTheme) === "light"
               ? "rgba(29,78,216,0.85)"
@@ -2242,13 +2242,13 @@ window.renderSection4 = function (mountEl, data, ctx) {
       return (
         "<tr>" +
         cell(
-          '<span style="color:#60a5fa;font-weight:800">#' +
+          '<span style="color:#60a5fa;font-weight:var(--weight-bold)">#' +
             esc(r.order || "-") +
             "</span>",
           "white-space:nowrap",
         ) +
         cell(
-          '<div style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;font-weight:700" title="' +
+          '<div style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;font-weight:var(--weight-bold)" title="' +
             esc(r.product || "-") +
             '">' +
             esc(r.product || "-") +
@@ -2259,17 +2259,17 @@ window.renderSection4 = function (mountEl, data, ctx) {
           "white-space:nowrap",
         ) +
         cell(
-          '<span style="font-weight:800;color:#fff">' +
+          '<span style="font-weight:var(--weight-bold);color:#fff">' +
             esc(r.qty || 1) +
             "</span>",
           "text-align:center;white-space:nowrap",
         ) +
         cell(
-          '<span style="display:inline-flex;padding:4px 9px;border-radius:999px;background:rgba(244,63,94,0.14);border:1px solid rgba(244,63,94,0.35);color:#fb7185;font-weight:900">0 ' + activeCurrency + '</span>',
+          '<span style="display:inline-flex;padding:4px 9px;border-radius:var(--radius-pill);background:rgba(244,63,94,0.14);border:1px solid rgba(244,63,94,0.35);color:#fb7185;font-weight:var(--weight-bold)">0 ' + activeCurrency + '</span>',
           "white-space:nowrap",
         ) +
         cell(
-          '<div style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fda4af;font-weight:700" title="' +
+          '<div style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fda4af;font-weight:var(--weight-bold)" title="' +
             esc(r.reason || "No SKU+qty reference price found") +
             '">' +
             esc(r.reason || "No SKU+qty reference price found") +
@@ -2281,14 +2281,14 @@ window.renderSection4 = function (mountEl, data, ctx) {
               window._kbotTheme) === "light"
               ? "rgba(30,10,60,0.85)"
               : "#e2e8f0") +
-            ';font-weight:700" title="' +
+            ';font-weight:var(--weight-bold)" title="' +
             esc(r.customerName || "-") +
             '">' +
             esc(r.customerName || "-") +
             "</div>",
         ) +
         cell(
-          '<span style="color:rgba(255,255,255,0.6);font-weight:600">' +
+          '<span style="color:var(--dash-text-muted);font-weight:var(--weight-semibold)">' +
             esc(r.phone || "-") +
             "</span>",
           "white-space:nowrap",
@@ -2317,7 +2317,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
         '" ' +
         (disabled ? "disabled" : "") +
         ' style="' +
-        "min-width:34px;height:32px;border-radius:8px;border:1px solid " +
+        "min-width:34px;height:32px;border-radius:var(--dash-radius-sm);border:1px solid " +
         (active ? "rgba(59,130,246,0.7)" : "rgba(255,255,255,0.10)") +
         ";" +
         "background:" +
@@ -2325,7 +2325,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
         ";" +
         "color:" +
         (disabled ? "rgba(255,255,255,0.28)" : "#e5e7eb") +
-        ";font-weight:800;cursor:" +
+        ";font-weight:var(--weight-bold);cursor:" +
         (disabled ? "not-allowed" : "pointer") +
         ';font-family:inherit">' +
         esc(label) +
@@ -2342,7 +2342,7 @@ window.renderSection4 = function (mountEl, data, ctx) {
       for (var p = startPage; p <= endPage; p++)
         pages.push(pageButton(table, p, p, false, p === current));
       el.innerHTML =
-        '<div style="color:rgba(255,255,255,0.48);font-size:11px;font-weight:700">' +
+        '<div style="color:rgba(255,255,255,0.48);font-size:var(--type-caption);font-weight:var(--weight-semibold)">' +
         info.start.toLocaleString("en-US") +
         "-" +
         info.end.toLocaleString("en-US") +
@@ -2367,10 +2367,10 @@ window.renderSection4 = function (mountEl, data, ctx) {
       );
       filledBody.innerHTML = filledInfo.rows.length
         ? filledInfo.rows.map(renderFilledRow).join("")
-        : '<tr><td colspan="9" style="padding:26px;text-align:center;color:rgba(255,255,255,0.5)">No filled orders match this search</td></tr>';
+        : '<tr><td colspan="9" style="padding:26px;text-align:center;color:var(--dash-text-faint)">No filled orders match this search</td></tr>';
       unfilledBody.innerHTML = unfilledInfo.rows.length
         ? unfilledInfo.rows.map(renderUnfilledRow).join("")
-        : '<tr><td colspan="8" style="padding:26px;text-align:center;color:rgba(255,255,255,0.5)">No unfilled orders match this search</td></tr>';
+        : '<tr><td colspan="8" style="padding:26px;text-align:center;color:var(--dash-text-faint)">No unfilled orders match this search</td></tr>';
       renderPagination("filled", filledInfo);
       renderPagination("unfilled", unfilledInfo);
     }
@@ -2547,17 +2547,17 @@ window.renderSection4 = function (mountEl, data, ctx) {
         const pct = Number(dot.getAttribute("data-pct")).toFixed(1);
 
         tooltip.innerHTML = `
-          <div style="font-weight:800; color:#14b8a6; margin-bottom:7px; font-size:15px;">${name}</div>
+          <div style="font-weight:var(--weight-semibold); color:#14b8a6; margin-bottom:7px; font-size:var(--type-component-title);">${name}</div>
           <div style="display:flex; justify-content:space-between; gap:18px; margin-bottom:4px;">
-            <span style="color:rgba(255,255,255,0.6)">${s4Txt("Expected:", "المتوقع:")}</span>
+            <span style="color:var(--dash-text-muted)">${s4Txt("Expected:", "المتوقع:")}</span>
             <span>${due} ${activeCurrency}</span>
           </div>
           <div style="display:flex; justify-content:space-between; gap:18px; margin-bottom:4px;">
-            <span style="color:rgba(255,255,255,0.6)">${s4Txt("Collected:", "تم التحصيل:")}</span>
+            <span style="color:var(--dash-text-muted)">${s4Txt("Collected:", "تم التحصيل:")}</span>
             <span>${coll} ${activeCurrency}</span>
           </div>
           <div style="display:flex; justify-content:space-between; gap:18px;">
-            <span style="color:rgba(255,255,255,0.6)">${s4Txt("Rate:", "النسبة:")}</span>
+            <span style="color:var(--dash-text-muted)">${s4Txt("Rate:", "النسبة:")}</span>
             <span style="color:#00e676">${pct}%</span>
           </div>
         `;
@@ -2572,17 +2572,17 @@ window.renderSection4 = function (mountEl, data, ctx) {
     });
 
     tooltip.innerHTML = `
-      <div data-s4-tip-name style="font-weight:800; color:#14b8a6; margin-bottom:7px; font-size:15px;"></div>
+      <div data-s4-tip-name style="font-weight:var(--weight-semibold); color:#14b8a6; margin-bottom:7px; font-size:var(--type-component-title);"></div>
       <div style="display:flex; justify-content:space-between; gap:18px; margin-bottom:4px;">
-        <span style="color:rgba(255,255,255,0.6)">${s4Txt("Expected:", "\u0627\u0644\u0645\u062a\u0648\u0642\u0639:")}</span>
+        <span style="color:var(--dash-text-muted)">${s4Txt("Expected:", "\u0627\u0644\u0645\u062a\u0648\u0642\u0639:")}</span>
         <span><span data-s4-tip-due></span> ${activeCurrency}</span>
       </div>
       <div style="display:flex; justify-content:space-between; gap:18px; margin-bottom:4px;">
-        <span style="color:rgba(255,255,255,0.6)">${s4Txt("Collected:", "\u062a\u0645 \u0627\u0644\u062a\u062d\u0635\u064a\u0644:")}</span>
+        <span style="color:var(--dash-text-muted)">${s4Txt("Collected:", "\u062a\u0645 \u0627\u0644\u062a\u062d\u0635\u064a\u0644:")}</span>
         <span><span data-s4-tip-coll></span> ${activeCurrency}</span>
       </div>
       <div style="display:flex; justify-content:space-between; gap:18px;">
-        <span style="color:rgba(255,255,255,0.6)">${s4Txt("Rate:", "\u0627\u0644\u0646\u0633\u0628\u0629:")}</span>
+        <span style="color:var(--dash-text-muted)">${s4Txt("Rate:", "\u0627\u0644\u0646\u0633\u0628\u0629:")}</span>
         <span data-s4-tip-pct style="color:#00e676"></span>
       </div>
     `;

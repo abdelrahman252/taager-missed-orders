@@ -6,6 +6,11 @@
 (function () {
   'use strict';
 
+  function dbg(event, detail, level) {
+    if (window.TaagerDebugLog) window.TaagerDebugLog('dashboard-shell', event, detail || {}, level);
+    else (console[level || 'log'] || console.log).call(console, '[DashboardShell] ' + event, detail || {});
+  }
+
   var NAV_ITEMS = [
     { id: 'master',     key: 'nav.master',     iconName: 'home'       },
     { id: 'overview',   key: 'nav.overview',   iconName: 'trendingUp' },
@@ -130,6 +135,12 @@
 
   function isRtl() {
     return !window.dashboardI18n || window.dashboardI18n.isRtl();
+  }
+
+  function shellLang() {
+    return window.dashboardI18n && window.dashboardI18n.currentLocale
+      ? window.dashboardI18n.currentLocale
+      : (window._kbotLang || 'ar');
   }
 
   function navLabel(item) {
@@ -289,9 +300,9 @@
       '</div>' +
       '<div class="dash-topbar-cluster" style="display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:nowrap;flex-shrink:0;">' +
         '<div id="dashboard-reporting-currency-wrap" class="dashboard-period-select-wrap" aria-label="Reporting currency" style="min-width:96px;max-width:120px;margin:0;"></div>' +
-        '<div class="dash-update-status-wrap" style="display:inline-flex;flex-direction:column;justify-content:center;gap:2px;font-size:10px;line-height:1.2;text-align:right;margin:0;margin-inline-start:6px;vertical-align:middle;flex-shrink:0;">' +
-          '<span class="dash-last-update-label" style="color:var(--dash-text-faint, #64748b);font-weight:700;">' + tr('shell.lastUpdate') + '</span>' +
-          '<span id="dashboard-last-updated" class="dash-last-updated" style="color:var(--dash-text, #fff);font-weight:800;">--</span>' +
+        '<div class="dash-update-status-wrap" style="display:inline-flex;flex-direction:column;justify-content:center;gap:2px;font-size:var(--type-micro);line-height:1.2;text-align:right;margin:0;margin-inline-start:6px;vertical-align:middle;flex-shrink:0;">' +
+          '<span class="dash-last-update-label" style="color:var(--dash-text-faint, #64748b);font-weight:var(--weight-semibold);">' + tr('shell.lastUpdate') + '</span>' +
+          '<span id="dashboard-last-updated" class="dash-last-updated" style="color:var(--dash-text, #fff);font-weight:var(--weight-semibold);">--</span>' +
         '</div>' +
         '<button type="button" id="dashboard-tour-btn" class="taager-tour-quick-guide" style="width:34px;height:34px;min-width:34px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--dash-text, #fff) !important;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);cursor:pointer;margin:0;flex-shrink:0;" title="' + tr('tour.common.quickGuide') + '" aria-label="' + tr('tour.common.quickGuide') + '" data-tooltip="' + tr('tour.common.quickGuide') + '"><span class="taager-tour-guide-mark" aria-hidden="true" style="color:var(--dash-text, #fff) !important;line-height:1;display:inline-flex;align-items:center;justify-content:center;">' + quickGuideIcon() + '</span></button>' +
       '</div>' +
@@ -914,8 +925,13 @@
     if (current &&
         current.getAttribute('data-dashboard-preloader') === 'true' &&
         current.getAttribute('data-dashboard-section') === sectionId) {
+      dbg('section-loader:reuse', { sectionId: sectionId });
       return;
     }
+    dbg('section-loader:show', {
+      sectionId: sectionId,
+      paneChildren: pane ? pane.children.length : 0
+    });
     pane.innerHTML = loaderHTML(sectionId);
     if (window.TaagerPreloader && typeof window.TaagerPreloader.dashboardRefresh === 'function') {
       window.TaagerPreloader.dashboardRefresh();
@@ -937,8 +953,8 @@
     }
     return '<div style="flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:rgba(255,255,255,0.35);text-align:center;padding:32px;">' +
       '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
-      '<div style="font-size:16px;font-weight:800;color:rgba(255,255,255,0.78);">' + tr('shell.noDataTitle') + '</div>' +
-      '<div style="font-size:12px;max-width:340px;line-height:1.7;">' + tr('shell.noDataBody', { account: label }) + '</div>' +
+      '<div style="font-size:var(--type-subtitle);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.78);">' + tr('shell.noDataTitle') + '</div>' +
+      '<div style="font-size:var(--type-label);max-width:340px;line-height:1.7;">' + tr('shell.noDataBody', { account: label }) + '</div>' +
     '</div>';
   }
 
@@ -1691,29 +1707,8 @@
   function scheduleInlineThemeFix(pane) {
     if (!pane) return;
     applyDashboardInlineTheme(pane);
-    [60, 180, 420, 900].forEach(function (delay) {
-      setTimeout(function () { applyDashboardInlineTheme(pane); }, delay);
-    });
-    if (!window.MutationObserver) return;
     if (pane._inlineThemeObserver) pane._inlineThemeObserver.disconnect();
-    var pending = false;
-    var applying = false;
-    pane._inlineThemeObserver = new MutationObserver(function () {
-      if (applying || pending || !isLightTheme()) return;
-      pending = true;
-      requestAnimationFrame(function () {
-        pending = false;
-        applying = true;
-        applyDashboardInlineTheme(pane);
-        applying = false;
-      });
-    });
-    pane._inlineThemeObserver.observe(pane, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ['style', 'class']
-    });
+    pane._inlineThemeObserver = null;
   }
 
   function disconnectPaneThemeObservers(pane) {
@@ -1736,6 +1731,17 @@
 
   function switchSection(shellEl, sectionId, data, ctx, skipDelay) {
     sectionId = normalizeSection(sectionId);
+    var previousSectionId = normalizeSection(shellEl._dashboardActiveSection || '');
+    dbg('switch:start', {
+      sectionId: sectionId,
+      previousSectionId: previousSectionId,
+      skipDelay: !!skipDelay,
+      loaded: !!(data && data._loaded),
+      loading: !!(data && data._loading),
+      version: getDataVersion(data),
+      scopeKey: getDashboardScopeKey(data),
+      activePaneSection: shellEl._dashboardActivePane && shellEl._dashboardActivePane.dataset ? shellEl._dashboardActivePane.dataset.sectionId : null
+    });
     var sectionSwitchTimer = window.TaagerPerf && typeof window.TaagerPerf.start === 'function'
       ? window.TaagerPerf.start('dashboard:section:switch', {
         sectionId: sectionId,
@@ -1761,16 +1767,19 @@
     var renderKey = sectionId + '|' + version + '|' + scopeKey + '|' + (window._kbotLang || '') + '|' + (window._kbotTheme || '');
     var pane = shellEl._dashboardActivePane || container;
     if (!skipDelay && pane._dashboardRenderKey === renderKey && pane.children.length && !(data && data._loading)) {
+      dbg('switch:render-key-hit', { sectionId: sectionId, renderKey: renderKey });
       finishSectionSwitch({ ok: true, cacheHit: true, renderKey: renderKey });
       return;
     }
     var cacheable = isCacheableSection(sectionId);
     var cachedPane = cacheable && !(data && data._loading) ? getCachedSectionPane(shellEl, renderKey) : null;
     if (cachedPane && cachedPane._dashboardNeedsRefresh) {
+      dbg('switch:cached-pane-needs-refresh', { sectionId: sectionId, renderKey: renderKey });
       destroySectionPane(shellEl, cachedPane);
       cachedPane = null;
     }
     if (!skipDelay && cachedPane && cachedPane.children.length) {
+      dbg('switch:cached-pane-restore', { sectionId: sectionId, renderKey: renderKey });
       var restoreTimer = window.TaagerPerf && typeof window.TaagerPerf.start === 'function'
         ? window.TaagerPerf.start('dashboard:section:cache-restore', { sectionId: sectionId, renderKey: renderKey })
         : null;
@@ -1804,6 +1813,7 @@
         currentLoader &&
         currentLoader.getAttribute('data-dashboard-preloader') === 'true' &&
         currentLoader.getAttribute('data-dashboard-section') === sectionId) {
+      dbg('switch:loader-reused', { sectionId: sectionId, loaded: !!(data && data._loaded), loading: !!(data && data._loading) });
       finishSectionSwitch({ ok: true, loading: true, loaderReused: true });
       return;
     }
@@ -1816,6 +1826,7 @@
 
     var fn = window[SECTION_FN[sectionId]];
     if (typeof fn !== 'function') {
+      dbg('switch:missing-renderer', { sectionId: sectionId, rendererName: SECTION_FN[sectionId] }, 'warn');
       pane = prepareFreshSectionPane(shellEl, container, sectionId, renderKey, false);
       showSectionLoader(pane, sectionId);
       if (typeof window.ensureDashboardSection === 'function') {
@@ -1824,16 +1835,33 @@
           ? window.TaagerPerf.start('dashboard:section-group:load', { sectionId: sectionId })
           : null;
         window.ensureDashboardSection(sectionId).then(function () {
+          dbg('switch:lazy-section-loaded', { sectionId: requestedSection });
           if (window.TaagerPerf && typeof window.TaagerPerf.end === 'function' && groupLoadTimer) {
             window.TaagerPerf.end(groupLoadTimer, { ok: true, sectionId: requestedSection });
           }
-          if (!shellEl.isConnected) return;
-          if (shellEl._dashboardActiveSection !== requestedSection) return;
-          pane._dashboardRenderKey = null;
+          if (!shellEl.isConnected) {
+            dbg('switch:lazy-section-loaded-shell-disconnected', { sectionId: requestedSection }, 'warn');
+            return;
+          }
+          if (shellEl._dashboardActiveSection !== requestedSection) {
+            dbg('switch:lazy-section-loaded-inactive', {
+              requestedSection: requestedSection,
+              activeSection: shellEl._dashboardActiveSection
+            }, 'warn');
+            return;
+          }
+          if (pane) pane._dashboardRenderKey = null;
           switchSection(shellEl, requestedSection, data, ctx, true);
         }).catch(function (err) {
+          dbg('switch:lazy-section-load-failed', {
+            sectionId: requestedSection,
+            error: err && err.message ? err.message : String(err || '')
+          }, 'error');
           if (window.TaagerPerf && typeof window.TaagerPerf.end === 'function' && groupLoadTimer) {
             window.TaagerPerf.end(groupLoadTimer, { ok: false, sectionId: requestedSection, error: err && err.message ? err.message : String(err || '') });
+          }
+          if (!pane || !pane.isConnected || pane._dashboardSectionId !== requestedSection) {
+            pane = prepareFreshSectionPane(shellEl, container, requestedSection, renderKey, false);
           }
           pane.innerHTML = '<div class="dash-coming-soon">' +
             '<div class="dash-coming-soon-icon">!</div>' +
@@ -1850,12 +1878,35 @@
     }
 
     var render = function () {
+      dbg('switch:render-enter', {
+        sectionId: sectionId,
+        loaded: !!(data && data._loaded),
+        loading: !!(data && data._loading),
+        skipDelay: !!skipDelay
+      });
       if (!data || !data._loaded || data._loading) {
+        dbg('switch:render-loader-data-not-ready', {
+          sectionId: sectionId,
+          hasData: !!data,
+          loaded: !!(data && data._loaded),
+          loading: !!(data && data._loading)
+        });
         showSectionLoader(pane, sectionId);
         finishSectionSwitch({ ok: true, loading: true });
         return;
       }
+      var suppressEntrance = !shellEl._dashboardHasRenderedContent || (shellEl._dashboardHasRenderedContent && previousSectionId === sectionId);
+      dbg('switch:render-fresh-pane', {
+        sectionId: sectionId,
+        renderKey: renderKey,
+        cacheable: cacheable,
+        suppressEntrance: suppressEntrance,
+        hasRenderedContent: !!shellEl._dashboardHasRenderedContent
+      });
       pane = prepareFreshSectionPane(shellEl, container, sectionId, renderKey, cacheable);
+      if (suppressEntrance) {
+        pane.classList.add(shellEl._dashboardHasRenderedContent ? 'dash-section-refreshing' : 'dash-section-no-entrance');
+      }
       if (window.TaagerPerf && typeof window.TaagerPerf.end === 'function' && pane._dashboardLoaderTimer) {
         window.TaagerPerf.end(pane._dashboardLoaderTimer, { sectionId: sectionId });
         pane._dashboardLoaderTimer = null;
@@ -1872,6 +1923,11 @@
       });
       pane._dashboardSectionContext = sectionCtx;
       var lifecycle = normalizeSectionLifecycle(runSectionPhase(sectionId, 'render-body', function () { return fn(pane, slice, sectionCtx); }));
+      dbg('switch:render-body-done', {
+        sectionId: sectionId,
+        paneChildren: pane.children.length,
+        hasLifecycle: !!lifecycle
+      });
       if (lifecycle) {
         pane._dashboardSectionLifecycle = lifecycle;
         if (typeof lifecycle.destroy === 'function') {
@@ -1898,6 +1954,12 @@
       if (window.TaagerPerf && typeof window.TaagerPerf.end === 'function' && renderTimer) {
         window.TaagerPerf.end(renderTimer, { ok: true, sectionId: sectionId });
       }
+      shellEl._dashboardHasRenderedContent = true;
+      dbg('switch:render-complete', {
+        sectionId: sectionId,
+        renderKey: renderKey,
+        paneChildren: pane.children.length
+      });
       finishSectionSwitch({ ok: true, rendered: true, renderKey: renderKey });
     };
 
@@ -1907,13 +1969,23 @@
 
   window.renderDashboardShell = function (mountEl, data, options) {
     if (!mountEl) return;
+    dbg('renderDashboardShell:start', {
+      loaded: !!(data && data._loaded),
+      loading: !!(data && data._loading),
+      version: getDataVersion(data),
+      scopeKey: getDashboardScopeKey(data),
+      previousActiveSection: mountEl._dashboardActiveSection || null,
+      hadCleanup: typeof mountEl._dashboardCleanup === 'function'
+    });
     syncDashboardCountryState(data);
     if (typeof mountEl._dashboardCleanup === 'function') {
+      dbg('renderDashboardShell:cleanup-previous');
       mountEl._dashboardCleanup();
       mountEl._dashboardCleanup = null;
     }
     options = options || {};
     mountEl._dashboardOptions = options;
+    mountEl._dashboardShellLang = shellLang();
     var activeSection = normalizeSection(mountEl._dashboardActiveSection || window._dashboardInitialSection || 'master');
     window._dashboardInitialSection = null;
     var innerCollapsed = false;
@@ -1938,10 +2010,10 @@
       buildSidebar(activeSection) +
       '<div class="dash-main">' +
         buildTopbar(activeSection) +
-        '<div id="dashboard-first-run-guidance" class="dashboard-first-run-guidance" style="display:none;margin:12px 16px 0;padding:14px 16px;border:1px solid var(--dash-border, var(--border));border-radius:12px;background:var(--dash-card, var(--bg2));align-items:center;justify-content:space-between;gap:14px;box-shadow:0 10px 28px rgba(0,0,0,.10);">' +
+        '<div id="dashboard-first-run-guidance" class="dashboard-first-run-guidance" style="display:none;margin:12px 16px 0;padding:14px 16px;border:1px solid var(--dash-border, var(--border));border-radius:var(--dash-radius-md);background:var(--dash-card, var(--bg2));align-items:center;justify-content:space-between;gap:14px;box-shadow:0 10px 28px rgba(0,0,0,.10);">' +
           '<div style="min-width:0;">' +
-            '<div style="font-size:13px;font-weight:800;color:var(--dash-text, var(--text));margin-bottom:3px;">' + trText('shell.firstRunTitle', 'Dashboard is ready') + '</div>' +
-            '<div style="font-size:12px;color:var(--dash-muted, var(--text2));line-height:1.5;">' + trText('shell.firstRunBody', 'Update the dashboard to start filling every section with live account data. Until then, the dashboard stays visible with zero-value metrics.') + '</div>' +
+            '<div style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:var(--dash-text, var(--text));margin-bottom:3px;">' + trText('shell.firstRunTitle', 'Dashboard is ready') + '</div>' +
+            '<div style="font-size:var(--type-label);color:var(--dash-muted, var(--text2));line-height:1.5;">' + trText('shell.firstRunBody', 'Update the dashboard to start filling every section with live account data. Until then, the dashboard stays visible with zero-value metrics.') + '</div>' +
           '</div>' +
         '</div>' +
         '<div id="dash-section-pane" class="dash-scroll dash-content" style="flex:1 1 0;display:flex;flex-direction:column;min-width:0;min-height:0;overflow-y:auto;overflow-x:hidden;"></div>' +
@@ -2039,19 +2111,42 @@
       if (_resizeObserver) _resizeObserver.disconnect();
     };
     handleResize();
+    dbg('renderDashboardShell:switch-initial-section', { activeSection: activeSection });
     switchSection(mountEl, activeSection, data, ctx);
     bindDashboardTour(mountEl, data, ctx);
     if (!(window.TaagerPremiumPreview && window.TaagerPremiumPreview.isActive('dashboard')) && typeof window.mountDashboardAI === 'function') window.mountDashboardAI(mountEl, data, ctx);
+    dbg('renderDashboardShell:done', { activeSection: mountEl._dashboardActiveSection || activeSection });
   };
 
   window.refreshDashboardShell = function (mountEl, data) {
     if (!mountEl) return;
+    dbg('refreshDashboardShell:start', {
+      loaded: !!(data && data._loaded),
+      loading: !!(data && data._loading),
+      version: getDataVersion(data),
+      scopeKey: getDashboardScopeKey(data),
+      activeSection: mountEl._dashboardActiveSection || null
+    });
     syncDashboardCountryState(data);
+    if (mountEl._dashboardShellLang && mountEl._dashboardShellLang !== shellLang()) {
+      dbg('refreshDashboardShell:rebuild-for-language', {
+        previousLang: mountEl._dashboardShellLang,
+        nextLang: shellLang()
+      });
+      window.renderDashboardShell(mountEl, data, mountEl._dashboardOptions || {});
+      return;
+    }
     applyResponsiveState(mountEl);
     var incomingDataVersion = getDataVersion(data);
     var incomingScopeKey = getDashboardScopeKey(data);
     if (mountEl._dashboardPaneDataVersion !== incomingDataVersion ||
         mountEl._dashboardPaneScopeKey !== incomingScopeKey) {
+      dbg('refreshDashboardShell:destroy-cache-for-new-data', {
+        previousVersion: mountEl._dashboardPaneDataVersion,
+        incomingVersion: incomingDataVersion,
+        previousScopeKey: mountEl._dashboardPaneScopeKey,
+        incomingScopeKey: incomingScopeKey
+      });
       destroyDashboardPaneCache(mountEl);
       mountEl._dashboardPaneDataVersion = incomingDataVersion;
       mountEl._dashboardPaneScopeKey = incomingScopeKey;
@@ -2075,5 +2170,6 @@
     if (window.dashboardI18n) window.dashboardI18n.apply(mountEl);
     if (window.TaagerUI) window.TaagerUI.enhance(mountEl);
     if (!(window.TaagerPremiumPreview && window.TaagerPremiumPreview.isActive('dashboard')) && typeof window.mountDashboardAI === 'function') window.mountDashboardAI(mountEl, data, ctx);
+    dbg('refreshDashboardShell:done', { activeSection: mountEl._dashboardActiveSection || active });
   };
 })();

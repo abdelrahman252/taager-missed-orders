@@ -315,12 +315,13 @@
         '<tr class="os-source-row" data-source-toggle="' + index + '">' +
           '<td><button type="button" class="os-expand-btn" aria-expanded="false">' + icon('chevronDown') + '</button><span class="os-source-mark">' + esc(sourceInitial(source)) + '</span><bdi dir="auto">' + esc(sourceLabel(source)) + '</bdi>' + (low ? '<span class="os-low-badge">' + esc(pick('Low sample', '\u0639\u064a\u0646\u0629 \u0642\u0644\u064a\u0644\u0629')) + '</span>' : '') + '</td>' +
           '<td>' + num(source.netOrders || 0) + '</td>' +
+          '<td>' + num(source.confirmationCount || 0) + '</td>' +
           '<td>' + num(source.delivered || 0) + '</td>' +
           '<td><strong class="os-ndr">' + pct(source.ndr) + '</strong></td>' +
           '<td>' + money(source.deliveredProfit || 0) + '</td>' +
           '<td>' + money(source.avgProfit || 0) + '</td>' +
         '</tr>' +
-        '<tr class="os-detail-row" hidden><td colspan="6">' +
+        '<tr class="os-detail-row" hidden><td colspan="7">' +
           '<div class="os-source-panel os-panel-' + esc(health.tone) + '">' +
             '<div class="os-verdict-row">' +
               '<div class="os-verdict-main">' +
@@ -359,6 +360,7 @@
       '<div class="os-summary-grid">' +
         summaryCard(pick('Sources used', '\u0627\u0644\u0645\u0635\u0627\u062f\u0631 \u0627\u0644\u0645\u0633\u062a\u062e\u062f\u0645\u0629'), num(summary.sourceCount || sources.length), pick('Distinct raw source values', '\u0642\u064a\u0645 \u0645\u0635\u062f\u0631 \u062e\u0627\u0645 \u0645\u062e\u062a\u0644\u0641\u0629'), 'info') +
         summaryCard(pick('Total net orders', '\u0625\u062c\u0645\u0627\u0644\u064a \u0635\u0627\u0641\u064a \u0627\u0644\u0637\u0644\u0628\u0627\u062a'), num(summary.netOrders || 0), pick('Raw minus Canceled by you', '\u0627\u0644\u062e\u0627\u0645 \u0646\u0627\u0642\u0635 \u0645\u0644\u063a\u064a \u0628\u0648\u0627\u0633\u0637\u062a\u0643'), 'neutral') +
+        summaryCard(pick('Confirmed orders', '\u0627\u0644\u0637\u0644\u0628\u0627\u062a \u0627\u0644\u0645\u0624\u0643\u062f\u0629'), num(summary.confirmedOrders || 0), pick('Confirmed or progressed', '\u0645\u0624\u0643\u062f\u0629 \u0623\u0648 \u062a\u0642\u062f\u0645\u062a \u0641\u064a \u0627\u0644\u062a\u0646\u0641\u064a\u0630'), 'info') +
         summaryCard(pick('Delivered orders', '\u0627\u0644\u0637\u0644\u0628\u0627\u062a \u0627\u0644\u0645\u0633\u0644\u0645\u0629'), num(summary.delivered || 0), money(summary.deliveredProfit || 0), 'good') +
         summaryCard(pick('Overall NDR', '\u0625\u062c\u0645\u0627\u0644\u064a NDR'), pct(summary.ndr || 0), pick('Delivered / Net orders', '\u0627\u0644\u0645\u0633\u0644\u0645 / \u0635\u0627\u0641\u064a \u0627\u0644\u0637\u0644\u0628\u0627\u062a'), 'warn') +
       '</div>' +
@@ -366,12 +368,13 @@
         '<table class="os-table"><thead><tr>' +
           '<th>' + esc(pick('Source', '\u0627\u0644\u0645\u0635\u062f\u0631')) + '</th>' +
           '<th>' + esc(pick('Net Orders', '\u0635\u0627\u0641\u064a \u0627\u0644\u0637\u0644\u0628\u0627\u062a')) + '</th>' +
+          '<th>' + esc(pick('Confirmed Orders', '\u0627\u0644\u0637\u0644\u0628\u0627\u062a \u0627\u0644\u0645\u0624\u0643\u062f\u0629')) + '</th>' +
           '<th>' + esc(pick('Delivered', '\u0627\u0644\u0645\u0633\u0644\u0645')) + '</th>' +
           '<th>NDR</th>' +
           '<th>' + esc(pick('Delivered Profit', '\u0631\u0628\u062d \u0627\u0644\u0645\u0633\u0644\u0645')) + '</th>' +
           '<th>' + esc(pick('Avg. Profit', '\u0645\u062a\u0648\u0633\u0637 \u0627\u0644\u0631\u0628\u062d')) + '</th>' +
         '</tr></thead>' +
-        (sources.length ? sources.map(sourceRow).join('') : '<tbody><tr><td colspan="6" class="os-empty">' + esc(pick('No order source values found for this period.', '\u0644\u0627 \u062a\u0648\u062c\u062f \u0642\u064a\u0645 \u0645\u0635\u062f\u0631 \u0637\u0644\u0628 \u0644\u0647\u0630\u0647 \u0627\u0644\u0641\u062a\u0631\u0629.')) + '</td></tr></tbody>') +
+        (sources.length ? sources.map(sourceRow).join('') : '<tbody><tr><td colspan="7" class="os-empty">' + esc(pick('No order source values found for this period.', '\u0644\u0627 \u062a\u0648\u062c\u062f \u0642\u064a\u0645 \u0645\u0635\u062f\u0631 \u0637\u0644\u0628 \u0644\u0647\u0630\u0647 \u0627\u0644\u0641\u062a\u0631\u0629.')) + '</td></tr></tbody>') +
         '</table>' +
       '</div>' +
       '<div class="os-insights"><h3>' + esc(pick('Insights', '\u0627\u0644\u0631\u0624\u0649')) + '</h3><div class="os-insight-grid">' +

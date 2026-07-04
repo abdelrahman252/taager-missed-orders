@@ -117,8 +117,8 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
 
   function showCitiesQueryLoader() {
     mountEl.innerHTML =
-      '<div class="dash-scroll" style="flex:1;display:flex;align-items:center;justify-content:center;background:#080b12;color:#fff;">' +
-        '<div style="display:flex;align-items:center;gap:12px;padding:16px 20px;border-radius:14px;background:#0b1120;border:1px solid rgba(168,85,247,0.22);color:rgba(255,255,255,0.72);font-size:13px;font-weight:800;">' +
+      '<div class="dash-scroll" style="flex:1;display:flex;align-items:center;justify-content:center;background:var(--dash-bg);color:#fff;">' +
+        '<div style="display:flex;align-items:center;gap:12px;padding:16px 20px;border-radius:var(--dash-radius-lg);background:var(--dash-surface);border:1px solid rgba(168,85,247,0.22);color:rgba(255,255,255,0.72);font-size:var(--type-control);font-weight:var(--weight-semibold);">' +
           '<span style="width:18px;height:18px;border:2px solid rgba(168,85,247,0.2);border-top-color:#a855f7;border-radius:50%;animation:dashSpin 0.7s linear infinite;"></span>' +
           '<span>Updating city analysis...</span>' +
         '</div>' +
@@ -216,13 +216,13 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
     function platformBtn(key, label, active) {
       return (
         '<button class="sc-exclusion-platform" data-platform="' + key + '" style="' +
-        "padding:8px 12px;border-radius:10px;border:1px solid " +
+        "padding:8px 12px;border-radius:var(--dash-radius-md);border:1px solid " +
         (active ? "rgba(168,85,247,0.55)" : "rgba(255,255,255,0.08)") +
         ";background:" +
         (active ? "rgba(168,85,247,0.18)" : "rgba(255,255,255,0.04)") +
         ";color:" +
         (active ? "#f5f3ff" : "rgba(255,255,255,0.62)") +
-        ";font-size:12px;font-weight:800;font-family:inherit;cursor:pointer;" +
+        ";font-size:var(--type-label);font-weight:var(--weight-semibold);font-family:inherit;cursor:pointer;" +
         '">' +
         label +
         "</button>"
@@ -232,9 +232,9 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
     var preview = items.slice(0, 10).map(function (city) {
       var ndrLabel = typeof city.ndr === "number" ? " - NDR " + pctValue(city.ndr) + "%" : "";
       return (
-        '<span style="display:inline-flex;padding:5px 9px;border-radius:999px;' +
+        '<span style="display:inline-flex;padding:5px 9px;border-radius:var(--radius-pill);' +
         'background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.28);' +
-        'color:#fecaca;font-size:11px;font-weight:800;">' +
+        'color:#fecaca;font-size:var(--type-caption);font-weight:var(--weight-semibold);">' +
         esc(city.name) + esc(ndrLabel) +
         "</span>"
       );
@@ -248,20 +248,20 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
       "padding:18px;";
     overlay.innerHTML =
       '<div style="width:min(720px,100%);background:#0d1525;border:1px solid rgba(168,85,247,0.28);' +
-      'border-radius:18px;box-shadow:0 24px 80px rgba(0,0,0,0.42);padding:22px;direction:' +
+      'border-radius:var(--dash-radius-xl);box-shadow:0 24px 80px rgba(0,0,0,0.42);padding:22px;direction:' +
       (getIsAr() ? "rtl" : "ltr") +
-      ';font-family:Cairo,sans-serif;">' +
+      ';font-family:var(--font-ui);">' +
       '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;">' +
       '<div>' +
-      '<div style="font-size:18px;font-weight:900;color:#fff;margin-bottom:5px;">' +
+      '<div style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff;margin-bottom:5px;">' +
       s6Txt("Ad Set Exclusion List", "قائمة استبعاد المدن للإعلانات") +
       "</div>" +
-      '<div style="font-size:12px;color:rgba(255,255,255,0.52);line-height:1.7;">' +
+      '<div style="font-size:var(--type-label);color:rgba(255,255,255,0.52);line-height:1.7;">' +
       esc(reason || s6Txt("Cities with weak NDR are recommended for exclusion.", "المدن ذات NDR الضعيف يفضل استبعادها من الحملات.")) +
       "</div>" +
       "</div>" +
-      '<button id="sc-exclusion-close" style="width:34px;height:34px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);' +
-      'background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.72);font-size:18px;font-weight:900;cursor:pointer;">x</button>' +
+      '<button id="sc-exclusion-close" style="width:34px;height:34px;border-radius:var(--dash-radius-md);border:1px solid var(--dash-border-soft);' +
+      'background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.72);font-size:var(--type-section-title);font-weight:var(--weight-bold);cursor:pointer;">x</button>' +
       "</div>" +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">' +
       platformBtn("plain", s6Txt("Plain", "قائمة عادية"), true) +
@@ -270,16 +270,16 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
       platformBtn("snapchat", "Snapchat", false) +
       "</div>" +
       '<textarea id="sc-exclusion-output" readonly style="width:100%;height:180px;resize:vertical;box-sizing:border-box;' +
-      'background:#08111f;border:1px solid rgba(255,255,255,0.10);border-radius:14px;color:#e5e7eb;' +
-      'font-family:Consolas,monospace;font-size:13px;line-height:1.7;padding:14px;outline:none;direction:ltr;">' +
+      'background:#08111f;border:1px solid rgba(255,255,255,0.10);border-radius:var(--dash-radius-lg);color:#e5e7eb;' +
+      'font-family:var(--font-mono);font-size:var(--type-control);line-height:1.7;padding:14px;outline:none;direction:ltr;">' +
       esc(platformTemplates.plain || "") +
       "</textarea>" +
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;flex-wrap:wrap;">' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;max-width:480px;">' +
-      (preview || '<span style="color:rgba(255,255,255,0.42);font-size:12px;">' + s6Txt("No weak-NDR cities found.", "لا توجد مدن ضعيفة NDR.") + "</span>") +
+      (preview || '<span style="color:rgba(255,255,255,0.42);font-size:var(--type-label);">' + s6Txt("No weak-NDR cities found.", "لا توجد مدن ضعيفة NDR.") + "</span>") +
       "</div>" +
-      '<button id="sc-exclusion-copy" style="padding:10px 16px;border-radius:11px;border:1px solid rgba(20,184,166,0.35);' +
-      'background:rgba(20,184,166,0.15);color:#99f6e4;font-size:12px;font-weight:900;font-family:inherit;cursor:pointer;">' +
+      '<button id="sc-exclusion-copy" style="padding:10px 16px;border-radius:var(--dash-radius-md);border:1px solid rgba(20,184,166,0.35);' +
+      'background:rgba(20,184,166,0.15);color:#99f6e4;font-size:var(--type-label);font-weight:var(--weight-semibold);font-family:inherit;cursor:pointer;">' +
       s6Txt("Copy List", "نسخ القائمة") +
       "</button>" +
       "</div>" +
@@ -343,17 +343,17 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
           }),
         ) || 1;
       mountEl.innerHTML =
-        '<div dir="rtl" style="flex:1;overflow-y:auto;background:#080b12;color:#fff;font-family:Cairo,sans-serif;padding:24px 28px 38px;">' +
+        '<div dir="rtl" style="flex:1;overflow-y:auto;background:var(--dash-bg);color:#fff;font-family:var(--font-ui);padding:24px 28px 38px;">' +
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;gap:16px;">' +
-        '<div style="font-size:12px;color:rgba(255,255,255,0.45);">' +
+        '<div style="font-size:var(--type-label);color:rgba(255,255,255,0.45);">' +
         s6Txt(
           "Sorted by collection gap and order count from the current Dashboard snapshot",
           "مرتبة حسب فجوة التحصيل وعدد الطلبات من لقطة Dashboard الحالية",
         ) +
         "</div>" +
-        '<div><h1 style="margin:0;font-size:28px;font-weight:900;">' +
+        '<div><h1 style="margin:0;font-size:var(--type-page-title);font-weight:var(--weight-bold);">' +
         s6Txt("Cities and Regions", "المدن والمناطق") +
-        '</h1><p style="margin:6px 0 0;color:rgba(255,255,255,0.42);font-size:12px;">' +
+        '</h1><p style="margin:6px 0 0;color:rgba(255,255,255,0.42);font-size:var(--type-label);">' +
         s6Txt(
           "Real data based on the selected account",
           "بيانات حقيقية حسب الحساب المحدد",
@@ -367,35 +367,35 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
             return (
               '<div class="fade-up" style="animation-delay:' +
               idx * 45 +
-              'ms;background:#0b1120;border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px;">' +
+              'ms;background:var(--dash-surface);border:1px solid var(--dash-border-soft);border-radius:var(--dash-radius-lg);padding:16px;">' +
               '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;">' +
-              '<div style="font-size:12px;color:#a855f7;font-weight:800;">#' +
+              '<div style="font-size:var(--type-label);color:#a855f7;font-weight:var(--weight-semibold);">#' +
               (idx + 1) +
               "</div>" +
-              '<div style="font-size:16px;font-weight:900;text-align:right;">' +
+              '<div style="font-size:var(--type-subtitle);font-weight:var(--weight-semibold);text-align:right;">' +
               city.name +
               "</div>" +
               "</div>" +
-              '<div style="height:6px;background:rgba(255,255,255,0.06);border-radius:999px;overflow:hidden;margin-bottom:14px;"><div style="width:' +
+              '<div style="height:6px;background:rgba(255,255,255,0.06);border-radius:var(--radius-pill);overflow:hidden;margin-bottom:14px;"><div style="width:' +
               pct +
               '%;height:100%;background:linear-gradient(90deg,#7c3aed,#14b8a6);"></div></div>' +
-              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;">' +
-              '<div style="background:rgba(255,255,255,0.035);border-radius:10px;padding:10px;"><div style="color:rgba(255,255,255,0.42);margin-bottom:4px;">' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:var(--type-label);">' +
+              '<div style="background:rgba(255,255,255,0.035);border-radius:var(--dash-radius-md);padding:10px;"><div style="color:rgba(255,255,255,0.42);margin-bottom:4px;">' +
               s6Txt("Orders", "الطلبات") +
               "</div><strong>" +
               (city.count || 0).toLocaleString("en-US") +
               "</strong></div>" +
-              '<div style="background:rgba(255,255,255,0.035);border-radius:10px;padding:10px;"><div style="color:rgba(255,255,255,0.42);margin-bottom:4px;">' +
+              '<div style="background:rgba(255,255,255,0.035);border-radius:var(--dash-radius-md);padding:10px;"><div style="color:rgba(255,255,255,0.42);margin-bottom:4px;">' +
               s6Txt("Collection", "التحصيل") +
               "</div><strong>" +
               (city.pct || 0).toLocaleString("en-US") +
               "%</strong></div>" +
-              '<div style="background:rgba(255,255,255,0.035);border-radius:10px;padding:10px;"><div style="color:rgba(255,255,255,0.42);margin-bottom:4px;">' +
+              '<div style="background:rgba(255,255,255,0.035);border-radius:var(--dash-radius-md);padding:10px;"><div style="color:rgba(255,255,255,0.42);margin-bottom:4px;">' +
               s6Txt("Remaining", "المتبقي") +
               "</div><strong>" +
               fmtSAR(city.gap || 0) +
               "</strong></div>" +
-              '<div style="background:rgba(255,255,255,0.035);border-radius:10px;padding:10px;"><div style="color:rgba(255,255,255,0.42);margin-bottom:4px;">' +
+              '<div style="background:rgba(255,255,255,0.035);border-radius:var(--dash-radius-md);padding:10px;"><div style="color:rgba(255,255,255,0.42);margin-bottom:4px;">' +
               s6Txt("Due", "المستحق") +
               "</div><strong>" +
               fmtSAR(city.due || 0) +
@@ -784,10 +784,10 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
       ? "padding:8px 12px 8px 28px;"
       : "padding:8px 28px 8px 12px;";
     var selStyle =
-      "background:#0b1120 " +
+      "background:var(--dash-surface) " +
       selBg +
-      ";border:1px solid rgba(255,255,255,0.1);border-radius:10px;" +
-      "color:#fff;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;" +
+      ";border:1px solid rgba(255,255,255,0.1);border-radius:var(--dash-radius-md);" +
+      "color:#fff;font-family:var(--font-ui);font-size:var(--type-label);font-weight:var(--weight-semibold);" +
       paddingStr +
       "cursor:pointer;outline:none;appearance:none;-webkit-appearance:none;min-width:140px;" +
       "transition:border-color 0.2s,box-shadow 0.2s;";
@@ -800,7 +800,7 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
 
     function pillStyle(active) {
       return (
-        "padding:7px 14px;border-radius:9px;border:none;font-size:11px;font-weight:800;" +
+        "padding:7px 14px;border-radius:var(--dash-radius-sm);border:none;font-size:var(--type-caption);font-weight:var(--weight-semibold);" +
         "cursor:pointer;font-family:inherit;transition:all 0.18s;" +
         "background:" +
         (active ? "#7c3aed" : "rgba(255,255,255,0.05)") +
@@ -828,14 +828,14 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
       '">' +
       provinceOpts +
       "</select>" +
-      '<select id="sc-fb-product" style="' +
+      '<select id="sc-fb-product" data-dashboard-data-text data-i18n-preserve style="' +
       selStyle +
       '" dir="' +
       dirStr +
       '">' +
       productOpts +
       "</select>" +
-      '<div style="display:flex;gap:4px;background:rgba(255,255,255,0.04);border-radius:11px;padding:3px;">' +
+      '<div style="display:flex;gap:4px;background:rgba(255,255,255,0.04);border-radius:var(--dash-radius-md);padding:3px;">' +
       '<button class="sc-pay-pill" data-pay="all" style="' +
       pillStyle(payVal === "all") +
       '">' +
@@ -854,8 +854,8 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
       '<input id="sc-fb-search" type="text" placeholder="' +
       s6Txt("Search city...", "بحث عن مدينة...") +
       '" value="' + esc(searchVal) + '" style="' +
-      "width:100%;background:#0b1120;border:1px solid rgba(255,255,255,0.1);border-radius:10px;" +
-      "color:#fff;font-family:Cairo,sans-serif;font-size:12px;padding:8px 12px;outline:none;" +
+      "width:100%;background:var(--dash-surface);border:1px solid rgba(255,255,255,0.1);border-radius:var(--dash-radius-md);" +
+      "color:#fff;font-family:var(--font-ui);font-size:var(--type-label);padding:8px 12px;outline:none;" +
       'box-sizing:border-box;transition:border-color 0.2s;" dir="' +
       dirStr +
       '" />' +
@@ -865,8 +865,8 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
       '" title="' + s6Txt("Reset city analysis filters", "إعادة ضبط فلاتر تحليل المدن") + '">↺ ' +
       s6Txt("Reset", "إعادة ضبط") +
       "</button>" +
-      '<button id="sc-fb-exclude-export" style="padding:7px 12px;border-radius:9px;border:1px solid rgba(168,85,247,0.3);' +
-      "background:rgba(168,85,247,0.1);color:#e9d5ff;font-size:11px;font-weight:800;" +
+      '<button id="sc-fb-exclude-export" style="padding:7px 12px;border-radius:var(--dash-radius-sm);border:1px solid rgba(168,85,247,0.3);' +
+      "background:rgba(168,85,247,0.1);color:#e9d5ff;font-size:var(--type-caption);font-weight:var(--weight-semibold);" +
       'cursor:pointer;font-family:inherit;transition:all 0.18s;white-space:nowrap;">' +
       s6Txt("Export Exclusions", "تصدير الاستبعاد") +
       "</button>" +
@@ -968,8 +968,8 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
     return cards
       .map(function (c, i) {
         var trendHTML = c.trend
-          ? '<div style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:700;' +
-            "padding:3px 8px;border-radius:8px;" +
+          ? '<div style="display:flex;align-items:center;gap:4px;font-size:var(--type-caption);font-weight:var(--weight-semibold);' +
+            "padding:3px 8px;border-radius:var(--dash-radius-sm);" +
             "color:" +
             (c.trendUp ? "#00e676" : "#ef4444") +
             ";" +
@@ -982,7 +982,7 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
             "</div>"
           : "";
         var subHTML = c.sub
-          ? '<div style="font-size:11px;font-weight:600;margin-top:6px;color:' +
+          ? '<div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);margin-top:6px;color:' +
             c.color +
             '">' +
             c.sub +
@@ -992,10 +992,10 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
           '<div class="fade-up" style="animation-delay:' +
           i * 60 +
           "ms;" +
-          "background:#0b1120;border:1px solid rgba(255,255,255,0.06);border-radius:18px;" +
+          "background:var(--dash-surface);border:1px solid rgba(255,255,255,0.06);border-radius:var(--dash-radius-xl);" +
           'padding:20px;flex:1;display:flex;flex-direction:column;gap:12px;">' +
           '<div style="display:flex;align-items:center;justify-content:space-between;">' +
-          '<div style="width:36px;height:36px;border-radius:12px;flex-shrink:0;' +
+          '<div style="width:36px;height:36px;border-radius:var(--dash-radius-md);flex-shrink:0;' +
           "display:flex;align-items:center;justify-content:center;background:" +
           c.color +
           '1e">' +
@@ -1004,10 +1004,10 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
           trendHTML +
           "</div>" +
           '<div style="text-align:right">' +
-          '<div style="font-size:22px;font-weight:900;color:#fff;line-height:1">' +
+          '<div style="font-size:var(--type-metric-sm);font-weight:var(--weight-semibold);color:#fff;line-height:1">' +
           c.value +
           "</div>" +
-          '<div style="font-size:11px;color:rgba(255,255,255,0.38);margin-top:4px">' +
+          '<div style="font-size:var(--type-caption);color:rgba(255,255,255,0.38);margin-top:4px">' +
           c.label +
           "</div>" +
           subHTML +
@@ -1042,8 +1042,8 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
 
   function mixedCountryMapsHTML(countryGroups) {
     var fastMapPaint = true;
-    return '<div class="fade-up" style="animation-delay:80ms;background:#0b1120;border:1px solid rgba(255,255,255,0.06);border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:12px;">' +
-      '<div style="font-size:15px;font-weight:800;color:#fff;">' + s6Txt("Geographical Distribution by Country", "التوزيع الجغرافي حسب الدولة") + '</div>' +
+    return '<div class="fade-up" style="animation-delay:80ms;background:var(--dash-surface);border:1px solid rgba(255,255,255,0.06);border-radius:var(--dash-radius-xl);padding:20px;display:flex;flex-direction:column;gap:12px;">' +
+      '<div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:#fff;">' + s6Txt("Geographical Distribution by Country", "التوزيع الجغرافي حسب الدولة") + '</div>' +
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;">' +
       countryGroups.map(function (group, groupIdx) {
         var code = String(group.country || "sa").toLowerCase();
@@ -1079,15 +1079,15 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
             : '<ellipse cx="' + p.x + '" cy="' + p.y + '" rx="' + (p.rx || 38) + '" ry="' + (p.ry || 28) + '" fill="url(#' + miniId + '_glow_' + p.id + ')" clip-path="url(#' + miniId + '_clip)" opacity=".92"/>';
         }).join("");
         var label = window.TaagerCountry && window.TaagerCountry.label ? window.TaagerCountry.label(code) : code.toUpperCase();
-        return '<div style="border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025);border-radius:14px;padding:10px;">' +
-          '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px;"><strong style="font-size:11px;color:#fff;">' + esc(label) + '</strong><span style="font-size:9px;color:rgba(255,255,255,.48);">' + esc(group.currency || "") + ' · ' + s7Num(group.orderCount || group.rows || 0) + '</span></div>' +
+        return '<div style="border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025);border-radius:var(--dash-radius-lg);padding:10px;">' +
+          '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px;"><strong style="font-size:var(--type-caption);color:#fff;">' + esc(label) + '</strong><span style="font-size:var(--type-micro);color:rgba(255,255,255,.48);">' + esc(group.currency || "") + ' · ' + s7Num(group.orderCount || group.rows || 0) + '</span></div>' +
           '<svg class="dash-country-map dash-country-map--compact" viewBox="' + (window.TaagerGeo && window.TaagerGeo.viewBox ? window.TaagerGeo.viewBox(code) : "0 0 400 340") + '" style="width:100%;height:145px;">' +
           '<defs><clipPath id="' + miniId + '_clip"><path d="' + miniShape.outline + '"/></clipPath>' + (fastMapPaint ? "" : '<filter id="' + miniId + '_shadow" x="-25%" y="-25%" width="150%" height="170%"><feDropShadow dx="0" dy="7" stdDeviation="6" flood-color="#020617" flood-opacity=".65"/></filter>') + miniGlowDefs + '</defs>' +
           '<path d="' + miniShape.outline + '" fill="rgba(59,130,246,.09)" stroke="rgba(168,85,247,.55)" stroke-width="2"' + (fastMapPaint ? "" : ' filter="url(#' + miniId + '_shadow)"') + '/>' +
           miniGlows +
           '<path d="' + miniShape.outline + '" fill="none" stroke="rgba(196,181,253,.68)" stroke-width="1.7"/>' +
           dots + '</svg>' +
-          '<div style="font-size:9px;color:rgba(255,255,255,.48);text-align:center;">' + s7Num(group.nativeSales || 0) + ' ' + esc(group.currency || "") + '</div>' +
+          '<div style="font-size:var(--type-micro);color:rgba(255,255,255,.48);text-align:center;">' + s7Num(group.nativeSales || 0) + ' ' + esc(group.currency || "") + '</div>' +
         '</div>';
       }).join("") +
       '</div></div>';
@@ -1130,12 +1130,12 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
           var code = String(group.country || "sa").toLowerCase();
           var label = window.TaagerCountry && window.TaagerCountry.label ? window.TaagerCountry.label(code) : code.toUpperCase();
           var flagCls = window.TaagerCountry && window.TaagerCountry.flagClass ? window.TaagerCountry.flagClass(code) : "";
-          return '<div style="border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.035);border-radius:10px;padding:8px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">' +
+          return '<div style="border:1px solid var(--dash-border-soft);background:rgba(255,255,255,0.035);border-radius:var(--dash-radius-md);padding:8px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">' +
             '<span style="display:flex;align-items:center;gap:7px;min-width:0;">' +
               (flagCls ? '<span class="' + esc(flagCls) + '" aria-hidden="true"></span>' : '') +
-              '<span style="font-size:11px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(label) + '</span>' +
+              '<span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(label) + '</span>' +
             '</span>' +
-            '<span style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.58);white-space:nowrap;">' +
+            '<span style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.58);white-space:nowrap;">' +
               esc(group.currency || "") + ' · ' + s7Num(group.orderCount || group.rows || 0) +
             '</span>' +
           '</div>';
@@ -1278,7 +1278,7 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
         p.id +
         '" style="' +
         "display:flex;align-items:center;gap:6px;" +
-        "padding:4px 10px;border-radius:8px;border:1px solid " +
+        "padding:4px 10px;border-radius:var(--dash-radius-sm);border:1px solid " +
         p.color +
         "44;" +
         "background:" +
@@ -1286,7 +1286,7 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
         "18;color:" +
         p.color +
         ";" +
-        "font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;" +
+        "font-size:var(--type-micro);font-weight:var(--weight-semibold);cursor:pointer;font-family:inherit;" +
         'transition:all 0.2s;">' +
         '<span style="width:6px;height:6px;border-radius:50%;background:' +
         p.color +
@@ -1312,7 +1312,7 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
           '<button class="sc-heat-pill" data-mode="' +
           m.id +
           '" style="' +
-          "padding:5px 11px;border-radius:9px;border:none;font-size:11px;font-weight:700;" +
+          "padding:5px 11px;border-radius:var(--dash-radius-sm);border:none;font-size:var(--type-caption);font-weight:var(--weight-semibold);" +
           "cursor:pointer;font-family:inherit;transition:all 0.15s;" +
           "background:" +
           (isFirst ? "#7c3aed" : "transparent") +
@@ -1333,8 +1333,8 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
 
     return (
       '<div class="fade-up" style="animation-delay:80ms;' +
-      "background:#0b1120;border:1px solid rgba(255,255,255,0.06);" +
-      'border-radius:18px;padding:20px;display:flex;flex-direction:column;">' +
+      "background:var(--dash-surface);border:1px solid rgba(255,255,255,0.06);" +
+      'border-radius:var(--dash-radius-xl);padding:20px;display:flex;flex-direction:column;">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;' +
       "margin-bottom:10px;flex-direction:" +
       (isAr ? "row" : "row-reverse") +
@@ -1343,24 +1343,24 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
       (isAr ? "row" : "row-reverse") +
       ';">' +
       svgIcon("mapPin", 16, "#a855f7") +
-      '<span style="font-size:15px;font-weight:800;color:#fff">' +
+      '<span style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:#fff">' +
       s6Txt("Geographical Distribution Map", "خريطة التوزيع الجغرافي") +
       ' · ' + esc(countryLabel) +
       "</span>" +
       "</div>" +
-      '<button id="sc-clear-btn" style="display:none;font-size:11px;font-weight:700;' +
+      '<button id="sc-clear-btn" style="display:none;font-size:var(--type-caption);font-weight:var(--weight-semibold);' +
       "color:#a855f7;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);" +
-      'border-radius:8px;padding:4px 10px;cursor:pointer;font-family:inherit;">' +
+      'border-radius:var(--dash-radius-sm);padding:4px 10px;cursor:pointer;font-family:inherit;">' +
       s6Txt("Show All ✕", "عرض الكل ✕") +
       "</button>" +
       "</div>" +
       mixedCountryCards +
       /* T-15: Heatmap mode selector row */
       '<div id="sc-heat-bar" style="display:flex;gap:4px;background:rgba(255,255,255,0.05);' +
-      'border-radius:10px;padding:3px;margin-bottom:4px;align-self:flex-start">' +
+      'border-radius:var(--dash-radius-md);padding:3px;margin-bottom:4px;align-self:flex-start">' +
       heatPills +
       "</div>" +
-      '<div id="sc-heat-desc" style="font-size:10.5px;color:rgba(255,255,255,0.6);margin-bottom:12px;padding:0 4px;line-height:1.4;">' +
+      '<div id="sc-heat-desc" style="font-size:var(--type-caption);color:var(--dash-text-muted);margin-bottom:12px;padding:0 4px;line-height:1.4;">' +
       s6Txt(
         "Displays regions grouped by color to show overall activity.",
         "يعرض المناطق مجمعة حسب اللون لإظهار النشاط العام.",
@@ -1387,7 +1387,7 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
       "</svg>" +
       '<div id="sc-tooltip" style="pointer-events:none;position:absolute;left:0;top:0;opacity:0;visibility:hidden;' +
       'transform:translate3d(-50%,calc(-100% - 10px),0);will-change:transform,opacity;contain:layout paint;' +
-      'min-width:170px;padding:11px 14px;border-radius:10px;text-align:center;white-space:nowrap;' +
+      'min-width:170px;padding:11px 14px;border-radius:var(--dash-radius-md);text-align:center;white-space:nowrap;' +
       'background:' +
       ttFill +
       ";border:1px solid " +
@@ -1395,8 +1395,8 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
       ";color:" +
       ttText +
       ';box-shadow:0 8px 24px rgba(0,0,0,0.34);z-index:30;">' +
-      '<div id="sc-tt-name" style="font-size:14px;font-weight:800;line-height:1.45;margin-bottom:3px"></div>' +
-      '<div id="sc-tt-info" style="font-size:12px;font-weight:700;line-height:1.45"></div>' +
+      '<div id="sc-tt-name" style="font-size:var(--type-body);font-weight:var(--weight-semibold);line-height:1.45;margin-bottom:3px"></div>' +
+      '<div id="sc-tt-info" style="font-size:var(--type-label);font-weight:var(--weight-semibold);line-height:1.45"></div>' +
       "</div>" +
       "</div>" +
       '<div id="sc-legend" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;justify-content:flex-end">' +
@@ -1489,14 +1489,14 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
 
       function ndrBadge(val) {
         if (val === null)
-          return '<span style="font-size:11px;font-weight:800;color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:6px;">—</span>';
+          return '<span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:var(--dash-radius-sm);">—</span>';
         var nc = rateColor(val);
         return (
-          '<span style="font-size:11px;font-weight:800;color:' +
+          '<span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:' +
           nc +
           ";background:" +
           nc +
-          '1a;padding:2px 6px;border-radius:6px;">' +
+          '1a;padding:2px 6px;border-radius:var(--dash-radius-sm);">' +
           val.toFixed(1) +
           "%</span>"
         );
@@ -1581,7 +1581,7 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
         '">' +
         /* City name + province dot + rank */
         '<div style="display:flex;align-items:center;gap:7px;min-width:0;">' +
-        '<span style="color:#fff;font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' +
+        '<span style="color:#fff;font-weight:var(--weight-semibold);font-size:var(--type-control);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' +
         esc(c.name) +
         '">' +
         c.name +
@@ -1589,42 +1589,42 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
         '<span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:' +
         c.color +
         '"></span>' +
-        '<span class="sc-lb-rank" style="font-size:10px;color:rgba(255,255,255,0.2);font-weight:700;width:16px;text-align:center">' +
+        '<span class="sc-lb-rank" style="font-size:var(--type-micro);color:rgba(255,255,255,0.2);font-weight:var(--weight-semibold);width:16px;text-align:center">' +
         (i + 1) +
         "</span>" +
         "</div>" +
         /* Orders — switchable by pill */
-        '<div class="sc-lb-orders-cell" style="color:rgba(255,255,255,0.72);font-size:12px;font-weight:600;text-align:center">' +
+        '<div class="sc-lb-orders-cell" style="color:rgba(255,255,255,0.72);font-size:var(--type-label);font-weight:var(--weight-semibold);text-align:center">' +
         rowTotalOrders.toLocaleString("en-US") +
         "</div>" +
         /* Delivered orders */
-        '<div class="sc-lb-delivered-cell" style="color:rgba(255,255,255,0.55);font-size:12px;font-weight:600;text-align:center">' +
+        '<div class="sc-lb-delivered-cell" style="color:rgba(255,255,255,0.55);font-size:var(--type-label);font-weight:var(--weight-semibold);text-align:center">' +
         deliveredDisplay + window.supposedBadgeHtml('delivered') +
         "</div>" +
-        '<div class="sc-lb-confirmed-cell" style="color:#3b82f6;font-size:12px;font-weight:700;text-align:center">' +
+        '<div class="sc-lb-confirmed-cell" style="color:#3b82f6;font-size:var(--type-label);font-weight:var(--weight-semibold);text-align:center">' +
         confirmedVal.toLocaleString("en-US") +
         "</div>" +
         '<div class="sc-lb-cr-cell" style="text-align:center;">' +
-        '<span style="font-size:11px;font-weight:800;color:' +
+        '<span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:' +
         confirmationRateColor +
         ";background:" +
         confirmationRateColor +
-        '1a;padding:2px 6px;border-radius:6px;">' +
+        '1a;padding:2px 6px;border-radius:var(--dash-radius-sm);">' +
         confirmationRateVal.toFixed(1) +
         "%</span></div>" +
         /* DR% (Active) + bar — uses drRate (active orders only) */
         '<div class="sc-lb-dr-cell" style="display:flex;flex-direction:column;gap:3px">' +
-        '<span style="font-size:12px;font-weight:700;text-align:right;color:' +
+        '<span style="font-size:var(--type-label);font-weight:var(--weight-semibold);text-align:right;color:' +
         drColor2 +
         '">' +
         (c.drRate || 0).toFixed(1) +
         "%" +
         "</span>" +
-        '<div style="height:3px;border-radius:9999px;background:rgba(148,163,184,0.22);overflow:hidden">' +
+        '<div style="height:3px;border-radius:var(--radius-pill);background:rgba(148,163,184,0.22);overflow:hidden">' +
         '<div class="sc-rate-bar" data-pct="' +
         (c.drRate || 0) +
         '"' +
-        ' style="height:100%;width:' + Math.max(0, Math.min(100, Number(c.drRate || 0))) + '%;border-radius:9999px;background:' +
+        ' style="height:100%;width:' + Math.max(0, Math.min(100, Number(c.drRate || 0))) + '%;border-radius:var(--radius-pill);background:' +
         drColor2 +
         ';"></div>' +
         "</div>" +
@@ -1636,10 +1636,10 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
         /* Earned Profit After Tax */
         '<div class="sc-lb-commission-cell" style="text-align:center;">' +
         (commDisplay
-          ? '<span style="font-size:11px;font-weight:700;color:#a855f7">' +
+          ? '<span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:#a855f7">' +
             commDisplay + window.supposedBadgeHtml('commission') +
             "</span>"
-          : '<span style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.18)">—</span>') +
+          : '<span style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.18)">—</span>') +
         "</div>" +
         "</div>"
       );
@@ -1651,17 +1651,17 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
     var alignStr = isAr ? "right" : "left";
     return (
       '<div class="fade-up" style="animation-delay:100ms;' +
-      "background:#0b1120;border:1px solid rgba(255,255,255,0.06);" +
-      'border-radius:18px;padding:20px;display:flex;flex-direction:column;">' +
+      "background:var(--dash-surface);border:1px solid rgba(255,255,255,0.06);" +
+      'border-radius:var(--dash-radius-xl);padding:20px;display:flex;flex-direction:column;">' +
       '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-direction:' +
       (isAr ? "row" : "row-reverse") +
       ';">' +
       svgIcon("barChart", 16, "#a855f7") +
-      '<span id="sc-lb-title" style="font-size:15px;font-weight:800;color:#fff" dir="' +
+      '<span id="sc-lb-title" style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:#fff" dir="' +
       (isAr ? "rtl" : "ltr") +
       '">' +
       s6Txt("City Leaderboard", "ترتيب المدن") +
-      ' <span style="color:rgba(255,255,255,0.3);font-weight:600;font-size:13px">(' +
+      ' <span style="color:rgba(255,255,255,0.3);font-weight:var(--weight-semibold);font-size:var(--type-control)">(' +
       ALL_CITIES.length +
       ")</span>" +
       "</span>" +
@@ -1671,7 +1671,7 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
         : "") +
       /* Header row — 6 columns now */
       '<div style="display:grid;grid-template-columns:minmax(0, 1.45fr) minmax(0, 0.65fr) minmax(0, 0.65fr) minmax(0, 0.65fr) minmax(0, 0.65fr) minmax(0, 0.9fr) minmax(0, 0.6fr) minmax(0, 0.6fr);' +
-      "padding:8px 12px;font-size:10px;font-weight:700;color:rgba(255,255,255,0.3);" +
+      "padding:8px 12px;font-size:var(--type-micro);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.3);" +
       "border-bottom:1px solid rgba(255,255,255,0.05);gap:8px;text-align:" +
       alignStr +
       '">' +
@@ -1734,7 +1734,7 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
             '<span style="width:7px;height:7px;border-radius:50%;background:' +
             parts[0] +
             '"></span>' +
-            '<span style="font-size:10px;color:rgba(255,255,255,0.3)">' +
+            '<span style="font-size:var(--type-micro);color:rgba(255,255,255,0.3)">' +
             parts[1] +
             "</span>" +
             "</div>"
@@ -1760,11 +1760,11 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
         i * 70 +
         "ms;" +
         "background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);" +
-        "border-radius:18px;padding:20px;flex:1;text-align:right;" +
+        "border-radius:var(--dash-radius-xl);padding:20px;flex:1;text-align:right;" +
         "display:flex;flex-direction:column;align-items:stretch;width:100%;gap:14px;cursor:pointer;" +
         'font-family:inherit;transition:all 0.2s;">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;width:100%">' +
-        '<span style="font-size:14px;font-weight:900;color:' +
+        '<span style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:' +
         p.color +
         '">' +
         shortProvName(p.name) +
@@ -1774,12 +1774,12 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
           "Order growth rate compared to last month",
           "معدل نمو الطلبات مقارنة بالشهر الماضي",
         ) +
-        '" style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:800;' +
+        '" style="display:flex;align-items:center;gap:4px;font-size:var(--type-label);font-weight:var(--weight-semibold);' +
         "color:" +
         (p.trendUp ? "#00e676" : "#ef4444") +
         ";background:" +
         (p.trendUp ? "rgba(0,230,118,0.1)" : "rgba(239,68,68,0.1)") +
-        ';padding:3px 8px;border-radius:8px;">' +
+        ';padding:3px 8px;border-radius:var(--dash-radius-sm);">' +
         trendIcon +
         " " +
         p.trend +
@@ -1787,10 +1787,10 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
         "</span>" +
         "</div>" +
         '<div style="width:100%">' +
-        '<div style="font-size:28px;font-weight:900;color:#fff;line-height:1">' +
+        '<div style="font-size:var(--type-page-title);font-weight:var(--weight-semibold);color:#fff;line-height:1">' +
         p.orders.toLocaleString("en-US") +
         "</div>" +
-        '<div style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.4);margin-top:6px">' +
+        '<div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:var(--dash-text-faint);margin-top:6px">' +
         s6Txt("Net Orders · ", "صافي الطلبات · ") +
         p.cities.length +
         s6Txt(" cities", " مدن") +
@@ -1803,19 +1803,19 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
           "نسبة التسليم من إجمالي الطلبات (NDR)",
         ) +
         '">' +
-        '<span style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.45)">' +
+        '<span style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.45)">' +
         s6Txt("NDR (Total)", "NDR (إجمالي)") +
         "</span>" +
-        '<span style="font-size:14px;font-weight:800;color:' +
+        '<span style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:' +
         p.color +
         '">' +
         formatPercent(p.deliveryRate) +
         "%</span>" +
         "</div>" +
-        '<div style="height:4px;border-radius:9999px;background:rgba(148,163,184,0.22);overflow:hidden;margin-bottom:12px">' +
+        '<div style="height:4px;border-radius:var(--radius-pill);background:rgba(148,163,184,0.22);overflow:hidden;margin-bottom:12px">' +
         '<div class="sc-prov-bar" data-pct="' +
         p.deliveryRate +
-        '" style="height:100%;width:' + Math.max(0, Math.min(100, Number(p.deliveryRate || 0))) + '%;border-radius:9999px;background:' +
+        '" style="height:100%;width:' + Math.max(0, Math.min(100, Number(p.deliveryRate || 0))) + '%;border-radius:var(--radius-pill);background:' +
         p.color +
         ';"></div>' +
         "</div>" +
@@ -1825,19 +1825,19 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
           "نسبة التسليم من الطلبات النشطة فقط",
         ) +
         '">' +
-        '<span style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.45)">' +
+        '<span style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.45)">' +
         s6Txt("DR (Active)", "DR (النشطة)") +
         "</span>" +
-        '<span style="font-size:14px;font-weight:800;color:' +
+        '<span style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:' +
         p.color +
         '">' +
         formatPercent(p.drRate) +
         "%</span>" +
         "</div>" +
-        '<div style="height:4px;border-radius:9999px;background:rgba(148,163,184,0.22);overflow:hidden">' +
+        '<div style="height:4px;border-radius:var(--radius-pill);background:rgba(148,163,184,0.22);overflow:hidden">' +
         '<div class="sc-prov-bar" data-pct="' +
         p.drRate +
-        '" style="height:100%;width:' + Math.max(0, Math.min(100, Number(p.drRate || 0))) + '%;border-radius:9999px;background:' +
+        '" style="height:100%;width:' + Math.max(0, Math.min(100, Number(p.drRate || 0))) + '%;border-radius:var(--radius-pill);background:' +
         p.color +
         ';"></div>' +
         "</div>" +
@@ -1850,18 +1850,18 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
           "نسبة الطلبات بالدفع عند الاستلام (COD)",
         ) +
         '">' +
-        '<div style="font-size:11px;color:rgba(255,255,255,0.35);font-weight:600;margin-bottom:4px;text-align:center;width:100%;">COD</div>' +
-        '<div style="font-size:14px;font-weight:800;color:#06b6d4;text-align:center;width:100%;">' +
+        '<div style="font-size:var(--type-caption);color:rgba(255,255,255,0.35);font-weight:var(--weight-semibold);margin-bottom:4px;text-align:center;width:100%;">COD</div>' +
+        '<div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#06b6d4;text-align:center;width:100%;">' +
         formatPercent(p.codRate) +
         "%</div>" +
         "</div>" +
         '<div style="display:flex;flex-direction:column;align-items:center;text-align:center;" class="cool-tooltip" data-tooltip="' +
         s6Txt("Percentage of returned orders", "نسبة الطلبات المرتجعة") +
         '">' +
-        '<div style="font-size:11px;color:rgba(255,255,255,0.35);font-weight:600;margin-bottom:4px;text-align:center;width:100%">' +
+        '<div style="font-size:var(--type-caption);color:rgba(255,255,255,0.35);font-weight:var(--weight-semibold);margin-bottom:4px;text-align:center;width:100%">' +
         s6Txt("Returns", "مرتجعات") +
         "</div>" +
-        '<div style="font-size:14px;font-weight:800;color:#ef4444;text-align:center;width:100%;">' +
+        '<div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#ef4444;text-align:center;width:100%;">' +
         formatPercent(p.returnRate) +
         "%</div>" +
         "</div>" +
@@ -1871,12 +1871,12 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
           "متوسط أيام التوصيل (من إنشاء الطلب حتى آخر تحديث للتسليم)",
         ) +
         '">' +
-        '<div style="font-size:11px;color:rgba(255,255,255,0.35);font-weight:600;display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:4px;text-align:center;width:100%;">' +
+        '<div style="font-size:var(--type-caption);color:rgba(255,255,255,0.35);font-weight:var(--weight-semibold);display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:4px;text-align:center;width:100%;">' +
         svgIcon("clock", 12, "rgba(255,255,255,0.35)") +
         " " +
         s6Txt("days", "أيام") +
         "</div>" +
-        '<div style="font-size:14px;font-weight:800;color:rgba(255,255,255,0.75);text-align:center;width:100%;">' +
+        '<div style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.75);text-align:center;width:100%;">' +
         (p.avgDays == null ? "—" : p.avgDays) +
         "</div>" +
         "</div>" +
@@ -1887,7 +1887,7 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
 
     return (
       '<div style="margin-top:0">' +
-      '<div style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.28);' +
+      '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.28);' +
       'letter-spacing:3px;text-align:right;margin-bottom:10px">' +
       s6Txt("Administrative Regions", "المناطق الإدارية") +
       "</div>" +
@@ -1906,14 +1906,14 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
   ];
   function tabsHTML(active) {
     return (
-      '<div style="display:flex;gap:4px;background:rgba(255,255,255,0.05);border-radius:12px;padding:4px">' +
+      '<div style="display:flex;gap:4px;background:rgba(255,255,255,0.05);border-radius:var(--dash-radius-md);padding:4px">' +
       TIME_TABS.map(function (t, i) {
         var isActive = i === active;
         return (
           '<button class="sc-tab" data-tab="' +
           i +
           '" style="' +
-          "padding:7px 14px;border-radius:9px;border:none;font-size:11px;font-weight:700;" +
+          "padding:7px 14px;border-radius:var(--dash-radius-sm);border:none;font-size:var(--type-caption);font-weight:var(--weight-semibold);" +
           "cursor:pointer;font-family:inherit;transition:all 0.15s;" +
           "background:" +
           (isActive ? "#7c3aed" : "transparent") +
@@ -1942,21 +1942,21 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
   mountEl.innerHTML =
     '<div class="sc-body dash-scroll" dir="' +
     dirStr +
-    '" style="flex:1;overflow-y:auto;background:#080b12;' +
-    "display:flex;flex-direction:column;color:#fff;font-family:'Cairo',sans-serif;\">" +
+    '" style="flex:1;overflow-y:auto;background:var(--dash-bg);' +
+    "display:flex;flex-direction:column;color:#fff;font-family:var(--font-ui);\">" +
     '<style>.sc-body .fade-up{animation:none!important}.sc-body .sc-rate-bar,.sc-body .sc-prov-bar{transition:none!important;box-shadow:none!important}.sc-body .sc-city-dot,.sc-body .sc-prov-blob{transition:opacity .12s ease!important}</style>' +
     /* Header */
     '<div style="padding:28px 32px 20px;display:flex;align-items:flex-start;">' +
     "<div>" +
-    '<h1 class="fade-up" style="font-size:30px;font-weight:900;color:#fff;margin:0;text-align:' +
+    '<h1 class="fade-up" style="font-size:var(--type-page-title);font-weight:var(--weight-bold);color:#fff;margin:0;text-align:' +
     alignStr +
     ';display:inline-flex;align-items:center;gap:12px;">' +
     s6Txt("Cities & Regions", "المدن والمناطق") +
-    '<span id="cities-updating-badge" style="font-size:12px;font-weight:normal;color:#a855f7;background:rgba(168,85,247,0.1);padding:4px 8px;border-radius:6px;transition:opacity 0.3s;opacity:0;">' +
+    '<span id="cities-updating-badge" style="font-size:var(--type-label);font-weight:normal;color:#a855f7;background:rgba(168,85,247,0.1);padding:4px 8px;border-radius:var(--dash-radius-sm);transition:opacity 0.3s;opacity:0;">' +
     s6Txt("⏳ Updating...", "⏳ جاري التحديث...") +
     '</span>' +
     "</h1>" +
-    '<p class="fade-up" style="font-size:11px;color:rgba(255,255,255,0.32);margin:6px 0 0;text-align:' +
+    '<p class="fade-up" style="font-size:var(--type-caption);color:rgba(255,255,255,0.32);margin:6px 0 0;text-align:' +
     alignStr +
     ';animation-delay:80ms">' +
     s6Txt(
@@ -2034,7 +2034,7 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
         : s6Txt("City Leaderboard", "ترتيب المدن");
       titleEl.innerHTML =
         provLabel +
-        ' <span style="color:rgba(255,255,255,0.3);font-weight:600;font-size:13px">(' +
+        ' <span style="color:rgba(255,255,255,0.3);font-weight:var(--weight-semibold);font-size:var(--type-control)">(' +
         visibleCount +
         ")</span>";
     }
@@ -2506,7 +2506,7 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
       : s6Txt("City Leaderboard", "\u062a\u0631\u062a\u064a\u0628 \u0627\u0644\u0645\u062f\u0646");
     return (
       label +
-      ' <span style="color:rgba(255,255,255,0.3);font-weight:600;font-size:13px">(' +
+      ' <span style="color:rgba(255,255,255,0.3);font-weight:var(--weight-semibold);font-size:var(--type-control)">(' +
       total +
       ")</span>"
     );
@@ -2720,7 +2720,7 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
       indicator.className = "sc-lb-sort-indicator";
       indicator.setAttribute("aria-hidden", "true");
       indicator.style.cssText =
-        "font-size:9px;color:rgba(255,255,255,0.28);margin-inline-start:4px;";
+        "font-size:var(--type-micro);color:rgba(255,255,255,0.28);margin-inline-start:4px;";
       indicator.textContent =
         leaderboardSortState.key === hdr.dataset.lbSortKey
           ? leaderboardSortState.dir === "asc"
@@ -2844,7 +2844,7 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
       btn.style.cursor = "pointer";
       btn.style.fontSize = "12px";
       btn.style.fontWeight = "700";
-      btn.style.fontFamily = "Cairo, sans-serif";
+      btn.style.fontFamily = "var(--font-ui)";
       btn.style.display = "flex";
       btn.style.alignItems = "center";
       btn.style.justifyContent = "space-between";
@@ -2909,7 +2909,7 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
         searchInput.style.color = "#fff";
         searchInput.style.padding = "6px 10px";
         searchInput.style.fontSize = "12px";
-        searchInput.style.fontFamily = "Cairo, sans-serif";
+        searchInput.style.fontFamily = "var(--font-ui)";
         searchInput.style.outline = "none";
         searchInput.style.boxSizing = "border-box";
         searchInput.style.transition = "border-color 0.2s";
@@ -2978,7 +2978,7 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
           item.style.color = "rgba(255,255,255,0.7)";
           item.style.fontSize = "12px";
           item.style.fontWeight = "600";
-          item.style.fontFamily = "Cairo, sans-serif";
+          item.style.fontFamily = "var(--font-ui)";
           if (idx !== selectEl.options.length - 1) {
             item.style.borderBottom = "1px solid rgba(255,255,255,0.04)";
           }
@@ -3403,11 +3403,11 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
             var crTotal = parseFloat(row.dataset.cr || "0") || 0;
             var crc0 = rateColor(crTotal);
             crCell.innerHTML =
-              '<span style="font-size:11px;font-weight:800;color:' +
+              '<span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:' +
               crc0 +
               ";background:" +
               crc0 +
-              '1a;padding:2px 6px;border-radius:6px;">' +
+              '1a;padding:2px 6px;border-radius:var(--dash-radius-sm);">' +
               crTotal.toFixed(1) +
               "%</span>";
           }
@@ -3420,14 +3420,14 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
                 ? rateColor(ndrNum)
                 : null;
             ndrCell.innerHTML = nc0
-              ? '<span style="font-size:11px;font-weight:800;color:' +
+              ? '<span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:' +
                 nc0 +
                 ";background:" +
                 nc0 +
-                '1a;padding:2px 6px;border-radius:6px;">' +
+                '1a;padding:2px 6px;border-radius:var(--dash-radius-sm);">' +
                 pctValue(ndrNum) +
                 "%</span>"
-              : '<span style="font-size:11px;font-weight:800;color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:6px;">&mdash;</span>';
+              : '<span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:var(--dash-radius-sm);">&mdash;</span>';
           }
           /* Restore delivered cell to city total */
           var deliveredCellR = row.querySelector('.sc-lb-delivered-cell');
@@ -3482,14 +3482,14 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
               ? rateColor(cr)
               : null;
           crCell.innerHTML = crc
-            ? '<span style="font-size:11px;font-weight:800;color:' +
+            ? '<span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:' +
               crc +
               ";background:" +
               crc +
-              '1a;padding:2px 6px;border-radius:6px;">' +
+              '1a;padding:2px 6px;border-radius:var(--dash-radius-sm);">' +
               cr.toFixed(1) +
               "%</span>"
-            : '<span style="font-size:11px;font-weight:800;color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:6px;">&mdash;</span>';
+            : '<span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:var(--dash-radius-sm);">&mdash;</span>';
         }
 
         if (ndrCell && cell) {
@@ -3500,14 +3500,14 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
               ? rateColor(ndr)
               : null;
           ndrCell.innerHTML = nc
-            ? '<span style="font-size:11px;font-weight:800;color:' +
+            ? '<span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:' +
               nc +
               ";background:" +
               nc +
-              '1a;padding:2px 6px;border-radius:6px;">' +
+              '1a;padding:2px 6px;border-radius:var(--dash-radius-sm);">' +
               pctValue(ndr) +
               "%</span>"
-            : '<span style="font-size:11px;font-weight:800;color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:6px;">&mdash;</span>';
+            : '<span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:var(--dash-radius-sm);">&mdash;</span>';
         }
 
         /* Delivered cell — update to product-specific delivered count */
@@ -3696,16 +3696,16 @@ function renderSectionCitiesHydrated(mountEl, data, ctx) {
             ndrRaw !== undefined && ndrRaw !== "" ? parseFloat(ndrRaw) : null;
           if (ndrNum === null) {
             ndrCell.innerHTML =
-              '<span style="font-size:11px;font-weight:800;color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:6px;">—</span>';
+              '<span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:var(--dash-radius-sm);">—</span>';
           } else {
             var nc =
               rateColor(ndrNum);
             ndrCell.innerHTML =
-              '<span style="font-size:11px;font-weight:800;color:' +
+              '<span style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:' +
               nc +
               ";background:" +
               nc +
-              '1a;padding:2px 6px;border-radius:6px;">' +
+              '1a;padding:2px 6px;border-radius:var(--dash-radius-sm);">' +
               pctValue(ndrNum) +
               "%</span>";
           }
@@ -4127,11 +4127,11 @@ function isActiveCitiesPane(mountEl) {
 
 function citiesHydrationSkeleton() {
   return '<div class="dash-scroll" data-dashboard-hydrating="cities" role="status" aria-live="polite" aria-label="Loading" ' +
-    'style="flex:1;display:flex;align-items:center;justify-content:center;background:#080b12;">' +
+    'style="flex:1;display:flex;align-items:center;justify-content:center;background:var(--dash-bg);">' +
       '<div aria-hidden="true" style="width:min(760px,78%);display:grid;gap:14px;">' +
-        '<div style="height:28px;width:42%;border-radius:10px;background:rgba(255,255,255,0.07);"></div>' +
-        '<div style="height:86px;border-radius:16px;background:rgba(255,255,255,0.045);"></div>' +
-        '<div style="height:180px;border-radius:16px;background:rgba(255,255,255,0.035);"></div>' +
+        '<div style="height:28px;width:42%;border-radius:var(--dash-radius-md);background:rgba(255,255,255,0.07);"></div>' +
+        '<div style="height:86px;border-radius:var(--dash-radius-xl);background:rgba(255,255,255,0.045);"></div>' +
+        '<div style="height:180px;border-radius:var(--dash-radius-xl);background:rgba(255,255,255,0.035);"></div>' +
       '</div>' +
     '</div>';
 }

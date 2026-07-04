@@ -56,7 +56,7 @@ function renderOpsAccountPerf(container, allRuns) {
                         <div class="ops-perf-bar ops-animated-bar" style="width:${barW}%"></div>
                       </div>
                     </div>
-                    <div class="ops-perf-rev">${_opsAcctPerfState.sortBy === "orders" ? `${s.total.toLocaleString("en-US")} <span style="font-size:10px;font-weight:500;color:var(--text3)">${window.t_ops('accountPerf.ordersCount')}</span>` : _opsFmtSAR(s.rev)}</div>
+                    <div class="ops-perf-rev">${_opsAcctPerfState.sortBy === "orders" ? `${s.total.toLocaleString("en-US")} <span style="font-size:var(--type-micro);font-weight:var(--weight-medium);color:var(--text3)">${window.t_ops('accountPerf.ordersCount')}</span>` : _opsFmtSAR(s.rev)}</div>
                   </div>`;
               }).join("")
           }
@@ -161,7 +161,7 @@ function renderOpsProductPerf(container, allRuns) {
     container.innerHTML = `
       <div class="ops-product-card">
         <div class="ops-product-header">
-          <div class="ops-section-title">📦 ${window.t_ops('productPerf.title')} <span style="font-size:11px;font-weight:400;color:var(--text3)">(${window.t_ops('productPerf.detailed')})</span></div>
+          <div class="ops-section-title">📦 ${window.t_ops('productPerf.title')} <span style="font-size:var(--type-caption);font-weight:var(--weight-regular);color:var(--text3)">(${window.t_ops('productPerf.detailed')})</span></div>
           <div class="ops-product-header-right">
             <div class="ops-product-search-wrap">
               <span class="ops-product-search-icon">🔍</span>
@@ -173,7 +173,7 @@ function renderOpsProductPerf(container, allRuns) {
               ${escapeHtml(window.t_ops('productPerf.clearSort', { default: 'Clear Sort' }))}
             </button>
             ${accounts.length > 1 ? `<div class="ops-product-account-select" id="ops-product-account-select"></div>` : ""}
-            <span style="font-size:11px;color:var(--text3)">${grouped.length} ${window.t_ops('productPerf.products')}</span>
+            <span style="font-size:var(--type-caption);color:var(--text3)">${grouped.length} ${window.t_ops('productPerf.products')}</span>
           </div>
         </div>
         <div class="ops-product-table-wrap">
@@ -203,13 +203,13 @@ function renderOpsProductPerf(container, allRuns) {
                       <td class="ops-product-name-cell" title="${escapeHtml(g.key || "")}">${escapeHtml(g.key || window.t_ops('orderDetails.unknown'))}</td>
                       <td>
                         <div style="display:flex;align-items:center;gap:8px">
-                          <span style="font-weight:600">${g.count}</span>
+                          <span style="font-weight:var(--weight-semibold)">${g.count}</span>
                           <div style="flex:1;background:var(--bg3);border-radius:4px;height:5px;min-width:40px">
                             <div class="ops-animated-bar" style="width:${barW}%;height:100%;background:var(--accent);border-radius:4px"></div>
                           </div>
                         </div>
                       </td>
-                      <td style="font-weight:600">${g.total.toLocaleString("en-SA", {minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                      <td style="font-weight:var(--weight-semibold)">${g.total.toLocaleString("en-SA", {minimumFractionDigits:2,maximumFractionDigits:2})}</td>
                       <td>${convPct}%</td>
                       <td class="${refPct > 10 ? "ops-danger-text" : ""}">${refPct}%</td>
                       <td class="ops-product-bar-cell">
@@ -343,7 +343,7 @@ async function renderOpsPresets(container, allRuns, onApplyPreset) {
   container.innerHTML = `
     <div class="ops-presets-card">
       <div class="ops-presets-header">
-        <div class="ops-section-title">⚡ Advanced Filters <span style="font-size:11px;font-weight:400;color:var(--text3)">(Saved Presets)</span></div>
+        <div class="ops-section-title">⚡ Advanced Filters <span style="font-size:var(--type-caption);font-weight:var(--weight-regular);color:var(--text3)">(Saved Presets)</span></div>
         <button class="ops-link-btn" id="ops-presets-manage">Manage</button>
       </div>
 

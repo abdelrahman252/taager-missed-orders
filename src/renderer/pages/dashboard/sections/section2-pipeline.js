@@ -118,6 +118,8 @@ window.renderSection2 = function (mountEl, data, ctx) {
 
   stages = stages.map(normalizeStage);
 
+  var sourceStages = stages;
+
   function compactVisibleStages(inputStages) {
     var source = Array.isArray(inputStages) ? inputStages : [];
     var byId = {};
@@ -152,9 +154,30 @@ window.renderSection2 = function (mountEl, data, ctx) {
         sar: sar ? sar.toLocaleString('en-US', { maximumFractionDigits: 2 }) : undefined
       });
     }
+    function confirmationStage() {
+      var row = pick('confirmed', { id: 'confirmed', label: s2Txt('Confirmation', 'التأكيد'), color: '#3b82f6', count: 0 });
+      var aggregateCount = metrics && metrics.confirmationStatusCount != null
+        ? Number(metrics.confirmationStatusCount)
+        : (metrics && metrics.confirmedCount != null ? Number(metrics.confirmedCount) : NaN);
+      if (!Number.isFinite(aggregateCount)) return normalizeStage(row);
+      var total = Number(metrics.statusTotalCount || metrics.netOrderCount || metrics.totalOrders || metrics.businessTotalOrders || 0) || source.reduce(function (sum, stage) {
+        return stage && stage.businessGroup !== 'excluded' ? sum + Number(stage.count || 0) : sum;
+      }, 0);
+      var share = pctNum(aggregateCount, total);
+      return normalizeStage(Object.assign({}, row, {
+        id: 'confirmed',
+        exactBucket: 'confirmed',
+        label: s2Txt('Confirmation', 'التأكيد'),
+        shortLabel: s2Txt('Confirmation', 'التأكيد'),
+        count: aggregateCount,
+        share: share,
+        pct: pctLabel(share),
+        businessGroup: 'confirmation'
+      }));
+    }
     return [
       normalizeStage(pick('received',        { id: 'received',        label: s2Txt('Order received',       'تم استلام الطلب'),   color: '#3b82f6',  count: 0 })),
-      normalizeStage(pick('confirmed',       { id: 'confirmed',       label: s2Txt('Confirmed',             'مؤكد'),              color: '#3b82f6',  count: 0 })),
+      confirmationStage(),
       normalizeStage(pick('waiting',         { id: 'waiting',         label: s2Txt('Awaiting Shipment',     'في انتظار الشحن'),   color: '#64748b',  count: 0 })),
       normalizeStage(pick('on_hold',         { id: 'on_hold',         label: s2Txt('Temporarily Suspended', 'معلق مؤقتًا'),       color: '#64748b',  count: 0 })),
       combine('shipping', s2Txt('Out for delivery', 'قيد التوصيل'), ['shipping', 'delivery_suspended', 'after_sales_progress'], '#f59e0b', 'incoming'),
@@ -292,12 +315,12 @@ window.renderSection2 = function (mountEl, data, ctx) {
     var iconHtml = svgIcon(PATHS[iconKey], s.color, 22);
 
     return '<div class="s2-stage-wrapper fade-up" style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:0;animation-delay:' + (i * 80) + 'ms;">' +
-      '<div class="s2-stage-label" style="font-size:13px;font-weight:700;margin-bottom:12px;white-space:nowrap;color:' + s.color + ';text-shadow:' + (isLight ? 'none' : '0 0 10px ' + s.color + '77') + ';">' + s.label + window.supposedBadgeHtml(s.label) + '</div>' +
-      '<div class="s2-stage-card" style="position:relative;width:92%;height:220px;border-radius:16px;transform:skewX(-6deg);background:' + bg + ';border:1.5px solid ' + s.color + ';box-shadow:' + glowBase + ';">' +
+      '<div class="s2-stage-label" style="font-size:var(--type-control);font-weight:var(--weight-semibold);margin-bottom:12px;white-space:nowrap;color:' + s.color + ';text-shadow:' + (isLight ? 'none' : '0 0 10px ' + s.color + '77') + ';">' + s.label + window.supposedBadgeHtml(s.label) + '</div>' +
+      '<div class="s2-stage-card" style="position:relative;width:92%;height:220px;border-radius:var(--dash-radius-xl);transform:skewX(-6deg);background:' + bg + ';border:1.5px solid ' + s.color + ';box-shadow:' + glowBase + ';">' +
         '<div class="s2-card-inner" style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:24px 8px;box-sizing:border-box;transform:skewX(6deg);">' +
           '<div class="s2-card-top" style="text-align:center;margin-top:8px;">' +
-            '<div class="s2-count s2-count-num" data-to="' + animTo + '" data-decimals="' + animDec + '" data-suffix="' + suffix + '" style="font-size:40px;font-weight:900;color:' + countColor + ';line-height:1;letter-spacing:-2px;">' + primary + '</div>' +
-            '<div class="s2-pct-text" style="font-size:13px;font-weight:700;color:' + pctColor + ';margin-top:8px;letter-spacing:1px;">' + secondary + '</div>' +
+            '<div class="s2-count s2-count-num" data-to="' + animTo + '" data-decimals="' + animDec + '" data-suffix="' + suffix + '" style="font-size:var(--type-hero);font-weight:var(--weight-bold);color:' + countColor + ';line-height:1;letter-spacing:-2px;">' + primary + '</div>' +
+            '<div class="s2-pct-text" style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:' + pctColor + ';margin-top:8px;letter-spacing:1px;">' + secondary + '</div>' +
           '</div>' +
           '<div class="s2-icon-wrap" style="width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:8px;flex-shrink:0;background:' + iconBg + ';border:1.5px solid ' + s.color + 'cc;box-shadow:' + iconShadow + ';">' +
             iconHtml +
@@ -343,10 +366,10 @@ window.renderSection2 = function (mountEl, data, ctx) {
   /* ── Conversion card HTML ────────────────────────────────────────────────── */
   function convCardHtml(s, i) {
     var convText = s.conv == null ? '—' : pctLabel(s.conv);
-    return '<div class="s2-conv-card fade-up" style="flex:1;min-width:0;background:#0b1120;border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:10px 12px;text-align:center;animation-delay:' + (500 + i * 60) + 'ms;">' +
-      '<div class="s2-conv-label" style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px;">' + s.convLabel + '</div>' +
-      '<div class="s2-conv-value" style="font-size:18px;font-weight:800;line-height:1;margin-bottom:6px;color:' + s.color + ';">' + convText + '</div>' +
-      '<div class="s2-conv-from" style="font-size:10px;color:rgba(255,255,255,0.4);">' + s.convFrom + '</div>' +
+    return '<div class="s2-conv-card fade-up" style="flex:1;min-width:0;background:var(--dash-surface);border:1px solid rgba(255,255,255,0.10);border-radius:var(--dash-radius-md);padding:10px 12px;text-align:center;animation-delay:' + (500 + i * 60) + 'ms;">' +
+      '<div class="s2-conv-label" style="font-size:var(--type-caption);color:var(--dash-text-faint);margin-bottom:4px;">' + s.convLabel + '</div>' +
+      '<div class="s2-conv-value" style="font-size:var(--type-section-title);font-weight:var(--weight-semibold);line-height:1;margin-bottom:6px;color:' + s.color + ';">' + convText + '</div>' +
+      '<div class="s2-conv-from" style="font-size:var(--type-micro);color:var(--dash-text-faint);">' + s.convFrom + '</div>' +
     '</div>';
   }
 
@@ -356,11 +379,11 @@ window.renderSection2 = function (mountEl, data, ctx) {
     var textAlign = isRtl ? 'right' : 'left';
     var rowDir    = isRtl ? 'row-reverse' : 'row';
     var iconHtml  = svgIcon(PATHS[iconKey] || PATHS.bag, color, 30);
-    return '<div class="s2-metric-card fade-up" style="flex:1;min-width:0;background:#0b1120;border:1px solid rgba(255,255,255,0.10);border-radius:16px;padding:32px;display:flex;align-items:center;gap:24px;flex-direction:' + rowDir + ';animation-delay:' + delay + 'ms;box-shadow:inset 0 0 30px ' + color + '08;">' +
+    return '<div class="s2-metric-card fade-up" style="flex:1;min-width:0;background:var(--dash-surface);border:1px solid rgba(255,255,255,0.10);border-radius:var(--dash-radius-xl);padding:32px;display:flex;align-items:center;gap:24px;flex-direction:' + rowDir + ';animation-delay:' + delay + 'ms;box-shadow:inset 0 0 30px ' + color + '08;">' +
       '<div class="s2-metric-text" style="flex:1;text-align:' + textAlign + ';">' +
-        '<div class="s2-metric-label" style="font-size:14px;color:rgba(255,255,255,0.6);font-weight:600;margin-bottom:8px;">' + label + window.supposedBadgeHtml(label) + '</div>' +
-        '<div class="s2-metric s2-metric-value" data-to="' + value + '" data-decimals="' + (isPercent ? '1' : '0') + '" data-suffix="' + (isPercent ? '%' : '') + '" id="' + animId + '" style="font-size:40px;font-weight:900;line-height:1;letter-spacing:-2px;color:' + color + ';text-shadow:0 0 20px ' + color + '55;">0</div>' +
-        '<div class="s2-metric-sub" style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:8px;">' + sub + '</div>' +
+        '<div class="s2-metric-label" style="font-size:var(--type-body);color:var(--dash-text-muted);font-weight:var(--weight-semibold);margin-bottom:8px;">' + label + window.supposedBadgeHtml(label) + '</div>' +
+        '<div class="s2-metric s2-metric-value" data-to="' + value + '" data-decimals="' + (isPercent ? '1' : '0') + '" data-suffix="' + (isPercent ? '%' : '') + '" id="' + animId + '" style="font-size:var(--type-hero);font-weight:var(--weight-semibold);line-height:1;letter-spacing:-2px;color:' + color + ';text-shadow:0 0 20px ' + color + '55;">0</div>' +
+        '<div class="s2-metric-sub" style="font-size:var(--type-label);color:var(--dash-text-faint);margin-top:8px;">' + sub + '</div>' +
       '</div>' +
       '<div class="s2-metric-icon" style="width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:radial-gradient(circle,' + color + '28 0%,' + color + '0a 70%);border:1.5px solid ' + color + ';box-shadow:0 0 22px ' + color + '66,0 0 40px ' + color + '33,inset 0 0 16px ' + color + '33;">' +
         iconHtml +
@@ -375,27 +398,34 @@ window.renderSection2 = function (mountEl, data, ctx) {
     }, 0);
   }
 
+  function sourceStageCount(ids) {
+    ids = Array.isArray(ids) ? ids : [ids];
+    return (Array.isArray(sourceStages) ? sourceStages : []).reduce(function (sum, stage) {
+      return stage && ids.indexOf(stage.id) !== -1 ? sum + Number(stage.count || 0) : sum;
+    }, 0);
+  }
+
   function analyticsCardHtml(iconKey, color, label, value, sub, suffix, animId, delay) {
     var isRtl     = window.dashboardI18n ? window.dashboardI18n.isRtl() : true;
     var textAlign = isRtl ? 'right' : 'left';
     var rowDir    = isRtl ? 'row-reverse' : 'row';
-    return '<div class="s2-analytics-card fade-up" style="min-width:0;background:#0b1120;border:1px solid ' + color + '38;border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:14px;flex-direction:' + rowDir + ';animation-delay:' + delay + 'ms;box-shadow:inset 0 0 24px ' + color + '08;">' +
-      '<div style="width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + color + '18;border:1px solid ' + color + '55;color:' + color + ';">' +
+    return '<div class="s2-analytics-card fade-up" style="min-width:0;background:var(--dash-surface);border:1px solid ' + color + '38;border-radius:var(--dash-radius-lg);padding:16px 18px;display:flex;align-items:center;gap:14px;flex-direction:' + rowDir + ';animation-delay:' + delay + 'ms;box-shadow:inset 0 0 24px ' + color + '08;">' +
+      '<div style="width:42px;height:42px;border-radius:var(--dash-radius-md);display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + color + '18;border:1px solid ' + color + '55;color:' + color + ';">' +
         svgIcon(PATHS[iconKey] || PATHS.barChart, color, 20) +
       '</div>' +
       '<div style="min-width:0;flex:1;text-align:' + textAlign + ';">' +
-        '<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.48);margin-bottom:7px;">' + label + window.supposedBadgeHtml(label) + '</div>' +
-        '<div class="s2-metric s2-analytics-value" data-to="' + value + '" data-decimals="' + (suffix === '%' ? '1' : '0') + '" data-suffix="' + (suffix || '') + '" id="' + animId + '" style="font-size:26px;font-weight:900;line-height:1;color:#fff;font-variant-numeric:tabular-nums;">0</div>' +
-        '<div style="font-size:11px;color:rgba(255,255,255,0.42);margin-top:7px;line-height:1.35;">' + sub + '</div>' +
+        '<div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.48);margin-bottom:7px;">' + label + window.supposedBadgeHtml(label) + '</div>' +
+        '<div class="s2-metric s2-analytics-value" data-to="' + value + '" data-decimals="' + (suffix === '%' ? '1' : '0') + '" data-suffix="' + (suffix || '') + '" id="' + animId + '" style="font-size:var(--type-page-title);font-weight:var(--weight-semibold);line-height:1;color:#fff;font-variant-numeric:tabular-nums;">0</div>' +
+        '<div style="font-size:var(--type-caption);color:rgba(255,255,255,0.42);margin-top:7px;line-height:1.35;">' + sub + '</div>' +
       '</div>' +
     '</div>';
   }
 
   function buildAnalyticsCards() {
     var total = Number(metrics.netOrderCount || 0);
-    var activeCount = stageCount(['received', 'confirmed', 'waiting', 'shipping']);
-    var preShipCount = stageCount(['received', 'confirmed', 'waiting']);
-    var shippingCount = stageCount('shipping');
+    var activeCount = metrics.activeCount != null ? Number(metrics.activeCount || 0) : sourceStageCount(['received', 'confirmed', 'processing', 'waiting', 'shipping']);
+    var preShipCount = sourceStageCount(['received', 'confirmed', 'processing', 'waiting']);
+    var shippingCount = sourceStageCount('shipping') || stageCount('shipping');
     var deliveredCount = Number(metrics.deliveredCount || stageCount('delivered') || 0);
     var failedCount = Number(metrics.failedCount || stageCount('lost') || 0);
     var resolvedCount = deliveredCount + failedCount;
@@ -457,9 +487,9 @@ window.renderSection2 = function (mountEl, data, ctx) {
         iconHtml +
       '</div>' +
       '<div class="s2-insight-text" style="flex:1;text-align:' + textAlign + ';">' +
-        '<div class="s2-insight-title" style="font-size:14px;font-weight:800;margin-bottom:8px;color:' + ins.color + ';text-shadow:0 0 12px ' + ins.color + '55;">' + ins.title + '</div>' +
-        '<div class="s2-insight-body" style="font-size:12px;color:rgba(255,255,255,0.6);line-height:1.6;">' + bodyEscaped + '</div>' +
-        (ins.highlight ? '<div class="s2-insight-highlight" style="font-size:13px;font-weight:700;margin-top:6px;color:' + ins.color + ';">' + ins.highlight + '</div>' : '') +
+        '<div class="s2-insight-title" style="font-size:var(--type-body);font-weight:var(--weight-semibold);margin-bottom:8px;color:' + ins.color + ';text-shadow:0 0 12px ' + ins.color + '55;">' + ins.title + '</div>' +
+        '<div class="s2-insight-body" style="font-size:var(--type-label);color:var(--dash-text-muted);line-height:1.6;">' + bodyEscaped + '</div>' +
+        (ins.highlight ? '<div class="s2-insight-highlight" style="font-size:var(--type-control);font-weight:var(--weight-semibold);margin-top:6px;color:' + ins.color + ';">' + ins.highlight + '</div>' : '') +
       '</div>' +
     '</div>';
   }
@@ -485,12 +515,12 @@ window.renderSection2 = function (mountEl, data, ctx) {
 
   /* ── Full HTML ───────────────────────────────────────────────────────────── */
   var html =
-    '<div class="dash-scroll" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;background:#080b12;direction:' + dirStr + ';">' +
+    '<div class="dash-scroll" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;background:var(--dash-bg);direction:' + dirStr + ';">' +
 
       '<div class="s2-header" style="padding:32px 40px;display:flex;flex-direction:row;justify-content:space-between;align-items:center;gap:16px;">' +
         '<div style="text-align:' + (isRtl ? 'right' : 'left') + ';flex:1;">' +
-          '<h1 id="s2-h1" style="font-size:36px;font-weight:900;color:var(--dash-text,#fff);margin:0;line-height:1.15;opacity:0;transform:translateY(-8px);transition:opacity 0.4s ease,transform 0.4s ease;">' + s2Txt('Status Pipeline', 'مسار الحالات') + '</h1>' +
-          '<div id="s2-sub" style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--dash-text-faint,rgba(255,255,255,0.5));margin-top:8px;justify-content:flex-' + (isRtl ? 'end' : 'start') + ';flex-direction:' + (isRtl ? 'row-reverse' : 'row') + ';opacity:0;transition:opacity 0.4s ease 0.12s;">' +
+          '<h1 id="s2-h1" style="font-size:var(--type-display);font-weight:var(--weight-bold);color:var(--dash-text,#fff);margin:0;line-height:1.15;opacity:0;transform:translateY(-8px);transition:opacity 0.4s ease,transform 0.4s ease;">' + s2Txt('Status Pipeline', 'مسار الحالات') + '</h1>' +
+          '<div id="s2-sub" style="display:flex;align-items:center;gap:8px;font-size:var(--type-control);color:var(--dash-text-faint,rgba(255,255,255,0.5));margin-top:8px;justify-content:flex-' + (isRtl ? 'end' : 'start') + ';flex-direction:' + (isRtl ? 'row-reverse' : 'row') + ';opacity:0;transition:opacity 0.4s ease 0.12s;">' +
             s2Txt('Track order status and performance from creation to final delivery', 'تتبع حالة وأداء الطلبات من لحظة استلامها وحتى وصولها النهائي للعميل') +
             svgIcon(PATHS.info, '#3b82f6', 14) +
           '</div>' +
@@ -517,10 +547,10 @@ window.renderSection2 = function (mountEl, data, ctx) {
             metricCardHtml('xCircle',  '#ef4444', s2Txt('Overall Failure Rate', 'معدل الفشل الإجمالي'),  metrics.failureRate,  Number(metrics.failedCount    || 0).toLocaleString('en-US') + s2Txt(' orders', ' طلب'),            true, 's2-m2', 300) +
           '</div>' +
 
-          '<div class="s2-analytics-box fade-up" style="background:#0b1120;border:1px solid rgba(255,255,255,0.10);border-radius:16px;padding:22px;animation-delay:500ms;">' +
+          '<div class="s2-analytics-box fade-up" style="background:var(--dash-surface);border:1px solid rgba(255,255,255,0.10);border-radius:var(--dash-radius-xl);padding:22px;animation-delay:500ms;">' +
             '<div style="display:flex;align-items:center;gap:10px;justify-content:flex-' + (isRtl ? 'end' : 'start') + ';margin-bottom:14px;flex-direction:' + (isRtl ? 'row-reverse' : 'row') + ';">' +
               svgIcon(PATHS.barChart, '#22d3ee', 18) +
-              '<span style="font-size:18px;font-weight:800;color:#fff;">' + s2Txt('Order Analytics & Funnel', 'تحليلات وحالة الطلبات') + '</span>' +
+              '<span style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff;">' + s2Txt('Order Analytics & Funnel', 'تحليلات وحالة الطلبات') + '</span>' +
             '</div>' +
             '<div class="s2-analytics-grid" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;">' +
               buildAnalyticsCards().map(function (card, i) {
@@ -529,10 +559,10 @@ window.renderSection2 = function (mountEl, data, ctx) {
             '</div>' +
           '</div>' +
 
-          '<div class="s2-insights-box fade-up" style="background:#0b1120;border:1px solid rgba(255,255,255,0.10);border-radius:16px;padding:28px;animation-delay:600ms;">' +
+          '<div class="s2-insights-box fade-up" style="background:var(--dash-surface);border:1px solid rgba(255,255,255,0.10);border-radius:var(--dash-radius-xl);padding:28px;animation-delay:600ms;">' +
             '<div class="s2-insights-head" style="display:flex;align-items:center;gap:10px;justify-content:flex-' + (isRtl ? 'end' : 'start') + ';margin-bottom:16px;flex-direction:' + (isRtl ? 'row-reverse' : 'row') + ';">' +
-              '<span style="font-size:20px;color:#a855f7;text-shadow:0 0 12px #a855f7aa;">✦</span>' +
-              '<span style="font-size:20px;font-weight:800;color:#fff;letter-spacing:0.5px;">' + s2Txt('Quick Insights', 'رؤى سريعة') + '</span>' +
+              '<span style="font-size:var(--type-metric-sm);color:#a855f7;text-shadow:0 0 12px #a855f7aa;">✦</span>' +
+              '<span style="font-size:var(--type-metric-sm);font-weight:var(--weight-bold);color:#fff;letter-spacing:0.5px;">' + s2Txt('Quick Insights', 'رؤى سريعة') + '</span>' +
             '</div>' +
             '<div class="s2-insights-grid" style="display:flex;flex-wrap:nowrap;border-top:1px solid rgba(255,255,255,0.05);">' +
               buildDynamicInsights().map(function (ins, i) { return insightHtml(ins, i); }).join(
@@ -560,7 +590,7 @@ window.renderSection2 = function (mountEl, data, ctx) {
     }, { ariaLabel: raw(s2Txt('Last 30 days', 'عرض 30 يوم')) });
   } else if (periodWrap) {
     periodWrap.innerHTML =
-      '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.10);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.9);font-size:13px;font-weight:600;font-family:inherit;flex-direction:' + (isRtl ? 'row-reverse' : 'row') + ';">' +
+      '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--dash-radius-md);border:1px solid rgba(255,255,255,0.10);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.9);font-size:var(--type-control);font-weight:var(--weight-semibold);font-family:inherit;flex-direction:' + (isRtl ? 'row-reverse' : 'row') + ';">' +
         svgIcon(PATHS.calendar, 'rgba(255,255,255,0.6)', 16) +
         '<select id="s2-period-select" style="background:transparent;border:none;color:#fff;outline:none;font:inherit;cursor:pointer;">' +
           periodOptions.map(function (opt) {

@@ -1,4 +1,4 @@
-﻿// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // section9-product-forecast.js — Product-Level Smart Forecasting Engine
 // Parity with Account Calculator (Section 7) — same inputs, tooltips, metrics
 // ─────────────────────────────────────────────────────────────────────────────
@@ -42,7 +42,15 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   var observer = new MutationObserver(function (mutations) {
     mutations.forEach(function (mutation) {
       if (mutation.attributeName === 'data-theme') {
-        window.renderSectionProductForecast(mountEl, data, ctx);
+        if (!mountEl.isConnected || mountEl.hidden) {
+          mountEl._dashboardNeedsRefresh = true;
+          return;
+        }
+        var refresh = function () {
+          if (mountEl.isConnected && !mountEl.hidden) window.renderSectionProductForecast(mountEl, data, ctx);
+        };
+        if (window.TaagerAfterNextPaint) window.TaagerAfterNextPaint(refresh);
+        else setTimeout(refresh, 0);
       }
     });
   });
@@ -53,7 +61,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   var rawPd = (data && data.products && data.products.rankedList) ? data.products.rankedList : [];
 
   if (!rawPd.length) {
-    mountEl.innerHTML = '<div style="padding:40px;text-align:center;color:rgba(255,255,255,0.4)">' + p9Txt('No product data available for simulation', 'لا توجد بيانات منتجات متاحة للمحاكاة') + '</div>';
+    mountEl.innerHTML = '<div style="padding:40px;text-align:center;color:var(--dash-text-faint)">' + p9Txt('No product data available for simulation', 'لا توجد بيانات منتجات متاحة للمحاكاة') + '</div>';
     return;
   }
 
@@ -428,8 +436,8 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   }
   function skuCopyRowHtml(sim) {
     var sku = String(sim && sim.sku || '').trim();
-    var skuHtml = skuCopyHtml(sku, { style: 'color:#2dd4bf;font-size:10px;font-weight:800' });
-    return '<div data-i18n-preserve style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:10px;font-weight:800;color:rgba(255,255,255,.54)">' +
+    var skuHtml = skuCopyHtml(sku, { style: 'color:#2dd4bf;font-size:var(--type-micro);font-weight:var(--weight-semibold)' });
+    return '<div data-i18n-preserve style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:var(--type-micro);font-weight:var(--weight-semibold);color:rgba(255,255,255,.54)">' +
       skuHtml +
       '<span style="color:#f59e0b;min-width:0">&middot; ' + escapeHtml(matchMethodLabel(sim)) + '</span>' +
     '</div>';
@@ -623,9 +631,10 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   }
 
   function setSimDeliveredOrders(s, delivered) {
+    var totalOrders = Math.max(0, Math.round(Number(s.totalOrders) || 0));
     s.deliveredOrders = Math.max(0, Math.round(Number(delivered) || 0));
-    if (s.deliveredOrders === 0) s.ndr = 0;
-    if (s.ndr > 0) s.totalOrders = Math.max(s.deliveredOrders, Math.ceil(s.deliveredOrders / s.ndr));
+    if (totalOrders > 0 && s.deliveredOrders > totalOrders) s.deliveredOrders = totalOrders;
+    s.ndr = totalOrders > 0 ? (s.deliveredOrders / totalOrders) : 0;
     s.expectedDeliveriesExact = s.deliveredOrders;
     s.isModified = true;
   }
@@ -666,7 +675,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     ].map(function (lbl) {
       var deg = START + ((lbl.pct + 100) / 400) * SPAN;
       var p = pt(R + SW / 2 + 18, deg);
-      return '<text x="' + p.x.toFixed(2) + '" y="' + p.y.toFixed(2) + '" text-anchor="' + lbl.anchor + '" dominant-baseline="middle" fill="rgba(255,255,255,0.5)" font-size="11" font-weight="700" font-family="Cairo,sans-serif" direction="ltr">' + lbl.text + '</text>';
+      return '<text x="' + p.x.toFixed(2) + '" y="' + p.y.toFixed(2) + '" text-anchor="' + lbl.anchor + '" dominant-baseline="middle" fill="rgba(255,255,255,0.5)" font-size="11" font-weight="700" font-family="Inter, IBM Plex Sans Arabic, sans-serif" direction="ltr">' + lbl.text + '</text>';
     }).join('');
     return '<svg viewBox="0 0 380 250" width="100%" height="220" style="height:auto">' +
       '<defs><linearGradient id="s9g" x1="0%" y1="100%" x2="100%" y2="0%">' +
@@ -676,8 +685,8 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       labelsHtml +
       '<polygon points="' + tip.x.toFixed(2) + ',' + tip.y.toFixed(2) + ' ' + bl.x.toFixed(2) + ',' + bl.y.toFixed(2) + ' ' + br.x.toFixed(2) + ',' + br.y.toFixed(2) + '" fill="white" style="filter:drop-shadow(0 0 4px rgba(255,255,255,0.8))"/>' +
       '<circle cx="' + cx + '" cy="' + cy + '" r="8" fill="#fff"/>' +
-      '<text x="' + cx + '" y="' + (cy + 25) + '" text-anchor="middle" fill="' + roiColor + '" font-size="42" font-weight="900" font-family="Cairo,sans-serif" direction="ltr">' + formattedRoi + '</text>' +
-      '<text x="' + cx + '" y="' + (cy + 62) + '" text-anchor="middle" fill="' + roiColor + '" font-size="13" font-weight="800" font-family="Cairo,sans-serif">● ' + p9Txt(roi < 0 ? 'Loss' : roi < 50 ? 'Near Breakeven' : 'Profitable', roi < 0 ? 'خسارة' : roi < 50 ? 'قريب من التعادل' : 'مربح') + '</text>' +
+      '<text x="' + cx + '" y="' + (cy + 25) + '" text-anchor="middle" fill="' + roiColor + '" font-size="42" font-weight="700" font-family="Inter, IBM Plex Sans Arabic, sans-serif" direction="ltr">' + formattedRoi + '</text>' +
+      '<text x="' + cx + '" y="' + (cy + 62) + '" text-anchor="middle" fill="' + roiColor + '" font-size="13" font-weight="700" font-family="Inter, IBM Plex Sans Arabic, sans-serif">● ' + p9Txt(roi < 0 ? 'Loss' : roi < 50 ? 'Near Breakeven' : 'Profitable', roi < 0 ? 'خسارة' : roi < 50 ? 'قريب من التعادل' : 'مربح') + '</text>' +
       '</svg>';
   }
 
@@ -703,11 +712,11 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
   }
 
   function _kpiMiniTip(label, val, color, icon, tipTitle, tipDesc, tipFormula) {
-    return '<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:12px;padding:14px;text-align:center;position:relative">' +
-      '<div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:6px;display:flex;align-items:center;justify-content:center;gap:5px">' +
+    return '<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:var(--dash-radius-md);padding:14px;text-align:center;position:relative">' +
+      '<div style="font-size:var(--type-caption);color:var(--dash-text-faint);margin-bottom:6px;display:flex;align-items:center;justify-content:center;gap:5px">' +
         label + ' ' + _tip(icon, tipTitle, tipDesc, tipFormula) +
       '</div>' +
-      '<div class="s9-metric-val" style="font-size:17px;font-weight:900;color:' + color + '">' + val + '</div>' +
+      '<div class="s9-metric-val" style="font-size:var(--type-section-title);font-weight:var(--weight-semibold);color:' + color + '">' + val + '</div>' +
     '</div>';
   }
 
@@ -733,15 +742,15 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       '<div id="s7-tip-inner" style="' +
         'background:rgba(8,12,24,0.98);' +
         'border:1px solid rgba(59,130,246,0.45);' +
-        'border-radius:13px;' +
+        'border-radius:var(--dash-radius-lg);' +
         'padding:14px 16px;' +
         'box-shadow:0 12px 40px rgba(0,0,0,0.8),0 0 0 1px rgba(255,255,255,0.05) inset;' +
-        'font-family:Cairo,sans-serif' +
+        'font-family:var(--font-ui);' +
       '">' +
-        '<div id="s7-tip-title" style="font-size:11px;font-weight:800;letter-spacing:.05em;color:#93c5fd;margin-bottom:7px;display:flex;align-items:center;gap:5px;"></div>' +
-        '<div id="s7-tip-desc"  style="font-size:12px;color:rgba(255,255,255,0.75);line-height:1.65;margin-bottom:0"></div>' +
-        '<div id="s7-tip-flbl"  style="display:none;font-size:9px;font-weight:700;letter-spacing:.12em;color:rgba(255,255,255,0.25);text-transform:uppercase;margin-top:9px;margin-bottom:4px;"></div>' +
-        '<div id="s7-tip-fbox"  style="display:none;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.25);border-radius:7px;padding:7px 10px;font-size:11px;color:#60a5fa;font-family:Courier New,monospace;direction:ltr;line-height:1.5;word-break:break-all"></div>' +
+        '<div id="s7-tip-title" style="font-size:var(--type-caption);font-weight:var(--weight-semibold);letter-spacing:.05em;color:#93c5fd;margin-bottom:7px;display:flex;align-items:center;gap:5px;"></div>' +
+        '<div id="s7-tip-desc"  style="font-size:var(--type-label);color:rgba(255,255,255,0.75);line-height:1.65;margin-bottom:0"></div>' +
+        '<div id="s7-tip-flbl"  style="display:none;font-size:var(--type-micro);font-weight:var(--weight-semibold);letter-spacing:.12em;color:rgba(255,255,255,0.25);text-transform:uppercase;margin-top:9px;margin-bottom:4px;"></div>' +
+        '<div id="s7-tip-fbox"  style="display:none;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.25);border-radius:var(--dash-radius-sm);padding:7px 10px;font-size:var(--type-caption);color:#60a5fa;font-family:var(--font-mono);direction:ltr;line-height:1.5;word-break:break-all"></div>' +
       '</div>' +
       '<div id="s7-tip-arrow" style="' +
         'position:absolute;width:10px;height:10px;' +
@@ -1001,9 +1010,9 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
 
       return '<tr style="' + trStyle + '" data-idx="' + absoluteIdx + '" class="s9-row">' +
         '<td data-i18n-preserve class="s9-product-cell">' + s.name +
-          (s.combination ? '<span style="display:inline-flex;margin-inline-start:6px;padding:2px 6px;border-radius:999px;background:rgba(168,85,247,.14);border:1px solid rgba(168,85,247,.32);color:#c4b5fd;font-size:9px;font-weight:900;vertical-align:middle;">' + p9Txt('COMBINED', 'مدمج') + '</span>' : '') +
-          skuCopyHtml(s.combination ? s.combination.skus.join(' + ') : (s.sku || ''), { emptyText: 'N/A', block: true, style: 'font-size:10px;font-weight:700;color:rgba(255,255,255,.42);margin-top:3px' }) +
-          '<div style="font-size:10px;font-weight:700;color:' + (s.syncedAdSpend ? '#2dd4bf' : '#f59e0b') + ';margin-top:3px;">' + matchMethodLabel(s) + '</div>' +
+          (s.combination ? '<span style="display:inline-flex;margin-inline-start:6px;padding:2px 6px;border-radius:var(--radius-pill);background:rgba(168,85,247,.14);border:1px solid rgba(168,85,247,.32);color:#c4b5fd;font-size:var(--type-micro);font-weight:var(--weight-semibold);vertical-align:middle;">' + p9Txt('COMBINED', 'مدمج') + '</span>' : '') +
+          skuCopyHtml(s.combination ? s.combination.skus.join(' + ') : (s.sku || ''), { emptyText: 'N/A', block: true, style: 'font-size:var(--type-micro);font-weight:var(--weight-semibold);color:rgba(255,255,255,.42);margin-top:3px' }) +
+          '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:' + (s.syncedAdSpend ? '#2dd4bf' : '#f59e0b') + ';margin-top:3px;">' + matchMethodLabel(s) + '</div>' +
         '</td>' +
         '<td class="s9-number-cell">' + p9Num(s.realOrders) + '</td>' +
         '<td class="s9-number-cell s9-number-cell--confirmed">' + p9Num(s.realConfirmed) + '</td>' +
@@ -1019,7 +1028,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       '</tr>';
     }).join('');
     if (!rows) {
-      rows = '<tr><td colspan="7" style="padding:28px 16px;text-align:center;color:rgba(255,255,255,0.45);font-size:13px;font-weight:700;">' +
+      rows = '<tr><td colspan="7" style="padding:28px 16px;text-align:center;color:rgba(255,255,255,0.45);font-size:var(--type-control);font-weight:var(--weight-semibold);">' +
         (tableSearchQuery
           ? p9Txt('No product matches this search.', 'لا يوجد منتج مطابق لهذا البحث.')
           : p9Txt('No products available.', 'لا توجد منتجات متاحة.')) +
@@ -1055,27 +1064,27 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     return '<div class="s9-table-container dash-scroll">' +
       '<div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.01);">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">' +
-          '<div style="font-size:16px;font-weight:800;color:#fff;">' + p9Txt('Products', 'المنتجات') + '</div>' +
+          '<div style="font-size:var(--type-subtitle);font-weight:var(--weight-semibold);color:#fff;">' + p9Txt('Products', 'المنتجات') + '</div>' +
           '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
-            '<button type="button" id="s9-combine-products" class="s9-combine-products-btn" style="border:1px solid rgba(168,85,247,.42);background:rgba(168,85,247,.13);color:#c4b5fd;border-radius:9px;padding:7px 11px;font-size:11px;font-weight:900;font-family:inherit;cursor:pointer;">+ ' + p9Txt('Combine Products', 'دمج المنتجات') + '</button>' +
+            '<button type="button" id="s9-combine-products" class="s9-combine-products-btn" style="border:1px solid rgba(168,85,247,.42);background:rgba(168,85,247,.13);color:#c4b5fd;border-radius:var(--dash-radius-sm);padding:7px 11px;font-size:var(--type-caption);font-weight:var(--weight-semibold);font-family:inherit;cursor:pointer;">+ ' + p9Txt('Combine Products', 'دمج المنتجات') + '</button>' +
             '<button type="button" id="s9-clear-sort" class="s9-clear-sort"' + (tableSortBy ? '' : ' disabled') + '>' + p9Txt('Clear sort', 'مسح الترتيب') + '</button>' +
           '</div>' +
         '</div>' +
-        '<div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:2px;">' + p9Txt('Enter budget per product to see forecasts.', 'أدخل الميزانية لكل منتج لرؤية التوقعات.') + '</div>' +
-        '<div style="display:block;margin-top:10px;padding:8px 10px;border:1px solid rgba(45,212,191,.18);border-radius:10px;background:rgba(45,212,191,.06);">' +
+        '<div style="font-size:var(--type-label);color:var(--dash-text-faint);margin-top:2px;">' + p9Txt('Enter budget per product to see forecasts.', 'أدخل الميزانية لكل منتج لرؤية التوقعات.') + '</div>' +
+        '<div style="display:block;margin-top:10px;padding:8px 10px;border:1px solid rgba(45,212,191,.18);border-radius:var(--dash-radius-md);background:rgba(45,212,191,.06);">' +
           '<div style="display:flex;flex-direction:column;gap:2px;min-width:0;">' +
-            '<span style="font-size:11px;color:#2dd4bf;font-weight:900;">' + p9Txt('Marketing sync period', 'Marketing sync period') + ': ' + productSyncPeriodLabel() + ' · ' + p9Txt('Spend platform', 'منصة الإنفاق') + ': ' + FORECAST_PLATFORMS.filter(function (platform) { return platform.id === selectedMarketingPlatform; })[0].label + '</span>' +
-            '<span style="font-size:10px;color:rgba(255,255,255,.48);font-weight:700;">' + p9Txt('Matched products', 'المنتجات المطابقة') + ': ' + syncedProductCount + ' / ' + simulations.length + ' · ' + p9Txt('Separated SKU', 'SKU منفصل') + ': ' + matchSummary.separatedSkuRows + ' · ' + p9Txt('Glued SKU', 'SKU ملتصق') + ': ' + matchSummary.gluedSkuRows + ' · ' + p9Txt('Name fallback', 'مطابقة الاسم') + ': ' + matchSummary.nameRows + ' · ' + p9Txt('Ambiguous', 'ملتبس') + ': ' + matchSummary.ambiguousRows + ' · ' + p9Txt('Unmatched', 'غير مطابق') + ': ' + matchSummary.unmatchedRows + '</span>' +
-            '<span style="font-size:10px;color:#f59e0b;font-weight:700;">' + p9Txt('Best accuracy: include the product SKU in each TikTok, Snapchat, or Facebook campaign name. If no SKU is present, fallback requires the complete normalized product name. Campaigns containing an unknown SKU stay unmatched to prevent incorrect spend allocation.', 'لأدق نتيجة: ضع SKU المنتج داخل اسم كل حملة تيك توك أو سناب شات أو فيسبوك. تقبل مطابقة الاسم كلمة مميزة واحدة أو عبارة مطابقة مع توحيد اختلافات الكتابة العربية الشائعة. قد تحتاج أسماء الحملات التاريخية المعدلة إلى تحديث بيانات الحملات قبل أن تظهر هنا.') + '</span>' +
+            '<span style="font-size:var(--type-caption);color:#2dd4bf;font-weight:var(--weight-semibold);">' + p9Txt('Marketing sync period', 'Marketing sync period') + ': ' + productSyncPeriodLabel() + ' · ' + p9Txt('Spend platform', 'منصة الإنفاق') + ': ' + FORECAST_PLATFORMS.filter(function (platform) { return platform.id === selectedMarketingPlatform; })[0].label + '</span>' +
+            '<span style="font-size:var(--type-micro);color:rgba(255,255,255,.48);font-weight:var(--weight-semibold);">' + p9Txt('Matched products', 'المنتجات المطابقة') + ': ' + syncedProductCount + ' / ' + simulations.length + ' · ' + p9Txt('Separated SKU', 'SKU منفصل') + ': ' + matchSummary.separatedSkuRows + ' · ' + p9Txt('Glued SKU', 'SKU ملتصق') + ': ' + matchSummary.gluedSkuRows + ' · ' + p9Txt('Name fallback', 'مطابقة الاسم') + ': ' + matchSummary.nameRows + ' · ' + p9Txt('Ambiguous', 'ملتبس') + ': ' + matchSummary.ambiguousRows + ' · ' + p9Txt('Unmatched', 'غير مطابق') + ': ' + matchSummary.unmatchedRows + '</span>' +
+            '<span style="font-size:var(--type-micro);color:#f59e0b;font-weight:var(--weight-semibold);">' + p9Txt('Best accuracy: include the product SKU in each TikTok, Snapchat, or Facebook campaign name. If no SKU is present, fallback requires the complete normalized product name. Campaigns containing an unknown SKU stay unmatched to prevent incorrect spend allocation.', 'لأدق نتيجة: ضع SKU المنتج داخل اسم كل حملة تيك توك أو سناب شات أو فيسبوك. تقبل مطابقة الاسم كلمة مميزة واحدة أو عبارة مطابقة مع توحيد اختلافات الكتابة العربية الشائعة. قد تحتاج أسماء الحملات التاريخية المعدلة إلى تحديث بيانات الحملات قبل أن تظهر هنا.') + '</span>' +
           '</div>' +
         '</div>' +
         '<div class="s9-platform-tabs" aria-label="' + p9Txt('Advertising spend platform', 'منصة الإنفاق الإعلاني') + '">' + platformTabs + '</div>' +
         '<div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">' +
           '<div style="flex:1;min-width:220px;position:relative;">' +
             '<input type="search" id="s9-product-search" value="' + escapeHtml(tableSearchQuery) + '" placeholder="' + p9Txt('Search product name or SKU...', 'ابحث باسم المنتج أو SKU...') + '" ' +
-              'style="width:100%;box-sizing:border-box;background:#0b1120;border:1px solid rgba(255,255,255,0.10);border-radius:10px;color:#fff;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;padding:9px 12px;outline:none;transition:border-color .18s,box-shadow .18s;" />' +
+              'style="width:100%;box-sizing:border-box;background:var(--dash-surface);border:1px solid rgba(255,255,255,0.10);border-radius:var(--dash-radius-md);color:#fff;font-family:var(--font-ui);font-size:var(--type-label);font-weight:var(--weight-semibold);padding:9px 12px;outline:none;transition:border-color .18s,box-shadow .18s;" />' +
           '</div>' +
-          '<div style="font-size:11px;color:rgba(255,255,255,0.42);font-weight:800;white-space:nowrap;">' +
+          '<div style="font-size:var(--type-caption);color:rgba(255,255,255,0.42);font-weight:var(--weight-semibold);white-space:nowrap;">' +
             p9Txt('Showing', 'يعرض') + ' ' + totalFilteredRows + ' / ' + simulations.length +
           '</div>' +
         '</div>' +
@@ -1091,15 +1100,15 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
             '<col class="s9-col-budget">' +
             '<col class="s9-col-profit">' +
           '</colgroup>' +
-          '<thead style="position:sticky;top:0;background:#0b0f19;z-index:10;border-bottom:1px solid rgba(255,255,255,0.06);font-size:11px;color:rgba(255,255,255,0.4);">' +
+          '<thead style="position:sticky;top:0;background:#0b0f19;z-index:10;border-bottom:1px solid rgba(255,255,255,0.06);font-size:var(--type-caption);color:var(--dash-text-faint);">' +
             '<tr>' +
-              '<th style="padding:10px 16px;font-weight:600;">' + sortHeader(p9Txt('Product', 'المنتج'), 'product') + '</th>' +
-              '<th style="padding:10px 16px;font-weight:600;">' + sortHeader(p9Txt('Net Orders', 'صافي الطلبات'), 'orders') + '</th>' +
-              '<th style="padding:10px 16px;font-weight:600;">' + sortHeader(p9Txt('Confirmed Orders', 'الطلبات المؤكدة'), 'confirmed') + '</th>' +
-              '<th style="padding:10px 16px;font-weight:600;">' + sortHeader(p9Txt('Delivered Orders', 'الطلبات المسلمة'), 'delivered') + '</th>' +
-              '<th style="padding:10px 16px;font-weight:600;">' + sortHeader('NDR ' + p9Txt('Real', 'الفعلي'), 'ndr') + '</th>' +
-              '<th style="padding:10px 16px;font-weight:600;">' + sortHeader(p9Txt('Ad Budget', 'الميزانية الإعلانية') + ' (' + viewCurrency + ')', 'spend') + '</th>' +
-              '<th style="padding:10px 16px;font-weight:600;text-align:left;">' + sortHeader(p9Txt('Net Profit', 'صافي الربح'), 'profit') + '</th>' +
+              '<th style="padding:10px 16px;font-weight:var(--weight-semibold);">' + sortHeader(p9Txt('Product', 'المنتج'), 'product') + '</th>' +
+              '<th style="padding:10px 16px;font-weight:var(--weight-semibold);">' + sortHeader(p9Txt('Net Orders', 'صافي الطلبات'), 'orders') + '</th>' +
+              '<th style="padding:10px 16px;font-weight:var(--weight-semibold);">' + sortHeader(p9Txt('Confirmed Orders', 'الطلبات المؤكدة'), 'confirmed') + '</th>' +
+              '<th style="padding:10px 16px;font-weight:var(--weight-semibold);">' + sortHeader(p9Txt('Delivered Orders', 'الطلبات المسلمة'), 'delivered') + '</th>' +
+              '<th style="padding:10px 16px;font-weight:var(--weight-semibold);">' + sortHeader('NDR ' + p9Txt('Real', 'الفعلي'), 'ndr') + '</th>' +
+              '<th style="padding:10px 16px;font-weight:var(--weight-semibold);">' + sortHeader(p9Txt('Ad Budget', 'الميزانية الإعلانية') + ' (' + viewCurrency + ')', 'spend') + '</th>' +
+              '<th style="padding:10px 16px;font-weight:var(--weight-semibold);text-align:left;">' + sortHeader(p9Txt('Net Profit', 'صافي الربح'), 'profit') + '</th>' +
             '</tr>' +
           '</thead>' +
           '<tbody>' + rows + '</tbody>' +
@@ -1127,9 +1136,9 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     if (!s) return '<div style="flex:1;"></div>';
     var c = computeSim(s);
 
-    // ── 4 product-level metric mini-cards (mirrors S7 "Real Bot Data" grid) ──
-    var metricsHtml =
-      '<div class="s9-kpi-grid">' +
+    // ── Product-level metric mini-cards (first row visible, details collapsed) ──
+    var primaryMetricsHtml =
+      '<div class="s9-kpi-grid s9-kpi-grid--primary">' +
         // Taager dashboard/status/NDR migration:
         // Average profit is derived from order profit minus tax profit, then averaged per delivered order.
         _kpiMiniTip(
@@ -1160,6 +1169,10 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
           p9Txt('Percentage of orders successfully delivered. Healthy baseline starts at 30%, with top tier at 40%+.', 'النسبة المئوية للطلبات التي تم تسليمها. المعيار الصحي يبدأ من 30%، وأعلى مستوى من 40% فأكثر.'),
           'NDR = deliveredOrders / totalOrders * 100'
         ) +
+      '</div>';
+
+    var detailMetricsHtml =
+      '<div class="s9-kpi-grid s9-kpi-grid--details">' +
         _kpiMiniTip(
           p9Txt('Average Profit', 'متوسط الربح'),
           valueStack(formatMoney(s.realCommission, true), 'profit', 's9-card-value-stack'), '#3b82f6', '💵',
@@ -1206,18 +1219,32 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         ) +
       '</div>';
 
+    var detailsExpanded = !!mountEl._s9ForecastDetailsExpanded;
+    var metricsHtml =
+      '<div class="s9-forecast-metrics">' +
+        primaryMetricsHtml +
+        '<details class="s9-forecast-details" ' + (detailsExpanded ? 'open' : '') + '>' +
+          '<summary class="s9-forecast-details-summary">' +
+            '<span class="s9-details-chevron">⌄</span>' +
+            '<span class="s9-details-text s9-details-text--closed">' + p9Txt('Press or click to expand for more details.', 'اضغط أو انقر للتوسيع لمزيد من التفاصيل.') + '</span>' +
+            '<span class="s9-details-text s9-details-text--open">' + p9Txt('Press or click to collapse details.', 'اضغط أو انقر لإخفاء التفاصيل.') + '</span>' +
+          '</summary>' +
+          detailMetricsHtml +
+        '</details>' +
+      '</div>';
+
     // ── Editable NDR input ────────────────────────────────────────────────────
     var ndrInputHtml =
-      '<div style="background:rgba(255,255,255,0.02);padding:16px;border-radius:12px;border:1px solid rgba(255,255,255,0.05);">' +
+      '<div style="background:rgba(255,255,255,0.02);padding:16px;border-radius:var(--dash-radius-md);border:1px solid rgba(255,255,255,0.05);">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-          '<label style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.7);display:flex;align-items:center;gap:5px;">' +
+          '<label style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.7);display:flex;align-items:center;gap:5px;">' +
             p9Txt('Net Delivery Rate (NDR)', 'نسبة التسليم (NDR)') + ' ' +
             _tip('📊',
               p9Txt('Net Delivery Rate (NDR)', 'نسبة التسليم (NDR)'),
               p9Txt('Percentage of orders delivered to customers. Below 20% is critical, 30%+ is healthy, 40%+ is top tier.', 'نسبة الطلبات التي وصلت للعميل. أقل من 20% خطر، 30% فأعلى صحي، 40% فأعلى أعلى مستوى.'),
               'NDR = deliveredOrders / totalOrders * 100') +
           '</label>' +
-          '<span style="font-size:11px;color:rgba(255,255,255,0.35);">' + p9Txt('Actual: ', 'الفعلي: ') + formatPct(s.realNdr) + '</span>' +
+          '<span style="font-size:var(--type-caption);color:rgba(255,255,255,0.35);">' + p9Txt('Actual: ', 'الفعلي: ') + formatPct(s.realNdr) + '</span>' +
         '</div>' +
         '<div class="sfe-input-wrap2">' +
           '<input type="number" class="s9-ndr-input sfe-input2" min="0" max="100" step="any" value="' + p9RatioPctValue(s.ndr) + '" placeholder="24" style="direction:ltr;">' +
@@ -1232,16 +1259,16 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
 
     // Editable average profit input. avgCommission is retained as a compatibility field.
     var commInputHtml =
-      '<div style="background:rgba(255,255,255,0.02);padding:16px;border-radius:12px;border:1px solid rgba(255,255,255,0.05);">' +
+      '<div style="background:rgba(255,255,255,0.02);padding:16px;border-radius:var(--dash-radius-md);border:1px solid rgba(255,255,255,0.05);">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-          '<label style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.7);display:flex;align-items:center;gap:5px;">' +
+          '<label style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.7);display:flex;align-items:center;gap:5px;">' +
             p9Txt('Average Profit / Delivered Order', 'متوسط الربح لكل طلب مسلم') + ' ' +
             _tip('💵',
               p9Txt('Average Profit / Delivered Order', 'متوسط الربح لكل طلب مسلم'),
               p9Txt('Editable average profit assumption used for forecast math. The real KPI above is average profit from the sheet.', 'افتراض متوسط الربح المستخدم في المحاكاة. المؤشر الحقيقي أعلاه هو متوسط الربح من الشيت.'),
               'totalProfitBeforeAdSpend = expectedDeliveriesExact * averageProfitPerDeliveredOrder') +
           '</label>' +
-          '<span style="font-size:11px;color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + toDisplay(s.realCommission).toFixed(2) + ' ' + viewCurrency + '</span>' +
+          '<span style="font-size:var(--type-caption);color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + toDisplay(s.realCommission).toFixed(2) + ' ' + viewCurrency + '</span>' +
         '</div>' +
         '<div class="sfe-input-wrap2">' +
           '<input type="number" class="s9-comm-input sfe-input2" min="1" step="0.5" value="' + toDisplay(s.avgCommission).toFixed(2) + '" placeholder="32.79" style="direction:ltr;">' +
@@ -1250,27 +1277,27 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       '</div>';
 
     var spendInputHtml =
-      '<div style="background:rgba(255,255,255,0.02);padding:16px;border-radius:12px;border:1px solid rgba(255,255,255,0.05);">' +
+      '<div style="background:rgba(255,255,255,0.02);padding:16px;border-radius:var(--dash-radius-md);border:1px solid rgba(255,255,255,0.05);">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-          '<label style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.7);display:flex;align-items:center;gap:5px;">' +
+          '<label style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.7);display:flex;align-items:center;gap:5px;">' +
             p9Txt('Scenario Ad Budget', 'ميزانية الإعلان في السيناريو') +
           '</label>' +
-          '<span style="font-size:11px;color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + formatMoney(s.realAdSpend, true) + '</span>' +
+          '<span style="font-size:var(--type-caption);color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + formatMoney(s.realAdSpend, true) + '</span>' +
         '</div>' +
         '<div class="sfe-input-wrap2">' +
           '<input type="number" class="s9-sim-spend-input sfe-input2" min="0" step="1" value="' + Math.round(toDisplay(s.adSpend)) + '" placeholder="0" style="direction:ltr;">' +
           '<span class="sfe-input-unit2">' + viewCurrency + '</span>' +
         '</div>' +
-        (isSpendLocked(s) ? '<div style="font-size:10px;color:#2dd4bf;font-weight:800;margin-top:8px">' + p9Txt('Actual spend is synced from marketing platforms for ', 'تمت مزامنة الإنفاق الفعلي من منصات التسويق للفترة ') + productSyncPeriodLabel() + '. ' + p9Txt('Edit the scenario budget above without changing the synced actual spend.', 'هذا الإنفاق مقفل لأنه جاء من منصة تسويق متصلة.') + '</div>' : '') +
+        (isSpendLocked(s) ? '<div style="font-size:var(--type-micro);color:#2dd4bf;font-weight:var(--weight-semibold);margin-top:8px">' + p9Txt('Actual spend is synced from marketing platforms for ', 'تمت مزامنة الإنفاق الفعلي من منصات التسويق للفترة ') + productSyncPeriodLabel() + '. ' + p9Txt('Edit the scenario budget above without changing the synced actual spend.', 'هذا الإنفاق مقفل لأنه جاء من منصة تسويق متصلة.') + '</div>' : '') +
       '</div>';
 
     var ordersInputHtml =
-      '<div style="background:rgba(255,255,255,0.02);padding:16px;border-radius:12px;border:1px solid rgba(255,255,255,0.05);">' +
+      '<div style="background:rgba(255,255,255,0.02);padding:16px;border-radius:var(--dash-radius-md);border:1px solid rgba(255,255,255,0.05);">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-          '<label style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.7);display:flex;align-items:center;gap:5px;">' +
+          '<label style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.7);display:flex;align-items:center;gap:5px;">' +
             p9Txt('Net Orders', 'صافي الطلبات') +
           '</label>' +
-          '<span style="font-size:11px;color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + p9Num(s.realOrders) + '</span>' +
+          '<span style="font-size:var(--type-caption);color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + p9Num(s.realOrders) + '</span>' +
         '</div>' +
         '<div class="sfe-input-wrap2">' +
           '<input type="number" class="s9-total-orders-input sfe-input2" min="0" step="1" value="' + c.totalOrders + '" placeholder="0" style="direction:ltr;">' +
@@ -1279,12 +1306,12 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       '</div>';
 
     var deliveredInputHtml =
-      '<div style="background:rgba(255,255,255,0.02);padding:16px;border-radius:12px;border:1px solid rgba(255,255,255,0.05);">' +
+      '<div style="background:rgba(255,255,255,0.02);padding:16px;border-radius:var(--dash-radius-md);border:1px solid rgba(255,255,255,0.05);">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-          '<label style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.7);display:flex;align-items:center;gap:5px;">' +
+          '<label style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.7);display:flex;align-items:center;gap:5px;">' +
             p9Txt('Delivered Orders', 'الطلبات المسلمة') +
           '</label>' +
-          '<span style="font-size:11px;color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + p9Num(s.realDelivered) + '</span>' +
+          '<span style="font-size:var(--type-caption);color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + p9Num(s.realDelivered) + '</span>' +
         '</div>' +
         '<div class="sfe-input-wrap2">' +
           '<input type="number" class="s9-delivered-orders-input sfe-input2" min="0" step="1" value="' + c.deliveredOrders + '" placeholder="0" style="direction:ltr;">' +
@@ -1298,9 +1325,9 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       '<div style="display:flex;align-items:center;gap:2px;flex-wrap:wrap;">' +
         ['SAR', 'USD', 'EGP', 'AED', 'IQD', 'OMR'].map(function (currency) {
           var active = viewCurrency === currency;
-          return '<div class="s9-curr-btn ' + (active ? 's9-curr-active' : '') + '" data-curr="' + currency + '" style="display:flex;align-items:center;gap:4px;padding:7px 12px;border-radius:20px;font-size:13px;font-weight:800;cursor:pointer;transition:.2s;' +
+          return '<div class="s9-curr-btn ' + (active ? 's9-curr-active' : '') + '" data-curr="' + currency + '" style="display:flex;align-items:center;gap:4px;padding:7px 12px;border-radius:var(--dash-radius-xl);font-size:var(--type-control);font-weight:var(--weight-semibold);cursor:pointer;transition:.2s;' +
             (active ? 'background:rgba(59,130,246,0.18);border:1px solid rgba(59,130,246,0.45);color:#60a5fa;' : 'background:transparent;border:1px solid transparent;color:rgba(255,255,255,0.38);') +
-            '"><span style="font-size:9px;font-weight:700;letter-spacing:.04em;opacity:.75">' + currencyCountries[currency] + '</span><span>' + currency + '</span></div>';
+            '"><span style="font-size:var(--type-micro);font-weight:var(--weight-semibold);letter-spacing:.04em;opacity:.75">' + currencyCountries[currency] + '</span><span>' + currency + '</span></div>';
         }).join('') +
       '</div>';
 
@@ -1308,15 +1335,15 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       ? window.TaagerCurrency.snapshot()
       : { source: 'defaults', updatedAt: '' };
     var rateNoteHtml =
-      '<div style="background:rgba(59,130,246,0.08);padding:16px;border-radius:12px;border:1px solid rgba(59,130,246,0.18);">' +
-        '<div style="font-size:12px;font-weight:900;color:#93c5fd;margin-bottom:5px;">' + p9Txt('Global exchange rates', 'أسعار الصرف العامة') + '</div>' +
-        '<div style="font-size:10px;color:rgba(255,255,255,0.58);line-height:1.6;">' +
+      '<div style="background:rgba(59,130,246,0.08);padding:16px;border-radius:var(--dash-radius-md);border:1px solid rgba(59,130,246,0.18);">' +
+        '<div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:#93c5fd;margin-bottom:5px;">' + p9Txt('Global exchange rates', 'أسعار الصرف العامة') + '</div>' +
+        '<div style="font-size:var(--type-micro);color:rgba(255,255,255,0.58);line-height:1.6;">' +
           p9Txt('Rates come from the dashboard top bar. Source: ', 'أسعار الصرف من الشريط العلوي. المصدر: ') +
           (rateSnap.source || 'defaults') +
         '</div>' +
       '</div>';
 
-    // ── KPI cards ─────────────────────────────────────────────────────────────
+    // ── Financial KPI cards ──────────────────────────────────────────────────
     var npClass = c.netProfit < 0 ? 's9-profit-negative' : c.netProfit > 0 ? 's9-profit-positive' : 's9-profit-zero';
     var isLight = document.documentElement.getAttribute('data-theme') === 'light';
     var npColor = c.netProfit < 0 ? '#ef4444' : (c.netProfit > 0 ? (isLight ? '#10b981' : '#00e676') : (isLight ? '#6b7280' : 'rgba(255,255,255,0.6)'));
@@ -1324,39 +1351,27 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       '<div class="s9-kpi-cards-grid">' +
         // Net Profit
         '<div class="s7-card">' +
-          '<div style="font-size:11px;color:#00e676;font-weight:700;display:flex;align-items:center;gap:4px;">' + p9Txt('Net Profit After Ad Spend', 'صافي الربح بعد الإنفاق الإعلاني') + ' ' + _tip('🪙', p9Txt('Net Profit After Ad Spend', 'صافي الربح بعد الإنفاق الإعلاني'), p9Txt('Total profit before ad spend minus ad spend.', 'إجمالي الربح قبل الإنفاق الإعلاني ناقص الإنفاق الإعلاني.'), 'netProfit = totalProfitBeforeAdSpend - adSpend') + '</div>' +
-          '<div class="s9-kpi-netprofit s9-forecast-kpi-value ' + npClass + '" style="font-size:17px;font-weight:900;color:' + npColor + ' !important;" dir="ltr">' + valueStack(formatMoney(c.netProfit), 'profit', 's9-card-value-stack') + '</div>' +
-          '<div style="font-size:10px;color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;">' + viewCurrency + '</div>' +
+          '<div style="font-size:var(--type-caption);color:#00e676;font-weight:var(--weight-semibold);display:flex;align-items:center;gap:4px;">' + p9Txt('Net Profit After Ad Spend', 'صافي الربح بعد الإنفاق الإعلاني') + ' ' + _tip('🪙', p9Txt('Net Profit After Ad Spend', 'صافي الربح بعد الإنفاق الإعلاني'), p9Txt('Total profit before ad spend minus ad spend.', 'إجمالي الربح قبل الإنفاق الإعلاني ناقص الإنفاق الإعلاني.'), 'netProfit = totalProfitBeforeAdSpend - adSpend') + '</div>' +
+          '<div class="s9-kpi-netprofit s9-forecast-kpi-value ' + npClass + '" style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:' + npColor + ' !important;" dir="ltr">' + valueStack(formatMoney(c.netProfit), 'profit', 's9-card-value-stack') + '</div>' +
+          '<div style="font-size:var(--type-micro);color:var(--dash-text-faint);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:var(--dash-radius-md);">' + viewCurrency + '</div>' +
         '</div>' +
         // Revenue
         '<div class="s7-card">' +
-          '<div style="font-size:11px;color:#3b82f6;font-weight:700;display:flex;align-items:center;gap:4px;">' + p9Txt('Total Profit Before Ad Spend', 'إجمالي الربح قبل الإنفاق الإعلاني') + ' ' + _tip('💰', p9Txt('Total Profit Before Ad Spend', 'إجمالي الربح قبل الإنفاق الإعلاني'), p9Txt('Exact expected deliveries multiplied by average profit per delivered order.', 'الطلبات المتوقع تسليمها بدقة مضروبة في متوسط الربح لكل طلب مسلم.'), 'totalProfitBeforeAdSpend = expectedDeliveriesExact * averageProfitPerDeliveredOrder') + '</div>' +
-          '<div class="s9-forecast-kpi-value" style="font-size:17px;font-weight:900;color:#fff;" dir="ltr">' + valueStack(formatMoney(c.revenue), 'revenue', 's9-card-value-stack') + '</div>' +
-          '<div style="font-size:10px;color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;">' + viewCurrency + '</div>' +
+          '<div style="font-size:var(--type-caption);color:#3b82f6;font-weight:var(--weight-semibold);display:flex;align-items:center;gap:4px;">' + p9Txt('Total Profit Before Ad Spend', 'إجمالي الربح قبل الإنفاق الإعلاني') + ' ' + _tip('💰', p9Txt('Total Profit Before Ad Spend', 'إجمالي الربح قبل الإنفاق الإعلاني'), p9Txt('Exact expected deliveries multiplied by average profit per delivered order.', 'الطلبات المتوقع تسليمها بدقة مضروبة في متوسط الربح لكل طلب مسلم.'), 'totalProfitBeforeAdSpend = expectedDeliveriesExact * averageProfitPerDeliveredOrder') + '</div>' +
+          '<div class="s9-forecast-kpi-value" style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff;" dir="ltr">' + valueStack(formatMoney(c.revenue), 'revenue', 's9-card-value-stack') + '</div>' +
+          '<div style="font-size:var(--type-micro);color:var(--dash-text-faint);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:var(--dash-radius-md);">' + viewCurrency + '</div>' +
         '</div>' +
         // CPA
         '<div class="s7-card">' +
-          '<div style="font-size:11px;color:#a855f7;font-weight:700;display:flex;align-items:center;gap:4px;">CPA ' + _tip('🎯', p9Txt('Cost Per Acquisition (CPA)', 'تكلفة الطلب (CPA)'), p9Txt('Cost per acquired net order. It should remain below break-even CPA.', 'تكلفة الحصول على طلب صافي واحد. يجب أن تبقى أقل من تكلفة التعادل.'), 'CPA = adSpend / netOrders') + '</div>' +
-          '<div style="font-size:17px;font-weight:900;color:#fff;" dir="ltr">' + formatMoney(c.cpa, false, 2) + '</div>' +
-          '<div style="font-size:10px;color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;">' + viewCurrency + '</div>' +
+          '<div style="font-size:var(--type-caption);color:#a855f7;font-weight:var(--weight-semibold);display:flex;align-items:center;gap:4px;">CPA ' + _tip('🎯', p9Txt('Cost Per Acquisition (CPA)', 'تكلفة الطلب (CPA)'), p9Txt('Cost per acquired net order. It should remain below break-even CPA.', 'تكلفة الحصول على طلب صافي واحد. يجب أن تبقى أقل من تكلفة التعادل.'), 'CPA = adSpend / netOrders') + '</div>' +
+          '<div style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff;" dir="ltr">' + formatMoney(c.cpa, false, 2) + '</div>' +
+          '<div style="font-size:var(--type-micro);color:var(--dash-text-faint);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:var(--dash-radius-md);">' + viewCurrency + '</div>' +
         '</div>' +
         // Break-even CPA
         '<div class="s7-card">' +
-          '<div style="font-size:11px;color:#f59e0b;font-weight:700;display:flex;align-items:center;gap:4px;">' + p9Txt('Break-even CPA', 'تكلفة التعادل') + ' ' + _tip('⚖️', p9Txt('Break-even CPA', 'تكلفة الاكتساب عند التعادل'), p9Txt('Maximum CPA before this product starts losing money. It equals average profit per delivered order multiplied by NDR.', 'أعلى تكلفة اكتساب قبل أن يبدأ هذا المنتج بالخسارة. يساوي متوسط الربح لكل طلب مسلم مضروبا في نسبة التسليم الصافي.'), 'Break-even CPA = averageProfitPerDeliveredOrder * NDR') + '</div>' +
-          '<div class="s9-kpi-breakeven s9-forecast-kpi-value" style="font-size:17px;font-weight:900;color:' + (c.cpa > c.breakEvenCpa ? '#ef4444' : '#f59e0b') + ';" dir="ltr">' + valueStack(formatMoney(c.breakEvenCpa, false, 2), 'breakeven', 's9-card-value-stack') + '</div>' +
-          '<div style="font-size:10px;color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;">' + viewCurrency + '</div>' +
-        '</div>' +
-        // Confirmed Orders
-        '<div class="s7-card">' +
-          '<div style="font-size:11px;color:#3b82f6;font-weight:700;display:flex;align-items:center;gap:4px;">' + p9Txt('Confirmed', 'مؤكدة') + ' ' + _tip('✓', p9Txt('Confirmed Orders', 'الطلبات المؤكدة'), p9Txt('Orders that passed confirmation for this selected product.', 'الطلبات التي تم تأكيدها لهذا المنتج المحدد.'), 'confirmedOrders = netOrders * confirmationRate') + '</div>' +
-          '<div class="s9-kpi-confirmed" style="font-size:17px;font-weight:900;color:#3b82f6;">' + p9Num(s.realConfirmed) + '</div>' +
-          '<div style="font-size:10px;color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;">' + p9Txt('orders', 'طلب') + '</div>' +
-        '</div>' +
-        // Delivered Orders
-        '<div class="s7-card">' +
-          '<div style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:700;display:flex;align-items:center;gap:4px;">' + p9Txt('Delivered', 'مسلمة') + ' ' + _tip('✅', p9Txt('Delivered Orders', 'الطلبات المسلمة'), p9Txt('Number of orders delivered based on simulated NDR.', 'عدد الطلبات المسلمة بناءً على نسبة التسليم المحاكاة.'), 'delivered = totalOrders * NDR') + '</div>' +
-          '<div class="s9-forecast-kpi-value" style="font-size:17px;font-weight:900;color:#fff;">' + valueStack(p9Num(Math.round(c.deliveredOrders)), 'delivered', 's9-card-value-stack') + '</div>' +
-          '<div style="font-size:10px;color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;">' + p9Txt('orders', 'طلب') + '</div>' +
+          '<div style="font-size:var(--type-caption);color:#f59e0b;font-weight:var(--weight-semibold);display:flex;align-items:center;gap:4px;">' + p9Txt('Break-even CPA', 'تكلفة التعادل') + ' ' + _tip('⚖️', p9Txt('Break-even CPA', 'تكلفة الاكتساب عند التعادل'), p9Txt('Maximum CPA before this product starts losing money. It equals average profit per delivered order multiplied by NDR.', 'أعلى تكلفة اكتساب قبل أن يبدأ هذا المنتج بالخسارة. يساوي متوسط الربح لكل طلب مسلم مضروبا في نسبة التسليم الصافي.'), 'Break-even CPA = averageProfitPerDeliveredOrder * NDR') + '</div>' +
+          '<div class="s9-kpi-breakeven s9-forecast-kpi-value" style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:' + (c.cpa > c.breakEvenCpa ? '#ef4444' : '#f59e0b') + ';" dir="ltr">' + valueStack(formatMoney(c.breakEvenCpa, false, 2), 'breakeven', 's9-card-value-stack') + '</div>' +
+          '<div style="font-size:var(--type-micro);color:var(--dash-text-faint);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:var(--dash-radius-md);">' + viewCurrency + '</div>' +
         '</div>' +
       '</div>';
 
@@ -1365,14 +1380,14 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       // Header + currency toggle
       '<div style="padding:20px 24px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;gap:12px;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
-          '<div style="font-size:12px;color:#3b82f6;font-weight:700;letter-spacing:1px;white-space:nowrap;">' + p9Txt('PRODUCT SMART FORECAST', 'مُحاكي التوقعات الذكية') + '</div>' +
-          '<button type="button" class="s9-reset-real-btn" style="border:1px solid ' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(34,197,94,0.35)' : 'rgba(34,197,94,0.45)') + ';background:' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.10)') + ';color:' + (document.documentElement.getAttribute('data-theme') === 'light' ? '#15803d' : '#86efac') + ';border-radius:9px;padding:6px 12px;font-size:11px;font-weight:900;font-family:inherit;cursor:pointer;flex-shrink:0;">' + p9Txt('Reset to Actual Data', 'الرجوع للبيانات الفعلية') + '</button>' +
+          '<div style="font-size:var(--type-label);color:#3b82f6;font-weight:var(--weight-semibold);letter-spacing:1px;white-space:nowrap;">' + p9Txt('PRODUCT SMART FORECAST', 'مُحاكي التوقعات الذكية') + '</div>' +
+          '<button type="button" class="s9-reset-real-btn" style="border:1px solid ' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(34,197,94,0.35)' : 'rgba(34,197,94,0.45)') + ';background:' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.10)') + ';color:' + (document.documentElement.getAttribute('data-theme') === 'light' ? '#15803d' : '#86efac') + ';border-radius:var(--dash-radius-sm);padding:6px 12px;font-size:var(--type-caption);font-weight:var(--weight-semibold);font-family:inherit;cursor:pointer;flex-shrink:0;">' + p9Txt('Reset to Actual Data', 'الرجوع للبيانات الفعلية') + '</button>' +
         '</div>' +
-        '<div data-i18n-preserve style="font-size:18px;font-weight:900;color:#fff;line-height:1.35;word-break:break-word;" title="' + s.name.replace(/"/g, '&quot;') + '">' + s.name + '</div>' +
+        '<div data-i18n-preserve style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff;line-height:1.35;word-break:break-word;" title="' + s.name.replace(/"/g, '&quot;') + '">' + s.name + '</div>' +
         skuCopyRowHtml(s) +
-        (s.combination ? '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:11px;border:1px solid rgba(168,85,247,.28);background:rgba(168,85,247,.08);">' +
-          '<div><div style="font-size:10px;color:#c4b5fd;font-weight:900;margin-bottom:4px;">' + p9Txt('COMBINED SKUS', 'أكواد المنتجات المدمجة') + '</div><div dir="ltr" style="display:flex;gap:5px;flex-wrap:wrap;">' + s.combination.skus.map(function (sku) { return skuCopyHtml(sku, { prefix: false, style: 'padding:3px 7px;border-radius:999px;background:rgba(255,255,255,.06);color:#fff;font-size:10px;font-weight:800' }); }).join('') + '</div></div>' +
-          '<button type="button" class="s9-uncombine-products" data-combination-id="' + escapeHtml(s.combination.id) + '" style="border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.09);color:#fca5a5;border-radius:8px;padding:6px 9px;font-size:10px;font-weight:900;font-family:inherit;cursor:pointer;">' + p9Txt('Uncombine', 'إلغاء الدمج') + '</button>' +
+        (s.combination ? '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:var(--dash-radius-md);border:1px solid rgba(168,85,247,.28);background:rgba(168,85,247,.08);">' +
+          '<div><div style="font-size:var(--type-micro);color:#c4b5fd;font-weight:var(--weight-semibold);margin-bottom:4px;">' + p9Txt('COMBINED SKUS', 'أكواد المنتجات المدمجة') + '</div><div dir="ltr" style="display:flex;gap:5px;flex-wrap:wrap;">' + s.combination.skus.map(function (sku) { return skuCopyHtml(sku, { prefix: false, style: 'padding:3px 7px;border-radius:var(--radius-pill);background:rgba(255,255,255,.06);color:#fff;font-size:var(--type-micro);font-weight:var(--weight-semibold)' }); }).join('') + '</div></div>' +
+          '<button type="button" class="s9-uncombine-products" data-combination-id="' + escapeHtml(s.combination.id) + '" style="border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.09);color:#fca5a5;border-radius:var(--dash-radius-sm);padding:6px 9px;font-size:var(--type-micro);font-weight:var(--weight-semibold);font-family:inherit;cursor:pointer;">' + p9Txt('Uncombine', 'إلغاء الدمج') + '</button>' +
         '</div>' : '') +
         '<div style="margin-top:4px;">' + currToggleHtml + '</div>' +
       '</div>' +
@@ -1382,7 +1397,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         // 4-metric product panel
         metricsHtml +
 
-        // KPI Cards row — above scenario inputs
+        // Financial KPI cards
         kpiCardsHtml +
 
         // Controls: scenario inputs
@@ -1396,8 +1411,8 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         '</div>' +
 
         // Gauge
-        '<div style="background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.04);border-radius:14px;padding:20px;display:flex;flex-direction:column;align-items:center;">' +
-          '<div style="font-size:13px;font-weight:800;color:rgba(255,255,255,0.8);margin-bottom:4px;display:flex;align-items:center;gap:6px;">' +
+        '<div style="background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.04);border-radius:var(--dash-radius-lg);padding:20px;display:flex;flex-direction:column;align-items:center;">' +
+          '<div style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.8);margin-bottom:4px;display:flex;align-items:center;gap:6px;">' +
             p9Txt('ROI Gauge', 'مقياس العائد على الاستثمار') + ' ' +
             _tip('📊', p9Txt('Return on Investment (ROI)', 'العائد على الاستثمار (ROI)'), p9Txt('Measures campaign profitability. 0% = break-even, positive = profit, negative = loss.', 'يقيس ربحية الحملة. 0% تعادل، موجب ربح، سالب خسارة.'), 'ROI = (netProfit / adSpend) * 100%') +
           '</div>' +
@@ -1406,7 +1421,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
 
         // Insights feed
         '<div>' +
-          '<div style="font-size:12px;font-weight:800;color:rgba(255,255,255,0.8);margin-bottom:12px;display:flex;align-items:center;gap:6px;">' +
+          '<div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.8);margin-bottom:12px;display:flex;align-items:center;gap:6px;">' +
             '🧠 ' + p9Txt('Smart Insights', 'المساعد الذكي') +
           '</div>' +
           '<div class="sfe-insights-feed">' + renderInsightsFeed(s, c) + '</div>' +
@@ -1434,104 +1449,116 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       :
       '.s9-profit-cell.s9-profit-negative,.s9-profit-value.s9-profit-negative { color: #ef4444 !important; -webkit-text-fill-color: #ef4444 !important; }' +
       '.s9-profit-cell.s9-profit-positive,.s9-profit-value.s9-profit-positive { color: #00e676 !important; -webkit-text-fill-color: #00e676 !important; }' +
-      '.s9-profit-cell.s9-profit-zero,.s9-profit-value.s9-profit-zero { color: rgba(255,255,255,0.6) !important; -webkit-text-fill-color: rgba(255,255,255,0.6) !important; }' +
+      '.s9-profit-cell.s9-profit-zero,.s9-profit-value.s9-profit-zero { color:var(--dash-text-muted) !important; -webkit-text-fill-color:var(--dash-text-muted) !important; }' +
 
       // KPI card Net Profit value — same classes reused
       '.s9-kpi-netprofit.s9-profit-negative { color: #ef4444 !important; }' +
       '.s9-kpi-netprofit.s9-profit-positive { color: #00e676 !important; }' +
-      '.s9-kpi-netprofit.s9-profit-zero     { color: rgba(255,255,255,0.6) !important; }'
+      '.s9-kpi-netprofit.s9-profit-zero     { color:var(--dash-text-muted) !important; }'
     ) +
-    '.s9-sort-btn{appearance:none;background:transparent;border:0;color:inherit;font:inherit;font-weight:700;padding:0;cursor:pointer;white-space:nowrap}' +
+    '.s9-sort-btn{appearance:none;background:transparent;border:0;color:inherit;font:inherit;font-weight:var(--weight-bold);padding:0;cursor:pointer;white-space:nowrap}' +
     '.s9-products-table{width:100%;min-width:620px;border-collapse:collapse;table-layout:fixed;text-align:center}' +
-    '.s9-products-table th{padding:8px 5px!important;font-weight:700!important;vertical-align:middle;line-height:1.05;text-align:center}' +
+    '.s9-products-table th{padding:8px 5px!important;font-weight:var(--weight-bold)!important;vertical-align:middle;line-height:1.05;text-align:center}' +
     '.s9-products-table .s9-sort-btn{white-space:normal;line-height:1.05;max-width:100%;text-align:center}' +
     '.s9-products-table .s9-sort-btn--stacked{display:inline-flex;flex-direction:column;align-items:center;gap:1px}' +
-    '.s9-products-table .s9-sort-subline{font-size:9px;opacity:.8}' +
-    '.s9-products-table .s9-sort-arrow{font-size:10px;color:#60a5fa}' +
+    '.s9-products-table .s9-sort-subline{font-size:var(--type-micro);opacity:.8}' +
+    '.s9-products-table .s9-sort-arrow{font-size:var(--type-micro);color:#60a5fa}' +
     '.s9-col-product{width:auto}.s9-col-net{width:58px}.s9-col-confirmed{width:74px}.s9-col-delivered{width:78px}.s9-col-ndr{width:64px}.s9-col-budget{width:88px}.s9-col-profit{width:100px}' +
-    '.s9-product-cell{padding:10px 10px!important;font-weight:700;color:#fff;text-align:start;line-height:1.12;word-break:break-word}' +
-    '.s9-number-cell{padding:10px 5px!important;color:rgba(255,255,255,0.66);font-size:13px;font-weight:800;text-align:center;white-space:nowrap}' +
-    '.s9-number-cell--confirmed{color:#3b82f6;font-weight:900}' +
-    '.s9-table-value-stack{width:100%;font-size:13px}' +
-    '.s9-table-value-stack .supposed-badge{font-size:9px;line-height:1.05;color:#fbbf24!important;-webkit-text-fill-color:#fbbf24!important}' +
+    '.s9-product-cell{padding:10px 10px!important;font-weight:var(--weight-bold);color:#fff;text-align:start;line-height:1.12;word-break:break-word}' +
+    '.s9-number-cell{padding:10px 5px!important;color:rgba(255,255,255,0.66);font-size:var(--type-control);font-weight:var(--weight-semibold);text-align:center;white-space:nowrap}' +
+    '.s9-number-cell--confirmed{color:#3b82f6;font-weight:var(--weight-bold)}' +
+    '.s9-table-value-stack{width:100%;font-size:var(--type-control)}' +
+    '.s9-table-value-stack .supposed-badge{font-size:var(--type-micro);line-height:1.05;color:#fbbf24!important;-webkit-text-fill-color:#fbbf24!important}' +
     '.s9-card-value-stack{width:100%;font-size:inherit}' +
-    '.s9-card-value-stack .supposed-badge{font-size:10px;color:#fbbf24!important;-webkit-text-fill-color:#fbbf24!important}' +
+    '.s9-card-value-stack .supposed-badge{font-size:var(--type-micro);color:#fbbf24!important;-webkit-text-fill-color:#fbbf24!important}' +
     '.s9-metric-val,.s9-forecast-kpi-value{min-width:0;max-width:100%;text-align:center}' +
     '.s9-metric-val .expected-value-stack,.s9-forecast-kpi-value .expected-value-stack{display:flex}' +
     '.s9-input-cell{padding:8px 5px!important;text-align:center}' +
-    '.s9-profit-cell{padding:10px 5px!important;font-weight:800;text-align:center;white-space:nowrap}' +
+    '.s9-profit-cell{padding:10px 5px!important;font-weight:var(--weight-bold);text-align:center;white-space:nowrap}' +
     '.s9-sort-btn:hover,.s9-sort-btn.is-active{color:#60a5fa}' +
-    '.s9-clear-sort{border:1px solid rgba(255,255,255,.14);background:transparent;color:rgba(255,255,255,.65);padding:5px 9px;border-radius:7px;font:inherit;font-size:11px;font-weight:800;cursor:pointer}' +
+    '.s9-clear-sort{border:1px solid rgba(255,255,255,.14);background:transparent;color:rgba(255,255,255,.65);padding:5px 9px;border-radius:var(--dash-radius-sm);font:inherit;font-size:var(--type-caption);font-weight:var(--weight-semibold);cursor:pointer}' +
     '.s9-clear-sort:disabled{opacity:.35;cursor:default}' +
     '.s9-platform-tabs{display:flex;align-items:center;gap:6px;margin-top:10px;flex-wrap:wrap}' +
-    '.s9-platform-tab{border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.55);border-radius:999px;padding:6px 12px;font:inherit;font-size:11px;font-weight:900;cursor:pointer}' +
+    '.s9-platform-tab{border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.55);border-radius:var(--radius-pill);padding:6px 12px;font:inherit;font-size:var(--type-caption);font-weight:var(--weight-semibold);cursor:pointer}' +
     '.s9-platform-tab:hover{border-color:rgba(96,165,250,.45);color:#93c5fd}' +
     '.s9-platform-tab.is-active{border-color:rgba(59,130,246,.55);background:rgba(59,130,246,.16);color:#60a5fa}' +
     '@media (max-width:620px){.s9-combo-dialog>div:nth-child(2)>div:first-child{grid-template-columns:1fr!important}.s9-combo-dialog>div:nth-child(2)>div:nth-child(2)>div:last-child{grid-template-columns:repeat(2,minmax(0,1fr))!important}}' +
 
     // ── Dark background for all input wrapper containers ──
-    '[data-sim-panel] > div > div[style*="border-radius:12px"],' +
-    '[data-sim-panel] div[style*="border-radius:12px"][style*="rgba(255,255,255,0.02)"]' +
+    '[data-sim-panel] > div > div[style*="border-radius:var(--dash-radius-md)"],' +
+    '[data-sim-panel] div[style*="border-radius:var(--dash-radius-md)"][style*="rgba(255,255,255,0.02)"]' +
     '{background:rgba(255,255,255,0.02)!important;color-scheme:dark}' +
 
     // Input wrap — exact S7 SFE pattern
-    '.sfe-input-wrap2{display:flex;align-items:center;background:' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(12, 56, 70, 0.47)' : 'rgba(255,255,255,0.06)') + ';border:1px solid rgba(255,255,255,0.12);border-radius:8px;overflow:hidden;transition:border-color .2s;color-scheme:dark}' +
+    '.sfe-input-wrap2{display:flex;align-items:center;background:' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(12, 56, 70, 0.47)' : 'rgba(255,255,255,0.06)') + ';border:1px solid rgba(255,255,255,0.12);border-radius:var(--dash-radius-sm);overflow:hidden;transition:border-color .2s;color-scheme:dark}' +
     '.sfe-input-wrap2:focus-within{border-color:rgba(0,229,160,.4);box-shadow:0 0 0 2px rgba(0,229,160,0.08)}' +
-    '.sfe-input2{background:#161921!important;border:none;outline:none;color:#f0f1f3!important;font-size:15px;font-weight:600;padding:9px 12px;width:100%;-moz-appearance:textfield;font-family:Cairo,sans-serif;caret-color:#00e5a0;color-scheme:dark}' +
+    '.sfe-input2{background:#161921!important;border:none;outline:none;color:#f0f1f3!important;font-size:var(--type-component-title);font-weight:var(--weight-semibold);padding:9px 12px;width:100%;-moz-appearance:textfield;font-family:var(--font-ui);caret-color:#00e5a0;color-scheme:dark}' +
     '.sfe-input2::-webkit-inner-spin-button,.sfe-input2::-webkit-outer-spin-button{-webkit-appearance:none}' +
     // Force dark autofill styles
     '.sfe-input2:-webkit-autofill,.sfe-input2:-webkit-autofill:hover,.sfe-input2:-webkit-autofill:focus' +
     '{-webkit-text-fill-color:#f0f1f3!important;-webkit-box-shadow:0 0 0px 1000px ' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgb(41, 8, 41)' : 'rgba(255,255,255,0.06)') + ' inset!important;transition:background-color 5000s ease-in-out 0s}' +
-    '.sfe-input-unit2{padding:0 12px;font-size:11px;font-weight:600;color:#4d5066;letter-spacing:.06em;white-space:nowrap;border-left:1px solid rgba(255,255,255,0.07);flex-shrink:0;}' +
+    '.sfe-input-unit2{padding:0 12px;font-size:var(--type-caption);font-weight:var(--weight-semibold);color:#4d5066;letter-spacing:.06em;white-space:nowrap;border-left:1px solid rgba(255,255,255,0.07);flex-shrink:0;}' +
 
     // NDR markers
     '.sfe-slider-markers{display:flex;justify-content:space-between;margin-top:4px}' +
-    '.sfe-marker{font-size:9px;font-weight:700;text-align:center;line-height:1.3}' +
+    '.sfe-marker{font-size:var(--type-micro);font-weight:var(--weight-semibold);text-align:center;line-height:1.3}' +
     '.sfe-marker--danger{color:#ff3b5c}.sfe-marker--mid{color:#f5a623}.sfe-marker--safe{color:#22d3ee}' +
 
     // Tooltip badge
-    '.s7-tip-badge{width:18px;height:18px;border-radius:50%;background:' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(37,99,235,0.12)' : 'rgba(59,130,246,0.16)') + ';border:1px solid rgba(96,165,250,0.55);color:#93c5fd;font-size:0;font-weight:900;display:inline-flex;align-items:center;justify-content:center;cursor:help;transition:background .18s,border-color .18s,color .18s;font-family:system-ui,sans-serif;flex-shrink:0;vertical-align:middle;line-height:1;user-select:none}' +
-    '.s7-tip-badge::before{content:"?";display:block;color:currentColor;font-size:11px;font-weight:900;line-height:1}' +
+    '.s7-tip-badge{width:18px;height:18px;border-radius:50%;background:' + (document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(37,99,235,0.12)' : 'rgba(59,130,246,0.16)') + ';border:1px solid rgba(96,165,250,0.55);color:#93c5fd;font-size:0;font-weight:var(--weight-bold);display:inline-flex;align-items:center;justify-content:center;cursor:help;transition:background .18s,border-color .18s,color .18s;font-family:var(--font-ui);flex-shrink:0;vertical-align:middle;line-height:1;user-select:none}' +
+    '.s7-tip-badge::before{content:"?";display:block;color:currentColor;font-size:var(--type-caption);font-weight:var(--weight-semibold);line-height:1}' +
     '.s7-tip-badge:hover{background:rgba(59,130,246,0.28);border-color:rgba(59,130,246,0.7);color:#93c5fd}' +
 
     // S7 KPI card
-    '.s7-card{background:linear-gradient(145deg,rgba(30,41,59,0.4),rgba(15,23,42,0.6));border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px;align-items:center;justify-content:center;position:relative;overflow:hidden;transition:.2s}' +
+    '.s7-card{background:linear-gradient(145deg,rgba(30,41,59,0.4),rgba(15,23,42,0.6));border:1px solid rgba(255,255,255,0.06);border-radius:var(--dash-radius-lg);padding:16px;display:flex;flex-direction:column;gap:8px;align-items:center;justify-content:center;position:relative;overflow:hidden;transition:.2s}' +
     '.s7-card:hover{border-color:rgba(255,255,255,0.15);transform:translateY(-2px)}' +
 
     // SFE insight cards
     '.sfe-insights-feed{display:flex;flex-direction:column;gap:8px}' +
-    '.sfe-insight{display:flex;gap:10px;padding:11px 13px;border-radius:9px;border:1px solid transparent;animation:sfeIn .3s ease}' +
+    '.sfe-insight{display:flex;gap:10px;padding:11px 13px;border-radius:var(--dash-radius-sm);border:1px solid transparent;animation:sfeIn .3s ease}' +
     '@keyframes sfeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}' +
     '.sfe-insight--positive{background:rgba(0,229,160,.05);border-color:rgba(0,229,160,.15)}' +
     '.sfe-insight--negative{background:rgba(255,59,92,.05);border-color:rgba(255,59,92,.15)}' +
     '.sfe-insight--warning{background:rgba(245,166,35,.05);border-color:rgba(245,166,35,.15)}' +
     '.sfe-insight--info{background:rgba(77,166,255,.05);border-color:rgba(77,166,255,.12)}' +
     '.sfe-insight--critical{background:rgba(255,59,92,.08);border-color:rgba(255,59,92,.3)}' +
-    '.sfe-insight-icon{font-size:14px;flex-shrink:0;margin-top:1px}' +
+    '.sfe-insight-icon{font-size:var(--type-body);flex-shrink:0;margin-top:1px}' +
     '.sfe-insight-body{flex:1}' +
-    '.sfe-insight-category{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#4d5066;margin-bottom:3px}' +
-    '.sfe-insight-text{font-size:12px;color:#8b8fa8;line-height:1.55}' +
-    '.sfe-insight-text strong{color:#f0f1f3;font-weight:600}' +
-    '.sfe-insight-text .hi-green{color:#00e5a0;font-weight:600}' +
-    '.sfe-insight-text .hi-cyan{color:#22d3ee;font-weight:600}' +
-    '.sfe-insight-text .hi-red{color:#ff3b5c;font-weight:600}' +
-    '.sfe-insight-text .hi-yellow{color:#f5a623;font-weight:600}' +
+    '.sfe-insight-category{font-size:var(--type-micro);font-weight:var(--weight-semibold);letter-spacing:.12em;text-transform:uppercase;color:#4d5066;margin-bottom:3px}' +
+    '.sfe-insight-text{font-size:var(--type-label);color:#8b8fa8;line-height:1.55}' +
+    '.sfe-insight-text strong{color:#f0f1f3;font-weight:var(--weight-semibold)}' +
+    '.sfe-insight-text .hi-green{color:#00e5a0;font-weight:var(--weight-semibold)}' +
+    '.sfe-insight-text .hi-cyan{color:#22d3ee;font-weight:var(--weight-semibold)}' +
+    '.sfe-insight-text .hi-red{color:#ff3b5c;font-weight:var(--weight-semibold)}' +
+    '.sfe-insight-text .hi-yellow{color:#f5a623;font-weight:var(--weight-semibold)}' +
 
     // Row hover
     '.s9-row:hover{background:rgba(255,255,255,0.03)!important}' +
 
     // Spend input (table column)
-    '.s9-spend-input{width:68px;max-width:100%;box-sizing:border-box;padding:6px 4px;background:rgba(0,0,0,0.3)!important;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#fff!important;text-align:center;font-family:inherit;font-size:13px;font-weight:800;color-scheme:dark}' +
+    '.s9-spend-input{width:68px;max-width:100%;box-sizing:border-box;padding:6px 4px;background:rgba(0,0,0,0.3)!important;border:1px solid rgba(255,255,255,0.1);border-radius:var(--dash-radius-sm);color:#fff!important;text-align:center;font-family:inherit;font-size:var(--type-control);font-weight:var(--weight-semibold);color-scheme:dark}' +
     '.s9-spend-input:focus{outline:none;border-color:#3b82f6!important;background:rgba(59,130,246,0.1)!important}' +
 
     // Layout containers
-    '.s9-root { display: flex; width: 100%; height: 100%; background: #070a13; font-family: "Cairo", sans-serif; }' +
+    '.s9-root { display: flex; width: 100%; height: 100%; background:var(--dash-bg-deep); font-family:var(--font-ui); }' +
     '.s9-table-container { flex: 1.2; display: flex; flex-direction: column; border-left: 1px solid rgba(255,255,255,0.06); overflow-y: auto; }' +
     '.s9-table-scroll { flex: none; overflow-x: auto; overflow-y: visible; }' +
     '.s9-sim-container { flex: 0.8; display: flex; flex-direction: column; background: #0b0f19; overflow-y: auto; }' +
-    '.s9-kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }' +
+    '.s9-forecast-metrics{display:flex;flex-direction:column;gap:10px}' +
+    '.s9-kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }' +
+    '.s9-forecast-details{display:flex;flex-direction:column;gap:12px}' +
+    '.s9-forecast-details>summary::-webkit-details-marker{display:none}' +
+    '.s9-forecast-details>summary::marker{content:""}' +
+    '.s9-forecast-details-summary{list-style:none;display:flex;align-items:center;justify-content:center;gap:8px;min-height:38px;padding:9px 12px;border-radius:var(--dash-radius-md);border:1px dashed rgba(96,165,250,.34);background:rgba(59,130,246,.07);color:#93c5fd;font-size:var(--type-caption);font-weight:var(--weight-semibold);cursor:pointer;text-align:center;transition:background .18s,border-color .18s,color .18s}' +
+    '.s9-forecast-details-summary:hover{background:rgba(59,130,246,.12);border-color:rgba(96,165,250,.52);color:#bfdbfe}' +
+    '.s9-details-chevron{font-size:var(--type-subtitle);line-height:1;transition:transform .18s;display:inline-flex;align-items:center}' +
+    '.s9-forecast-details[open] .s9-details-chevron{transform:rotate(180deg)}' +
+    '.s9-forecast-details[open] .s9-kpi-grid--details{margin-top:2px}' +
+    '.s9-details-text--open{display:none}' +
+    '.s9-forecast-details[open] .s9-details-text--closed{display:none}' +
+    '.s9-forecast-details[open] .s9-details-text--open{display:inline}' +
     '.s9-inputs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }' +
-    '.s9-kpi-cards-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }' +
+    '.s9-kpi-cards-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }' +
 
     // Responsive rules for size classes
     '.dash-size-md .s9-root, .dash-size-sm .s9-root, .dash-size-xs .s9-root { flex-direction: column !important; height: auto !important; overflow: visible !important; }' +
@@ -1545,10 +1572,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     '@media (max-width: 480px) { .s9-kpi-grid { grid-template-columns: 1fr !important; } }' +
 
     '.dash-size-xs .s9-inputs-grid { grid-template-columns: 1fr !important; }' +
-
-    '.dash-size-md .s9-kpi-cards-grid { grid-template-columns: repeat(3, 1fr) !important; }' +
-    '.dash-size-sm .s9-kpi-cards-grid { grid-template-columns: repeat(2, 1fr) !important; }' +
-    '.dash-size-xs .s9-kpi-cards-grid { grid-template-columns: 1fr 1fr !important; }' +
+    '.dash-size-md .s9-kpi-cards-grid, .dash-size-sm .s9-kpi-cards-grid, .dash-size-xs .s9-kpi-cards-grid { grid-template-columns: repeat(2, 1fr) !important; }' +
     '@media (max-width: 400px) { .s9-kpi-cards-grid { grid-template-columns: 1fr !important; } }' +
 
     // Media query fallback for direct viewport sizing
@@ -1628,21 +1652,21 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     var options = products.map(function (product) {
       var sku = String(product.sku || '').trim();
       var active = skuKey(sku) === skuKey(selectedSku);
-      return '<div role="button" tabindex="0" class="s9-combo-option" data-side="' + side + '" data-sku="' + escapeHtml(sku) + '" data-search="' + escapeHtml(textKey((product.name || '') + ' ' + sku)) + '" style="width:100%;display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;border:1px solid ' + (active ? color + '55' : 'transparent') + ';background:' + (active ? color + '18' : 'transparent') + ';color:#fff;font-family:inherit;text-align:start;cursor:pointer;margin-bottom:3px;">' +
-        '<span class="s9-combo-option-copy" style="min-width:0;flex:1;"><span class="s9-combo-product-name" style="display:block;font-size:12px;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(product.name || p9Txt('Unnamed product', 'منتج بدون اسم')) + '</span>' + skuCopyHtml(sku, { block: true, style: 'font-size:10px;color:rgba(255,255,255,.42);margin-top:2px;font-weight:700' }) + '</span>' +
-        (active ? '<span style="color:' + color + ';font-weight:950;">✓</span>' : '') +
+      return '<div role="button" tabindex="0" class="s9-combo-option" data-side="' + side + '" data-sku="' + escapeHtml(sku) + '" data-search="' + escapeHtml(textKey((product.name || '') + ' ' + sku)) + '" style="width:100%;display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:var(--dash-radius-sm);border:1px solid ' + (active ? color + '55' : 'transparent') + ';background:' + (active ? color + '18' : 'transparent') + ';color:#fff;font-family:inherit;text-align:start;cursor:pointer;margin-bottom:3px;">' +
+        '<span class="s9-combo-option-copy" style="min-width:0;flex:1;"><span class="s9-combo-product-name" data-dashboard-product-name data-i18n-preserve style="display:block;font-size:var(--type-label);font-weight:var(--weight-semibold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><bdi dir="auto">' + escapeHtml(product.name || p9Txt('Unnamed product', 'منتج بدون اسم')) + '</bdi></span>' + skuCopyHtml(sku, { block: true, style: 'font-size:var(--type-micro);color:rgba(255,255,255,.42);margin-top:2px;font-weight:var(--weight-semibold)' }) + '</span>' +
+        (active ? '<span style="color:' + color + ';font-weight:var(--weight-bold);">✓</span>' : '') +
       '</div>';
     }).join('');
     return '<div class="s9-combo-selector" data-side="' + side + '" style="position:relative;">' +
-      '<div style="font-size:10px;font-weight:950;color:' + color + ';margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px;">' + (isPrimary ? p9Txt('Product A · Primary', 'المنتج A · الأساسي') : p9Txt('Product B · Add to A', 'المنتج B · دمجه مع A')) + '</div>' +
-      '<div role="button" tabindex="0" class="s9-combo-trigger" style="width:100%;min-height:48px;border-radius:11px;border:1px solid ' + (selected ? color + '55' : 'rgba(255,255,255,.12)') + ';background:rgba(255,255,255,.04);color:#fff;padding:7px 11px;font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:9px;text-align:start;">' +
-        '<span style="width:29px;height:29px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + color + '18;color:' + color + ';font-weight:950;">' + (isPrimary ? 'A' : 'B') + '</span>' +
-        (selected ? '<span class="s9-combo-trigger-copy" style="min-width:0;flex:1;"><span class="s9-combo-product-name" style="display:block;font-size:12px;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(selected.name || selected.sku) + '</span>' + skuCopyHtml(selected.sku, { block: true, style: 'font-size:10px;color:rgba(255,255,255,.42);font-weight:700' }) + '</span>' : '<span class="s9-combo-placeholder" style="font-size:12px;color:rgba(255,255,255,.4);font-weight:750;flex:1;">' + p9Txt('Search by product or SKU...', 'ابحث باسم المنتج أو SKU...') + '</span>') +
+      '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:' + color + ';margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px;">' + (isPrimary ? p9Txt('Product A · Primary', 'المنتج A · الأساسي') : p9Txt('Product B · Add to A', 'المنتج B · دمجه مع A')) + '</div>' +
+      '<div role="button" tabindex="0" class="s9-combo-trigger" style="width:100%;min-height:48px;border-radius:var(--dash-radius-md);border:1px solid ' + (selected ? color + '55' : 'rgba(255,255,255,.12)') + ';background:rgba(255,255,255,.04);color:#fff;padding:7px 11px;font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:9px;text-align:start;">' +
+        '<span style="width:29px;height:29px;border-radius:var(--dash-radius-sm);display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + color + '18;color:' + color + ';font-weight:var(--weight-bold);">' + (isPrimary ? 'A' : 'B') + '</span>' +
+        (selected ? '<span class="s9-combo-trigger-copy" style="min-width:0;flex:1;"><span class="s9-combo-product-name" data-dashboard-product-name data-i18n-preserve style="display:block;font-size:var(--type-label);font-weight:var(--weight-semibold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><bdi dir="auto">' + escapeHtml(selected.name || selected.sku) + '</bdi></span>' + skuCopyHtml(selected.sku, { block: true, style: 'font-size:var(--type-micro);color:rgba(255,255,255,.42);font-weight:var(--weight-semibold)' }) + '</span>' : '<span class="s9-combo-placeholder" style="font-size:var(--type-label);color:rgba(255,255,255,.4);font-weight:var(--weight-semibold);flex:1;">' + p9Txt('Search by product or SKU...', 'ابحث باسم المنتج أو SKU...') + '</span>') +
         '<span class="s9-combo-arrow" style="color:rgba(255,255,255,.4);">⌄</span>' +
       '</div>' +
-      '<div class="s9-combo-panel" style="display:none;position:absolute;top:calc(100% + 6px);inset-inline:0;z-index:20;background:#0d1526;border:1px solid rgba(255,255,255,.14);border-radius:13px;overflow:hidden;box-shadow:0 18px 45px rgba(0,0,0,.45);">' +
-        '<div style="padding:9px;border-bottom:1px solid rgba(255,255,255,.07);"><input class="s9-combo-search" type="search" placeholder="' + p9Txt('Search name or SKU...', 'ابحث بالاسم أو SKU...') + '" style="width:100%;box-sizing:border-box;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);color:#fff;padding:0 10px;font-family:inherit;font-size:12px;outline:none;"></div>' +
-        '<div class="s9-combo-options" style="max-height:230px;overflow:auto;padding:6px;">' + (options || '<div style="padding:18px;text-align:center;color:rgba(255,255,255,.42);font-size:11px;">' + p9Txt('No available products', 'لا توجد منتجات متاحة') + '</div>') + '</div>' +
+      '<div class="s9-combo-panel" style="display:none;position:absolute;top:calc(100% + 6px);inset-inline:0;z-index:20;background:#0d1526;border:1px solid rgba(255,255,255,.14);border-radius:var(--dash-radius-lg);overflow:hidden;box-shadow:0 18px 45px rgba(0,0,0,.45);">' +
+        '<div style="padding:9px;border-bottom:1px solid rgba(255,255,255,.07);"><input class="s9-combo-search" type="search" placeholder="' + p9Txt('Search name or SKU...', 'ابحث بالاسم أو SKU...') + '" style="width:100%;box-sizing:border-box;height:36px;border-radius:var(--dash-radius-sm);border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);color:#fff;padding:0 10px;font-family:inherit;font-size:var(--type-label);outline:none;"></div>' +
+        '<div class="s9-combo-options" style="max-height:230px;overflow:auto;padding:6px;">' + (options || '<div style="padding:18px;text-align:center;color:rgba(255,255,255,.42);font-size:var(--type-caption);">' + p9Txt('No available products', 'لا توجد منتجات متاحة') + '</div>') + '</div>' +
       '</div>' +
     '</div>';
   }
@@ -1650,7 +1674,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     var primary = combinationProduct(combinationModalState.primarySku);
     var secondary = combinationProduct(combinationModalState.secondarySku);
     if (!primary || !secondary) {
-      return '<div class="s9-combo-empty-preview" style="padding:14px;border-radius:12px;border:1px dashed rgba(255,255,255,.12);color:rgba(255,255,255,.45);font-size:11px;text-align:center;">' + p9Txt('Choose two products to preview the combined numbers.', 'اختر منتجين لمعاينة الأرقام بعد الدمج.') + '</div>';
+      return '<div class="s9-combo-empty-preview" style="padding:14px;border-radius:var(--dash-radius-md);border:1px dashed rgba(255,255,255,.12);color:rgba(255,255,255,.45);font-size:var(--type-caption);text-align:center;">' + p9Txt('Choose two products to preview the combined numbers.', 'اختر منتجين لمعاينة الأرقام بعد الدمج.') + '</div>';
     }
     var preview = aggregateProductGroup({ id: 'preview', primarySku: primary.sku, skus: [primary.sku, secondary.sku] }, [primary, secondary]);
     var spend = simulations.reduce(function (sum, sim) {
@@ -1663,26 +1687,26 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
       [p9Txt('Ad Spend', 'الإنفاق الإعلاني'), formatMoney(spend)],
       [p9Txt('Net Profit', 'صافي الربح'), formatMoney(profit)]
     ];
-    return '<div class="s9-combo-preview"><div class="s9-combo-preview-title" style="font-size:10px;font-weight:950;color:#c4b5fd;margin-bottom:8px;">' + p9Txt('COMBINED PREVIEW', 'معاينة الدمج') + '</div><div class="s9-combo-preview-grid" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;">' + cards.map(function (card) {
-      return '<div class="s9-combo-preview-card" style="padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.035);"><div class="s9-combo-preview-label" style="font-size:9px;color:rgba(255,255,255,.45);font-weight:800;margin-bottom:4px;">' + card[0] + '</div><div class="s9-combo-preview-value" dir="ltr" style="font-size:13px;color:#fff;font-weight:950;">' + card[1] + '</div></div>';
+    return '<div class="s9-combo-preview"><div class="s9-combo-preview-title" style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:#c4b5fd;margin-bottom:8px;">' + p9Txt('COMBINED PREVIEW', 'معاينة الدمج') + '</div><div class="s9-combo-preview-grid" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;">' + cards.map(function (card) {
+      return '<div class="s9-combo-preview-card" style="padding:10px;border-radius:var(--dash-radius-md);border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.035);"><div class="s9-combo-preview-label" style="font-size:var(--type-micro);color:rgba(255,255,255,.45);font-weight:var(--weight-semibold);margin-bottom:4px;">' + card[0] + '</div><div class="s9-combo-preview-value" dir="ltr" style="font-size:var(--type-control);color:#fff;font-weight:var(--weight-semibold);">' + card[1] + '</div></div>';
     }).join('') + '</div></div>';
   }
   function renderCombinationModal() {
     if (!combinationModal) return;
     var canCombine = combinationProduct(combinationModalState.primarySku) && combinationProduct(combinationModalState.secondarySku) && skuKey(combinationModalState.primarySku) !== skuKey(combinationModalState.secondarySku);
-    combinationModal.innerHTML = '<div class="s9-combo-dialog" style="width:min(720px,96vw);max-height:92vh;overflow:visible;border-radius:20px;background:#0b1120;border:1px solid rgba(255,255,255,.12);box-shadow:0 30px 90px rgba(0,0,0,.6);">' +
+    combinationModal.innerHTML = '<div class="s9-combo-dialog" style="width:min(720px,96vw);max-height:92vh;overflow:visible;border-radius:var(--dash-radius-xl);background:var(--dash-surface);border:1px solid rgba(255,255,255,.12);box-shadow:0 30px 90px rgba(0,0,0,.6);">' +
       '<div class="s9-combo-header" style="padding:18px 20px;border-bottom:1px solid rgba(255,255,255,.075);display:flex;align-items:center;justify-content:space-between;gap:14px;">' +
-        '<div><div class="s9-combo-title" style="font-size:18px;font-weight:950;color:#fff;">' + p9Txt('Combine Products', 'دمج المنتجات') + '</div><div class="s9-combo-subtitle" style="font-size:11px;color:rgba(255,255,255,.43);font-weight:700;margin-top:3px;">' + p9Txt('Create one forecasting row from two SKUs. Imported data stays unchanged.', 'أنشئ صف توقعات واحدًا من رمزين SKU بدون تغيير البيانات المستوردة.') + '</div></div>' +
-        '<button type="button" class="s9-combo-close" style="width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);color:#fff;font-size:20px;cursor:pointer;">&times;</button>' +
+        '<div><div class="s9-combo-title" style="font-size:var(--type-section-title);font-weight:var(--weight-semibold);color:#fff;">' + p9Txt('Combine Products', 'دمج المنتجات') + '</div><div class="s9-combo-subtitle" style="font-size:var(--type-caption);color:rgba(255,255,255,.43);font-weight:var(--weight-semibold);margin-top:3px;">' + p9Txt('Create one forecasting row from two SKUs. Imported data stays unchanged.', 'أنشئ صف توقعات واحدًا من رمزين SKU بدون تغيير البيانات المستوردة.') + '</div></div>' +
+        '<button type="button" class="s9-combo-close" style="width:36px;height:36px;border-radius:var(--dash-radius-md);border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);color:#fff;font-size:var(--type-metric-sm);cursor:pointer;">&times;</button>' +
       '</div>' +
       '<div style="padding:18px 20px;display:flex;flex-direction:column;gap:16px;">' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' + combinationSelectorHtml('primary', combinationModalState.primarySku) + combinationSelectorHtml('secondary', combinationModalState.secondarySku) + '</div>' +
         combinationPreviewHtml() +
-        '<div class="s9-combo-note" style="font-size:10px;line-height:1.7;color:rgba(255,255,255,.46);">' + p9Txt('Product A keeps its name and primary SKU. Product B becomes an alias. Both original rows are replaced by one reversible combined row in Section 9.', 'يحتفظ المنتج A باسمه ورمز SKU الأساسي، ويصبح المنتج B رمزًا بديلًا. يتم استبدال الصفين بصف واحد قابل لإلغاء الدمج داخل القسم 9.') + '</div>' +
+        '<div class="s9-combo-note" style="font-size:var(--type-micro);line-height:1.7;color:rgba(255,255,255,.46);">' + p9Txt('Product A keeps its name and primary SKU. Product B becomes an alias. Both original rows are replaced by one reversible combined row in Section 9.', 'يحتفظ المنتج A باسمه ورمز SKU الأساسي، ويصبح المنتج B رمزًا بديلًا. يتم استبدال الصفين بصف واحد قابل لإلغاء الدمج داخل القسم 9.') + '</div>' +
       '</div>' +
       '<div class="s9-combo-footer" style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.075);display:flex;justify-content:flex-end;gap:9px;">' +
-        '<button type="button" class="s9-combo-cancel" style="border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.7);border-radius:9px;padding:8px 14px;font-family:inherit;font-size:11px;font-weight:850;cursor:pointer;">' + p9Txt('Cancel', 'إلغاء') + '</button>' +
-        '<button type="button" class="s9-combo-confirm"' + (canCombine ? '' : ' disabled') + ' style="border:1px solid rgba(168,85,247,.48);background:rgba(168,85,247,.2);color:#ddd6fe;border-radius:9px;padding:8px 15px;font-family:inherit;font-size:11px;font-weight:950;cursor:' + (canCombine ? 'pointer' : 'default') + ';opacity:' + (canCombine ? '1' : '.4') + ';">' + p9Txt('Combine', 'دمج') + '</button>' +
+        '<button type="button" class="s9-combo-cancel" style="border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.7);border-radius:var(--dash-radius-sm);padding:8px 14px;font-family:inherit;font-size:var(--type-caption);font-weight:var(--weight-semibold);cursor:pointer;">' + p9Txt('Cancel', 'إلغاء') + '</button>' +
+        '<button type="button" class="s9-combo-confirm"' + (canCombine ? '' : ' disabled') + ' style="border:1px solid rgba(168,85,247,.48);background:rgba(168,85,247,.2);color:#ddd6fe;border-radius:var(--dash-radius-sm);padding:8px 15px;font-family:inherit;font-size:var(--type-caption);font-weight:var(--weight-semibold);cursor:' + (canCombine ? 'pointer' : 'default') + ';opacity:' + (canCombine ? '1' : '.4') + ';">' + p9Txt('Combine', 'دمج') + '</button>' +
       '</div>' +
     '</div>';
 
@@ -1753,7 +1777,7 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     combinationModalState = { primarySku: '', secondarySku: '' };
     combinationModal = document.createElement('div');
     combinationModal.className = 'dash-overlay-scope';
-    combinationModal.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.74);font-family:Cairo,sans-serif;direction:' + (isAr ? 'rtl' : 'ltr') + ';box-sizing:border-box;';
+    combinationModal.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.74);font-family:var(--font-ui);direction:' + (isAr ? 'rtl' : 'ltr') + ';box-sizing:border-box;';
     combinationModal.addEventListener('click', function (event) {
       if (event.target === combinationModal) {
         closeCombinationModal();
@@ -1913,9 +1937,9 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
     var gaugeWrap = mountEl.querySelector('#s9-gauge-wrap');
     if (gaugeWrap) gaugeWrap.innerHTML = gaugeHtml(c.roi);
 
-    // KPI cards — update text nodes only
-    var cards = mountEl.querySelectorAll('.s7-card');
-    if (cards.length >= 6) {
+    // Financial KPI cards — update text nodes only
+    var cards = mountEl.querySelectorAll('.s9-kpi-cards-grid .s7-card');
+    if (cards.length >= 4) {
       // Net Profit — update text AND color (class + inline important)
       var npEl = cards[0].querySelector('.s9-kpi-netprofit');
       if (npEl) {
@@ -1934,15 +1958,9 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         beEl.innerHTML = valueStack(formatMoney(c.breakEvenCpa, false, 2), 'breakeven', 's9-card-value-stack');
         beEl.style.color = c.cpa > c.breakEvenCpa ? '#ef4444' : '#f59e0b';
       }
-      // Confirmed
-      var confirmedEl = cards[4].querySelector('.s9-kpi-confirmed');
-      if (confirmedEl) confirmedEl.textContent = p9Num(s.realConfirmed);
-      // Delivered
-      var delEl = cards[5].querySelector('div:nth-child(2)');
-      if (delEl) delEl.innerHTML = valueStack(p9Num(Math.round(c.deliveredOrders)), 'delivered', 's9-card-value-stack');
     }
 
-    // Metric mini-cards (4-grid above gauge)
+    // Metric mini-cards above controls
     var simPanel = mountEl.querySelector('[data-sim-panel]');
     if (simPanel) {
       var metricVals = simPanel.querySelectorAll('.s9-metric-val');
@@ -2143,6 +2161,9 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         var v = parseFloat(e.target.value);
         if (isNaN(v) || v < 0) return;
         setSimDeliveredOrders(simulations[selectedIdx], v);
+        if (String(e.target.value) !== String(simulations[selectedIdx].deliveredOrders)) {
+          e.target.value = simulations[selectedIdx].deliveredOrders;
+        }
         updateSimulatorOnly();
       });
     }
@@ -2181,6 +2202,13 @@ window.renderSectionProductForecast = function (mountEl, data, ctx) {
         resetSimulationToReal(simulations[selectedIdx]);
         invalidateSimulationRowsCache();
         renderAll();
+      });
+    }
+
+    var forecastDetails = eventRoot.querySelector('.s9-forecast-details');
+    if (forecastDetails) {
+      forecastDetails.addEventListener('toggle', function () {
+        mountEl._s9ForecastDetailsExpanded = forecastDetails.open;
       });
     }
 

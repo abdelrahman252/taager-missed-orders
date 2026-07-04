@@ -106,9 +106,9 @@ function renderKpiSection(container, runs, dateRange, settings, activeFilter) {
       deltaStr = absMin + "m";
     }
     var cls = timeDiffMin >= 0 ? "up" : "down";
-    timeSavedDeltaHtml = '<span class="kpi-delta ' + cls + '">' + sign + ' ' + deltaStr + ' <span style="font-weight:400;opacity:.65">' + periodLabel + '</span></span>';
+    timeSavedDeltaHtml = '<span class="kpi-delta ' + cls + '">' + sign + ' ' + deltaStr + ' <span style="font-weight:var(--weight-regular);opacity:.65">' + periodLabel + '</span></span>';
   } else {
-    timeSavedDeltaHtml = '<span class="kpi-delta flat">— <span style="font-weight:400;opacity:.65">' + periodLabel + '</span></span>';
+    timeSavedDeltaHtml = '<span class="kpi-delta flat">— <span style="font-weight:var(--weight-regular);opacity:.65">' + periodLabel + '</span></span>';
   }
 
   var kpis = [
@@ -231,10 +231,10 @@ function _kpiCardHtml(k) {
     var cls    = isGood ? "up" : "down";
     var sign   = k.delta.positive ? "▲" : "▼";
     var lbl    = k.periodLabel || window.t_anl('kpi.prevPeriod');
-    deltaHtml = '<span class="kpi-delta ' + cls + '">' + sign + ' ' + k.delta.pct + '% <span style="font-weight:400;opacity:.65">' + lbl + '</span></span>';
+    deltaHtml = '<span class="kpi-delta ' + cls + '">' + sign + ' ' + k.delta.pct + '% <span style="font-weight:var(--weight-regular);opacity:.65">' + lbl + '</span></span>';
   } else {
     var lbl = k.periodLabel || window.t_anl('kpi.prevPeriod');
-    deltaHtml = '<span class="kpi-delta flat">— <span style="font-weight:400;opacity:.65">' + lbl + '</span></span>';
+    deltaHtml = '<span class="kpi-delta flat">— <span style="font-weight:var(--weight-regular);opacity:.65">' + lbl + '</span></span>';
   }
 
   // Get high-quality SVG based on ID to match mockup mockup icons
@@ -257,7 +257,7 @@ function _kpiCardHtml(k) {
 
   var helperHtml = "";
   if (k.id === "time-saved") {
-    helperHtml = '<div class="kpi-card-helper" style="font-size:8px;color:#64748b;margin-top:2px;line-height:1.2;font-weight:500;">' + window.t_anl('kpi.timeSavedHelper') + '</div>';
+    helperHtml = '<div class="kpi-card-helper" style="font-size:var(--type-micro);color:#64748b;margin-top:2px;line-height:1.2;font-weight:var(--weight-medium);">' + window.t_anl('kpi.timeSavedHelper') + '</div>';
   }
 
   return '<div class="kpi-card" data-kpi-id="' + k.id + '" data-color="' + k.color + '">' +

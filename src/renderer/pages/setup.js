@@ -54,6 +54,7 @@ window.renderSetup = function (onComplete, initialStep) {
         accounts = [{
           id: "account_1",
           label: buildLabel(1),
+          cmsProvider: "easyorders",
           easyEmail: creds.easyEmail,
           easyStore: creds.easyStore || "",
           taagerEmail: creds.taagerEmail || "",
@@ -206,34 +207,34 @@ window.renderSetup = function (onComplete, initialStep) {
           background: rgba(124,106,247,.12);
           border: 1px solid rgba(124,106,247,.3);
           color: #b3a9f9;
-          border-radius: 99px;
+          border-radius:var(--radius-pill);
           padding: 3px 12px;
-          font-size: 10px;
-          font-weight: 700;
+          font-size:var(--type-micro);
+          font-weight:var(--weight-semibold);
           letter-spacing: .1em;
           text-transform: uppercase;
           margin-bottom: 8px;
         }
 
-        .sv3-page-title { font-size: 24px; font-weight: 800; color: var(--text); letter-spacing: -.4px; margin-bottom: 4px; }
-        .sv3-page-sub   { font-size: 13px; color: var(--text2); margin-bottom: 28px; }
+        .sv3-page-title { font-size:var(--type-metric); font-weight:var(--weight-bold); color: var(--text); letter-spacing: -.4px; margin-bottom: 4px; }
+        .sv3-page-sub   { font-size:var(--type-control); color: var(--text2); margin-bottom: 28px; }
         .sv3-recovery-note {
           display: flex;
           align-items: flex-start;
           gap: 12px;
           padding: 14px 16px;
           margin-bottom: 18px;
-          border-radius: 8px;
+          border-radius:var(--radius-xs);
           background: rgba(245, 158, 11, .12);
           border: 1px solid rgba(245, 158, 11, .34);
           color: var(--text);
-          font-size: 13px;
+          font-size:var(--type-control);
           line-height: 1.45;
         }
         .sv3-recovery-note strong {
           display: block;
           margin-bottom: 3px;
-          font-size: 13px;
+          font-size:var(--type-control);
         }
         .sv3-recovery-note span {
           color: var(--text2);
@@ -249,8 +250,8 @@ window.renderSetup = function (onComplete, initialStep) {
           background: rgba(245, 158, 11, .2);
           border: 1px solid rgba(245, 158, 11, .4);
           color: #fbbf24;
-          font-weight: 900;
-          font-size: 13px;
+          font-weight:var(--weight-semibold);
+          font-size:var(--type-control);
         }
 
         .sv3-run-title-lockup {
@@ -261,7 +262,7 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-run-icon {
           width: 56px;
           height: 56px;
-          border-radius: 14px;
+          border-radius:var(--radius-md);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -269,15 +270,15 @@ window.renderSetup = function (onComplete, initialStep) {
           background: linear-gradient(135deg, rgba(124,106,247,.55), rgba(79,142,247,.18));
           border: 1px solid rgba(124,106,247,.28);
           box-shadow: 0 18px 46px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.1);
-          font-size: 24px;
+          font-size:var(--type-metric);
         }
         .sv3-run-title-lockup .sv3-page-title {
-          font-size: 30px;
+          font-size:var(--type-page-title);
           line-height: 1.05;
           margin-bottom: 8px;
         }
         .sv3-run-title-lockup .sv3-page-sub {
-          font-size: 15px;
+          font-size:var(--type-component-title);
           margin-bottom: 0;
         }
         .sv3-run-hero {
@@ -335,8 +336,8 @@ window.renderSetup = function (onComplete, initialStep) {
           background: var(--bg2);
           border: 1px solid var(--border);
           color: var(--text);
-          font-size: 16px;
-          font-weight: 800;
+          font-size:var(--type-subtitle);
+          font-weight:var(--weight-semibold);
         }
         .sv3-flow-node.done .sv3-flow-node-num { background: linear-gradient(135deg,#21d892,#09a86d); border-color: rgba(55,239,166,.45); color: #041b13; }
         .sv3-flow-node.active .sv3-flow-node-num { background: linear-gradient(135deg,#8d63ff,#6847d8); border-color: rgba(167,139,250,.6); color: #fff; box-shadow: 0 0 0 8px rgba(124,106,247,.14), 0 16px 34px rgba(97,70,215,.28); }
@@ -344,7 +345,7 @@ window.renderSetup = function (onComplete, initialStep) {
           content: "";
           position: absolute;
           inset: -8px;
-          border-radius: 999px;
+          border-radius:var(--radius-pill);
           border: 1px solid rgba(124,106,247,.55);
           animation: sv3-step-heartbeat 1.45s ease-out infinite;
           pointer-events: none;
@@ -361,8 +362,8 @@ window.renderSetup = function (onComplete, initialStep) {
           gap: 2px;
           min-width: 0;
         }
-        .sv3-flow-node-title { font-size: 14px; font-weight: 800; color: var(--text); }
-        .sv3-flow-node-sub { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sv3-flow-node-title { font-size:var(--type-body); font-weight:var(--weight-semibold); color: var(--text); }
+        .sv3-flow-node-sub { font-size:var(--type-label); color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         .sv3-flow-panel {
           position: relative;
@@ -397,7 +398,7 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-step-badge {
           width: 34px;
           height: 34px;
-          border-radius: 10px;
+          border-radius:var(--radius-sm);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -405,16 +406,16 @@ window.renderSetup = function (onComplete, initialStep) {
           background: rgba(124,106,247,.14);
           border: 1px solid rgba(124,106,247,.3);
           color: #c5bfff;
-          font-size: 13px;
-          font-weight: 900;
+          font-size:var(--type-control);
+          font-weight:var(--weight-semibold);
         }
         .sv3-step-badge.green {
           background: rgba(0,214,143,.12);
           border-color: rgba(0,214,143,.28);
           color: #45e6b3;
         }
-        .sv3-section-title-lg { font-size: 16px; font-weight: 800; color: var(--text); margin-bottom: 4px; }
-        .sv3-section-copy { font-size: 12px; color: var(--text2); line-height: 1.45; }
+        .sv3-section-title-lg { font-size:var(--type-subtitle); font-weight:var(--weight-semibold); color: var(--text); margin-bottom: 4px; }
+        .sv3-section-copy { font-size:var(--type-label); color: var(--text2); line-height: 1.45; }
         .sv3-settings-dock {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -426,7 +427,7 @@ window.renderSetup = function (onComplete, initialStep) {
             radial-gradient(circle at 12% 18%, rgba(79,142,247,.1), transparent 34%),
             rgba(24,33,50,.7);
           border: 1px solid rgba(125,148,186,.22);
-          border-radius: 20px;
+          border-radius:var(--radius-lg);
           padding: 28px 30px;
           min-height: 142px;
           transition: border-color .2s, background .2s;
@@ -444,12 +445,12 @@ window.renderSetup = function (onComplete, initialStep) {
           justify-content: space-between;
           gap: 12px;
         }
-        .sv3-setting-title { font-size: 12px; font-weight: 800; color: var(--text); margin-bottom: 0; }
+        .sv3-setting-title { font-size:var(--type-label); font-weight:var(--weight-semibold); color: var(--text); margin-bottom: 0; }
         .sv3-setting-desc {
           width: 100%;
           margin-top: 9px;
           padding-inline-start: 48px;
-          font-size: 10.5px;
+          font-size:var(--type-caption);
           color: var(--text2);
           line-height: 1.45;
         }
@@ -457,14 +458,14 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-setting-icon {
           width: 52px;
           height: 52px;
-          border-radius: 14px;
+          border-radius:var(--radius-md);
           display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
           background: linear-gradient(135deg, rgba(124,106,247,.52), rgba(79,142,247,.14));
           border: 1px solid rgba(167,139,250,.22);
-          font-size: 24px;
+          font-size:var(--type-metric);
           box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
         }
         .sv3-setting-copy {
@@ -476,7 +477,7 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-toggle-btn {
           width: 46px;
           height: 25px;
-          border-radius: 999px;
+          border-radius:var(--radius-pill);
           border: none;
           cursor: pointer;
           position: relative;
@@ -495,19 +496,19 @@ window.renderSetup = function (onComplete, initialStep) {
           transition: transform .25s;
           box-shadow: 0 2px 8px rgba(0,0,0,.18);
         }
-        .sv3-toggle-label { font-size: 10px; color: var(--text2); min-width: 24px; font-weight: 700; }
+        .sv3-toggle-label { font-size:var(--type-micro); color: var(--text2); min-width: 24px; font-weight:var(--weight-semibold); }
 
         /* ── Section card ── */
         .sv3-section {
           background: var(--bg2);
           border: 1px solid var(--border);
-          border-radius: 14px;
+          border-radius:var(--radius-md);
           padding: 20px 24px;
           margin-bottom: 18px;
         }
         .sv3-date-panel {
           position: relative;
-          border-radius: 24px;
+          border-radius:var(--radius-lg);
           padding: 28px 44px 30px;
           overflow: hidden;
           background:
@@ -529,7 +530,7 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-users-panel {
           position: relative;
-          border-radius: 24px;
+          border-radius:var(--radius-lg);
           padding: 34px 38px 30px;
           overflow: hidden;
           background:
@@ -560,21 +561,21 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-date-panel .sv3-step-badge {
           width: 58px;
           height: 58px;
-          border-radius: 14px;
-          font-size: 24px;
+          border-radius:var(--radius-md);
+          font-size:var(--type-metric);
           background: linear-gradient(135deg, rgba(124,106,247,.82), rgba(61,38,135,.74));
           border-color: rgba(167,139,250,.34);
           box-shadow: 0 14px 32px rgba(80,55,180,.26), inset 0 1px 0 rgba(255,255,255,.08);
         }
         .sv3-users-panel .sv3-section-title-lg,
         .sv3-date-panel .sv3-section-title-lg {
-          font-size: 25px;
+          font-size:var(--type-metric);
           line-height: 1.1;
           margin-bottom: 10px;
         }
         .sv3-users-panel .sv3-section-copy,
         .sv3-date-panel .sv3-section-copy {
-          font-size: 16px;
+          font-size:var(--type-subtitle);
           color: #aab6ca;
         }
         .sv3-users-panel .sv3-settings-dock {
@@ -584,12 +585,12 @@ window.renderSetup = function (onComplete, initialStep) {
           align-items: flex-start;
         }
         .sv3-users-panel .sv3-setting-title {
-          font-size: 19px;
+          font-size:var(--type-section-title);
           margin-bottom: 10px;
         }
         .sv3-users-panel .sv3-setting-desc {
           max-width: 285px;
-          font-size: 15px;
+          font-size:var(--type-component-title);
           line-height: 1.5;
           color: #aab6ca;
         }
@@ -605,7 +606,7 @@ window.renderSetup = function (onComplete, initialStep) {
           height: 28px;
         }
         .sv3-users-panel .sv3-toggle-label {
-          font-size: 13px;
+          font-size:var(--type-control);
           min-width: 34px;
         }
         .sv3-section-hd {
@@ -614,9 +615,9 @@ window.renderSetup = function (onComplete, initialStep) {
           gap: 10px;
           margin-bottom: 4px;
         }
-        .sv3-section-hd-icon { font-size: 18px; }
-        .sv3-section-hd-title { font-size: 15px; font-weight: 700; color: var(--text); }
-        .sv3-section-desc { font-size: 12px; color: var(--text2); margin-bottom: 20px; padding-left: 28px; }
+        .sv3-section-hd-icon { font-size:var(--type-section-title); }
+        .sv3-section-hd-title { font-size:var(--type-component-title); font-weight:var(--weight-semibold); color: var(--text); }
+        .sv3-section-desc { font-size:var(--type-label); color: var(--text2); margin-bottom: 20px; padding-left: 28px; }
 
         /* ── Account cards grid ── */
         .sv3-grid {
@@ -634,7 +635,7 @@ window.renderSetup = function (onComplete, initialStep) {
           justify-content: center;
           gap: 12px;
           padding: 28px 28px 26px;
-          border-radius: 20px;
+          border-radius:var(--radius-lg);
           background:
             radial-gradient(circle at 50% 10%, rgba(79,142,247,.1), transparent 40%),
             rgba(24,33,50,.66);
@@ -660,33 +661,33 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-run-accounts .sv3-avatar {
           width: 86px;
           height: 86px;
-          font-size: 40px;
+          font-size:var(--type-hero);
           margin-top: 10px;
           box-shadow: 0 18px 36px rgba(0,0,0,.2);
         }
         .sv3-run-accounts .sv3-avatar.lk {
           width: 88px;
           height: 88px;
-          font-size: 30px;
+          font-size:var(--type-page-title);
           background: rgba(10,16,27,.58);
           border-color: rgba(125,148,186,.2);
         }
         .sv3-run-accounts .sv3-acc-name {
           max-width: 100%;
-          font-size: 21px;
+          font-size:var(--type-metric-sm);
           line-height: 1.2;
           margin-top: 8px;
         }
         .sv3-run-accounts .sv3-acc-email {
           max-width: 100%;
-          font-size: 14px;
+          font-size:var(--type-body);
           color: #aab6ca;
         }
         .sv3-run-accounts .sv3-status-pill {
           margin-top: 10px;
           padding: 11px 28px;
-          font-size: 15px;
-          border-radius: 999px;
+          font-size:var(--type-component-title);
+          border-radius:var(--radius-pill);
           letter-spacing: .04em;
         }
         .sv3-run-accounts .sv3-status-pill.ok {
@@ -700,10 +701,10 @@ window.renderSetup = function (onComplete, initialStep) {
           left: 22px;
           background: rgba(245,158,11,.16);
           border: 1px solid rgba(245,158,11,.5);
-          border-radius: 999px;
+          border-radius:var(--radius-pill);
           padding: 7px 15px;
-          font-size: 14px;
-          font-weight: 800;
+          font-size:var(--type-body);
+          font-weight:var(--weight-semibold);
           color: #ffd166;
           letter-spacing: .01em;
         }
@@ -714,7 +715,7 @@ window.renderSetup = function (onComplete, initialStep) {
           min-height: 178px;
           background: var(--bg3, #1e2535);
           border: 1.5px solid var(--border);
-          border-radius: 14px;
+          border-radius:var(--radius-md);
           padding: 28px 14px 14px;
           display: flex;
           flex-direction: column;
@@ -813,11 +814,11 @@ window.renderSetup = function (onComplete, initialStep) {
           white-space: nowrap;
           background: rgba(245,158,11,.13);
           border: 1px solid rgba(245,158,11,.34);
-          border-radius: 999px;
+          border-radius:var(--radius-pill);
           padding: 5px 8px;
           color: #ffd166;
-          font-size: 9px;
-          font-weight: 900;
+          font-size:var(--type-micro);
+          font-weight:var(--weight-semibold);
           letter-spacing: .02em;
           line-height: 1;
         }
@@ -862,8 +863,8 @@ window.renderSetup = function (onComplete, initialStep) {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 18px;
-          font-weight: 800;
+          font-size:var(--type-section-title);
+          font-weight:var(--weight-bold);
           color: #fff;
           flex-shrink: 0;
           margin-top: 8px;
@@ -872,12 +873,12 @@ window.renderSetup = function (onComplete, initialStep) {
           background: var(--bg2);
           border: 1.5px solid var(--border);
           color: var(--text2);
-          font-size: 16px;
+          font-size:var(--type-subtitle);
         }
 
         .sv3-acc-name {
-          font-size: 12px;
-          font-weight: 700;
+          font-size:var(--type-label);
+          font-weight:var(--weight-semibold);
           color: var(--text);
           white-space: nowrap;
           overflow: hidden;
@@ -885,7 +886,7 @@ window.renderSetup = function (onComplete, initialStep) {
           max-width: 116px;
         }
         .sv3-acc-email {
-          font-size: 10px;
+          font-size:var(--type-micro);
           color: var(--text2);
           white-space: nowrap;
           overflow: hidden;
@@ -896,10 +897,10 @@ window.renderSetup = function (onComplete, initialStep) {
           border: 1px solid rgba(124,106,247,.35);
           background: rgba(124,106,247,.12);
           color: #b8b0ff;
-          border-radius: 999px;
+          border-radius:var(--radius-pill);
           padding: 3px 8px;
-          font-size: 9px;
-          font-weight: 800;
+          font-size:var(--type-micro);
+          font-weight:var(--weight-semibold);
           cursor: pointer;
           max-width: 112px;
           white-space: nowrap;
@@ -917,10 +918,10 @@ window.renderSetup = function (onComplete, initialStep) {
           display: inline-flex;
           align-items: center;
           gap: 4px;
-          border-radius: 99px;
+          border-radius:var(--radius-pill);
           padding: 2px 8px;
-          font-size: 9px;
-          font-weight: 700;
+          font-size:var(--type-micro);
+          font-weight:var(--weight-semibold);
           text-transform: uppercase;
           letter-spacing: .05em;
           margin-top: 2px;
@@ -943,8 +944,8 @@ window.renderSetup = function (onComplete, initialStep) {
           border: 1px solid var(--border);
           border-radius: 5px;
           padding: 2px 8px;
-          font-size: 9px;
-          font-weight: 700;
+          font-size:var(--type-micro);
+          font-weight:var(--weight-semibold);
           cursor: pointer;
           color: var(--text2);
           transition: all .1s;
@@ -959,7 +960,7 @@ window.renderSetup = function (onComplete, initialStep) {
           min-height: 178px;
           background: rgba(255,255,255,.018);
           border: 1.5px dashed rgba(125,148,186,.22);
-          border-radius: 14px;
+          border-radius:var(--radius-md);
           padding: 14px 12px;
           display: flex;
           flex-direction: column;
@@ -980,17 +981,17 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-add-disabled { opacity: .35; cursor: not-allowed; }
         .sv3-add-circle {
           width: 44px; height: 44px;
-          border-radius: 14px;
+          border-radius:var(--radius-md);
           background: rgba(124,106,247,.1);
           border: 1px solid rgba(124,106,247,.28);
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 20px;
+          font-size:var(--type-metric-sm);
           color: #b3a9f9;
         }
-        .sv3-add-label { font-size: 11px; font-weight: 700; line-height: 1.3; }
-        .sv3-add-warn  { font-size: 9px; color: #ffc94d; line-height: 1.3; margin-top: 2px; }
+        .sv3-add-label { font-size:var(--type-caption); font-weight:var(--weight-semibold); line-height: 1.3; }
+        .sv3-add-warn  { font-size:var(--type-micro); color: #ffc94d; line-height: 1.3; margin-top: 2px; }
 
         /* Selected count bar */
         .sv3-sel-bar {
@@ -998,7 +999,7 @@ window.renderSetup = function (onComplete, initialStep) {
           align-items: center;
           justify-content: center;
           gap: 6px;
-          font-size: 12px;
+          font-size:var(--type-label);
           color: var(--text2);
           margin-top: 16px;
           padding-top: 14px;
@@ -1033,9 +1034,9 @@ window.renderSetup = function (onComplete, initialStep) {
           padding: 0 16px;
           background: rgba(16,23,36,.62);
           border: 1px solid rgba(125,148,186,.22);
-          border-radius: 10px;
-          font-size: 15px;
-          font-weight: 700;
+          border-radius:var(--radius-sm);
+          font-size:var(--type-component-title);
+          font-weight:var(--weight-semibold);
           color: #a9b5cc;
           cursor: pointer;
           display: flex;
@@ -1063,9 +1064,9 @@ window.renderSetup = function (onComplete, initialStep) {
           flex: 1;
           background: var(--bg3);
           border: 1px solid var(--border);
-          border-radius: 8px;
+          border-radius:var(--radius-xs);
           padding: 9px 12px;
-          font-size: 12px;
+          font-size:var(--type-label);
           color: var(--text);
           display: flex;
           align-items: center;
@@ -1075,14 +1076,14 @@ window.renderSetup = function (onComplete, initialStep) {
           background: transparent;
           border: none;
           outline: none;
-          font-size: 12px;
+          font-size:var(--type-label);
           color: var(--text);
           width: 100%;
           font-family: inherit;
           cursor: pointer;
         }
         .sv3-date-input::-webkit-calendar-picker-indicator { filter: invert(.6); cursor: pointer; }
-        .sv3-date-arrow { color: var(--text2); font-size: 14px; flex-shrink: 0; }
+        .sv3-date-arrow { color: var(--text2); font-size:var(--type-body); flex-shrink: 0; }
 
         /* Summary card */
         .sv3-summary-rows { display: flex; flex-direction: column; gap: 14px; }
@@ -1095,9 +1096,9 @@ window.renderSetup = function (onComplete, initialStep) {
           border-bottom: 1px solid var(--border);
         }
         .sv3-summary-row:last-child { border-bottom: none; padding-bottom: 0; }
-        .sv3-summary-row-left { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text2); }
-        .sv3-summary-row-left span { font-size: 16px; }
-        .sv3-summary-row-right { font-size: 13px; font-weight: 700; color: var(--text); text-align: right; }
+        .sv3-summary-row-left { display: flex; align-items: center; gap: 8px; font-size:var(--type-control); color: var(--text2); }
+        .sv3-summary-row-left span { font-size:var(--type-subtitle); }
+        .sv3-summary-row-right { font-size:var(--type-control); font-weight:var(--weight-semibold); color: var(--text); text-align: right; }
         .sv3-mini-avatars { display: flex; margin-top: 6px; }
         .sv3-mini-av {
           width: 26px; height: 26px;
@@ -1107,15 +1108,15 @@ window.renderSetup = function (onComplete, initialStep) {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 9px;
-          font-weight: 800;
+          font-size:var(--type-micro);
+          font-weight:var(--weight-semibold);
           color: #fff;
           margin-right: -6px;
         }
         .sv3-mini-av.more {
           background: var(--bg3);
           color: var(--text2);
-          font-size: 8px;
+          font-size:var(--type-micro);
         }
 
         /* ── Run button ── */
@@ -1123,7 +1124,7 @@ window.renderSetup = function (onComplete, initialStep) {
           margin-top: 18px;
           padding: 0;
           border: 1px solid rgba(125,148,186,.22);
-          border-radius: 16px;
+          border-radius:var(--radius-md);
           background: rgba(16,23,36,.52);
           overflow: hidden;
         }
@@ -1151,16 +1152,16 @@ window.renderSetup = function (onComplete, initialStep) {
           display: flex;
           align-items: center;
           gap: 6px;
-          font-size: 11px;
+          font-size:var(--type-caption);
           color: #9ca8bd;
           margin-bottom: 6px;
           text-transform: uppercase;
           letter-spacing: .06em;
-          font-weight: 800;
+          font-weight:var(--weight-semibold);
         }
         .sv3-review-value {
-          font-size: 17px;
-          font-weight: 800;
+          font-size:var(--type-section-title);
+          font-weight:var(--weight-bold);
           color: var(--text);
           white-space: nowrap;
           overflow: hidden;
@@ -1170,11 +1171,11 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-review-icon {
           width: 48px;
           height: 48px;
-          border-radius: 999px;
+          border-radius:var(--radius-pill);
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 18px;
+          font-size:var(--type-section-title);
           box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
         }
         .sv3-review-icon.users { color:#c78bff; background:rgba(124,58,237,.22); border:1px solid rgba(167,139,250,.28); }
@@ -1204,7 +1205,7 @@ window.renderSetup = function (onComplete, initialStep) {
           margin-top: 34px;
           padding: 18px;
           border-top: 0;
-          border-radius: 22px;
+          border-radius:var(--radius-lg);
           background: rgba(10,16,27,.28);
         }
         .sv3-continue-btn {
@@ -1212,9 +1213,9 @@ window.renderSetup = function (onComplete, initialStep) {
           min-width: 168px;
           min-height: 82px;
           padding: 0 22px;
-          border-radius: 10px;
+          border-radius:var(--radius-sm);
           background: linear-gradient(90deg,#7c3aed,#4f8ef7);
-          font-size: 22px;
+          font-size:var(--type-metric-sm);
         }
         .sv3-run-primary {
           flex: 1;
@@ -1228,7 +1229,7 @@ window.renderSetup = function (onComplete, initialStep) {
           background: rgba(16,23,36,.46);
           border: 1px solid rgba(125,148,186,.22);
           color: #f3f6ff;
-          font-size: 16px;
+          font-size:var(--type-subtitle);
           padding: 0 18px;
           box-shadow: none;
         }
@@ -1236,7 +1237,7 @@ window.renderSetup = function (onComplete, initialStep) {
           min-height: 18px;
           margin-top: 18px;
           text-align: center;
-          font-size: 13px;
+          font-size:var(--type-control);
           color: var(--text2);
           display: flex;
           align-items: center;
@@ -1247,12 +1248,12 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-date-ready {
           background: rgba(0,214,143,.08);
           border: 1px solid rgba(0,214,143,.22);
-          border-radius: 10px;
+          border-radius:var(--radius-sm);
           padding: 12px;
           text-align: center;
-          font-size: 12px;
+          font-size:var(--type-label);
           color: #45e6b3;
-          font-weight: 700;
+          font-weight:var(--weight-semibold);
           max-width: 720px;
           margin: 0 auto;
         }
@@ -1268,8 +1269,8 @@ window.renderSetup = function (onComplete, initialStep) {
           margin: 0 auto;
         }
         .sv3-date-field-label {
-          font-size: 12px;
-          font-weight: 800;
+          font-size:var(--type-label);
+          font-weight:var(--weight-semibold);
           color: var(--text2);
           text-transform: uppercase;
           letter-spacing: .06em;
@@ -1281,10 +1282,10 @@ window.renderSetup = function (onComplete, initialStep) {
           padding: 15px;
           background: linear-gradient(90deg, #7c6af7 0%, #4f8ef7 100%);
           border: none;
-          border-radius: 12px;
+          border-radius:var(--radius-sm);
           color: #fff;
-          font-size: 16px;
-          font-weight: 700;
+          font-size:var(--type-subtitle);
+          font-weight:var(--weight-semibold);
           cursor: pointer;
           display: flex;
           align-items: center;
@@ -1312,19 +1313,19 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-run-icon {
           width: 46px;
           height: 46px;
-          border-radius: 12px;
-          font-size: 20px;
+          border-radius:var(--radius-sm);
+          font-size:var(--type-metric-sm);
           box-shadow: 0 12px 30px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.08);
         }
         .sv3-run-title-lockup {
           gap: 14px;
         }
         .sv3-run-title-lockup .sv3-page-title {
-          font-size: 26px;
+          font-size:var(--type-page-title);
           margin-bottom: 5px;
         }
         .sv3-run-title-lockup .sv3-page-sub {
-          font-size: 13px;
+          font-size:var(--type-control);
         }
         .sv3-flow-stepper {
           width: min(410px, 100%);
@@ -1341,7 +1342,7 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-flow-node-num {
           width: 40px;
           height: 40px;
-          font-size: 14px;
+          font-size:var(--type-body);
         }
         .sv3-flow-node.active .sv3-flow-node-num {
           box-shadow: 0 0 0 5px rgba(124,106,247,.12), 0 10px 24px rgba(97,70,215,.22);
@@ -1351,14 +1352,14 @@ window.renderSetup = function (onComplete, initialStep) {
           opacity: .72;
         }
         .sv3-flow-node-title {
-          font-size: 13px;
+          font-size:var(--type-control);
         }
         .sv3-flow-node-sub {
-          font-size: 11px;
+          font-size:var(--type-caption);
         }
         .sv3-users-panel,
         .sv3-date-panel {
-          border-radius: 20px;
+          border-radius:var(--radius-lg);
           padding: 22px 28px 24px;
           box-shadow: 0 18px 52px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.035);
         }
@@ -1366,18 +1367,18 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-date-panel .sv3-step-badge {
           width: 44px;
           height: 44px;
-          border-radius: 12px;
-          font-size: 18px;
+          border-radius:var(--radius-sm);
+          font-size:var(--type-section-title);
           box-shadow: 0 10px 24px rgba(80,55,180,.2), inset 0 1px 0 rgba(255,255,255,.08);
         }
         .sv3-users-panel .sv3-section-title-lg,
         .sv3-date-panel .sv3-section-title-lg {
-          font-size: 21px;
+          font-size:var(--type-metric-sm);
           margin-bottom: 5px;
         }
         .sv3-users-panel .sv3-section-copy,
         .sv3-date-panel .sv3-section-copy {
-          font-size: 13px;
+          font-size:var(--type-control);
         }
         .sv3-users-panel .sv3-settings-dock {
           margin-top: 22px;
@@ -1388,23 +1389,23 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-setting-card {
           min-height: 104px;
           padding: 18px 20px;
-          border-radius: 16px;
+          border-radius:var(--radius-md);
         }
         .sv3-setting-icon {
           width: 42px;
           height: 42px;
-          border-radius: 12px;
-          font-size: 19px;
+          border-radius:var(--radius-sm);
+          font-size:var(--type-section-title);
         }
         .sv3-setting-copy {
           gap: 14px;
         }
         .sv3-users-panel .sv3-setting-title {
-          font-size: 16px;
+          font-size:var(--type-subtitle);
           margin-bottom: 5px;
         }
         .sv3-users-panel .sv3-setting-desc {
-          font-size: 12px;
+          font-size:var(--type-label);
           line-height: 1.45;
           max-width: 250px;
         }
@@ -1417,7 +1418,7 @@ window.renderSetup = function (onComplete, initialStep) {
           height: 22px;
         }
         .sv3-users-panel .sv3-toggle-label {
-          font-size: 11px;
+          font-size:var(--type-caption);
           min-width: 30px;
         }
         .sv3-run-accounts {
@@ -1428,7 +1429,7 @@ window.renderSetup = function (onComplete, initialStep) {
           width: clamp(180px, calc((100% - 24px) / 3), 246px);
           min-height: 218px;
           padding: 22px 20px 20px;
-          border-radius: 16px;
+          border-radius:var(--radius-md);
           gap: 8px;
         }
         .sv3-run-accounts .sv3-check {
@@ -1441,40 +1442,40 @@ window.renderSetup = function (onComplete, initialStep) {
           top: 14px;
           left: 14px;
           padding: 5px 10px;
-          font-size: 11px;
+          font-size:var(--type-caption);
         }
         .sv3-run-accounts .sv3-avatar {
           width: 68px;
           height: 68px;
-          font-size: 30px;
+          font-size:var(--type-page-title);
           margin-top: 12px;
         }
         .sv3-run-accounts .sv3-avatar.lk {
           width: 70px;
           height: 70px;
-          font-size: 24px;
+          font-size:var(--type-metric);
         }
         .sv3-run-accounts .sv3-acc-name {
-          font-size: 17px;
+          font-size:var(--type-section-title);
           margin-top: 5px;
         }
         .sv3-run-accounts .sv3-acc-email {
-          font-size: 12px;
+          font-size:var(--type-label);
         }
         .sv3-run-accounts .sv3-status-pill {
           margin-top: 6px;
           padding: 7px 18px;
-          font-size: 11px;
+          font-size:var(--type-caption);
         }
         .sv3-continue-row {
           margin-top: 22px;
           padding: 12px;
-          border-radius: 16px;
+          border-radius:var(--radius-md);
         }
         .sv3-continue-btn {
           min-height: 52px;
-          font-size: 17px;
-          border-radius: 11px;
+          font-size:var(--type-section-title);
+          border-radius:var(--radius-sm);
         }
         .sv3-date-modes {
           gap: 10px;
@@ -1482,8 +1483,8 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-date-mode-btn {
           min-height: 42px;
-          font-size: 13px;
-          border-radius: 9px;
+          font-size:var(--type-control);
+          border-radius:var(--radius-xs);
         }
         .sv3-date-range-grid {
           gap: 14px;
@@ -1491,11 +1492,11 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-date-field-label {
           margin: 0 0 8px 12px;
-          font-size: 10px;
+          font-size:var(--type-micro);
         }
         .sv3-run-review {
           margin-top: 16px;
-          border-radius: 14px;
+          border-radius:var(--radius-md);
         }
         .sv3-review-metric {
           grid-template-columns: 40px 1fr;
@@ -1505,14 +1506,14 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-review-icon {
           width: 38px;
           height: 38px;
-          font-size: 15px;
+          font-size:var(--type-component-title);
         }
         .sv3-review-label {
-          font-size: 10px;
+          font-size:var(--type-micro);
           margin-bottom: 4px;
         }
         .sv3-review-value {
-          font-size: 14px;
+          font-size:var(--type-body);
         }
         .sv3-mini-av {
           width: 22px;
@@ -1527,17 +1528,17 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-run-primary,
         .sv3-dashboard-primary {
           min-height: 46px;
-          border-radius: 11px;
-          font-size: 14px;
+          border-radius:var(--radius-sm);
+          font-size:var(--type-body);
         }
         .sv3-dashboard-primary {
           margin-top: 10px;
           min-height: 44px;
-          font-size: 14px;
+          font-size:var(--type-body);
         }
         .sv3-run-hint {
           margin-top: 12px;
-          font-size: 11px;
+          font-size:var(--type-caption);
         }
 
         /* SaaS density refinement: keep polish, remove oversized showcase proportions */
@@ -1553,15 +1554,15 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-run-icon {
           width: 40px;
           height: 40px;
-          border-radius: 10px;
-          font-size: 18px;
+          border-radius:var(--radius-sm);
+          font-size:var(--type-section-title);
           box-shadow: 0 8px 22px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.06);
         }
         .sv3-run-title-lockup .sv3-page-title {
-          font-size: 24px;
+          font-size:var(--type-metric);
         }
         .sv3-run-title-lockup .sv3-page-sub {
-          font-size: 12px;
+          font-size:var(--type-label);
         }
         .sv3-flow-stepper {
           width: min(380px, 100%);
@@ -1572,7 +1573,7 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-flow-node-num {
           width: 34px;
           height: 34px;
-          font-size: 13px;
+          font-size:var(--type-control);
         }
         .sv3-flow-node.active .sv3-flow-node-num {
           box-shadow: 0 0 0 4px rgba(124,106,247,.1), 0 8px 18px rgba(97,70,215,.16);
@@ -1583,14 +1584,14 @@ window.renderSetup = function (onComplete, initialStep) {
           right: 58px;
         }
         .sv3-flow-node-title {
-          font-size: 12px;
+          font-size:var(--type-label);
         }
         .sv3-flow-node-sub {
-          font-size: 10px;
+          font-size:var(--type-micro);
         }
         .sv3-users-panel,
         .sv3-date-panel {
-          border-radius: 16px;
+          border-radius:var(--radius-md);
           padding: 18px 22px 20px;
           border-color: rgba(125,148,186,.22);
           box-shadow: 0 12px 36px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.03);
@@ -1599,18 +1600,18 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-date-panel .sv3-step-badge {
           width: 38px;
           height: 38px;
-          border-radius: 10px;
-          font-size: 16px;
+          border-radius:var(--radius-sm);
+          font-size:var(--type-subtitle);
           box-shadow: 0 7px 18px rgba(80,55,180,.16), inset 0 1px 0 rgba(255,255,255,.06);
         }
         .sv3-users-panel .sv3-section-title-lg,
         .sv3-date-panel .sv3-section-title-lg {
-          font-size: 19px;
+          font-size:var(--type-section-title);
           margin-bottom: 4px;
         }
         .sv3-users-panel .sv3-section-copy,
         .sv3-date-panel .sv3-section-copy {
-          font-size: 12px;
+          font-size:var(--type-label);
         }
         .sv3-users-panel .sv3-settings-dock {
           margin-top: 18px;
@@ -1621,25 +1622,25 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-setting-card {
           min-height: 84px;
           padding: 14px 16px;
-          border-radius: 12px;
+          border-radius:var(--radius-sm);
           background: rgba(24,33,50,.58);
           border-color: rgba(125,148,186,.18);
         }
         .sv3-setting-icon {
           width: 34px;
           height: 34px;
-          border-radius: 9px;
-          font-size: 16px;
+          border-radius:var(--radius-xs);
+          font-size:var(--type-subtitle);
         }
         .sv3-setting-copy {
           gap: 11px;
         }
         .sv3-users-panel .sv3-setting-title {
-          font-size: 14px;
+          font-size:var(--type-body);
           margin-bottom: 3px;
         }
         .sv3-users-panel .sv3-setting-desc {
-          font-size: 11px;
+          font-size:var(--type-caption);
           line-height: 1.35;
           max-width: 230px;
         }
@@ -1652,7 +1653,7 @@ window.renderSetup = function (onComplete, initialStep) {
           height: 18px;
         }
         .sv3-users-panel .sv3-toggle-label {
-          font-size: 10px;
+          font-size:var(--type-micro);
           min-width: 26px;
         }
         .sv3-run-accounts {
@@ -1663,7 +1664,7 @@ window.renderSetup = function (onComplete, initialStep) {
           width: clamp(160px, calc((100% - 20px) / 3), 216px);
           min-height: 176px;
           padding: 18px 16px 16px;
-          border-radius: 13px;
+          border-radius:var(--radius-md);
           gap: 6px;
           background: rgba(24,33,50,.56);
           border-color: rgba(125,148,186,.2);
@@ -1678,41 +1679,41 @@ window.renderSetup = function (onComplete, initialStep) {
           top: 10px;
           left: 10px;
           padding: 4px 8px;
-          font-size: 10px;
+          font-size:var(--type-micro);
         }
         .sv3-run-accounts .sv3-avatar {
           width: 54px;
           height: 54px;
-          font-size: 24px;
+          font-size:var(--type-metric);
           margin-top: 8px;
           box-shadow: 0 10px 22px rgba(0,0,0,.16);
         }
         .sv3-run-accounts .sv3-avatar.lk {
           width: 56px;
           height: 56px;
-          font-size: 19px;
+          font-size:var(--type-section-title);
         }
         .sv3-run-accounts .sv3-acc-name {
-          font-size: 14px;
+          font-size:var(--type-body);
           margin-top: 3px;
         }
         .sv3-run-accounts .sv3-acc-email {
-          font-size: 10px;
+          font-size:var(--type-micro);
         }
         .sv3-run-accounts .sv3-status-pill {
           margin-top: 5px;
           padding: 5px 13px;
-          font-size: 9px;
+          font-size:var(--type-micro);
         }
         .sv3-continue-row {
           margin-top: 16px;
           padding: 10px;
-          border-radius: 13px;
+          border-radius:var(--radius-md);
         }
         .sv3-continue-btn {
           min-height: 42px;
-          font-size: 15px;
-          border-radius: 9px;
+          font-size:var(--type-component-title);
+          border-radius:var(--radius-xs);
         }
         .sv3-date-modes {
           gap: 8px;
@@ -1720,8 +1721,8 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-date-mode-btn {
           min-height: 36px;
-          font-size: 12px;
-          border-radius: 8px;
+          font-size:var(--type-label);
+          border-radius:var(--radius-xs);
         }
         .sv3-date-range-grid {
           gap: 10px;
@@ -1729,11 +1730,11 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-date-field-label {
           margin: 0 0 6px 8px;
-          font-size: 9px;
+          font-size:var(--type-micro);
         }
         .sv3-run-review {
           margin-top: 12px;
-          border-radius: 12px;
+          border-radius:var(--radius-sm);
         }
         .sv3-review-metric {
           grid-template-columns: 32px 1fr;
@@ -1743,19 +1744,19 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-review-icon {
           width: 30px;
           height: 30px;
-          font-size: 13px;
+          font-size:var(--type-control);
         }
         .sv3-review-label {
-          font-size: 9px;
+          font-size:var(--type-micro);
           margin-bottom: 2px;
         }
         .sv3-review-value {
-          font-size: 12px;
+          font-size:var(--type-label);
         }
         .sv3-mini-av {
           width: 18px;
           height: 18px;
-          font-size: 8px;
+          font-size:var(--type-micro);
         }
         .sv3-launch-row {
           grid-template-columns: 180px 1fr;
@@ -1766,17 +1767,17 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-run-primary,
         .sv3-dashboard-primary {
           min-height: 38px;
-          border-radius: 9px;
-          font-size: 13px;
+          border-radius:var(--radius-xs);
+          font-size:var(--type-control);
         }
         .sv3-dashboard-primary {
           margin-top: 8px;
           min-height: 38px;
-          font-size: 13px;
+          font-size:var(--type-control);
         }
         .sv3-run-hint {
           margin-top: 8px;
-          font-size: 10px;
+          font-size:var(--type-micro);
         }
 
         /* Production SaaS layout pass: compact, scalable, desktop-first */
@@ -1796,19 +1797,19 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-run-icon {
           width: 36px;
           height: 36px;
-          border-radius: 9px;
-          font-size: 16px;
+          border-radius:var(--radius-xs);
+          font-size:var(--type-subtitle);
           background: rgba(124,106,247,.22);
           border-color: rgba(124,106,247,.24);
           box-shadow: none;
         }
         .sv3-run-title-lockup .sv3-page-title {
-          font-size: 22px;
+          font-size:var(--type-metric-sm);
           margin-bottom: 3px;
           letter-spacing: -.2px;
         }
         .sv3-run-title-lockup .sv3-page-sub {
-          font-size: 12px;
+          font-size:var(--type-label);
           color: #9aa7bc;
         }
         .sv3-flow-stepper {
@@ -1822,7 +1823,7 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-flow-node-num {
           width: 30px;
           height: 30px;
-          font-size: 12px;
+          font-size:var(--type-label);
         }
         .sv3-flow-stepper::before {
           top: 17px;
@@ -1831,10 +1832,10 @@ window.renderSetup = function (onComplete, initialStep) {
           opacity: .75;
         }
         .sv3-flow-node-title {
-          font-size: 12px;
+          font-size:var(--type-label);
         }
         .sv3-flow-node-sub {
-          font-size: 10px;
+          font-size:var(--type-micro);
         }
         .sv3-flow-node.active .sv3-flow-node-num {
           box-shadow: 0 0 0 3px rgba(124,106,247,.08);
@@ -1845,7 +1846,7 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-users-panel,
         .sv3-date-panel {
-          border-radius: 14px;
+          border-radius:var(--radius-md);
           padding: 16px 18px 18px;
           background: rgba(17,23,36,.82);
           border-color: rgba(125,148,186,.2);
@@ -1859,19 +1860,19 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-date-panel .sv3-step-badge {
           width: 34px;
           height: 34px;
-          border-radius: 9px;
-          font-size: 14px;
+          border-radius:var(--radius-xs);
+          font-size:var(--type-body);
           background: rgba(124,106,247,.22);
           box-shadow: none;
         }
         .sv3-users-panel .sv3-section-title-lg,
         .sv3-date-panel .sv3-section-title-lg {
-          font-size: 18px;
+          font-size:var(--type-section-title);
           margin-bottom: 3px;
         }
         .sv3-users-panel .sv3-section-copy,
         .sv3-date-panel .sv3-section-copy {
-          font-size: 12px;
+          font-size:var(--type-label);
           color: #9aa7bc;
         }
         .sv3-users-panel .sv3-settings-dock {
@@ -1883,7 +1884,7 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-setting-card {
           min-height: 72px;
           padding: 12px 14px;
-          border-radius: 10px;
+          border-radius:var(--radius-sm);
           background: rgba(24,33,50,.5);
           border-color: rgba(125,148,186,.16);
           box-shadow: none;
@@ -1898,31 +1899,31 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-setting-icon {
           width: 30px;
           height: 30px;
-          border-radius: 8px;
-          font-size: 14px;
+          border-radius:var(--radius-xs);
+          font-size:var(--type-body);
           background: rgba(124,106,247,.18);
           box-shadow: none;
         }
         .sv3-users-panel .sv3-setting-title {
-          font-size: 13px;
+          font-size:var(--type-control);
           margin-bottom: 2px;
         }
         .sv3-users-panel .sv3-setting-desc {
-          font-size: 10.5px;
+          font-size:var(--type-caption);
           line-height: 1.35;
           max-width: 260px;
         }
         .sv3-users-panel .sv3-toggle-btn {
           width: 42px;
           height: 22px;
-          border-radius: 999px;
+          border-radius:var(--radius-pill);
         }
         .sv3-users-panel .sv3-toggle-btn span {
           width: 16px;
           height: 16px;
         }
         .sv3-users-panel .sv3-toggle-label {
-          font-size: 10px;
+          font-size:var(--type-micro);
           min-width: 24px;
         }
         .sv3-run-accounts {
@@ -1935,7 +1936,7 @@ window.renderSetup = function (onComplete, initialStep) {
           width: 100%;
           min-height: 124px;
           padding: 12px 12px 10px;
-          border-radius: 10px;
+          border-radius:var(--radius-sm);
           gap: 4px;
           justify-content: center;
           background: rgba(24,33,50,.48);
@@ -1963,44 +1964,44 @@ window.renderSetup = function (onComplete, initialStep) {
           top: 8px;
           left: 8px;
           padding: 3px 7px;
-          font-size: 9px;
-          border-radius: 999px;
+          font-size:var(--type-micro);
+          border-radius:var(--radius-pill);
         }
         .sv3-run-accounts .sv3-avatar {
           width: 40px;
           height: 40px;
-          font-size: 18px;
+          font-size:var(--type-section-title);
           margin-top: 4px;
           box-shadow: none;
         }
         .sv3-run-accounts .sv3-avatar.lk {
           width: 42px;
           height: 42px;
-          font-size: 15px;
+          font-size:var(--type-component-title);
         }
         .sv3-run-accounts .sv3-acc-name {
-          font-size: 12px;
+          font-size:var(--type-label);
           margin-top: 2px;
         }
         .sv3-run-accounts .sv3-acc-email {
-          font-size: 9.5px;
+          font-size:var(--type-micro);
           color: #9aa7bc;
         }
         .sv3-run-accounts .sv3-status-pill {
           margin-top: 4px;
           padding: 3px 9px;
-          font-size: 8.5px;
+          font-size:var(--type-micro);
         }
         .sv3-continue-row {
           margin-top: 14px;
           padding: 8px;
-          border-radius: 11px;
+          border-radius:var(--radius-sm);
           background: rgba(10,16,27,.2);
         }
         .sv3-continue-btn {
           min-height: 36px;
-          font-size: 13px;
-          border-radius: 8px;
+          font-size:var(--type-control);
+          border-radius:var(--radius-xs);
           box-shadow: 0 6px 16px rgba(79,142,247,.14);
         }
         .sv3-date-modes {
@@ -2010,8 +2011,8 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-date-mode-btn {
           min-height: 32px;
           padding: 0 12px;
-          border-radius: 7px;
-          font-size: 11px;
+          border-radius:var(--radius-xs);
+          font-size:var(--type-caption);
           background: rgba(24,33,50,.48);
           border-color: rgba(125,148,186,.16);
         }
@@ -2025,17 +2026,17 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-date-field-label {
           margin: 0 0 5px 6px;
-          font-size: 9px;
+          font-size:var(--type-micro);
           letter-spacing: .05em;
         }
         .sv3-date-ready {
           padding: 9px 10px;
-          border-radius: 8px;
-          font-size: 11px;
+          border-radius:var(--radius-xs);
+          font-size:var(--type-caption);
         }
         .sv3-run-review {
           margin-top: 12px;
-          border-radius: 10px;
+          border-radius:var(--radius-sm);
           background: rgba(16,23,36,.42);
         }
         .sv3-review-grid {
@@ -2049,14 +2050,14 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-review-icon {
           width: 26px;
           height: 26px;
-          font-size: 11px;
+          font-size:var(--type-caption);
         }
         .sv3-review-label {
-          font-size: 8.5px;
+          font-size:var(--type-micro);
           margin-bottom: 2px;
         }
         .sv3-review-value {
-          font-size: 11px;
+          font-size:var(--type-caption);
         }
         .sv3-mini-avatars {
           margin-top: 4px;
@@ -2064,7 +2065,7 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-mini-av {
           width: 16px;
           height: 16px;
-          font-size: 7px;
+          font-size:var(--type-micro);
           border-width: 1px;
         }
         .sv3-review-metric {
@@ -2098,8 +2099,8 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-run-primary,
         .sv3-dashboard-primary {
           min-height: 34px;
-          border-radius: 8px;
-          font-size: 12px;
+          border-radius:var(--radius-xs);
+          font-size:var(--type-label);
           box-shadow: none;
         }
         .sv3-dashboard-primary {
@@ -2109,9 +2110,9 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-run-hint {
           margin-top: 7px;
-          font-size: 10px;
+          font-size:var(--type-micro);
         }
-        .text-sm text-muted mt-12 { text-align: center; font-size: 11px; color: var(--text2); margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 5px; }
+        .text-sm text-muted mt-12 { text-align: center; font-size:var(--type-caption); color: var(--text2); margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 5px; }
 
         /* ── Form overlay ── */
         .sv3-form-overlay {
@@ -2133,7 +2134,7 @@ window.renderSetup = function (onComplete, initialStep) {
             radial-gradient(circle at 100% 0%, rgba(124,106,247,0.10) 0%, transparent 46%),
             linear-gradient(180deg, rgba(255,255,255,0.025), transparent 42%);
           border: 1px solid var(--border);
-          border-radius: 20px;
+          border-radius:var(--radius-lg);
           padding: 32px;
           width: min(980px, 94vw);
           max-width: 95vw;
@@ -2148,13 +2149,13 @@ window.renderSetup = function (onComplete, initialStep) {
           width: min(460px, calc(100vw - 32px));
           max-width: 460px;
           padding: 24px;
-          border-radius: 14px;
+          border-radius:var(--radius-md);
           max-height: min(90vh, 520px);
         }
         .sv3-member-card .form-group input {
           width: 100%;
           min-height: 44px;
-          font-size: 13px;
+          font-size:var(--type-control);
         }
         .sv3-member-card .sv3-member-actions {
           display: grid;
@@ -2166,7 +2167,7 @@ window.renderSetup = function (onComplete, initialStep) {
           width: 100%;
           min-height: 42px;
           padding: 0 14px;
-          font-size: 12px;
+          font-size:var(--type-label);
         }
         @keyframes sv3-slide-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
         [data-theme="light"] .sv3-form-card {
@@ -2184,7 +2185,7 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-form-panel {
           min-width: 0;
           border: 1px solid rgba(255,255,255,0.075);
-          border-radius: 16px;
+          border-radius:var(--radius-md);
           padding: 18px;
           background: rgba(8, 12, 22, 0.34);
           box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
@@ -2197,10 +2198,10 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-form-card .form-group select {
           background: rgba(0, 0, 0, 0.15);
           border: 1px solid var(--border);
-          border-radius: 10px;
+          border-radius:var(--radius-sm);
           padding: 12px 14px;
           color: var(--text);
-          font-size: 14px;
+          font-size:var(--type-body);
           font-family: inherit;
           transition: all 0.2s ease;
         }
@@ -2220,16 +2221,16 @@ window.renderSetup = function (onComplete, initialStep) {
           box-shadow: 0 0 0 3px rgba(124, 106, 247, 0.1);
         }
         .sv3-form-card .form-group label {
-          font-size: 11px;
-          font-weight: 700;
+          font-size:var(--type-caption);
+          font-weight:var(--weight-semibold);
           color: var(--text2);
           text-transform: uppercase;
           letter-spacing: 0.06em;
           margin-bottom: 8px;
         }
         .sv3-form-card .form-section-title {
-          font-size: 11px;
-          font-weight: 700;
+          font-size:var(--type-caption);
+          font-weight:var(--weight-semibold);
           color: var(--accent);
           text-transform: uppercase;
           letter-spacing: 0.12em;
@@ -2251,7 +2252,7 @@ window.renderSetup = function (onComplete, initialStep) {
           min-height: 46px;
           padding: 5px;
           border: 1px solid var(--border);
-          border-radius: 12px;
+          border-radius:var(--radius-sm);
           background: rgba(0,0,0,0.15);
         }
         .sv3-tab-btn,
@@ -2264,11 +2265,11 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-tab-btn {
           min-width: 0;
-          border-radius: 9px;
+          border-radius:var(--radius-xs);
           background: transparent;
           padding: 0 10px;
-          font-size: 12px;
-          font-weight: 800;
+          font-size:var(--type-label);
+          font-weight:var(--weight-semibold);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -2296,7 +2297,7 @@ window.renderSetup = function (onComplete, initialStep) {
           align-items: center;
           gap: 9px;
           min-height: 44px;
-          border-radius: 12px;
+          border-radius:var(--radius-sm);
           background: rgba(0,0,0,0.12);
           padding: 8px 10px;
           text-align: left;
@@ -2305,7 +2306,7 @@ window.renderSetup = function (onComplete, initialStep) {
           width: auto;
           min-width: 58px;
           height: 26px;
-          border-radius: 8px;
+          border-radius:var(--radius-xs);
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -2313,8 +2314,8 @@ window.renderSetup = function (onComplete, initialStep) {
           flex: 0 0 auto;
           background: rgba(255,255,255,0.07);
           color: inherit;
-          font-size: 10px;
-          font-weight: 900;
+          font-size:var(--type-micro);
+          font-weight:var(--weight-semibold);
           letter-spacing: .04em;
           padding: 0 7px;
         }
@@ -2325,14 +2326,14 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-country-name {
           min-width: 0;
-          font-size: 12px;
-          font-weight: 800;
+          font-size:var(--type-label);
+          font-weight:var(--weight-semibold);
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
         .sv3-field-hint {
-          font-size: 11px;
+          font-size:var(--type-caption);
           color: var(--text2);
           margin-top: 7px;
           line-height: 1.45;
@@ -2340,8 +2341,8 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-form-card #sv3-form-cancel {
           background: rgba(255,255,255,0.03);
           border: 1px solid var(--border);
-          border-radius: 10px;
-          font-size: 13px;
+          border-radius:var(--radius-sm);
+          font-size:var(--type-control);
           height: 44px;
           color: var(--text2);
           transition: all 0.2s ease;
@@ -2360,11 +2361,11 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-form-card #sv3-form-save {
           background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
           border: none;
-          border-radius: 10px;
-          font-size: 13px;
+          border-radius:var(--radius-sm);
+          font-size:var(--type-control);
           height: 44px;
           color: #fff;
-          font-weight: 700;
+          font-weight:var(--weight-semibold);
           box-shadow: 0 4px 16px rgba(124, 106, 247, 0.25);
           transition: all 0.2s ease;
         }
@@ -2503,7 +2504,7 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-users-panel,
         .sv3-date-panel {
-          border-radius: 12px;
+          border-radius:var(--radius-sm);
           padding: 16px 18px 18px;
         }
         .sv3-users-panel .sv3-section-top {
@@ -2526,8 +2527,8 @@ window.renderSetup = function (onComplete, initialStep) {
           border-top: 1px solid rgba(125,148,186,.14);
         }
         .sv3-users-count {
-          font-size: 11px;
-          font-weight: 800;
+          font-size:var(--type-caption);
+          font-weight:var(--weight-semibold);
           color: var(--text2);
           text-transform: uppercase;
           letter-spacing: .06em;
@@ -2543,26 +2544,26 @@ window.renderSetup = function (onComplete, initialStep) {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 12px;
-          border-radius: 12px;
+          border-radius:var(--radius-sm);
           background: rgba(10,16,27,.22);
           border: 1px solid rgba(125,148,186,.12);
         }
         .sv3-setting-card {
           min-height: 92px;
           padding: 12px 14px;
-          border-radius: 8px;
+          border-radius:var(--radius-xs);
         }
         .sv3-setting-icon {
           width: 28px;
           height: 28px;
-          border-radius: 8px;
-          font-size: 13px;
+          border-radius:var(--radius-xs);
+          font-size:var(--type-control);
         }
         .sv3-users-panel .sv3-setting-title {
-          font-size: 12px;
+          font-size:var(--type-label);
         }
         .sv3-users-panel .sv3-setting-desc {
-          font-size: 10px;
+          font-size:var(--type-micro);
           line-height: 1.45;
           max-width: none;
         }
@@ -2586,7 +2587,7 @@ window.renderSetup = function (onComplete, initialStep) {
           justify-content: stretch;
           text-align: start;
           padding: 10px 46px 10px 12px;
-          border-radius: 8px;
+          border-radius:var(--radius-xs);
         }
         [dir="rtl"] .sv3-run-accounts .sv3-acc-card {
           padding: 10px 12px 10px 46px;
@@ -2609,7 +2610,7 @@ window.renderSetup = function (onComplete, initialStep) {
           width: 34px;
           height: 34px;
           margin-top: 0 !important;
-          font-size: 15px;
+          font-size:var(--type-component-title);
         }
         .sv3-run-accounts .sv3-run-index-avatar {
           background:
@@ -2617,8 +2618,8 @@ window.renderSetup = function (onComplete, initialStep) {
             linear-gradient(135deg, rgba(124,106,247,.22), rgba(79,142,247,.1));
           border: 1px solid rgba(125,148,186,.28);
           color: #d9e2f4;
-          font-size: 13px;
-          font-weight: 900;
+          font-size:var(--type-control);
+          font-weight:var(--weight-semibold);
           box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 8px 18px rgba(0,0,0,.16);
         }
         .sv3-run-accounts .sv3-acc-card.selected .sv3-run-index-avatar {
@@ -2632,34 +2633,34 @@ window.renderSetup = function (onComplete, initialStep) {
           grid-row: 1;
           max-width: 100%;
           margin: 0;
-          font-size: 12px;
+          font-size:var(--type-label);
           line-height: 1.25;
         }
         .sv3-run-accounts .sv3-acc-email {
           grid-column: 2;
           grid-row: 2;
           max-width: 100%;
-          font-size: 10px;
+          font-size:var(--type-micro);
         }
         .sv3-run-accounts .sv3-status-pill {
           grid-column: 3;
           grid-row: 1 / 3;
           margin-top: 0;
           padding: 4px 9px;
-          font-size: 8.5px;
+          font-size:var(--type-micro);
           white-space: nowrap;
         }
         .sv3-run-acc-lock {
           grid-column: 3;
           grid-row: 1 / 3;
           justify-self: end;
-          border-radius: 999px;
+          border-radius:var(--radius-pill);
           padding: 4px 8px;
           background: rgba(255,201,77,.12);
           border: 1px solid rgba(255,201,77,.34);
           color: #ffc94d;
-          font-size: 9px;
-          font-weight: 800;
+          font-size:var(--type-micro);
+          font-weight:var(--weight-semibold);
           letter-spacing: .04em;
           white-space: nowrap;
         }
@@ -2668,24 +2669,24 @@ window.renderSetup = function (onComplete, initialStep) {
           grid-column: 3;
           grid-row: 1 / 3;
           justify-self: end;
-          border-radius: 999px !important;
+          border-radius:var(--radius-pill) !important;
           padding: 4px 8px !important;
           background: rgba(255,201,77,.12) !important;
           border: 1px solid rgba(255,201,77,.34) !important;
           color: #ffc94d !important;
-          font-size: 9px !important;
-          font-weight: 800 !important;
+          font-size:var(--type-micro) !important;
+          font-weight:var(--weight-semibold) !important;
           letter-spacing: .04em !important;
           white-space: nowrap;
         }
         .sv3-continue-row {
           margin-top: 12px;
           padding: 8px;
-          border-radius: 10px;
+          border-radius:var(--radius-sm);
         }
         .sv3-continue-btn {
           min-height: 42px;
-          font-size: 13px;
+          font-size:var(--type-control);
         }
         .sv3-flow-node {
           isolation: isolate;
@@ -2703,7 +2704,7 @@ window.renderSetup = function (onComplete, initialStep) {
           content: "";
           position: absolute;
           inset: -8px;
-          border-radius: 999px;
+          border-radius:var(--radius-pill);
           border: 1px solid rgba(167,139,250,.55);
           pointer-events: none;
           animation: sv3-step-pulse-ring 1.7s ease-out infinite;
@@ -2747,7 +2748,7 @@ window.renderSetup = function (onComplete, initialStep) {
           gap: 10px;
           margin: 12px 12px 0;
           padding: 12px;
-          border-radius: 12px;
+          border-radius:var(--radius-sm);
           background: rgba(10,16,27,.24);
           border: 1px solid rgba(125,148,186,.12);
         }
@@ -2758,8 +2759,8 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-run-primary {
           min-height: 42px;
           padding: 0 18px;
-          border-radius: 9px;
-          font-size: 12px;
+          border-radius:var(--radius-xs);
+          font-size:var(--type-label);
         }
         .sv3-run-primary {
           box-shadow: 0 10px 24px rgba(79,142,247,.18);
@@ -2818,11 +2819,11 @@ window.renderSetup = function (onComplete, initialStep) {
           </div>
 
           <div class="sv3-nav-item active" id="nav-accounts" data-step="accounts">
-            <div class="sv3-step-num" style="font-size:14px">👤</div>
+            <div class="sv3-step-num" style="font-size:var(--type-body)">👤</div>
             <span class="sv3-nav-label">${t("setup.nav_accounts")}</span>
           </div>
           ${window._teamLeaderEnabled ? "" : `<div class="sv3-nav-item" id="nav-run" data-step="run">
-            <div class="sv3-step-num" style="font-size:14px">🚀</div>
+            <div class="sv3-step-num" style="font-size:var(--type-body)">🚀</div>
             <span class="sv3-nav-label">${t("setup.nav_run")}</span>
           </div>`}
           ${window._teamLeaderEnabled ? "" : `<div class="sv3-nav-item sv3-nav-page${window._analyticsEnabled === false ? " sv3-nav-preview" : ""}" id="nav-analytics" data-page="analytics">
@@ -2850,7 +2851,7 @@ window.renderSetup = function (onComplete, initialStep) {
               <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
               <span id="sv3-update-btn-label">${t("setup.check_updates_btn")}</span>
             </button>
-            <div id="sv3-app-version-label" style="font-size:11px;color:var(--text2);margin-top:4px;text-align:center;width:100%">
+            <div id="sv3-app-version-label" style="font-size:var(--type-caption);color:var(--text2);margin-top:4px;text-align:center;width:100%">
               ${(() => {
                 const v = window._appVersion || "";
                 if (!v) return "";
@@ -3203,14 +3204,14 @@ window.renderSetup = function (onComplete, initialStep) {
               </div>
               <div class="sv3-setting-desc">${t("welcome.autorun_desc")}</div>
               <div id="sv3-autorun-interval-row" class="sv3-setting-meta" style="display:none">
-                <div style="font-size:10px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t("welcome.run_every")}</div>
+                <div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t("welcome.run_every")}</div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap" id="sv3-interval-options">
                   ${[{label:"30 min",mins:30},{label:"1 hr",mins:60},{label:"2 hr",mins:120},{label:"4 hr",mins:240},{label:"6 hr",mins:360}].map(o =>
-                    `<button class="btn btn-ghost sv3-interval-opt" data-mins="${o.mins}" style="font-size:11px;padding:4px 10px">${o.label}</button>`
+                    `<button class="btn btn-ghost sv3-interval-opt" data-mins="${o.mins}" style="font-size:var(--type-caption);padding:4px 10px">${o.label}</button>`
                   ).join("")}
                 </div>
               </div>
-              <div id="sv3-autorun-next" style="margin-top:7px;font-size:11px;color:var(--text2);display:none"></div>
+              <div id="sv3-autorun-next" style="margin-top:7px;font-size:var(--type-caption);color:var(--text2);display:none"></div>
             </div>
         </div>
 
@@ -3261,8 +3262,8 @@ window.renderSetup = function (onComplete, initialStep) {
 
         <div id="sv3-date-inputs"></div>
 
-        <div id="sv3-date-range-err" style="display:none;margin-top:12px;align-items:center;gap:8px;background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.4);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--danger);font-weight:600">
-          <span style="font-size:16px">⚠️</span>
+        <div id="sv3-date-range-err" style="display:none;margin-top:12px;align-items:center;gap:8px;background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.4);border-radius:var(--radius-xs);padding:10px 14px;font-size:var(--type-label);color:var(--danger);font-weight:var(--weight-semibold)">
+          <span style="font-size:var(--type-subtitle)">⚠️</span>
           <span>${t("setup.date_range_err")}</span>
         </div>
 
@@ -3465,7 +3466,7 @@ window.renderSetup = function (onComplete, initialStep) {
       document.querySelectorAll(".sv3-interval-opt").forEach(b => {
         const active = parseInt(b.dataset.mins) === sv3AutoRunIntervalMins;
         b.className = active ? "btn btn-primary sv3-interval-opt" : "btn btn-ghost sv3-interval-opt";
-        b.style.cssText = "font-size:12px;padding:6px 14px";
+        b.style.cssText = "font-size:var(--type-label);padding:6px 14px";
       });
     }
 
@@ -3730,7 +3731,7 @@ window.renderSetup = function (onComplete, initialStep) {
     }
 
     if (invalid) {
-      rangeEl.innerHTML = `<span style="color:var(--danger);font-size:11px">${t("setup.date_before_start")}</span>`;
+      rangeEl.innerHTML = `<span style="color:var(--danger);font-size:var(--type-caption)">${t("setup.date_before_start")}</span>`;
       daysEl.innerHTML  = `<span style="color:var(--danger)">—</span>`;
       updateLaunchState();
       return;
@@ -3763,20 +3764,20 @@ window.renderSetup = function (onComplete, initialStep) {
     overlay.innerHTML = `
       <div class="sv3-form-card sv3-member-card">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
-          <button id="sv3-member-back" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);font-size:15px;flex-shrink:0;transition:all .15s">←</button>
+          <button id="sv3-member-back" style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-xs);width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);font-size:var(--type-component-title);flex-shrink:0;transition:all .15s">←</button>
           <div>
-            <div style="font-size:16px;font-weight:800;color:var(--text)">${t("setup.member_name_title")}</div>
-            <div style="font-size:12px;color:var(--text2);margin-top:2px">${t("setup.member_name_subtitle")}</div>
+            <div style="font-size:var(--type-subtitle);font-weight:var(--weight-semibold);color:var(--text)">${t("setup.member_name_title")}</div>
+            <div style="font-size:var(--type-label);color:var(--text2);margin-top:2px">${t("setup.member_name_subtitle")}</div>
           </div>
         </div>
 
         <div class="form-group">
           <label>${t("setup.member_name_label")}</label>
           <input type="text" id="sv3-member-name" placeholder="${t("setup.member_name_ph")}" value="${esc(acc.memberName || "")}" autocomplete="off" />
-          <div style="font-size:11px;color:var(--text2);margin-top:4px">${t("setup.member_name_hint")}</div>
+          <div style="font-size:var(--type-caption);color:var(--text2);margin-top:4px">${t("setup.member_name_hint")}</div>
         </div>
 
-        <div style="font-size:11px;color:var(--text3);margin-top:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(accountEmailLine(acc))}</div>
+        <div style="font-size:var(--type-caption);color:var(--text3);margin-top:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(accountEmailLine(acc))}</div>
 
         <div id="sv3-member-err" class="notice-box danger mt-20" style="display:none">
           <span class="notice-icon">⚠️</span>
@@ -3841,10 +3842,14 @@ window.renderSetup = function (onComplete, initialStep) {
     const selectedTaagerMethod = acc?.taagerLoginMethod || "email";
     const selectedTaagerCountry = (acc?.taagerCountry || "sa").toLowerCase();
     const selectedTaagerMerchantId = acc?.taagerAffiliateCode || "";
-    const selectedDashboardProvider = acc?.dashboardEnrichmentProvider === "easyorders" ? "easyorders" : "none";
+    const selectedCmsProvider = acc?.cmsProvider === "lightfunnels" ? "lightfunnels" : "easyorders";
+    const selectedLightfunnelsMethod = acc?.lightfunnelsLoginMethod === "google" ? "google" : "email";
+    const selectedDashboardProvider = acc?.dashboardEnrichmentProvider === "none" || acc?.dashboardEnrichmentProvider === selectedCmsProvider
+      ? acc.dashboardEnrichmentProvider
+      : selectedCmsProvider;
     const selectedAccountType = acc?.accountType === "static" ? "static" : "live";
     const isTeamLeaderMode = window._teamLeaderEnabled === true;
-    const easyRequiredMark = '<span data-easy-required-mark style="color:var(--danger)">*</span>';
+    const cmsRequiredMark = '<span data-cms-required-mark style="color:var(--danger)">*</span>';
     const taagerMethodOptions = [
       { value: "email", label: t("setup.taager_login_email") },
       { value: "phone", label: t("setup.taager_login_phone") },
@@ -3868,13 +3873,13 @@ window.renderSetup = function (onComplete, initialStep) {
         <!-- Premium Header Lockup -->
         <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px;padding-bottom:18px;border-bottom:1px solid rgba(255,255,255,0.06)">
           <div style="display:flex;align-items:center;gap:14px">
-            <div style="width:40px;height:40px;border-radius:12px;background:rgba(124,106,247,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--accent)">👤</div>
+            <div style="width:40px;height:40px;border-radius:var(--radius-sm);background:rgba(124,106,247,0.15);display:flex;align-items:center;justify-content:center;font-size:var(--type-section-title);color:var(--accent)">👤</div>
             <div>
-              <div style="font-size:18px;font-weight:800;color:var(--text);letter-spacing:-0.3px">${isEdit ? t("setup.edit_account") : t("setup.new_account")}</div>
-              <div style="font-size:12px;color:var(--text2);margin-top:2px">${t("setup.form_subtitle")}</div>
+              <div style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:var(--text);letter-spacing:-0.3px">${isEdit ? t("setup.edit_account") : t("setup.new_account")}</div>
+              <div style="font-size:var(--type-label);color:var(--text2);margin-top:2px">${t("setup.form_subtitle")}</div>
             </div>
           </div>
-          <button id="sv3-form-back" style="margin-left:auto;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);font-size:16px;flex-shrink:0;transition:all 0.2s ease" onmouseover="this.style.background='rgba(255,255,255,0.08)';this.style.color='var(--text)'" onmouseout="this.style.background='rgba(255,255,255,0.03)';this.style.color='var(--text2)'">×</button>
+          <button id="sv3-form-back" style="margin-left:auto;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--radius-sm);width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);font-size:var(--type-subtitle);flex-shrink:0;transition:all 0.2s ease" onmouseover="this.style.background='rgba(255,255,255,0.08)';this.style.color='var(--text)'" onmouseout="this.style.background='rgba(255,255,255,0.03)';this.style.color='var(--text2)'">×</button>
         </div>
 
         ${!isEdit ? `<div class="form-group" style="margin-bottom:20px">
@@ -3899,30 +3904,41 @@ window.renderSetup = function (onComplete, initialStep) {
           <div class="sv3-form-panel">
         <div class="form-section-title">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-          ${t("setup.easy_section")}
+          ${setupText("setup.cms_section", "CMS Account")}
+        </div>
+        <div class="form-group">
+          <label>${setupText("setup.cms_label", "CMS / Order Source")}</label>
+          <input type="hidden" id="sv3-cms-provider" value="${esc(selectedCmsProvider)}" />
+          <div class="sv3-tab-control">
+            <button type="button" class="sv3-tab-btn ${selectedCmsProvider === "easyorders" ? "is-active" : ""}" data-cms-provider="easyorders" ${isLockedEdit ? "disabled" : ""}>${setupText("setup.cms_easyorders", "EasyOrders")}</button>
+            <button type="button" class="sv3-tab-btn ${selectedCmsProvider === "lightfunnels" ? "is-active" : ""}" data-cms-provider="lightfunnels" ${isLockedEdit ? "disabled" : ""}>${setupText("setup.cms_lightfunnels", "LightFunnels")}</button>
+          </div>
         </div>
         <div class="form-group">
           <label>${setupText("setup.dashboard_enrichment_label", "Dashboard Data Source")}</label>
           <input type="hidden" id="sv3-dashboard-enrichment-provider" value="${esc(selectedDashboardProvider)}" />
           <div class="sv3-tab-control">
             <button type="button" class="sv3-tab-btn ${selectedDashboardProvider === "none" ? "is-active" : ""}" data-dashboard-enrichment-provider="none" ${isLockedEdit ? "disabled" : ""}>${setupText("setup.dashboard_enrichment_taager", "Taager Only")}</button>
-            <button type="button" class="sv3-tab-btn ${selectedDashboardProvider === "easyorders" ? "is-active" : ""}" data-dashboard-enrichment-provider="easyorders" ${isLockedEdit ? "disabled" : ""}>${setupText("setup.dashboard_enrichment_easyorders", "Taager + EasyOrders")}</button>
+            <button type="button" class="sv3-tab-btn ${selectedDashboardProvider === "easyorders" ? "is-active" : ""}" data-dashboard-enrichment-provider="easyorders" style="${selectedCmsProvider === "easyorders" ? "" : "display:none;"}" ${isLockedEdit ? "disabled" : ""}>${setupText("setup.dashboard_enrichment_easyorders", "Taager + EasyOrders")}</button>
+            <button type="button" class="sv3-tab-btn ${selectedDashboardProvider === "lightfunnels" ? "is-active" : ""}" data-dashboard-enrichment-provider="lightfunnels" style="${selectedCmsProvider === "lightfunnels" ? "" : "display:none;"}" ${isLockedEdit ? "disabled" : ""}>${setupText("setup.dashboard_enrichment_lightfunnels", "Taager + LightFunnels")}</button>
           </div>
-          <div class="sv3-field-hint" id="sv3-enrichment-hint">${selectedDashboardProvider === "easyorders"
+          <div class="sv3-field-hint" id="sv3-enrichment-hint">${selectedDashboardProvider === "lightfunnels"
+            ? setupText("setup.dashboard_enrichment_hint_lightfunnels", "This account is wired as a LightFunnels CMS account. Dashboard automation will use this provider in the next phase.")
+            : selectedDashboardProvider === "easyorders"
             ? setupText("setup.dashboard_enrichment_hint_easyorders", "Your dashboard will pull orders and profits from Taager, and also connect to EasyOrders to enrich product names and payment data. Best choice if you use both platforms.")
-            : setupText("setup.dashboard_enrichment_hint_taager", "Your dashboard will use Taager as the only data source for orders, profits, and product info. Simple and fast — recommended if you don't use EasyOrders.")
+            : setupText("setup.dashboard_enrichment_hint_taager", "Your dashboard will use Taager as the only data source for orders, profits, and product info. Simple and fast — recommended if you don't use a CMS.")
           }</div>
         </div>
-        <div class="form-group">
-          <label>${t("setup.store_label")} ${easyRequiredMark}</label>
+        <div class="form-group" data-cms-field="easyorders">
+          <label>${t("setup.store_label")} ${cmsRequiredMark}</label>
           <input type="text" id="sv3-easy-store" placeholder="${t("setup.store_ph")}" value="${esc(acc?.easyStore||"")}" ${isLockedEdit ? "disabled" : ""} />
         </div>
-        <div class="form-group">
-          <label>${t("setup.email_label")} ${easyRequiredMark}</label>
+        <div class="form-group" data-cms-field="easyorders">
+          <label>${t("setup.email_label")} ${cmsRequiredMark}</label>
           <input type="email" id="sv3-easy-email" placeholder="${t("setup.email_ph")}" value="${esc(acc?.easyEmail||"")}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
         </div>
-        <div class="form-group">
-          <label>${t("setup.pass_label")} ${easyRequiredMark}</label>
+        <div class="form-group" data-cms-field="easyorders">
+          <label>${t("setup.pass_label")} ${cmsRequiredMark}</label>
           <div style="position:relative;display:flex;align-items:center">
             <input type="password" id="sv3-easy-pass" placeholder="••••••••" autocomplete="new-password" required ${isLockedEdit ? "disabled" : ""} style="padding-right:42px;width:100%" />
             <button type="button" class="password-toggle-btn" data-target="sv3-easy-pass" style="position:absolute;right:10px;background:none;border:none;cursor:pointer;color:var(--text3);padding:4px;display:flex;align-items:center;justify-content:center;transition:color 0.2s;outline:none" tabindex="-1">
@@ -3931,6 +3947,34 @@ window.renderSetup = function (onComplete, initialStep) {
           </div>
           ${isEdit ? `<div class="sv3-field-hint">${t("setup.keep_pass")}</div>` : ""}
           <div class="sv3-field-hint" id="sv3-easy-requirement-hint"></div>
+        </div>
+
+        <div class="form-group" data-cms-field="lightfunnels">
+          <label>${setupText("setup.lightfunnels_account_label", "Account Name")} ${cmsRequiredMark}</label>
+          <input type="text" id="sv3-lightfunnels-account" placeholder="${setupText("setup.lightfunnels_account_ph", "e.g. trendatsaudi")}" value="${esc(acc?.lightfunnelsAccountName||"")}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
+        </div>
+        <div class="form-group" data-cms-field="lightfunnels">
+          <label>${setupText("setup.lightfunnels_login_method", "LightFunnels Login Method")}</label>
+          <input type="hidden" id="sv3-lightfunnels-login-method" value="${esc(selectedLightfunnelsMethod)}" />
+          <div class="sv3-tab-control">
+            <button type="button" class="sv3-tab-btn ${selectedLightfunnelsMethod === "email" ? "is-active" : ""}" data-lightfunnels-method="email" ${isLockedEdit ? "disabled" : ""}>${setupText("setup.lightfunnels_login_email", "Email + Password")}</button>
+            <button type="button" class="sv3-tab-btn ${selectedLightfunnelsMethod === "google" ? "is-active" : ""}" data-lightfunnels-method="google" ${isLockedEdit ? "disabled" : ""}>${setupText("setup.lightfunnels_login_google", "Google")}</button>
+          </div>
+          <div class="sv3-field-hint" id="sv3-lightfunnels-method-hint"></div>
+        </div>
+        <div class="form-group" data-cms-field="lightfunnels">
+          <label>${t("setup.email_label")} ${cmsRequiredMark}</label>
+          <input type="email" id="sv3-lightfunnels-email" placeholder="${t("setup.email_ph")}" value="${esc(acc?.lightfunnelsEmail||"")}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
+        </div>
+        <div class="form-group" data-cms-field="lightfunnels" id="sv3-lightfunnels-pass-group">
+          <label>${t("setup.pass_label")} <span data-lightfunnels-pass-required style="color:var(--danger)">*</span></label>
+          <div style="position:relative;display:flex;align-items:center">
+            <input type="password" id="sv3-lightfunnels-pass" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" autocomplete="new-password" ${isLockedEdit ? "disabled" : ""} style="padding-right:42px;width:100%" />
+            <button type="button" class="password-toggle-btn" data-target="sv3-lightfunnels-pass" style="position:absolute;right:10px;background:none;border:none;cursor:pointer;color:var(--text3);padding:4px;display:flex;align-items:center;justify-content:center;transition:color 0.2s;outline:none" tabindex="-1">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            </button>
+          </div>
+          ${isEdit ? `<div class="sv3-field-hint">${t("setup.keep_pass")}</div>` : ""}
         </div>
 
           </div>
@@ -4035,27 +4079,95 @@ window.renderSetup = function (onComplete, initialStep) {
         if (!isLockedEdit) passInput.disabled = !usesPassword;
       }
     };
-    const easyOrdersRequired = () => {
-      const provider = document.getElementById("sv3-dashboard-enrichment-provider")?.value === "easyorders" ? "easyorders" : "none";
-      return !isTeamLeaderMode || provider === "easyorders";
+    const selectedCmsProviderValue = () => document.getElementById("sv3-cms-provider")?.value === "lightfunnels" ? "lightfunnels" : "easyorders";
+    const cmsCredentialsRequired = () => {
+      const cmsProvider = selectedCmsProviderValue();
+      const provider = document.getElementById("sv3-dashboard-enrichment-provider")?.value || cmsProvider;
+      return !isTeamLeaderMode || provider === cmsProvider;
     };
-    const syncEasyOrderFields = () => {
-      const required = easyOrdersRequired();
+    const syncEnrichmentHint = () => {
+      const provider = document.getElementById("sv3-dashboard-enrichment-provider")?.value || "none";
+      const hint = document.getElementById("sv3-enrichment-hint");
+      if (!hint) return;
+      hint.textContent = provider === "lightfunnels"
+        ? setupText("setup.dashboard_enrichment_hint_lightfunnels", "This account is wired as a LightFunnels CMS account. Dashboard automation will use this provider in the next phase.")
+        : provider === "easyorders"
+        ? setupText("setup.dashboard_enrichment_hint_easyorders", "Your dashboard will pull orders and profits from Taager, and also connect to EasyOrders to enrich product names and payment data. Best choice if you use both platforms.")
+        : setupText("setup.dashboard_enrichment_hint_taager", "Your dashboard will use Taager as the only data source for orders, profits, and product info. Simple and fast - recommended if you don't use a CMS.");
+    };
+    const syncEnrichmentOptions = () => {
+      const cmsProvider = selectedCmsProviderValue();
+      const input = document.getElementById("sv3-dashboard-enrichment-provider");
+      if (!input) return;
+      if (input.value !== "none" && input.value !== cmsProvider) input.value = cmsProvider;
+      overlay.querySelectorAll("[data-dashboard-enrichment-provider]").forEach(tab => {
+        const provider = tab.dataset.dashboardEnrichmentProvider || "none";
+        tab.style.display = provider === "none" || provider === cmsProvider ? "" : "none";
+        tab.classList.toggle("is-active", provider === input.value);
+      });
+    };
+    const syncCmsFields = () => {
+      const cmsProvider = selectedCmsProviderValue();
+      syncEnrichmentOptions();
+      const required = cmsCredentialsRequired();
+      const isLightFunnels = cmsProvider === "lightfunnels";
+      const lightfunnelsMethod = document.getElementById("sv3-lightfunnels-login-method")?.value === "google" ? "google" : "email";
       const storeInput = document.getElementById("sv3-easy-store");
       const emailInput = document.getElementById("sv3-easy-email");
       const passInput = document.getElementById("sv3-easy-pass");
+      const lightfunnelsAccountInput = document.getElementById("sv3-lightfunnels-account");
+      const lightfunnelsEmailInput = document.getElementById("sv3-lightfunnels-email");
+      const lightfunnelsPassInput = document.getElementById("sv3-lightfunnels-pass");
+      const lightfunnelsPassGroup = document.getElementById("sv3-lightfunnels-pass-group");
+      const lightfunnelsMethodHint = document.getElementById("sv3-lightfunnels-method-hint");
       const hint = document.getElementById("sv3-easy-requirement-hint");
-      overlay.querySelectorAll("[data-easy-required-mark]").forEach(mark => {
+      overlay.querySelectorAll("[data-cms-required-mark]").forEach(mark => {
         mark.style.display = required ? "" : "none";
       });
-      if (storeInput) storeInput.required = required;
-      if (emailInput) emailInput.required = required;
-      if (passInput) passInput.required = required && !isEdit;
+      overlay.querySelectorAll("[data-cms-field]").forEach(field => {
+        field.style.display = field.dataset.cmsField === cmsProvider ? "" : "none";
+      });
+      if (storeInput) {
+        storeInput.required = required && !isLightFunnels;
+        if (!isLockedEdit) storeInput.disabled = isLightFunnels;
+      }
+      if (emailInput) {
+        emailInput.required = required && !isLightFunnels;
+        if (!isLockedEdit) emailInput.disabled = isLightFunnels;
+      }
+      if (passInput) {
+        passInput.required = required && !isEdit && !isLightFunnels;
+        if (!isLockedEdit) passInput.disabled = isLightFunnels;
+      }
+      if (lightfunnelsAccountInput) {
+        lightfunnelsAccountInput.required = required && isLightFunnels;
+        if (!isLockedEdit) lightfunnelsAccountInput.disabled = !isLightFunnels;
+      }
+      if (lightfunnelsEmailInput) {
+        lightfunnelsEmailInput.required = required && isLightFunnels;
+        if (!isLockedEdit) lightfunnelsEmailInput.disabled = !isLightFunnels;
+      }
+      if (lightfunnelsPassInput) {
+        lightfunnelsPassInput.required = required && isLightFunnels && lightfunnelsMethod === "email" && !isEdit;
+        if (!isLockedEdit) lightfunnelsPassInput.disabled = !isLightFunnels || lightfunnelsMethod === "google";
+      }
+      if (lightfunnelsPassGroup) lightfunnelsPassGroup.style.display = isLightFunnels && lightfunnelsMethod === "email" ? "" : "none";
+      overlay.querySelectorAll("[data-lightfunnels-pass-required]").forEach(mark => {
+        mark.style.display = required && lightfunnelsMethod === "email" ? "" : "none";
+      });
+      if (lightfunnelsMethodHint) {
+        lightfunnelsMethodHint.textContent = lightfunnelsMethod === "google"
+          ? setupText("setup.lightfunnels_google_hint", "Google login will open Chrome during the LightFunnels login phase.")
+          : setupText("setup.lightfunnels_required_hint", "LightFunnels account name, email, and password are required for this account.");
+      }
       if (hint) {
-        hint.textContent = required
+        hint.textContent = required && !isLightFunnels
           ? setupText("setup.easy_required_hint", "EasyOrders store, email, and password are required for this account.")
+          : required && isLightFunnels
+          ? setupText("setup.lightfunnels_required_hint", "LightFunnels account name, email, and password are required for this account.")
           : setupText("setup.easy_optional_team_leader_hint", "Optional in Team Leader mode.");
       }
+      syncEnrichmentHint();
     };
     overlay.querySelectorAll("[data-taager-method]").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -4086,17 +4198,39 @@ window.renderSetup = function (onComplete, initialStep) {
         overlay.querySelectorAll("[data-dashboard-enrichment-provider]").forEach(tab => {
           tab.classList.toggle("is-active", tab === btn);
         });
-        const hint = document.getElementById("sv3-enrichment-hint");
-        if (hint) {
-          hint.textContent = btn.dataset.dashboardEnrichmentProvider === "easyorders"
-            ? setupText("setup.dashboard_enrichment_hint_easyorders", "Your dashboard will pull orders and profits from Taager, and also connect to EasyOrders to enrich product names and payment data. Best choice if you use both platforms.")
-            : setupText("setup.dashboard_enrichment_hint_taager", "Your dashboard will use Taager as the only data source for orders, profits, and product info. Simple and fast — recommended if you don't use EasyOrders.");
-        }
-        syncEasyOrderFields();
+        syncCmsFields();
+      });
+    });
+    overlay.querySelectorAll("[data-cms-provider]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (isLockedEdit) return;
+        const cmsProvider = btn.dataset.cmsProvider === "lightfunnels" ? "lightfunnels" : "easyorders";
+        const input = document.getElementById("sv3-cms-provider");
+        if (input) input.value = cmsProvider;
+        overlay.querySelectorAll("[data-cms-provider]").forEach(tab => {
+          tab.classList.toggle("is-active", tab === btn);
+        });
+        const dashboardInput = document.getElementById("sv3-dashboard-enrichment-provider");
+        if (dashboardInput) dashboardInput.value = cmsProvider;
+        overlay.querySelectorAll("[data-dashboard-enrichment-provider]").forEach(tab => {
+          tab.classList.toggle("is-active", tab.dataset.dashboardEnrichmentProvider === cmsProvider);
+        });
+        syncCmsFields();
+      });
+    });
+    overlay.querySelectorAll("[data-lightfunnels-method]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (isLockedEdit) return;
+        const input = document.getElementById("sv3-lightfunnels-login-method");
+        if (input) input.value = btn.dataset.lightfunnelsMethod === "google" ? "google" : "email";
+        overlay.querySelectorAll("[data-lightfunnels-method]").forEach(tab => {
+          tab.classList.toggle("is-active", tab === btn);
+        });
+        syncCmsFields();
       });
     });
     syncTaagerLoginFields();
-    syncEasyOrderFields();
+    syncCmsFields();
 
     overlay.querySelectorAll(".password-toggle-btn").forEach(btn => {
       btn.addEventListener("click", (e) => {
@@ -4131,13 +4265,19 @@ window.renderSetup = function (onComplete, initialStep) {
       const easyEmail    = document.getElementById("sv3-easy-email").value.trim();
       const easyPassword = document.getElementById("sv3-easy-pass").value;
       const easyStore    = document.getElementById("sv3-easy-store").value.trim();
+      const cmsProvider = document.getElementById("sv3-cms-provider")?.value === "lightfunnels" ? "lightfunnels" : "easyorders";
+      const lightfunnelsAccountName = (document.getElementById("sv3-lightfunnels-account")?.value || "").trim();
+      const lightfunnelsLoginMethod = document.getElementById("sv3-lightfunnels-login-method")?.value === "google" ? "google" : "email";
+      const lightfunnelsEmail = (document.getElementById("sv3-lightfunnels-email")?.value || "").trim();
+      const lightfunnelsPassword = document.getElementById("sv3-lightfunnels-pass")?.value || "";
       const taagerLoginMethod = document.getElementById("sv3-taager-login-method")?.value || "email";
       const taagerEmail = document.getElementById("sv3-taager-email").value.trim();
       const taagerPhone = document.getElementById("sv3-taager-phone").value.trim();
       const taagerPassword = document.getElementById("sv3-taager-pass").value;
       const taagerCountry  = (document.getElementById("sv3-taager-country")?.value || "sa").toLowerCase();
       const taagerMerchantId = (document.getElementById("sv3-taager-merchant-id")?.value || "").trim();
-      const dashboardEnrichmentProvider = document.getElementById("sv3-dashboard-enrichment-provider")?.value === "easyorders" ? "easyorders" : "none";
+      const rawDashboardProvider = document.getElementById("sv3-dashboard-enrichment-provider")?.value || cmsProvider;
+      const dashboardEnrichmentProvider = ["easyorders", "lightfunnels"].includes(rawDashboardProvider) ? rawDashboardProvider : "none";
       const errEl        = document.getElementById("sv3-form-err");
       const errText      = document.getElementById("sv3-form-err-text");
       const saveBtn      = document.getElementById("sv3-form-save");
@@ -4145,6 +4285,8 @@ window.renderSetup = function (onComplete, initialStep) {
       const currentAccount = isEdit ? accounts.find(a => a.id === editId) : null;
       const nextEasyStore = isEdit ? (easyStore || currentAccount?.easyStore || "") : easyStore;
       const nextEasyEmail = isEdit ? (easyEmail || currentAccount?.easyEmail || "") : easyEmail;
+      const nextLightfunnelsAccountName = isEdit ? (lightfunnelsAccountName || currentAccount?.lightfunnelsAccountName || "") : lightfunnelsAccountName;
+      const nextLightfunnelsEmail = isEdit ? (lightfunnelsEmail || currentAccount?.lightfunnelsEmail || "") : lightfunnelsEmail;
       const nextTaagerEmail = isEdit ? (taagerEmail || currentAccount?.taagerEmail || "") : taagerEmail;
       const nextTaagerPhone = isEdit ? (taagerPhone || currentAccount?.taagerPhone || "") : taagerPhone;
       const nextTaagerMerchantId = isEdit ? (taagerMerchantId || currentAccount?.taagerAffiliateCode || "") : taagerMerchantId;
@@ -4158,8 +4300,10 @@ window.renderSetup = function (onComplete, initialStep) {
       const needsPhone = taagerLoginMethod === "phone";
       const needsPassword = taagerLoginMethod !== "google";
       const hasTaagerLoginIdentity = needsPhone ? !!nextTaagerPhone : !!nextTaagerEmail;
-      const needsEasyOrdersCredentials = !isTeamLeaderMode || dashboardEnrichmentProvider === "easyorders";
-      if (accountType !== "static" && (!nextTaagerMerchantId || (needsEasyOrdersCredentials && (!nextEasyStore || !nextEasyEmail || (!isEdit && !easyPassword))) || (!isEdit && (!hasTaagerLoginIdentity || (needsPassword && !taagerPassword))))) {
+      const needsCmsCredentials = !isTeamLeaderMode || dashboardEnrichmentProvider === cmsProvider;
+      const missingEasyOrders = cmsProvider === "easyorders" && needsCmsCredentials && (!nextEasyStore || !nextEasyEmail || (!isEdit && !easyPassword));
+      const missingLightFunnels = cmsProvider === "lightfunnels" && needsCmsCredentials && (!nextLightfunnelsAccountName || !nextLightfunnelsEmail || (lightfunnelsLoginMethod === "email" && !isEdit && !lightfunnelsPassword));
+      if (accountType !== "static" && (!nextTaagerMerchantId || missingEasyOrders || missingLightFunnels || (!isEdit && (!hasTaagerLoginIdentity || (needsPassword && !taagerPassword))))) {
         errText.innerHTML = t("setup.err_missing");
         errEl.style.display = "flex";
         return;
@@ -4177,8 +4321,12 @@ window.renderSetup = function (onComplete, initialStep) {
           label: staticName,
           memberName: "",
         } : {
+          cmsProvider,
           easyEmail: nextEasyEmail,
           easyStore: nextEasyStore,
+          lightfunnelsAccountName: nextLightfunnelsAccountName,
+          lightfunnelsLoginMethod,
+          lightfunnelsEmail: nextLightfunnelsEmail,
           taagerLoginMethod,
           taagerEmail: nextTaagerEmail,
           taagerPhone: nextTaagerPhone,
@@ -4186,6 +4334,7 @@ window.renderSetup = function (onComplete, initialStep) {
           taagerAffiliateCode: nextTaagerMerchantId,
           dashboardEnrichmentProvider,
           ...(easyPassword ? { easyPassword } : {}),
+          ...(lightfunnelsPassword ? { lightfunnelsPassword } : {}),
           ...(taagerPassword ? { taagerPassword } : {}),
         };
         const idx = nextAccounts.findIndex(a => a.id === editId);
@@ -4211,9 +4360,14 @@ window.renderSetup = function (onComplete, initialStep) {
           accountType: "live",
           label: getNextLabel(),
           memberName: "",
+          cmsProvider,
           easyEmail,
           easyPassword,
           easyStore,
+          lightfunnelsAccountName,
+          lightfunnelsLoginMethod,
+          lightfunnelsEmail,
+          lightfunnelsPassword,
           taagerLoginMethod,
           taagerEmail,
           taagerPhone,
@@ -4233,7 +4387,7 @@ window.renderSetup = function (onComplete, initialStep) {
         saveBtn.disabled = false;
         errText.innerHTML = result.reason === "account_locked"
           ? t("setup.err_locked")
-          : result.reason === "easy_store_required" || result.reason === "easy_credentials_required" || result.reason === "taager_email_required" || result.reason === "taager_phone_required" || result.reason === "taager_password_required"
+          : result.reason === "easy_store_required" || result.reason === "easy_credentials_required" || result.reason === "lightfunnels_credentials_required" || result.reason === "taager_email_required" || result.reason === "taager_phone_required" || result.reason === "taager_password_required"
           ? t("setup.err_missing")
           : result.reason === "taager_merchant_id_required"
           ? setupText("setup.taager_merchant_id_required", "Taager merchant ID is required.")
@@ -4276,11 +4430,14 @@ window.renderSetup = function (onComplete, initialStep) {
 
   function accountUiLabel(acc) {
     if (!acc) return t("setup.account_fallback");
-    return acc.memberName || acc.easyEmail || acc.email || acc.taagerEmail || acc.easyStore || acc.storeName || acc.label || acc.name || t("setup.account_fallback");
+    return acc.memberName || acc.lightfunnelsAccountName || acc.easyStore || acc.storeName || acc.label || acc.name || acc.lightfunnelsEmail || acc.easyEmail || acc.email || acc.taagerEmail || t("setup.account_fallback");
   }
 
   function accountEmailLine(acc) {
     if (acc && acc.accountType === "static") return setupText("setup.static_account", "Static Account");
+    if (acc && acc.cmsProvider === "lightfunnels") {
+      return acc.lightfunnelsEmail || acc.taagerEmail || acc.taagerPhone || accountUiLabel(acc);
+    }
     if (!acc) return "—";
     return acc.easyEmail || acc.email || acc.taagerEmail || "—";
   }
@@ -4310,9 +4467,9 @@ window.renderSetup = function (onComplete, initialStep) {
       const overlay = document.createElement("div");
       overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:9999;";
       overlay.innerHTML = `
-        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:28px;width:380px;text-align:center">
-          <div style="font-size:18px;font-weight:800;margin-bottom:8px">${title}</div>
-          <div style="font-size:13px;color:var(--text2);margin-bottom:24px;line-height:1.5">${message}</div>
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-md);padding:28px;width:380px;text-align:center">
+          <div style="font-size:var(--type-section-title);font-weight:var(--weight-bold);margin-bottom:8px">${title}</div>
+          <div style="font-size:var(--type-control);color:var(--text2);margin-bottom:24px;line-height:1.5">${message}</div>
           <div style="display:flex;gap:10px;justify-content:center">
             <button id="dlg-cancel" class="btn btn-ghost">${cancelText}</button>
             <button id="dlg-confirm" class="btn btn-danger">${confirmText}</button>
@@ -4613,7 +4770,7 @@ function injectCalendarStyles() {
     .fc-wrap {
       background: rgba(16,23,36,.62);
       border:1px solid rgba(125,148,186,.2);
-      border-radius:12px;
+      border-radius:var(--radius-sm);
       padding:14px 14px 10px;
       user-select:none;
       box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
@@ -4630,7 +4787,7 @@ function injectCalendarStyles() {
       padding:8px 12px;
       background:rgba(16,23,36,.62);
       border:1px solid rgba(125,148,186,.2);
-      border-radius:8px;
+      border-radius:var(--radius-xs);
       color:var(--text3);
     }
     .fc-range-status-part {
@@ -4644,25 +4801,25 @@ function injectCalendarStyles() {
       justify-content:flex-end;
     }
     .fc-range-status-part span {
-      font-size:11px;
+      font-size:var(--type-caption);
       color:var(--text3);
-      font-weight:700;
+      font-weight:var(--weight-semibold);
     }
     .fc-range-status-part strong {
       min-width:0;
       overflow:hidden;
       text-overflow:ellipsis;
       white-space:nowrap;
-      font-size:13px;
+      font-size:var(--type-control);
       color:var(--text3);
     }
     .fc-range-status-part strong.active {
       color:var(--accent);
     }
     .fc-range-hint {
-      font-size:11px;
+      font-size:var(--type-caption);
       color:var(--text3);
-      font-weight:700;
+      font-weight:var(--weight-semibold);
     }
     .fc-header {
       display:flex;
@@ -4670,14 +4827,14 @@ function injectCalendarStyles() {
       justify-content:space-between;
       margin-bottom:12px;
     }
-    .fc-month-label { font-size:14px;font-weight:800;color:var(--text); }
+    .fc-month-label { font-size:var(--type-body);font-weight:var(--weight-semibold);color:var(--text); }
     .fc-nav {
       background:rgba(16,23,36,.62);
       border:1px solid rgba(125,148,186,.2);
-      border-radius:8px;
+      border-radius:var(--radius-xs);
       color:#b9c4d8;
       cursor:pointer;
-      font-size:18px;
+      font-size:var(--type-section-title);
       line-height:1;
       width:32px;
       height:32px;
@@ -4693,15 +4850,15 @@ function injectCalendarStyles() {
       display:flex;
       align-items:center;
       justify-content:center;
-      font-size:13px;
-      border-radius:8px;
+      font-size:var(--type-control);
+      border-radius:var(--radius-xs);
       min-width:0;
     }
     .fc-weekday {
       min-height:22px;
       aspect-ratio:auto;
-      font-size:10px;
-      font-weight:800;
+      font-size:var(--type-micro);
+      font-weight:var(--weight-semibold);
       color:#9aa7bc;
       text-transform:uppercase;
       letter-spacing:.04em;
@@ -4713,7 +4870,7 @@ function injectCalendarStyles() {
       border:0;
       background:transparent;
       font-family:inherit;
-      font-weight:600;
+      font-weight:var(--weight-semibold);
     }
     .fc-day:hover:not(.fc-disabled):not(.fc-selected):not(.fc-empty) {
       background:rgba(79,142,247,0.15);
@@ -4722,7 +4879,7 @@ function injectCalendarStyles() {
     }
     .fc-today {
       color:#8ab8ff;
-      font-weight:800;
+      font-weight:var(--weight-bold);
       position:relative;
     }
     .fc-today::after {
@@ -4732,14 +4889,14 @@ function injectCalendarStyles() {
       bottom:4px;
       width:4px;
       height:4px;
-      border-radius:999px;
+      border-radius:var(--radius-pill);
       background:var(--accent);
       transform:translateX(-50%);
     }
     .fc-selected {
       background:linear-gradient(135deg,#8b5cf6,#4f8ef7)!important;
       color:#fff!important;
-      font-weight:800;
+      font-weight:var(--weight-bold);
       box-shadow:0 2px 10px rgba(99,102,241,.36);
       transform:scale(1.05);
     }
@@ -4748,7 +4905,7 @@ function injectCalendarStyles() {
       color:var(--text);
       border-radius:0;
     }
-    .fc-range-start:not(.fc-selected) { border-radius:8px 0 0 8px; }
+    .fc-range-start:not(.fc-selected) { border-radius:var(--radius-xs) 0 0 8px; }
     .fc-range-end:not(.fc-selected) { border-radius:0 8px 8px 0; }
     .fc-disabled { opacity:0.25;cursor:default; }
     .fc-empty { visibility:hidden; }
@@ -4758,8 +4915,8 @@ function injectCalendarStyles() {
       border:0;
       color:var(--text3);
       cursor:pointer;
-      font-size:12px;
-      font-weight:700;
+      font-size:var(--type-label);
+      font-weight:var(--weight-semibold);
       padding:2px 0;
       transition:color .1s;
     }
@@ -4769,7 +4926,7 @@ function injectCalendarStyles() {
     .fc-selected-display {
       margin-top:6px;
       text-align:center;
-      font-size:11px;
+      font-size:var(--type-caption);
       color:#99aac5;
       font-variant-numeric:tabular-nums;
       letter-spacing:0;

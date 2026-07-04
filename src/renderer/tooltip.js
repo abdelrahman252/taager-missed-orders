@@ -34,6 +34,10 @@ window.TaagerTooltip = (() => {
     return node && node.closest ? node.closest("[data-tooltip],[data-tooltip-template]") : null;
   }
 
+  function isDomNode(value) {
+    return !!value && typeof value === "object" && typeof value.nodeType === "number";
+  }
+
   function handleMouseOver(e) {
     const target = tooltipTarget(e.target);
     if (!target) return;
@@ -53,11 +57,11 @@ window.TaagerTooltip = (() => {
     if (!target) return;
     
     // If moving within the same target, ignore
-    if (e.type === "mouseout" && e.relatedTarget && target.contains(e.relatedTarget)) {
+    if (e.type === "mouseout" && isDomNode(e.relatedTarget) && target.contains(e.relatedTarget)) {
       return;
     }
 
-    if (e.type === "mouseout" && e.relatedTarget && tooltipEl && tooltipEl.contains(e.relatedTarget)) {
+    if (e.type === "mouseout" && isDomNode(e.relatedTarget) && tooltipEl && tooltipEl.contains(e.relatedTarget)) {
       return;
     }
 
@@ -65,7 +69,7 @@ window.TaagerTooltip = (() => {
   }
 
   function handleClick(e) {
-    if (tooltipEl && tooltipEl.contains(e.target)) {
+    if (tooltipEl && isDomNode(e.target) && tooltipEl.contains(e.target)) {
       cancelHide();
       return;
     }
@@ -105,8 +109,10 @@ window.TaagerTooltip = (() => {
 
   function setContent(target) {
     const templateId = target.getAttribute("data-tooltip-template");
+    const variant = target.getAttribute("data-tooltip-variant") || "";
     tooltipEl.replaceChildren();
     tooltipEl.classList.toggle("is-structured", !!templateId);
+    tooltipEl.setAttribute("data-variant", variant);
     if (templateId) {
       const template = document.getElementById(templateId);
       if (!template) return false;
@@ -173,6 +179,12 @@ window.TaagerTooltip = (() => {
     tooltipEl.style.left = `${left}px`;
   }
 
+  function refresh(target) {
+    const nextTarget = target || currentTarget;
+    if (!nextTarget || !tooltipEl || !tooltipEl.classList.contains("is-visible")) return;
+    show(nextTarget);
+  }
+
   // Auto-init when DOM is ready
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
@@ -180,5 +192,5 @@ window.TaagerTooltip = (() => {
     init();
   }
 
-  return { init, hide, updatePosition };
+  return { init, hide, updatePosition, refresh };
 })();

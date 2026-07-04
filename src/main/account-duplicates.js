@@ -7,14 +7,26 @@ function normalizeAccountText(value) {
 function duplicateIdentity(account) {
   const country = normalizeAccountText(account && account.taagerCountry || "sa");
   const merchantId = normalizeAccountText(account && account.taagerAffiliateCode);
+  const cmsProvider = normalizeAccountText(account && account.cmsProvider || "easyorders") === "lightfunnels"
+    ? "lightfunnels"
+    : "easyorders";
   const easyEmail = normalizeAccountText(account && account.easyEmail);
   const easyStore = normalizeAccountText(account && account.easyStore);
+  const lightfunnelsEmail = normalizeAccountText(account && account.lightfunnelsEmail);
+  const lightfunnelsAccountName = normalizeAccountText(account && account.lightfunnelsAccountName);
+  const cmsEmail = cmsProvider === "lightfunnels" ? lightfunnelsEmail : easyEmail;
+  const cmsAccount = cmsProvider === "lightfunnels" ? lightfunnelsAccountName : easyStore;
   return {
     country,
     merchantId,
+    cmsProvider,
     easyEmail,
     easyStore,
-    hasEasyOrdersIdentity: !!(easyEmail && easyStore),
+    lightfunnelsEmail,
+    lightfunnelsAccountName,
+    cmsEmail,
+    cmsAccount,
+    hasCmsIdentity: !!(cmsEmail && cmsAccount),
   };
 }
 
@@ -23,8 +35,9 @@ function accountsAreDuplicates(left, right) {
   const b = duplicateIdentity(right);
   if (!a.merchantId || !b.merchantId) return false;
   if (a.country !== b.country || a.merchantId !== b.merchantId) return false;
-  if (!a.hasEasyOrdersIdentity || !b.hasEasyOrdersIdentity) return true;
-  return a.easyEmail === b.easyEmail && a.easyStore === b.easyStore;
+  if (a.cmsProvider !== b.cmsProvider) return false;
+  if (!a.hasCmsIdentity || !b.hasCmsIdentity) return true;
+  return a.cmsEmail === b.cmsEmail && a.cmsAccount === b.cmsAccount;
 }
 
 function duplicatePairKey(left, right) {

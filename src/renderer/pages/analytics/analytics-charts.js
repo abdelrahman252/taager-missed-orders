@@ -57,7 +57,7 @@ function renderAllCharts(chartsRoot, orders, dateRange) {
           '<div class="chart-card-header">',
             '<div style="display:flex; flex-direction:column; gap:2px;">',
               '<div class="chart-card-title">' + window.t_anl('charts.ordersTitle') + '</div>',
-              '<div class="chart-card-subtitle" id="orders-per-day-subtitle" style="font-size:10px; color:var(--text2); font-weight:400; line-height:1.2;"></div>',
+              '<div class="chart-card-subtitle" id="orders-per-day-subtitle" style="font-size:var(--type-micro); color:var(--text2); font-weight:var(--weight-regular); line-height:1.2;"></div>',
             '</div>',
           '</div>',
           '<div class="chart-canvas-wrap chart-orders-wrap" style="padding:0 4px 4px"><canvas id="canvas-orders-per-day"></canvas></div>',
@@ -113,7 +113,7 @@ function renderAllCharts(chartsRoot, orders, dateRange) {
   } catch (e) {
     console.error("[Analytics] Error rendering Orders Per Day chart:", e);
     var el = document.getElementById("chart-orders-per-day");
-    if (el) el.innerHTML = '<div class="analytics-chart-error" style="height:100%; display:flex; align-items:center; justify-content:center; font-size:11px; color:#ef4444; padding:20px; text-align:center;">Failed to load Orders Per Day</div>';
+    if (el) el.innerHTML = '<div class="analytics-chart-error" style="height:100%; display:flex; align-items:center; justify-content:center; font-size:var(--type-caption); color:#ef4444; padding:20px; text-align:center;">Failed to load Orders Per Day</div>';
   }
 
   try {
@@ -121,7 +121,7 @@ function renderAllCharts(chartsRoot, orders, dateRange) {
   } catch (e) {
     console.error("[Analytics] Error rendering Real vs Missed chart:", e);
     var el = document.getElementById("chart-real-vs-missed");
-    if (el) el.innerHTML = '<div class="analytics-chart-error" style="height:100%; display:flex; align-items:center; justify-content:center; font-size:11px; color:#ef4444; padding:20px; text-align:center;">Failed to load Real vs Missed</div>';
+    if (el) el.innerHTML = '<div class="analytics-chart-error" style="height:100%; display:flex; align-items:center; justify-content:center; font-size:var(--type-caption); color:#ef4444; padding:20px; text-align:center;">Failed to load Real vs Missed</div>';
   }
 
   try {
@@ -129,7 +129,7 @@ function renderAllCharts(chartsRoot, orders, dateRange) {
   } catch (e) {
     console.error("[Analytics] Error rendering Top Cities chart:", e);
     var el = document.getElementById("chart-top-cities");
-    if (el) el.innerHTML = '<div class="analytics-chart-error" style="height:100%; display:flex; align-items:center; justify-content:center; font-size:11px; color:#ef4444; padding:20px; text-align:center;">Failed to load Top Cities</div>';
+    if (el) el.innerHTML = '<div class="analytics-chart-error" style="height:100%; display:flex; align-items:center; justify-content:center; font-size:var(--type-caption); color:#ef4444; padding:20px; text-align:center;">Failed to load Top Cities</div>';
   }
 
   try {
@@ -137,7 +137,7 @@ function renderAllCharts(chartsRoot, orders, dateRange) {
   } catch (e) {
     console.error("[Analytics] Error rendering Delivery Funnel chart:", e);
     var el = document.getElementById("chart-delivery-funnel");
-    if (el) el.innerHTML = '<div class="analytics-chart-error" style="height:100%; display:flex; align-items:center; justify-content:center; font-size:11px; color:#ef4444; padding:20px; text-align:center;">Failed to load Delivery Funnel</div>';
+    if (el) el.innerHTML = '<div class="analytics-chart-error" style="height:100%; display:flex; align-items:center; justify-content:center; font-size:var(--type-caption); color:#ef4444; padding:20px; text-align:center;">Failed to load Delivery Funnel</div>';
   }
 
   try {
@@ -145,7 +145,7 @@ function renderAllCharts(chartsRoot, orders, dateRange) {
   } catch (e) {
     console.error("[Analytics] Error rendering Heatmap chart:", e);
     var el = document.getElementById("chart-heatmap");
-    if (el) el.innerHTML = '<div class="analytics-chart-error" style="height:100%; display:flex; align-items:center; justify-content:center; font-size:11px; color:#ef4444; padding:20px; text-align:center;">Failed to load Heatmap</div>';
+    if (el) el.innerHTML = '<div class="analytics-chart-error" style="height:100%; display:flex; align-items:center; justify-content:center; font-size:var(--type-caption); color:#ef4444; padding:20px; text-align:center;">Failed to load Heatmap</div>';
   }
 
   try {
@@ -153,7 +153,7 @@ function renderAllCharts(chartsRoot, orders, dateRange) {
   } catch (e) {
     console.error("[Analytics] Error rendering Orders by Hour chart:", e);
     var el = document.getElementById("chart-orders-by-hour");
-    if (el) el.innerHTML = '<div class="analytics-chart-error" style="height:100%; display:flex; align-items:center; justify-content:center; font-size:11px; color:#ef4444; padding:20px; text-align:center;">Failed to load Orders by Hour</div>';
+    if (el) el.innerHTML = '<div class="analytics-chart-error" style="height:100%; display:flex; align-items:center; justify-content:center; font-size:var(--type-caption); color:#ef4444; padding:20px; text-align:center;">Failed to load Orders by Hour</div>';
   }
 
   try {
@@ -161,7 +161,7 @@ function renderAllCharts(chartsRoot, orders, dateRange) {
   } catch (e) {
     console.error("[Analytics] Error rendering Top Products chart:", e);
     var el = document.getElementById("chart-top-products");
-    if (el) el.innerHTML = '<div class="analytics-chart-error" style="height:100%; display:flex; align-items:center; justify-content:center; font-size:11px; color:#ef4444; padding:20px; text-align:center;">Failed to load Top Products</div>';
+    if (el) el.innerHTML = '<div class="analytics-chart-error" style="height:100%; display:flex; align-items:center; justify-content:center; font-size:var(--type-caption); color:#ef4444; padding:20px; text-align:center;">Failed to load Top Products</div>';
   }
   
   // Custom select for Top Cities
@@ -1148,25 +1148,25 @@ function _renderHeatmap(orders) {
         ${cellsHtml}
       </div>
       <div class="heatmap-legend" style="display:flex !important; flex-direction:column !important; gap:8px !important; margin-top:12px !important; border-top:1px solid var(--border) !important; padding-top:10px !important; align-items:stretch !important;">
-        <div style="font-size:9px; font-weight:700; color:var(--text3); letter-spacing:0.06em; margin-bottom:8px;">${window.t_anl('charts.heatmapLegend', { default: 'LEGEND (ORDERS / DAY)' })}</div>
+        <div style="font-size:var(--type-micro); font-weight:var(--weight-semibold); color:var(--text3); letter-spacing:0.06em; margin-bottom:8px;">${window.t_anl('charts.heatmapLegend', { default: 'LEGEND (ORDERS / DAY)' })}</div>
         <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:center;">
-          <div style="display:flex; align-items:center; gap:6px; font-size:9px; color:var(--text2); white-space:nowrap;">
+          <div style="display:flex; align-items:center; gap:6px; font-size:var(--type-micro); color:var(--text2); white-space:nowrap;">
             <div class="heatmap-legend-cell level-0" style="width:10px; height:10px; border-radius:2px; flex-shrink:0;"></div>
             <span>${window.t_anl('charts.heatmapLegendValues.noActivity', { default: '0 orders (No activity)' })}</span>
           </div>
-          <div style="display:flex; align-items:center; gap:6px; font-size:9px; color:var(--text2); white-space:nowrap;">
+          <div style="display:flex; align-items:center; gap:6px; font-size:var(--type-micro); color:var(--text2); white-space:nowrap;">
             <div class="heatmap-legend-cell level-1" style="width:10px; height:10px; border-radius:2px; background:rgba(16, 185, 129, 0.08); border:1.5px solid #10b981; flex-shrink:0;"></div>
             <span>${window.t_anl('charts.heatmapLegendValues.lowVolume', { default: '1-3 orders (Low volume)' })}</span>
           </div>
-          <div style="display:flex; align-items:center; gap:6px; font-size:9px; color:var(--text2); white-space:nowrap;">
+          <div style="display:flex; align-items:center; gap:6px; font-size:var(--type-micro); color:var(--text2); white-space:nowrap;">
             <div class="heatmap-legend-cell level-2" style="width:10px; height:10px; border-radius:2px; background:rgba(245, 158, 11, 0.08); border:1.5px solid #f59e0b; flex-shrink:0;"></div>
             <span>${window.t_anl('charts.heatmapLegendValues.mediumVolume', { default: '4-10 orders (Medium volume)' })}</span>
           </div>
-          <div style="display:flex; align-items:center; gap:6px; font-size:9px; color:var(--text2); white-space:nowrap;">
+          <div style="display:flex; align-items:center; gap:6px; font-size:var(--type-micro); color:var(--text2); white-space:nowrap;">
             <div class="heatmap-legend-cell level-3" style="width:10px; height:10px; border-radius:2px; background:rgba(239, 68, 68, 0.08); border:1.5px solid #ef4444; flex-shrink:0;"></div>
             <span>${window.t_anl('charts.heatmapLegendValues.highVolume', { default: '11-25 orders (High volume)' })}</span>
           </div>
-          <div style="display:flex; align-items:center; gap:6px; font-size:9px; color:var(--text2); white-space:nowrap;">
+          <div style="display:flex; align-items:center; gap:6px; font-size:var(--type-micro); color:var(--text2); white-space:nowrap;">
             <div class="heatmap-legend-cell level-4" style="width:10px; height:10px; border-radius:2px; background:rgba(139, 92, 246, 0.08); border:1.5px solid #8b5cf6; flex-shrink:0;"></div>
             <span>${window.t_anl('charts.heatmapLegendValues.peakVolume', { default: '26+ orders (Peak volume)' })}</span>
           </div>
@@ -1227,13 +1227,13 @@ function _baseOptions(opts) {
         beginAtZero: opts.horizontal ? false : (opts.yBeginAtZero || false),
         grid:  { color: "rgba(255,255,255,0.03)", drawTicks: false },
         border: { display: false },
-        ticks: { color: "#4a5568", font: { size: 9, family: "'Inter', sans-serif" }, maxRotation: 0 },
+        ticks: { color: "#4a5568", font: { size: 10, family: "'Inter', sans-serif" }, maxRotation: 0 },
       },
       y: {
         beginAtZero: opts.horizontal ? false : (opts.yBeginAtZero || false),
         grid:  { color: "rgba(255,255,255,0.03)", drawTicks: false },
         border: { display: false },
-        ticks: { color: "#4a5568", font: { size: 9, family: "'Inter', sans-serif" } },
+        ticks: { color: "#4a5568", font: { size: 10, family: "'Inter', sans-serif" } },
       },
     },
   };

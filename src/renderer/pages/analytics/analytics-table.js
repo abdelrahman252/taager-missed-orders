@@ -73,7 +73,7 @@ function renderOrdersExplorer(container, runs, allRuns) {
       <div class="orders-explorer-header">
         <div class="orders-explorer-title">
           📋 ${window.t_anl('table.title')}
-          <span style="font-size:11px;font-weight:400;color:var(--text3)" id="explorer-count-badge"></span>
+          <span style="font-size:var(--type-caption);font-weight:var(--weight-regular);color:var(--text3)" id="explorer-count-badge"></span>
         </div>
         <div class="orders-explorer-controls">
           <div class="explorer-search-wrap">
@@ -85,10 +85,10 @@ function renderOrdersExplorer(container, runs, allRuns) {
           ${accounts.length > 1 ? `<div id="explorer-account-filter-wrap"></div>` : ""}
           <div id="explorer-source-filter-wrap"></div>
           <div id="explorer-per-page-wrap"></div>
-          <button class="btn btn-ghost" style="font-size:12px;padding:7px 12px" id="explorer-clear-sort-btn">
+          <button class="btn btn-ghost" style="font-size:var(--type-label);padding:7px 12px" id="explorer-clear-sort-btn">
             ${window.t_anl('table.clearSort')}
           </button>
-          <button class="btn btn-ghost" style="font-size:12px;padding:7px 14px" id="explorer-export-btn">
+          <button class="btn btn-ghost" style="font-size:var(--type-label);padding:7px 14px" id="explorer-export-btn">
             ⬆ ${window.t_anl('table.export')}
           </button>
         </div>
@@ -293,17 +293,17 @@ function _renderTableBody(container, rows) {
 
     return `
       <tr style="animation-delay: ${idx * 12}ms">
-        <td style="font-variant-numeric:tabular-nums;color:var(--text3);font-size:11px">${o.taagerOrderNumber || "—"}</td>
+        <td style="font-variant-numeric:tabular-nums;color:var(--text3);font-size:var(--type-caption)">${o.taagerOrderNumber || "—"}</td>
         <td style="white-space:nowrap">${date}</td>
-        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;font-size:11px;color:var(--text2)"
+        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;font-size:var(--type-caption);color:var(--text2)"
             title="${accountDisplay(o)}">${_shortAccount(accountDisplay(o))}</td>
         <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis" title="${o.name || ""}">${o.name || "—"}</td>
         <td style="font-variant-numeric:tabular-nums;color:var(--text2)">${phone}</td>
         <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${o.productName || ""}">${_shortText(o.productName, 28)}</td>
-        <td style="font-size:10px;color:var(--text3);max-width:100px;overflow:hidden;text-overflow:ellipsis" title="${sku}">${_shortText(sku, 14)}</td>
+        <td style="font-size:var(--type-micro);color:var(--text3);max-width:100px;overflow:hidden;text-overflow:ellipsis" title="${sku}">${_shortText(sku, 14)}</td>
         <td style="text-align:center">${o.qty || 1}</td>
         <td style="font-variant-numeric:tabular-nums">${o.subtotal > 0 ? formatSAR(o.subtotal) : "—"}</td>
-        <td style="font-variant-numeric:tabular-nums;font-weight:600;color:var(--success)">${codStr}</td>
+        <td style="font-variant-numeric:tabular-nums;font-weight:var(--weight-semibold);color:var(--success)">${codStr}</td>
         <td>
           <span class="status-badge" data-status="${o.orderStatus || ""}"
             style="background:${statusColor.bg};color:${statusColor.text}">${analyticsStatusLabel(o.orderStatus)}</span>

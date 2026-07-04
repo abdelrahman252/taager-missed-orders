@@ -92,13 +92,13 @@
     var titleBar = document.createElement('div');
     titleBar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap';
     titleBar.innerHTML =
-      '<div style="font-size:13px;font-weight:800;color:rgba(255,255,255,0.85)">' +
+      '<div style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.85)">' +
         sTx('📊 Performance of Products in Cities', '📊 أداء المنتجات في المدن') +
       '</div>' +
       '<input id="spm-product-search" type="text" value="' + escapeAttr(productSearchQuery) + '" placeholder="' + sTx('Search product name or SKU...', 'Search product name or SKU...') + '" style="' +
-        'flex:1;min-width:220px;max-width:360px;background:#0b1120;border:1px solid rgba(255,255,255,0.1);border-radius:10px;' +
-        'color:#fff;font-family:Cairo,sans-serif;font-size:12px;padding:8px 12px;outline:none;box-sizing:border-box;transition:border-color 0.2s;" />' +
-      '<div style="font-size:11px;color:rgba(255,255,255,0.3)">' +
+        'flex:1;min-width:220px;max-width:360px;background:var(--dash-surface);border:1px solid rgba(255,255,255,0.1);border-radius:var(--dash-radius-md);' +
+        'color:#fff;font-family:var(--font-ui);font-size:var(--type-label);padding:8px 12px;outline:none;box-sizing:border-box;transition:border-color 0.2s;" />' +
+      '<div style="font-size:var(--type-caption);color:rgba(255,255,255,0.3)">' +
         sTx('Total ', 'إجمالي ') + totalProducts + sTx(' products', ' منتجات') +
         (query ? ' <span style="color:rgba(255,255,255,0.18)">/ ' + unfilteredProducts.length + '</span>' : '') +
         (provFilter ? ' · <span style="color:#a855f7">' + sTx('Region Filter Active', 'فلتر المنطقة مُفعّل') + '</span>' : '') +
@@ -123,7 +123,7 @@
 
     if (totalProducts === 0) {
       var noData = document.createElement('div');
-      noData.style.cssText = 'padding:24px;text-align:center;color:rgba(255,255,255,0.3);font-size:13px';
+      noData.style.cssText = 'padding:24px;text-align:center;color:rgba(255,255,255,0.3);font-size:var(--type-control)';
       noData.innerHTML = sTx('Insufficient data to display performance', 'لا توجد بيانات كافية لعرض الأداء');
       wrapper.appendChild(noData);
       return;
@@ -133,7 +133,7 @@
     table.style.cssText = 'width:100%;min-width:750px;display:flex;flex-direction:column;gap:8px;';
     
     // Header
-    table.innerHTML += '<div style="display:grid;grid-template-columns:2.5fr 0.8fr 0.8fr 1fr 1.25fr 1.25fr;gap:10px;padding:0 12px 8px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:11px;font-weight:700;color:rgba(255,255,255,0.4);flex-shrink:0">' +
+    table.innerHTML += '<div style="display:grid;grid-template-columns:2.5fr 0.8fr 0.8fr 1fr 1.25fr 1.25fr;gap:10px;padding:0 12px 8px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:var(--type-caption);font-weight:var(--weight-semibold);color:var(--dash-text-faint);flex-shrink:0">' +
       '<div>' + sTx('Product', 'المنتج') + '</div><div style="text-align:center">' + sTx('Orders', 'الطلبات') + '</div><div style="text-align:center;color:#00e676">' + sTx('Net Orders', 'صافي الطلبات') + '</div><div style="text-align:center">' + sTx('Delivery', 'التسليم') + '</div><div style="text-align:center">' + sTx('Best City (NDR)', 'أفضل مدينة (NDR)') + '</div><div style="text-align:center">' + sTx('Worst City (NDR)', 'أسوأ مدينة (NDR)') + '</div>' +
     '</div>';
 
@@ -166,11 +166,16 @@
 
       var nameStr = p.name || p.sku || '؟';
       // Removed truncation to show full name
-      var nameHtml = '<div data-i18n-preserve style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.85);word-break:break-word" title="' + escapeAttr(nameStr) + '">' + escapeAttr(nameStr) + '</div>';
+      var nameHtml = window.dashboardProductNameHtml
+        ? window.dashboardProductNameHtml(nameStr, {
+            block: true,
+            style: 'font-size:var(--type-label);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.85);word-break:break-word'
+          })
+        : '<div data-dashboard-product-name data-i18n-preserve style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.85);word-break:break-word" title="' + escapeAttr(nameStr) + '"><bdi dir="auto">' + escapeAttr(nameStr) + '</bdi></div>';
       var skuHtml = (p.sku && p.sku !== p.name)
         ? (window.dashboardSkuCopyHtml
-          ? window.dashboardSkuCopyHtml(p.sku, { block: true, prefix: false, style: 'font-size:10px;font-weight:600;color:rgba(255,255,255,0.4);word-break:break-all;margin-top:2px' })
-          : '<div style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.4);word-break:break-all;margin-top:2px" title="' + escapeAttr(p.sku) + '">' + escapeAttr(p.sku) + '</div>')
+          ? window.dashboardSkuCopyHtml(p.sku, { block: true, prefix: false, style: 'font-size:var(--type-micro);font-weight:var(--weight-semibold);color:var(--dash-text-faint);word-break:break-all;margin-top:2px' })
+          : '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:var(--dash-text-faint);word-break:break-all;margin-top:2px" title="' + escapeAttr(p.sku) + '">' + escapeAttr(p.sku) + '</div>')
         : '';
       
       var overallDr = p.deliveryPct || 0;
@@ -181,22 +186,22 @@
       var productAvgCommission = (p.deliveredCount || 0) > 0 ? ((Number(p.commission) || 0) / p.deliveredCount) : 0;
       var productBreakEvenCpa = productAvgCommission * ((Number(p.ndrPct || p.deliveryRate || 0)) / 100);
       var drBadge = '<div style="display:flex;flex-direction:column;gap:4px;align-items:center">' +
-          '<div style="font-size:10px;font-weight:700;color:' + drColor + ';background:' + drColor + '18;padding:2px 6px;border-radius:12px;border:1px solid ' + drColor + '44">' + pctValue(overallDr) + '% <span style="opacity:0.5;font-size:9px">NDR</span></div>' +
-          '<div style="font-size:10px;font-weight:700;color:' + activeDrColor + ';background:' + activeDrColor + '18;padding:2px 6px;border-radius:12px;border:1px solid ' + activeDrColor + '44">' + activeDr.toFixed(1) + '% <span style="opacity:0.5;font-size:9px">DR</span></div>' +
-          '<div style="font-size:9px;font-weight:800;color:#c084fc;margin-top:2px;" title="' + sTx('Break-even CPA = simulator profit after tax per delivered order × NDR', 'تكلفة التعادل = متوسط ربح تاجر × NDR') + '">BE: ' + productBreakEvenCpa.toFixed(2) + ' ' + activeCurrency + '</div>' +
+          '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:' + drColor + ';background:' + drColor + '18;padding:2px 6px;border-radius:var(--dash-radius-md);border:1px solid ' + drColor + '44">' + pctValue(overallDr) + '% <span style="opacity:0.5;font-size:var(--type-micro)">NDR</span></div>' +
+          '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:' + activeDrColor + ';background:' + activeDrColor + '18;padding:2px 6px;border-radius:var(--dash-radius-md);border:1px solid ' + activeDrColor + '44">' + activeDr.toFixed(1) + '% <span style="opacity:0.5;font-size:var(--type-micro)">DR</span></div>' +
+          '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:#c084fc;margin-top:2px;" title="' + sTx('Break-even CPA = simulator profit after tax per delivered order × NDR', 'تكلفة التعادل = متوسط ربح تاجر × NDR') + '">BE: ' + productBreakEvenCpa.toFixed(2) + ' ' + activeCurrency + '</div>' +
         '</div>';
 
       function cityBadge(cityObj) {
-        if (!cityObj) return '<span style="color:rgba(255,255,255,0.15);font-size:11px">-</span>';
+        if (!cityObj) return '<span style="color:rgba(255,255,255,0.15);font-size:var(--type-caption)">-</span>';
         var cNdr = (cityObj.ndr * 100);
         var cNdrColor = window.dashboardRateColor ? window.dashboardRateColor(cNdr) : (cNdr >= 40 ? '#22d3ee' : cNdr >= 30 ? '#00e676' : cNdr >= 20 ? '#f59e0b' : '#ef4444');
         var cDr = (cityObj.dr * 100);
         var cDrColor = window.dashboardRateColor ? window.dashboardRateColor(cDr) : (cDr >= 40 ? '#22d3ee' : cDr >= 30 ? '#00e676' : cDr >= 20 ? '#f59e0b' : '#ef4444');
-        return '<div class="insight-city-btn" data-city="' + cityObj.name + '" style="cursor:pointer;display:inline-flex;flex-direction:column;align-items:center;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);padding:6px 12px;border-radius:6px;transition:background 0.2s">' +
-          '<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.85);max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + cityObj.name + '">' + cityObj.name + '</div>' +
+        return '<div class="insight-city-btn" data-city="' + cityObj.name + '" style="cursor:pointer;display:inline-flex;flex-direction:column;align-items:center;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);padding:6px 12px;border-radius:var(--dash-radius-sm);transition:background 0.2s">' +
+          '<div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.85);max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + cityObj.name + '">' + cityObj.name + '</div>' +
           '<div style="display:flex;gap:6px;margin-top:4px">' +
-            '<div style="font-size:10px;font-weight:800;color:' + cNdrColor + '">' + pctValue(cNdr) + '% <span style="opacity:0.5;font-size:8px">NDR</span></div>' +
-            '<div style="font-size:10px;font-weight:800;color:' + cDrColor + '">' + cDr.toFixed(1) + '% <span style="opacity:0.5;font-size:8px">DR</span></div>' +
+            '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:' + cNdrColor + '">' + pctValue(cNdr) + '% <span style="opacity:0.5;font-size:var(--type-micro)">NDR</span></div>' +
+            '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:' + cDrColor + '">' + cDr.toFixed(1) + '% <span style="opacity:0.5;font-size:var(--type-micro)">DR</span></div>' +
           '</div>' +
         '</div>';
       }
@@ -206,14 +211,14 @@
       var netColor = window.dashboardRateColor ? window.dashboardRateColor(overallDr) : drColor;
 
       var rowEl = document.createElement('div');
-      rowEl.style.cssText = 'display:grid;grid-template-columns:2.5fr 0.8fr 0.8fr 1fr 1.25fr 1.25fr;gap:10px;align-items:center;padding:12px;background:rgba(255,255,255,0.02);border-radius:8px;border:1px solid rgba(255,255,255,0.03);transition:background 0.2s;flex-shrink:0';
+      rowEl.style.cssText = 'display:grid;grid-template-columns:2.5fr 0.8fr 0.8fr 1fr 1.25fr 1.25fr;gap:10px;align-items:center;padding:12px;background:rgba(255,255,255,0.02);border-radius:var(--dash-radius-sm);border:1px solid rgba(255,255,255,0.03);transition:background 0.2s;flex-shrink:0';
       rowEl.onmouseenter = function() { this.style.background = 'rgba(255,255,255,0.04)'; };
       rowEl.onmouseleave = function() { this.style.background = 'rgba(255,255,255,0.02)'; };
       
       rowEl.innerHTML = 
         '<div style="display:flex;flex-direction:column;overflow:hidden">' + nameHtml + skuHtml + '</div>' +
-        '<div style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.6);text-align:center">' + (p.placedCount || 0).toLocaleString('en-US') + '</div>' +
-        '<div style="font-size:12px;font-weight:800;color:' + netColor + ';text-align:center">' + netOrders.toLocaleString('en-US') + '</div>' +
+        '<div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:var(--dash-text-muted);text-align:center">' + (p.placedCount || 0).toLocaleString('en-US') + '</div>' +
+        '<div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:' + netColor + ';text-align:center">' + netOrders.toLocaleString('en-US') + '</div>' +
         '<div style="text-align:center">' + drBadge + '</div>' +
         '<div style="text-align:center">' + cityBadge(bestCity) + '</div>' +
         '<div style="text-align:center">' + cityBadge(worstCity) + '</div>';
@@ -271,15 +276,15 @@
       var prevBtn = document.createElement('button');
       prevBtn.innerHTML = sTx('Previous', 'السابق');
       prevBtn.disabled = (currentPage === 0);
-      prevBtn.style.cssText = 'padding:6px 16px;font-size:12px;font-weight:700;border-radius:6px;background:rgba(255,255,255,0.05);color:#fff;border:none;cursor:' + (currentPage === 0 ? 'not-allowed;opacity:0.3' : 'pointer');
+      prevBtn.style.cssText = 'padding:6px 16px;font-size:var(--type-label);font-weight:var(--weight-semibold);border-radius:var(--dash-radius-sm);background:rgba(255,255,255,0.05);color:#fff;border:none;cursor:' + (currentPage === 0 ? 'not-allowed;opacity:0.3' : 'pointer');
       
       var nextBtn = document.createElement('button');
       nextBtn.innerHTML = sTx('Next', 'التالي');
       nextBtn.disabled = (currentPage === totalPages - 1);
-      nextBtn.style.cssText = 'padding:6px 16px;font-size:12px;font-weight:700;border-radius:6px;background:rgba(255,255,255,0.05);color:#fff;border:none;cursor:' + (currentPage === totalPages - 1 ? 'not-allowed;opacity:0.3' : 'pointer');
+      nextBtn.style.cssText = 'padding:6px 16px;font-size:var(--type-label);font-weight:var(--weight-semibold);border-radius:var(--dash-radius-sm);background:rgba(255,255,255,0.05);color:#fff;border:none;cursor:' + (currentPage === totalPages - 1 ? 'not-allowed;opacity:0.3' : 'pointer');
 
       var pageInfo = document.createElement('div');
-      pageInfo.style.cssText = 'font-size:12px;color:rgba(255,255,255,0.5);font-weight:600';
+      pageInfo.style.cssText = 'font-size:var(--type-label);color:var(--dash-text-faint);font-weight:var(--weight-semibold)';
       pageInfo.innerHTML = sTx('Page ', 'صفحة ') + (currentPage + 1) + sTx(' of ', ' من ') + totalPages;
 
       prevBtn.onclick = function() {
@@ -323,9 +328,9 @@
   function buildGrid(mountEl, geoData, filterBus) {
     var wrapper = document.createElement('div');
     wrapper.style.cssText = [
-      'background:#0b1120',
+      'background:var(--dash-surface)',
       'border:1px solid rgba(255,255,255,0.06)',
-      'border-radius:16px',
+      'border-radius:var(--dash-radius-xl)',
       'padding:20px 20px 14px',
       'flex-shrink:0'
     ].join(';');

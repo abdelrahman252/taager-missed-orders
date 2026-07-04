@@ -30,6 +30,7 @@ const { processDashboardSheets } = require("../bot/dashboard-sheet-processing");
 const { createDashboardQueryService } = require("./dashboard-query-service");
 const { findNewDuplicateConflict } = require("./account-duplicates");
 const { fetchActiveAdminNotification } = require("./admin-notifications");
+const { evaluateCachedLicense, isInsideWarningWindow } = require("./license-expiry-policy");
 const {
   replaceRowsInDateRange,
   validateCurrentYearDashboardRange,
@@ -726,6 +727,50 @@ function isStaticAccount(acc) {
   return !!acc && acc.accountType === "static";
 }
 
+function cmsProviderOf(acc) {
+  if (isStaticAccount(acc)) return "static";
+  const provider = String(acc && acc.cmsProvider || "easyorders").trim().toLowerCase();
+  return provider === "lightfunnels" ? "lightfunnels" : "easyorders";
+}
+
+function lightfunnelsLoginMethodOf(acc) {
+  const method = String(acc && acc.lightfunnelsLoginMethod || "email").trim().toLowerCase();
+  return method === "google" ? "google" : "email";
+}
+
+function dashboardEnrichmentProviderOf(acc) {
+  const provider = String(acc && acc.dashboardEnrichmentProvider || "").trim().toLowerCase();
+  if (provider === "lightfunnels") return "lightfunnels";
+  if (provider === "easyorders") return "easyorders";
+  return "none";
+}
+
+function cmsEmailOf(acc) {
+  return cmsProviderOf(acc) === "lightfunnels"
+    ? String(acc && acc.lightfunnelsEmail || "").trim().toLowerCase()
+    : String(acc && acc.easyEmail || "").trim().toLowerCase();
+}
+
+function cmsAccountNameOf(acc) {
+  return cmsProviderOf(acc) === "lightfunnels"
+    ? String(acc && acc.lightfunnelsAccountName || "").replace(/\s+/g, " ").trim().toLowerCase()
+    : String(acc && acc.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function cmsDisplayNameOf(acc) {
+  return cmsProviderOf(acc) === "lightfunnels"
+    ? String(acc && acc.lightfunnelsAccountName || "").replace(/\s+/g, " ").trim()
+    : String(acc && acc.easyStore || "").replace(/\s+/g, " ").trim();
+}
+
+function cmsLicenseStoreOf(acc) {
+  const name = cmsAccountNameOf(acc);
+  if (isStaticAccount(acc)) {
+    return String(acc.label || acc.memberName || "Static account").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+  return cmsProviderOf(acc) === "lightfunnels" && name ? `lightfunnels:${name}` : name;
+}
+
 function staticAccountIdentityOf(acc) {
   if (!isStaticAccount(acc)) return "";
   const id = String(acc.id || "").trim().toLowerCase();
@@ -733,10 +778,7 @@ function staticAccountIdentityOf(acc) {
 }
 
 function licenseEasyStoreOf(acc) {
-  if (isStaticAccount(acc)) {
-    return String(acc.label || acc.memberName || "Static account").replace(/\s+/g, " ").trim().toLowerCase();
-  }
-  return String(acc && acc.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase();
+  return cmsLicenseStoreOf(acc);
 }
 
 function taagerMerchantIdentityOf(acc) {
@@ -775,13 +817,15 @@ function taagerMarketingKeyOf(acc) {
 function accountIdentityKey(acc) {
   const staticIdentity = staticAccountIdentityOf(acc);
   if (staticIdentity) return staticIdentity;
-  const easy = (acc.easyEmail  || "").toLowerCase().trim();
+  const cmsProvider = cmsProviderOf(acc);
+  const cmsEmail = cmsEmailOf(acc);
+  const cmsAccount = cmsLicenseStoreOf(acc);
   const method = taagerLoginMethodOf(acc);
   const merchantId = String(acc && acc.taagerAffiliateCode || "").trim().toLowerCase();
   const country = String(acc && acc.taagerCountry || "sa").trim().toLowerCase();
   const loginIdentity = method === "phone" ? `phone:${taagerLoginIdentityOf(acc)}` : `email:${taagerLoginIdentityOf(acc)}`;
   const taagerIdentity = merchantId ? `merchant:${country}:${merchantId}` : loginIdentity;
-  return `${easy}|${method}|${taagerIdentity}`;
+  return `cms:${cmsProvider}|email:${cmsEmail}|account:${cmsAccount}|taager:${method}:${taagerIdentity}`;
 }
 
 function accountHash(acc) {
@@ -795,10 +839,10 @@ function accountHash(acc) {
 
 function licenseRowMatchesAccount(row, acc) {
   if (!row || !acc) return false;
-  const easy = (acc.easyEmail || "").toLowerCase().trim();
+  const easy = cmsEmailOf(acc);
   const rowEasy = String(row.easy_email || "").toLowerCase().trim();
   if (easy && rowEasy && easy !== rowEasy) return false;
-  const easyStore = String(acc.easyStore || "").replace(/\s+/g, " ").trim().toLowerCase();
+  const easyStore = licenseEasyStoreOf(acc);
   const rowEasyStore = String(row.easy_store || "").replace(/\s+/g, " ").trim().toLowerCase();
   if (easyStore && easy && rowEasyStore && rowEasyStore !== easyStore) return false;
 
@@ -837,13 +881,15 @@ function _buildAccountIdents() {
   try {
     const accounts = store.get("accounts", []);
     return accounts.map(a => ({
-      easy_email: (a.easyEmail || "").toLowerCase().trim(),
+      easy_email: cmsEmailOf(a),
+      easy_store: licenseEasyStoreOf(a),
+      cms_provider: cmsProviderOf(a),
       taager_email: staticAccountIdentityOf(a) || (a.taagerEmail || a.taagerEmail || "").toLowerCase().trim(),
       taager_phone: normalizePhone(a.taagerPhone || a.taagerPhone || "", a.taagerCountry || "sa"),
       taager_merchant_id: String(a.taagerAffiliateCode || "").trim().toLowerCase(),
       taager_country: String(a.taagerCountry || "sa").trim().toLowerCase(),
       taager_login_method: taagerLoginMethodOf(a),
-    })).filter(x => x.easy_email || x.taager_email || x.taager_phone || x.taager_merchant_id);
+    })).filter(x => x.easy_email || x.easy_store || x.taager_email || x.taager_phone || x.taager_merchant_id);
   } catch { return []; }
 }
 
@@ -909,10 +955,15 @@ function accountForCredentialBackup(account) {
     label: backupString(account && account.label, 160),
     licenseAccountHash: backupString(account && account.licenseAccountHash, 160),
     licenseIdentityKey: backupString(account && account.licenseIdentityKey, 512),
+    cmsProvider: cmsProviderOf(account),
     easyEmail: backupString(account && account.easyEmail, 320),
     easyPassword: id ? store.get(`pwd_easy_${id}`, "") : "",
     easyStore: backupString(account && account.easyStore, 180),
-    dashboardEnrichmentProvider: account && account.dashboardEnrichmentProvider === "easyorders" ? "easyorders" : "none",
+    lightfunnelsAccountName: backupString(account && account.lightfunnelsAccountName, 180),
+    lightfunnelsLoginMethod: lightfunnelsLoginMethodOf(account),
+    lightfunnelsEmail: backupString(account && account.lightfunnelsEmail, 320),
+    lightfunnelsPassword: id ? store.get(`pwd_lightfunnels_${id}`, "") : "",
+    dashboardEnrichmentProvider: ["easyorders", "lightfunnels"].includes(String(account && account.dashboardEnrichmentProvider || "").toLowerCase()) ? String(account.dashboardEnrichmentProvider).toLowerCase() : "none",
     easyOrdersLookbackDays: Number(account && account.easyOrdersLookbackDays || 60),
     taagerLoginMethod: taagerLoginMethodOf(account),
     taagerEmail: backupString(account && account.taagerEmail, 320),
@@ -933,6 +984,7 @@ function legacyAccountForCredentialBackup() {
     label: backupString(store.get("easyStore", "") || easyEmail, 160),
     licenseAccountHash: "",
     licenseIdentityKey: "",
+    cmsProvider: "easyorders",
     easyEmail,
     easyPassword: String(store.get("easyPassword", "") || ""),
     easyStore: backupString(store.get("easyStore", ""), 180),
@@ -975,10 +1027,15 @@ function normalizeRestoredCredentialAccount(raw, index) {
     accountType: src.accountType === "static" ? "static" : "live",
     memberName: backupString(src.memberName, 120),
     label: backupString(src.label, 160),
+    cmsProvider: src.cmsProvider === "lightfunnels" ? "lightfunnels" : "easyorders",
     easyEmail: backupString(src.easyEmail, 320),
     easyPassword: String(src.easyPassword || ""),
     easyStore: backupString(src.easyStore, 180),
-    dashboardEnrichmentProvider: src.dashboardEnrichmentProvider === "easyorders" ? "easyorders" : "none",
+    lightfunnelsAccountName: backupString(src.lightfunnelsAccountName, 180),
+    lightfunnelsLoginMethod: lightfunnelsLoginMethodOf(src),
+    lightfunnelsEmail: backupString(src.lightfunnelsEmail, 320),
+    lightfunnelsPassword: String(src.lightfunnelsPassword || ""),
+    dashboardEnrichmentProvider: ["easyorders", "lightfunnels"].includes(String(src.dashboardEnrichmentProvider || "").toLowerCase()) ? String(src.dashboardEnrichmentProvider).toLowerCase() : "none",
     easyOrdersLookbackDays: Number(src.easyOrdersLookbackDays || 60),
     taagerLoginMethod: taagerLoginMethodOf(src),
     taagerEmail: backupString(src.taagerEmail, 320),
@@ -1093,7 +1150,11 @@ function looksLikeEmail(value) {
 
 function accountDisplayName(acc, fallback = "Account") {
   if (!acc) return fallback;
-  return (acc.memberName || acc.easyEmail || acc.email || acc.taagerEmail || acc.easyStore || acc.storeName || acc.label || acc.name || fallback || "Account").trim();
+  return (acc.memberName || acc.lightfunnelsAccountName || acc.easyStore || acc.storeName || acc.label || acc.name || acc.lightfunnelsEmail || acc.easyEmail || acc.email || acc.taagerEmail || fallback || "Account").trim();
+}
+
+function accountContactEmail(acc) {
+  return String((acc && (acc.lightfunnelsEmail || acc.easyEmail || acc.email || acc.taagerEmail)) || "").trim();
 }
 
 const ADMIN_ERROR_ALERT_COOLDOWN_MS = 10 * 60 * 1000;
@@ -1109,7 +1170,7 @@ function adminAlertAccountInfo(account, fallbackId) {
   return {
     accountId: id,
     accountLabel: accountDisplayName(stored, id === "__single__" || id === "legacy" ? "Account 1" : id),
-    accountEmail: compactAdminAlertText(stored.easyEmail || stored.email || "", 180),
+    accountEmail: compactAdminAlertText(accountContactEmail(stored), 180),
     taagerCountry: compactAdminAlertText(stored.taagerCountry || store.get("taagerCountry", "sa") || "sa", 32),
   };
 }
@@ -1394,6 +1455,7 @@ function dashboardIsIncomingBucket(bucket) {
     bucket === "delivery_suspended" ||
     bucket === "confirmed" ||
     bucket === "waiting" ||
+    bucket === "on_hold" ||
     bucket === "after_sales_progress";
 }
 
@@ -1401,7 +1463,6 @@ function dashboardIsLostBucket(bucket) {
   return bucket === "failed" ||
     bucket === "return_verified" ||
     bucket === "customer_refused_confirmation" ||
-    bucket === "on_hold" ||
     bucket === "out_of_stock" ||
     bucket === "after_sales_done";
 }
@@ -1960,6 +2021,13 @@ async function isLicenseValid() {
   const key = licenseStore.get("licenseKey", "");
   if (!key) return false;
   if (_licenseCache && (Date.now() - _licenseCacheAt) < LICENSE_CACHE_TTL_MS) {
+    const cached = evaluateCachedLicense(_licenseCache);
+    if (cached.expired) {
+      _licenseCache = null;
+      _licenseCacheAt = 0;
+      return false;
+    }
+    _licenseCache = cached.result;
     return _licenseCache.valid === true;
   }
   try {
@@ -1978,7 +2046,9 @@ async function isLicenseValid() {
     }
     if (r.force_flush) _handleForceFlush();
     if (r.reset_cache) _handleResetCache();
-    _saveLastValidResult({ valid: true, key });
+    const expiresAt = r.expires_at || null;
+    const expiry = evaluateCachedLicense({ valid: true, key, expiresAt });
+    _saveLastValidResult(expiry.result);
     return true;
   } catch {
     return !!_getOfflineGraceResult();
@@ -2432,9 +2502,13 @@ ipcMain.on("reset-app-zoom", () => applyAppZoom(DEFAULT_APP_ZOOM));
 
 const OFFLINE_GRACE_MS = 48 * 60 * 60 * 1000;
 const STARTUP_LICENSE_FAST_PATH_MS = 6 * 60 * 60 * 1000;
+const LICENSE_WARNING_DAYS = 3;
 
 function _saveLastValidResult(result) {
-  const { adminNotification, ...persistedResult } = result || {};
+  const previous = licenseStore.get("lastValidResult", null);
+  const { adminNotification, ...nextResult } = result || {};
+  const canMerge = previous && previous.key && nextResult.key && previous.key === nextResult.key;
+  const persistedResult = canMerge ? { ...previous, ...nextResult } : nextResult;
   licenseStore.set("lastValidResult", persistedResult);
   licenseStore.set("lastValidAt", Date.now());
 }
@@ -2445,9 +2519,20 @@ function _getOfflineGraceResult() {
   if (!lastResult || !lastResult.valid) return null;
   const age = Date.now() - lastValidAt;
   if (age > OFFLINE_GRACE_MS) return null;
+  const cached = evaluateCachedLicense(lastResult);
+  if (cached.expired) {
+    log.warn("[License] Offline grace rejected because the known license expiry has passed.");
+    return null;
+  }
+  // Old installs did not persist expiresAt. Never extend an unverifiable
+  // result through offline grace; require one authoritative check first.
+  if (!cached.hasKnownExpiry) {
+    log.warn("[License] Offline grace rejected for legacy cache without expiry metadata.");
+    return null;
+  }
   const hoursLeft = Math.ceil((OFFLINE_GRACE_MS - age) / 3600000);
   log.warn(`[License] Offline grace active - last valid ${Math.round(age / 60000)} min ago, ${hoursLeft}h left`);
-  return { ...lastResult, offline: true };
+  return { ...cached.result, offline: true };
 }
 
 function _getStartupCachedLicenseResult() {
@@ -2456,7 +2541,13 @@ function _getStartupCachedLicenseResult() {
   const lastResult = licenseStore.get("lastValidResult", null);
   if (!key || !lastResult || !lastResult.valid || lastResult.key !== key) return null;
   if ((Date.now() - lastValidAt) > STARTUP_LICENSE_FAST_PATH_MS) return null;
-  return { ...lastResult, startupCached: true };
+  const cached = evaluateCachedLicense(lastResult);
+  if (cached.expired) return null;
+  if (!cached.hasKnownExpiry) return null;
+  // A license near its boundary must be checked before rendering so the UI
+  // never shows a stale renewal warning and then replaces it with Expired.
+  if (isInsideWarningWindow(cached, LICENSE_WARNING_DAYS)) return null;
+  return { ...cached.result, startupCached: true };
 }
 
 function _handleForceFlush() {
@@ -2500,7 +2591,15 @@ function _handleResetCache() {
 async function _checkLicenseImpl(bustCache) {
   const key = licenseStore.get("licenseKey", "");
   if (!key) return { valid: false, reason: "No license key." };
-  if (!bustCache && _licenseCache && (Date.now() - _licenseCacheAt) < LICENSE_CACHE_TTL_MS) return _licenseCache;
+  if (!bustCache && _licenseCache && (Date.now() - _licenseCacheAt) < LICENSE_CACHE_TTL_MS) {
+    const cached = evaluateCachedLicense(_licenseCache);
+    if (!cached.expired) {
+      _licenseCache = cached.result;
+      return _licenseCache;
+    }
+    _licenseCache = null;
+    _licenseCacheAt = 0;
+  }
   if (!bustCache) {
     const startupCached = _getStartupCachedLicenseResult();
     if (startupCached) {
@@ -2528,7 +2627,13 @@ async function _checkLicenseImpl(bustCache) {
         log.warn(`[License] Key "${key}" not found on server. Clearing local licenseKey.`);
         licenseStore.delete("licenseKey");
       }
-      return { valid: false, reason: r?.reason || "License not found on server." };
+      return {
+        valid: false,
+        key,
+        customerName: licenseStore.get("customerName", "") || null,
+        daysLeft: licenseStore.get("daysLeft", null),
+        reason: r?.reason || "License not found on server.",
+      };
     }
 
     // Handle force flush: wipe local data and notify renderer.
@@ -2543,7 +2648,8 @@ async function _checkLicenseImpl(bustCache) {
       return { valid: true, resetCache: true };
     }
 
-    const daysLeft = r.expires_at ? Math.max(0, Math.ceil((new Date(r.expires_at) - new Date()) / 86400000)) : null;
+    const expiresAt = r.expires_at || null;
+    const daysLeft = evaluateCachedLicense({ expiresAt }).result.daysLeft ?? null;
     const customerName = r.customer_name || null;
     if (customerName) licenseStore.set("customerName", customerName);
     if (daysLeft !== null) licenseStore.set("daysLeft", daysLeft);
@@ -2559,7 +2665,7 @@ async function _checkLicenseImpl(bustCache) {
     licenseStore.set("teamLeaderEnabled", teamLeaderEnabled);
     const adminNotification = await getActiveAdminNotification(key);
     const result = {
-      valid: true, key, daysLeft, customerName, allowReset: false,
+      valid: true, key, daysLeft, expiresAt, customerName, allowReset: false,
       maxDevices: r.max_devices || licenseStore.get("maxDevices", 1),
       activeDevices: r.active_devices || licenseStore.get("activeDevices", 1),
       analyticsEnabled:  operationsSuiteEnabled,
@@ -2576,7 +2682,16 @@ async function _checkLicenseImpl(bustCache) {
     log.warn("[License] License check failed:", e.message);
     const grace = _getOfflineGraceResult();
     if (grace) return grace;
-    return { valid: false, reason: "Cannot reach license server. Check your internet connection." };
+    const cached = evaluateCachedLicense(licenseStore.get("lastValidResult", null));
+    return {
+      valid: false,
+      key,
+      customerName: licenseStore.get("customerName", "") || null,
+      daysLeft: cached.expired ? 0 : licenseStore.get("daysLeft", null),
+      reason: cached.expired
+        ? "License expired. Please renew."
+        : "Cannot reach license server. Check your internet connection.",
+    };
   }
 }
 
@@ -2597,7 +2712,8 @@ ipcMain.handle("submit-license", async (_, key) => {
       p_account_idents: _buildAccountIdents(),
     });
     if (!r || !r.valid) return { success: false, reason: r?.reason || "License key not found. Contact support." };
-    const daysLeft = r.expires_at ? Math.max(0, Math.ceil((new Date(r.expires_at) - new Date()) / 86400000)) : null;
+    const expiresAt = r.expires_at || null;
+    const daysLeft = evaluateCachedLicense({ expiresAt }).result.daysLeft ?? null;
     const customerName = r.customer_name || null;
     licenseStore.set("licenseKey", clean);
     if (customerName) licenseStore.set("customerName", customerName);
@@ -2613,6 +2729,7 @@ ipcMain.handle("submit-license", async (_, key) => {
     licenseStore.set("teamLeaderEnabled", teamLeaderEnabled);
     _licenseCache = null;
     _licenseCacheAt = 0;
+    _saveLastValidResult({ valid: true, key: clean, daysLeft, expiresAt, customerName });
     recordLicensePresence();
     return {
       success: true,
@@ -2647,6 +2764,7 @@ function removeAccountLocalArtifacts(accountId) {
   const id = String(accountId || "").trim();
   if (!id || id === "__single__" || id === "legacy") return;
   try { store.delete(`pwd_easy_${id}`); } catch (_) {}
+  try { store.delete(`pwd_lightfunnels_${id}`); } catch (_) {}
   try { store.delete(`pwd_taager_${id}`); } catch (_) {}
   try {
     const accounts = dashboardStore.get("accounts", {});
@@ -2692,9 +2810,17 @@ function persistAccountsAfterAdminDelete(nextAccounts) {
 
   const first = accounts[0];
   if (first) {
-    store.set("easyEmail", first.easyEmail || "");
-    store.set("easyPassword", store.get(`pwd_easy_${first.id}`, ""));
-    store.set("easyStore", first.easyStore || "");
+    const firstCmsProvider = cmsProviderOf(first);
+    const firstIsEasyOrders = firstCmsProvider === "easyorders";
+    const firstIsLightFunnels = firstCmsProvider === "lightfunnels";
+    store.set("cmsProvider", firstCmsProvider);
+    store.set("easyEmail", firstIsEasyOrders ? first.easyEmail || "" : "");
+    store.set("easyPassword", firstIsEasyOrders ? store.get(`pwd_easy_${first.id}`, "") : "");
+    store.set("easyStore", firstIsEasyOrders ? first.easyStore || "" : "");
+    store.set("lightfunnelsEmail", firstIsLightFunnels ? first.lightfunnelsEmail || "" : "");
+    store.set("lightfunnelsPassword", firstIsLightFunnels ? store.get(`pwd_lightfunnels_${first.id}`, "") : "");
+    store.set("lightfunnelsAccountName", firstIsLightFunnels ? first.lightfunnelsAccountName || "" : "");
+    store.set("lightfunnelsLoginMethod", firstIsLightFunnels ? lightfunnelsLoginMethodOf(first) : "email");
     store.set("taagerLoginMethod", first.taagerLoginMethod || "email");
     store.set("taagerEmail", first.taagerEmail || "");
     store.set("taagerPhone", first.taagerPhone || "");
@@ -2702,7 +2828,7 @@ function persistAccountsAfterAdminDelete(nextAccounts) {
     store.set("taagerCountry", first.taagerCountry || "sa");
     store.set("taagerAffiliateCode", first.taagerAffiliateCode || "");
   } else {
-    ["easyEmail", "easyPassword", "easyStore", "taagerLoginMethod", "taagerEmail", "taagerPhone", "taagerPassword", "taagerCountry", "taagerAffiliateCode"].forEach(key => {
+    ["cmsProvider", "easyEmail", "easyPassword", "easyStore", "lightfunnelsEmail", "lightfunnelsPassword", "lightfunnelsAccountName", "lightfunnelsLoginMethod", "taagerLoginMethod", "taagerEmail", "taagerPhone", "taagerPassword", "taagerCountry", "taagerAffiliateCode"].forEach(key => {
       store.delete(key);
     });
   }
@@ -2899,11 +3025,21 @@ function validateAccountCredentialsForSave(a) {
       : { success: false, reason: "static_name_required" };
   }
   const method = taagerLoginMethodOf(a);
+  const cmsProvider = cmsProviderOf(a);
   const easyPassword = a.easyPassword || (a.id ? store.get(`pwd_easy_${a.id}`, "") : "");
+  const lightfunnelsPassword = a.lightfunnelsPassword || (a.id ? store.get(`pwd_lightfunnels_${a.id}`, "") : "");
   const taagerPassword = a.taagerPassword || (a.id ? store.get(`pwd_taager_${a.id}`, "") : "");
   const teamLeaderEnabled = licenseStore.get("teamLeaderEnabled", false) === true;
-  const needsEasyOrdersCredentials = !teamLeaderEnabled || a.dashboardEnrichmentProvider === "easyorders";
-  if (needsEasyOrdersCredentials && (!(a.easyStore || "").trim() || !(a.easyEmail || "").trim() || !easyPassword)) {
+  const dashboardProvider = dashboardEnrichmentProviderOf(a);
+  const needsCmsCredentials = !teamLeaderEnabled || dashboardProvider === cmsProvider;
+  if (needsCmsCredentials && cmsProvider === "lightfunnels") {
+    if (!(a.lightfunnelsAccountName || "").trim() || !(a.lightfunnelsEmail || "").trim()) {
+      return { success: false, reason: "lightfunnels_credentials_required" };
+    }
+    if (lightfunnelsLoginMethodOf(a) === "email" && !lightfunnelsPassword) {
+      return { success: false, reason: "lightfunnels_credentials_required" };
+    }
+  } else if (needsCmsCredentials && (!(a.easyStore || "").trim() || !(a.easyEmail || "").trim() || !easyPassword)) {
     return { success: false, reason: "easy_credentials_required" };
   }
   if (!(a.taagerAffiliateCode || "").trim()) {
@@ -2919,16 +3055,22 @@ function validateAccountCredentialsForSave(a) {
 }
 
 function safeAccountForStorage(a) {
+  const cmsProvider = cmsProviderOf(a);
+  const dashboardProvider = dashboardEnrichmentProviderOf(a);
   return {
     id:         a.id,
     accountType: isStaticAccount(a) ? "static" : "live",
     memberName: String(a.memberName || "").trim(),
-    label:      a.label || a.easyStore || a.easyEmail || a.taagerEmail || a.taagerEmail || a.taagerPhone || "",
+    label:      a.label || cmsDisplayNameOf(a) || cmsEmailOf(a) || a.taagerEmail || a.taagerPhone || "",
     licenseAccountHash: a.licenseAccountHash && a.licenseIdentityKey === accountIdentityKey(a) ? a.licenseAccountHash : "",
     licenseIdentityKey: a.licenseAccountHash && a.licenseIdentityKey === accountIdentityKey(a) ? a.licenseIdentityKey : "",
+    cmsProvider,
     easyEmail:  a.easyEmail,
     easyStore:  a.easyStore  || "",
-    dashboardEnrichmentProvider: a.dashboardEnrichmentProvider === "easyorders" ? "easyorders" : "none",
+    lightfunnelsAccountName: a.lightfunnelsAccountName || "",
+    lightfunnelsLoginMethod: lightfunnelsLoginMethodOf(a),
+    lightfunnelsEmail: a.lightfunnelsEmail || "",
+    dashboardEnrichmentProvider: dashboardProvider === "lightfunnels" || dashboardProvider === "easyorders" ? dashboardProvider : "none",
     easyOrdersLookbackDays: Number(a.easyOrdersLookbackDays || 60),
     taagerEmail:  a.taagerEmail,
     taagerAffiliateCode: a.taagerAffiliateCode || "",
@@ -2954,14 +3096,24 @@ function persistAccountsWithoutDeleting(accounts, maxAccounts) {
 
   for (const a of accounts) {
     if (a.easyPassword) store.set(`pwd_easy_${a.id}`, a.easyPassword);
+    if (a.lightfunnelsPassword) store.set(`pwd_lightfunnels_${a.id}`, a.lightfunnelsPassword);
     if (a.taagerPassword) store.set(`pwd_taager_${a.id}`, a.taagerPassword);
     if (a.taagerPassword || a.taagerPassword) store.set(`pwd_taager_${a.id}`, a.taagerPassword || a.taagerPassword);
   }
 
   if (accounts[0]) {
-    store.set("easyEmail",    accounts[0].easyEmail    || "");
-    store.set("easyPassword", accounts[0].easyPassword || store.get(`pwd_easy_${accounts[0].id}`, ""));
-    store.set("easyStore",    accounts[0].easyStore    || "");
+    const first = accounts[0];
+    const firstCmsProvider = cmsProviderOf(first);
+    const firstIsEasyOrders = firstCmsProvider === "easyorders";
+    const firstIsLightFunnels = firstCmsProvider === "lightfunnels";
+    store.set("cmsProvider", firstCmsProvider);
+    store.set("easyEmail",    firstIsEasyOrders ? first.easyEmail    || "" : "");
+    store.set("easyPassword", firstIsEasyOrders ? first.easyPassword || store.get(`pwd_easy_${first.id}`, "") : "");
+    store.set("easyStore",    firstIsEasyOrders ? first.easyStore    || "" : "");
+    store.set("lightfunnelsEmail", firstIsLightFunnels ? first.lightfunnelsEmail || "" : "");
+    store.set("lightfunnelsPassword", firstIsLightFunnels ? first.lightfunnelsPassword || store.get(`pwd_lightfunnels_${first.id}`, "") : "");
+    store.set("lightfunnelsAccountName", firstIsLightFunnels ? first.lightfunnelsAccountName || "" : "");
+    store.set("lightfunnelsLoginMethod", firstIsLightFunnels ? lightfunnelsLoginMethodOf(first) : "email");
     store.set("taagerEmail",    accounts[0].taagerEmail    || "");
     store.set("taagerPassword", accounts[0].taagerPassword || store.get(`pwd_taager_${accounts[0].id}`, ""));
     store.set("taagerCountry",  accounts[0].taagerCountry  || "sa");
@@ -2972,7 +3124,9 @@ function persistAccountsWithoutDeleting(accounts, maxAccounts) {
     store.set("taagerCountry",  accounts[0].taagerCountry  || accounts[0].taagerCountry || "sa");
   } else {
     ["easyEmail", "easyPassword", "easyStore", "taagerEmail", "taagerPassword",
-     "taagerCountry", "taagerLoginMethod", "taagerPhone", "taagerAffiliateCode"].forEach(k => store.delete(k));
+     "taagerCountry", "taagerLoginMethod", "taagerPhone", "taagerAffiliateCode",
+     "cmsProvider", "lightfunnelsEmail", "lightfunnelsPassword", "lightfunnelsAccountName",
+     "lightfunnelsLoginMethod"].forEach(k => store.delete(k));
   }
 
   licenseStore.set("maxAccounts", maxAccounts);
@@ -3009,7 +3163,7 @@ async function syncRestoredAccountLicenseSlots(accounts, maxAccounts) {
     const insertRes = await supabaseRpc("taager_insert_license_account", {
       p_license_key: licKey,
       p_account_hash: hash,
-      p_easy_email: (account.easyEmail || "").toLowerCase().trim() || null,
+      p_easy_email: cmsEmailOf(account) || null,
       p_easy_store: licenseEasyStoreOf(account) || null,
       p_taager_email: taagerLoginIdentityOf(account) || null,
       p_taager_login_method: taagerLoginMethodOf(account),
@@ -3116,7 +3270,7 @@ async function syncSingleEditedAccountLicenseSlot(oldAccount, newAccount, maxAcc
         const syncRes = await supabaseRpc("taager_insert_license_account", {
           p_license_key: licKey,
           p_account_hash: newH,
-          p_easy_email: (newAccount.easyEmail || "").toLowerCase().trim() || null,
+          p_easy_email: cmsEmailOf(newAccount) || null,
           p_easy_store: newStore || null,
           p_taager_email: taagerLoginIdentityOf(newAccount) || null,
           p_taager_login_method: taagerLoginMethodOf(newAccount),
@@ -3138,7 +3292,7 @@ async function syncSingleEditedAccountLicenseSlot(oldAccount, newAccount, maxAcc
         p_license_key: licKey,
         p_old_account_hash: oldH,
         p_new_account_hash: newH,
-        p_easy_email: (newAccount.easyEmail || "").toLowerCase().trim() || null,
+        p_easy_email: cmsEmailOf(newAccount) || null,
         p_easy_store: licenseEasyStoreOf(newAccount) || null,
         p_taager_email: newTaagerIdentity || null,
         p_taager_login_method: taagerLoginMethodOf(newAccount),
@@ -3156,7 +3310,7 @@ async function syncSingleEditedAccountLicenseSlot(oldAccount, newAccount, maxAcc
       const insertRes = await supabaseRpc("taager_insert_license_account", {
         p_license_key: licKey,
         p_account_hash: newH,
-        p_easy_email: (newAccount.easyEmail || "").toLowerCase().trim() || null,
+        p_easy_email: cmsEmailOf(newAccount) || null,
         p_easy_store: licenseEasyStoreOf(newAccount) || null,
         p_taager_email: taagerLoginIdentityOf(newAccount) || null,
         p_taager_login_method: taagerLoginMethodOf(newAccount),
@@ -3177,13 +3331,16 @@ function buildAccountPatchForUpdate(patch) {
   const src = patch && typeof patch === "object" ? patch : {};
   const next = {};
   [
-    "memberName", "label", "easyEmail", "easyStore", "dashboardEnrichmentProvider",
+    "memberName", "label", "cmsProvider", "easyEmail", "easyStore",
+    "lightfunnelsAccountName", "lightfunnelsLoginMethod", "lightfunnelsEmail",
+    "dashboardEnrichmentProvider",
     "easyOrdersLookbackDays", "taagerLoginMethod", "taagerEmail", "taagerPhone",
     "taagerCountry", "taagerAffiliateCode"
   ].forEach((key) => {
     if (Object.prototype.hasOwnProperty.call(src, key)) next[key] = src[key];
   });
   if (src.easyPassword) next.easyPassword = src.easyPassword;
+  if (src.lightfunnelsPassword) next.lightfunnelsPassword = src.lightfunnelsPassword;
   if (src.taagerPassword) next.taagerPassword = src.taagerPassword;
   return next;
 }
@@ -3245,30 +3402,9 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
   if (accounts.length > maxAccounts)
     return { success: false, reason: "limit_reached" };
 
-  const teamLeaderEnabled = licenseStore.get("teamLeaderEnabled", false) === true;
   for (const a of accounts) {
-    if (isStaticAccount(a)) {
-      if (!String(a.label || a.memberName || "").trim()) {
-        return { success: false, reason: "static_name_required" };
-      }
-      continue;
-    }
-    const method = taagerLoginMethodOf(a);
-    const easyPassword = a.easyPassword || (a.id ? store.get(`pwd_easy_${a.id}`, "") : "");
-    const taagerPassword = a.taagerPassword || (a.id ? store.get(`pwd_taager_${a.id}`, "") : "");
-    const needsEasyOrdersCredentials = !teamLeaderEnabled || a.dashboardEnrichmentProvider === "easyorders";
-    if (needsEasyOrdersCredentials && (!(a.easyStore || "").trim() || !(a.easyEmail || "").trim() || !easyPassword)) {
-      return { success: false, reason: "easy_credentials_required" };
-    }
-    if (!(a.taagerAffiliateCode || "").trim()) {
-      return { success: false, reason: "taager_merchant_id_required" };
-    }
-    if (method === "phone" ? !(a.taagerPhone || "").trim() : !(a.taagerEmail || "").trim()) {
-      return { success: false, reason: method === "phone" ? "taager_phone_required" : "taager_email_required" };
-    }
-    if (method !== "google" && !taagerPassword) {
-      return { success: false, reason: "taager_password_required" };
-    }
+    const validation = validateAccountCredentialsForSave(a);
+    if (!validation.success) return validation;
   }
 
   // ── Per-account lock check via license_accounts table ──
@@ -3307,7 +3443,7 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
             const syncRes = await supabaseRpc("taager_insert_license_account", {
               p_license_key: licKey,
               p_account_hash: newH,
-              p_easy_email: (a.easyEmail || "").toLowerCase().trim() || null,
+              p_easy_email: cmsEmailOf(a) || null,
               p_easy_store: newStore || null,
               p_taager_email: taagerLoginIdentityOf(a) || null,
               p_taager_login_method: taagerLoginMethodOf(a),
@@ -3334,7 +3470,7 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
             p_license_key:  licKey,
             p_old_account_hash: oldH,
             p_new_account_hash: newH,
-            p_easy_email:   (newAccObj?.easyEmail || "").toLowerCase().trim() || null,
+            p_easy_email:   cmsEmailOf(newAccObj) || null,
             p_easy_store:   licenseEasyStoreOf(newAccObj) || null,
             // RPC/column name is legacy; value is the Taager lock identity.
             p_taager_email:   newTaagerIdentity || null,
@@ -3365,7 +3501,7 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
           const insertRes = await supabaseRpc("taager_insert_license_account", {
             p_license_key:  licKey,
             p_account_hash: newH,
-            p_easy_email:   (newAccForInsert?.easyEmail || "").toLowerCase().trim() || null,
+            p_easy_email:   cmsEmailOf(newAccForInsert) || null,
             p_easy_store:   licenseEasyStoreOf(newAccForInsert) || null,
             // RPC/column name is legacy; value is the Taager lock identity.
             p_taager_email:   newTaagerIdentity || null,
@@ -3417,25 +3553,7 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
     if (!nextAccountIds.has(oldAccount.id)) removeAccountLocalArtifacts(oldAccount.id);
   }
 
-  const safeAccounts = accounts.map(a => ({
-    id:         a.id,
-    accountType: isStaticAccount(a) ? "static" : "live",
-    memberName: String(a.memberName || "").trim(),
-    label:      a.label || a.easyStore || a.easyEmail || a.taagerEmail || a.taagerEmail || a.taagerPhone || "",
-    licenseAccountHash: a.licenseAccountHash && a.licenseIdentityKey === accountIdentityKey(a) ? a.licenseAccountHash : "",
-    licenseIdentityKey: a.licenseAccountHash && a.licenseIdentityKey === accountIdentityKey(a) ? a.licenseIdentityKey : "",
-    easyEmail:  a.easyEmail,
-    easyStore:  a.easyStore  || "",
-    dashboardEnrichmentProvider: a.dashboardEnrichmentProvider === "easyorders" ? "easyorders" : "none",
-    easyOrdersLookbackDays: Number(a.easyOrdersLookbackDays || 60),
-    taagerEmail:  a.taagerEmail,
-    taagerAffiliateCode: a.taagerAffiliateCode || "",
-    taagerCountry: a.taagerCountry || "sa",
-    taagerLoginMethod: a.taagerLoginMethod || "email",
-    taagerEmail: a.taagerEmail || a.taagerEmail || "",
-    taagerPhone: a.taagerPhone || "",
-    taagerCountry: a.taagerCountry || a.taagerCountry || "sa",
-  }));
+  const safeAccounts = accounts.map(safeAccountForStorage);
   store.set("accounts", safeAccounts);
 
   // Prune local unlockedAccountIds cache — remove IDs that no longer exist
@@ -3451,28 +3569,40 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
   // Store passwords per account id
   for (const a of accounts) {
     if (a.easyPassword) store.set(`pwd_easy_${a.id}`, a.easyPassword);
+    if (a.lightfunnelsPassword) store.set(`pwd_lightfunnels_${a.id}`, a.lightfunnelsPassword);
     if (a.taagerPassword) store.set(`pwd_taager_${a.id}`, a.taagerPassword);
     if (a.taagerPassword || a.taagerPassword) store.set(`pwd_taager_${a.id}`, a.taagerPassword || a.taagerPassword);
   }
 
   // Also update legacy flat fields from first account (for any code still reading them)
   if (accounts[0]) {
-    store.set("easyEmail",    accounts[0].easyEmail    || "");
-    store.set("easyPassword", accounts[0].easyPassword || store.get(`pwd_easy_${accounts[0].id}`, ""));
-    store.set("easyStore",    accounts[0].easyStore    || "");
-    store.set("taagerEmail",    accounts[0].taagerEmail    || "");
-    store.set("taagerPassword", accounts[0].taagerPassword || store.get(`pwd_taager_${accounts[0].id}`, ""));
-    store.set("taagerCountry",  accounts[0].taagerCountry  || "sa");
-    store.set("taagerLoginMethod", accounts[0].taagerLoginMethod || "email");
-    store.set("taagerEmail",    accounts[0].taagerEmail    || accounts[0].taagerEmail || "");
-    store.set("taagerPhone",    accounts[0].taagerPhone    || "");
-    store.set("taagerPassword", accounts[0].taagerPassword || accounts[0].taagerPassword || store.get(`pwd_taager_${accounts[0].id}`, ""));
-    store.set("taagerCountry",  accounts[0].taagerCountry  || accounts[0].taagerCountry || "sa");
+    const first = accounts[0];
+    const firstCmsProvider = cmsProviderOf(first);
+    const firstIsEasyOrders = firstCmsProvider === "easyorders";
+    const firstIsLightFunnels = firstCmsProvider === "lightfunnels";
+    store.set("cmsProvider", firstCmsProvider);
+    store.set("easyEmail",    firstIsEasyOrders ? first.easyEmail    || "" : "");
+    store.set("easyPassword", firstIsEasyOrders ? first.easyPassword || store.get(`pwd_easy_${first.id}`, "") : "");
+    store.set("easyStore",    firstIsEasyOrders ? first.easyStore    || "" : "");
+    store.set("lightfunnelsEmail", firstIsLightFunnels ? first.lightfunnelsEmail || "" : "");
+    store.set("lightfunnelsPassword", firstIsLightFunnels ? first.lightfunnelsPassword || store.get(`pwd_lightfunnels_${first.id}`, "") : "");
+    store.set("lightfunnelsAccountName", firstIsLightFunnels ? first.lightfunnelsAccountName || "" : "");
+    store.set("lightfunnelsLoginMethod", firstIsLightFunnels ? lightfunnelsLoginMethodOf(first) : "email");
+    store.set("taagerEmail",    first.taagerEmail    || "");
+    store.set("taagerPassword", first.taagerPassword || store.get(`pwd_taager_${first.id}`, ""));
+    store.set("taagerCountry",  first.taagerCountry  || "sa");
+    store.set("taagerLoginMethod", first.taagerLoginMethod || "email");
+    store.set("taagerEmail",    first.taagerEmail    || first.taagerEmail || "");
+    store.set("taagerPhone",    first.taagerPhone    || "");
+    store.set("taagerPassword", first.taagerPassword || first.taagerPassword || store.get(`pwd_taager_${first.id}`, ""));
+    store.set("taagerCountry",  first.taagerCountry  || first.taagerCountry || "sa");
   } else {
     // All accounts deleted — clear legacy flat fields so the renderer can't
     // resurrect a ghost account from stale easyEmail / taagerEmail values
-    ["easyEmail", "easyPassword", "easyStore", "taagerEmail", "taagerPassword",
-     "taagerCountry", "taagerLoginMethod", "taagerPhone", "taagerAffiliateCode"].forEach(k => store.delete(k));
+    ["cmsProvider", "easyEmail", "easyPassword", "easyStore", "lightfunnelsEmail",
+     "lightfunnelsPassword", "lightfunnelsAccountName", "lightfunnelsLoginMethod",
+     "taagerEmail", "taagerPassword", "taagerCountry", "taagerLoginMethod",
+     "taagerPhone", "taagerAffiliateCode"].forEach(k => store.delete(k));
   }
   // Cache maxAccounts locally
   licenseStore.set("maxAccounts", maxAccounts);
@@ -3554,10 +3684,11 @@ const dashboardFetchChildren = new Set();
 const manualChromeChildren = new Set();
 ipcMain.on("bot-started", () => { botRunning = true; });
 ipcMain.on("bot-finished", () => { botRunning = false; currentBotChild = null; botChildren = []; });
-ipcMain.on("kill-bot", () => {
-  const toKill = botChildren.length ? botChildren : (currentBotChild ? [currentBotChild] : []);
-  for (const child of toKill) { try { child.kill("SIGKILL"); } catch {} }
-  currentBotChild = null; botChildren = []; botRunning = false;
+ipcMain.handle("kill-bot", async () => {
+  log.info("[Bot] Stop requested by user");
+  const result = await stopRunningBots();
+  log.info(`[Bot] Stop complete - children=${result.stopped}, forced=${result.forced}`);
+  return result;
 });
 
 // ── Analytics IPC Handlers ─────────────────────────────────────────────────
@@ -3829,12 +3960,16 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
   const userData = app.getPath("userData");
   const dashboardAccountId = accountId || acc.id || "__single__";
   const taagerLoginMethod = taagerLoginMethodOf(acc);
-  const dashboardEnrichmentProvider = !analyticsOnly && String(acc.dashboardEnrichmentProvider || "none").toLowerCase() === "easyorders" ? "easyorders" : "none";
+  const requestedDashboardProvider = dashboardEnrichmentProviderOf(acc);
+  const dashboardEnrichmentProvider = !analyticsOnly && (requestedDashboardProvider === "easyorders" || requestedDashboardProvider === "lightfunnels")
+    ? requestedDashboardProvider
+    : "none";
   const taagerEmail = acc.taagerEmail || store.get("taagerEmail", "");
   const taagerPassword = acc.taagerPassword || (acc.id ? store.get(`pwd_taager_${acc.id}`, "") : "") || store.get("taagerPassword", "");
   const taagerPhone = acc.taagerPhone || store.get("taagerPhone", "");
   const easyPassword = acc.easyPassword || (acc.id ? store.get(`pwd_easy_${acc.id}`, "") : "") || store.get("easyPassword", "");
-  const accountTimeoutMs = dashboardEnrichmentProvider === "easyorders"
+  const lightfunnelsPassword = acc.lightfunnelsPassword || (acc.id ? store.get(`pwd_lightfunnels_${acc.id}`, "") : "") || store.get("lightfunnelsPassword", "");
+  const accountTimeoutMs = dashboardEnrichmentProvider === "easyorders" || dashboardEnrichmentProvider === "lightfunnels"
     ? DASHBOARD_FETCH_EASYORDERS_TIMEOUT_MS
     : DASHBOARD_FETCH_ACCOUNT_TIMEOUT_MS;
   if (taagerLoginMethod !== "google" && !taagerEmail && !taagerPhone) {
@@ -3871,6 +4006,7 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
     profilePath,
     launchMinimized: store.get("launchMinimized", false),
     easyPassword,
+    lightfunnelsPassword,
     taagerEmail,
     taagerPassword,
     taagerLoginMethod,
@@ -4198,7 +4334,7 @@ function prepareStaticDashboardUpdate(payload = {}) {
     dateFrom: payload.dateFrom,
     dateTo: payload.dateTo,
     country: account.taagerCountry || "sa",
-    enrichmentEnabled: account.dashboardEnrichmentProvider === "easyorders",
+    enrichmentEnabled: account.dashboardEnrichmentProvider === "easyorders" || account.dashboardEnrichmentProvider === "lightfunnels",
     easyOrdersLookbackDays: Number(account.easyOrdersLookbackDays || 60),
     skuNameCache: getDashboardSkuNameCache(accountId),
   });
@@ -4515,7 +4651,7 @@ function marketingStableAccountKey(accountId) {
   const clean = String(accountId || "").trim();
   if (!clean || clean === "__all__") return clean;
   const account = getStoredAccountById(clean);
-  const stable = account && (taagerMarketingKeyOf(account) || account.taagerEmail || account.easyEmail || account.label || "");
+  const stable = account && (taagerMarketingKeyOf(account) || account.taagerEmail || account.lightfunnelsEmail || account.easyEmail || account.lightfunnelsAccountName || account.label || "");
   return String(stable || clean).trim().toLowerCase();
 }
 
@@ -4528,6 +4664,10 @@ function marketingAccountLookupKeys(accountId) {
     account && taagerLoginIdentityOf(account),
     account && account.taagerPhone,
     account && account.taagerEmail,
+    account && account.lightfunnelsEmail,
+    account && account.lightfunnelsAccountName,
+    account && cmsDisplayNameOf(account),
+    account && cmsEmailOf(account),
     account && account.easyEmail,
     account && account.email,
     account && account.label,
@@ -5199,6 +5339,25 @@ ipcMain.handle("get-marketing-status", async (_, accountId, platform = "tiktok",
   if (cached && mode === "cached") {
     return { ok: true, ...cached, cache: { ...(cached.cache || {}), status: "local", providerRequestCount: 0 } };
   }
+  // A cached lookup is deliberately local-only. Dashboard startup uses this
+  // mode to decide whether marketing work exists at all; contacting Windsor
+  // here made brand-new, disconnected accounts wait on three remote requests
+  // before the dashboard could become usable.
+  if (!cached && mode === "cached") {
+    return {
+      ok: true,
+      accountId: dashboardAccountId,
+      platform,
+      status: "disconnected",
+      statusCheckedAt: new Date().toISOString(),
+      linkedAccounts: [],
+      mappedAccounts: [],
+      mappings: {},
+      selectedSourceAccounts: [],
+      summary: null,
+      cache: { status: "local-miss", providerRequestCount: 0 },
+    };
+  }
   if (cached && mode === "revalidate" && (marketingStatusIsFresh(cached) || cached.status === "disconnected")) {
     return { ok: true, ...cached, cache: { ...(cached.cache || {}), status: "local", providerRequestCount: 0 } };
   }
@@ -5682,6 +5841,85 @@ function spawnBotChild(creds) {
 
 let botChildren = []; // track all running children
 
+function waitForBotChildExit(child, timeoutMs) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (exited) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.removeListener("exit", onExit);
+      resolve(exited);
+    };
+    const onExit = () => finish(true);
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    child.once("exit", onExit);
+  });
+}
+
+function forceKillBotProcessTree(child) {
+  if (!child || !child.pid || child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  if (process.platform === "win32") {
+    const { spawn } = require("child_process");
+    return new Promise((resolve) => {
+      const killer = spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+        windowsHide: true,
+        stdio: "ignore",
+      });
+      killer.once("error", () => {
+        try { child.kill("SIGKILL"); } catch (_) {}
+        resolve();
+      });
+      killer.once("exit", (code) => {
+        if (code !== 0) {
+          try { child.kill("SIGKILL"); } catch (_) {}
+        }
+        resolve();
+      });
+    });
+  }
+  try { child.kill("SIGKILL"); } catch (_) {}
+  return Promise.resolve();
+}
+
+async function stopRunningBots() {
+  botRunning = false;
+  const children = Array.from(new Set([
+    ...botChildren,
+    ...(currentBotChild ? [currentBotChild] : []),
+  ])).filter((child) => child && child.exitCode === null && child.signalCode === null);
+  const manualChildren = Array.from(manualChromeChildren)
+    .filter((child) => child && child.exitCode === null && child.signalCode === null);
+
+  for (const child of children) {
+    try {
+      if (child.connected) child.send({ type: "stop" });
+    } catch (_) {}
+  }
+
+  // Manual Google-login Chrome is spawned by the main process, not Playwright.
+  await Promise.all(manualChildren.map(forceKillBotProcessTree));
+  if (manualChildren.length) {
+    await Promise.all(manualChildren.map((child) => waitForBotChildExit(child, 2500)));
+  }
+  manualChromeChildren.clear();
+  pendingGoogleLoginRequests.clear();
+
+  const graceful = await Promise.all(children.map((child) => waitForBotChildExit(child, 4000)));
+  const stuck = children.filter((_child, index) => !graceful[index]);
+  await Promise.all(stuck.map(forceKillBotProcessTree));
+  if (stuck.length) await Promise.all(stuck.map((child) => waitForBotChildExit(child, 2500)));
+
+  botChildren = [];
+  currentBotChild = null;
+  return {
+    success: true,
+    stopped: children.length + manualChildren.length,
+    forced: stuck.length + manualChildren.length,
+  };
+}
+
 // ── Helper: auto-save failed orders xlsx to %APPDATA%/taager-order-bot/failed-orders/{easyEmail}/ ──
 function saveFailedOrdersFile(easyEmail, buffer) {
   try {
@@ -5730,6 +5968,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
       .map(a => ({
         ...a,
         easyPassword: store.get(`pwd_easy_${a.id}`, ""),
+        lightfunnelsPassword: store.get(`pwd_lightfunnels_${a.id}`, ""),
         taagerPassword: store.get(`pwd_taager_${a.id}`, ""),
         taagerPassword: store.get(`pwd_taager_${a.id}`, store.get(`pwd_taager_${a.id}`, "")),
         autoConfirm,
@@ -5793,7 +6032,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
         success: false,
         error: message,
         accountId: acc.id || "__single__",
-        accountEmail: acc.easyEmail || "",
+        accountEmail: accountContactEmail(acc),
         accountLabel: accountDisplayName(acc, "Account"),
         runStartedAt: now,
         runEndedAt: now,
@@ -5866,7 +6105,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
           // Auto-save failed orders to per-email folder before resolving
           const data = msg.data || {};
           if (data.failedOrders?.buffer && data.failedOrders.buffer.length > 0) {
-            const email = acc.easyEmail || "unknown";
+            const email = accountContactEmail(acc) || "unknown";
             const { dir, filePath } = saveFailedOrdersFile(email, data.failedOrders.buffer);
             data.failedOrders.failedDir  = dir;
             data.failedOrders.failedPath = filePath;
@@ -5877,7 +6116,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
             data,
             ...finishTiming(),
             accountId: acc.id || "__single__",
-            accountEmail: acc.easyEmail || "",
+            accountEmail: accountContactEmail(acc),
             accountLabel: accountDisplayName(acc, "Account 1"),
           });
         }
@@ -5898,7 +6137,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
             error: msg.error,
             ...finishTiming(),
             accountId: acc.id || "__single__",
-            accountEmail: acc.easyEmail || "",
+            accountEmail: accountContactEmail(acc),
             accountLabel: accountDisplayName(acc, "Account 1"),
           });
         }
@@ -5920,7 +6159,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
           mainWindow.webContents.send("bot-order-progress", {
             ...msg,
             accountId: acc.id || "__single__",
-            accountEmail: acc.easyEmail || "",
+            accountEmail: accountContactEmail(acc),
             accountLabel: accountDisplayName(acc, "Account 1"),
             accountIdx: 0,
             totalAccounts: 1,
@@ -5965,7 +6204,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
           logs,
           ...finishTiming(),
           accountId: acc.id || "__single__",
-          accountEmail: acc.easyEmail || "",
+          accountEmail: accountContactEmail(acc),
           accountLabel: accountDisplayName(acc, "Account 1"),
         });
       });
@@ -5989,7 +6228,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
           logs,
           ...finishTiming(),
           accountId: acc.id || "__single__",
-          accountEmail: acc.easyEmail || "",
+          accountEmail: accountContactEmail(acc),
           accountLabel: accountDisplayName(acc, "Account 1"),
         });
       });
@@ -6054,13 +6293,13 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
 
       child.on("message", (msg) => {
         const accountId    = acc.id;
-        const accountEmail = acc.easyEmail || "";
+        const accountEmail = accountContactEmail(acc);
         const accountLabel = accountDisplayName(acc, accountEmail || ("Account " + (idx + 1)));
 
         if (msg.type === "result") {
           const data = msg.data || {};
           if (data.failedOrders?.buffer && data.failedOrders.buffer.length > 0) {
-            const email = acc.easyEmail || acc.label || ("account-" + (idx + 1));
+            const email = accountContactEmail(acc) || acc.label || ("account-" + (idx + 1));
             const { dir, filePath } = saveFailedOrdersFile(email, data.failedOrders.buffer);
             data.failedOrders.failedDir  = dir;
             data.failedOrders.failedPath = filePath;
@@ -6134,7 +6373,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
           logs,
           ...finishTiming(),
           accountId:    acc.id,
-          accountEmail: acc.easyEmail || "",
+          accountEmail: accountContactEmail(acc),
           accountLabel: accountDisplayName(acc, "Account " + (idx + 1)),
         });
       });
@@ -6158,7 +6397,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
           logs,
           ...finishTiming(),
           accountId:    acc.id,
-          accountEmail: acc.easyEmail || "",
+          accountEmail: accountContactEmail(acc),
           accountLabel: accountDisplayName(acc, "Account " + (idx + 1)),
         });
       });

@@ -27,12 +27,12 @@
    * @param {function} opts.onResume       - Called after successful revalidation;
    *                                         overlay hides and workflow can continue.
    */
-  window.showExpiredOverlay = function ({ licenseKey = '', reason = '', onResume } = {}) {
+  window.showExpiredOverlay = function ({ licenseKey = '', customerName = '', reason = '', onResume } = {}) {
     if (_overlayEl) return;                 // already visible
     _onResumeCallback = onResume || null;
     _lastValidAt      = new Date();
 
-    _overlayEl = _buildOverlay(licenseKey, reason);
+    _overlayEl = _buildOverlay(licenseKey, customerName, reason);
     document.body.appendChild(_overlayEl);
 
     // Trap all keyboard input so nothing bleeds through
@@ -59,15 +59,18 @@
 
   // ── Build DOM ──────────────────────────────────────────────────────────────
 
-  function _buildOverlay(licenseKey, reason) {
+  function _buildOverlay(licenseKey, customerName, reason) {
     const el = document.createElement('div');
     el.id = 'expired-overlay';
     const t = window._t || ((k) => k);
 
     // The masked key shown in the footer (show last 4 chars of real key if available)
-    const displayKey = licenseKey
-      ? 'TAAGER-' + '●●●●-●●●●-●●●●-' + (licenseKey.slice(-4) || '????')
-      : '—';
+    const fullLicenseKey = String(licenseKey || '').trim();
+    const displayKey = fullLicenseKey || '—';
+    const displayCustomerName = String(customerName || '').trim() || '—';
+    const copyLabel = t('expired.copy_license') !== 'expired.copy_license'
+      ? t('expired.copy_license')
+      : 'Copy license ID';
 
     const now = new Date();
     const formattedTime = now.toLocaleString(undefined, {
@@ -117,7 +120,16 @@
         <div class="eo-meta">
           <div class="eo-meta-row">
             <span class="eo-meta-label">${t('expired.meta_license_id')}</span>
-            <span class="eo-meta-value eo-mono">${displayKey}</span>
+            <span class="eo-license-value">
+              <span class="eo-meta-value eo-mono" title="${_escapeHtml(displayKey)}">${_escapeHtml(displayKey)}</span>
+              ${fullLicenseKey ? `<button id="eo-copy-license-btn" class="eo-copy-btn" type="button" aria-label="${_escapeHtml(copyLabel)}" title="${_escapeHtml(copyLabel)}">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-2M6 7h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/></svg>
+              </button>` : ''}
+            </span>
+          </div>
+          <div class="eo-meta-row">
+            <span class="eo-meta-label">${t('expired.meta_merchant_name')}</span>
+            <span class="eo-meta-value">${_escapeHtml(displayCustomerName)}</span>
           </div>
           <div class="eo-meta-row">
             <span class="eo-meta-label">${t('expired.meta_last_valid')}</span>
@@ -161,7 +173,7 @@
           max-width: calc(100vw - 40px);
           background: #161b27;
           border: 1px solid #2a3347;
-          border-radius: 18px;
+          border-radius:var(--radius-lg);
           padding: 44px 36px 36px;
           text-align: center;
           box-shadow:
@@ -189,7 +201,7 @@
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 34px;
+          font-size:var(--type-display);
           margin: 0 auto;
           animation: eo-pulse 3s ease-in-out infinite;
         }
@@ -201,22 +213,22 @@
 
         /* Text */
         .eo-title {
-          font-size: 24px;
-          font-weight: 800;
+          font-size:var(--type-metric);
+          font-weight:var(--weight-bold);
           color: #e8eaf0;
           margin-bottom: 10px;
           letter-spacing: -.4px;
         }
 
         .eo-subtitle {
-          font-size: 14px;
+          font-size:var(--type-body);
           color: #ff6b84;
-          font-weight: 600;
+          font-weight:var(--weight-semibold);
           margin-bottom: 6px;
         }
 
         .eo-sub2 {
-          font-size: 13px;
+          font-size:var(--type-control);
           color: #8892a4;
           line-height: 1.65;
           margin-bottom: 22px;
@@ -229,12 +241,12 @@
 
         .eo-badge {
           display: inline-block;
-          font-size: 11px;
-          font-weight: 700;
+          font-size:var(--type-caption);
+          font-weight:var(--weight-semibold);
           letter-spacing: .06em;
           text-transform: uppercase;
           padding: 4px 14px;
-          border-radius: 99px;
+          border-radius:var(--radius-pill);
         }
 
         .eo-badge--expired {
@@ -254,10 +266,10 @@
           width: 100%;
           padding: 14px;
           border: none;
-          border-radius: 10px;
+          border-radius:var(--radius-sm);
           cursor: pointer;
-          font-size: 15px;
-          font-weight: 700;
+          font-size:var(--type-component-title);
+          font-weight:var(--weight-semibold);
           transition: opacity .2s, transform .15s;
           margin-bottom: 14px;
         }
@@ -288,13 +300,13 @@
 
         /* Error */
         .eo-error {
-          font-size: 12px;
-          font-weight: 600;
+          font-size:var(--type-label);
+          font-weight:var(--weight-semibold);
           color: #ff4d6d;
           padding: 8px 12px;
           background: rgba(255,77,109,.1);
           border: 1px solid rgba(255,77,109,.25);
-          border-radius: 6px;
+          border-radius:var(--radius-xs);
           margin-bottom: 14px;
           text-align: start;
         }
@@ -311,7 +323,7 @@
           justify-content: space-between;
           align-items: center;
           padding: 5px 0;
-          font-size: 12px;
+          font-size:var(--type-label);
         }
 
         .eo-meta-label {
@@ -320,13 +332,59 @@
 
         .eo-meta-value {
           color: #e8eaf0;
-          font-weight: 600;
+          font-weight:var(--weight-semibold);
+        }
+
+        .eo-license-value {
+          min-width: 0;
+          display: inline-flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 7px;
+        }
+
+        .eo-license-value .eo-mono {
+          overflow-wrap: anywhere;
+          text-align: end;
+        }
+
+        .eo-copy-btn {
+          width: 28px;
+          height: 28px;
+          flex: 0 0 28px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+          border: 1px solid #34405a;
+          border-radius:var(--radius-xs);
+          background: rgba(124,106,247,.08);
+          color: #a89cf7;
+          cursor: pointer;
+          transition: border-color .2s, background .2s, color .2s;
+        }
+
+        .eo-copy-btn:hover, .eo-copy-btn:focus-visible {
+          border-color: #7c6af7;
+          background: rgba(124,106,247,.18);
+          color: #d6d0ff;
+          outline: none;
+        }
+
+        .eo-copy-btn svg {
+          width: 15px;
+          height: 15px;
+          fill: none;
+          stroke: currentColor;
+          stroke-width: 1.8;
+          stroke-linecap: round;
+          stroke-linejoin: round;
         }
 
         .eo-mono {
-          font-family: monospace;
+          font-family:var(--font-mono);
           letter-spacing: .05em;
-          font-size: 11px;
+          font-size:var(--type-caption);
         }
 
         .eo-expired-text {
@@ -348,6 +406,7 @@
         [data-theme="light"] .eo-meta   { border-color: #d0d5e0; }
         [data-theme="light"] .eo-meta-label { color: #6b7280; }
         [data-theme="light"] .eo-meta-value { color: #111827; }
+        [data-theme="light"] .eo-copy-btn { border-color: #c7ccda; color: #6558d6; }
         [data-theme="light"] .eo-btn--secondary { color: #4b5563; border-color: #d0d5e0; }
         [data-theme="light"] .eo-btn--secondary:hover { color: #111827; border-color: #7c6af7; }
       </style>
@@ -356,6 +415,7 @@
     // Wire up buttons
     const continueBtn = el.querySelector('#eo-continue-btn');
     const supportBtn  = el.querySelector('#eo-support-btn');
+    const copyBtn     = el.querySelector('#eo-copy-license-btn');
     const errorEl     = el.querySelector('#eo-error');
     const badge       = el.querySelector('.eo-badge');
 
@@ -374,6 +434,27 @@
         }
       } catch (_) {
         errorEl.textContent = 'Could not open the support link. Please contact the administrator directly.';
+        errorEl.style.display = 'block';
+      }
+    });
+
+    copyBtn?.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(fullLicenseKey);
+        const copiedText = t('expired.copied') !== 'expired.copied' ? t('expired.copied') : 'Copied!';
+        copyBtn.setAttribute('aria-label', copiedText);
+        copyBtn.setAttribute('title', copiedText);
+        if (window.TaagerUI && typeof window.TaagerUI.toast === 'function') {
+          window.TaagerUI.toast(copiedText, { kind: 'success', timeout: 2000 });
+        }
+        setTimeout(() => {
+          copyBtn.setAttribute('aria-label', copyLabel);
+          copyBtn.setAttribute('title', copyLabel);
+        }, 2000);
+      } catch (_) {
+        errorEl.textContent = t('expired.err_copy') !== 'expired.err_copy'
+          ? t('expired.err_copy')
+          : 'Could not copy the license ID.';
         errorEl.style.display = 'block';
       }
     });
@@ -402,8 +483,9 @@
           badge.textContent = t('expired.badge_active');
 
           setTimeout(() => {
+            const onResumeCallback = _onResumeCallback;
             _teardown();
-            if (_onResumeCallback) _onResumeCallback(result);
+            if (onResumeCallback) onResumeCallback(result);
           }, 900);
         } else {
           const invalidReason = String((result && result.reason) || '').toLowerCase();
@@ -455,8 +537,15 @@
       try {
         const result = await window.api.checkLicenseNocache();
         if (result.valid) {
+          const onResumeCallback = _onResumeCallback;
           _teardown();
-          if (_onResumeCallback) _onResumeCallback(result);
+          if (onResumeCallback) onResumeCallback(result);
+          return;
+        }
+        const invalidReason = String((result && result.reason) || '').toLowerCase();
+        if ((invalidReason.includes('not found') || invalidReason.includes('no license key')) &&
+            typeof window.returnToLicensePage === 'function') {
+          window.returnToLicensePage();
         }
       } catch (_) { /* silent — no connection, try next tick */ }
     }, 30_000);
@@ -489,13 +578,22 @@
     return raw;
   }
 
+  function _escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
   function _trapKey(e) {
     // Allow Tab so the Continue button stays keyboard-accessible,
     // but swallow everything else so no shortcuts bleed through.
     if (e.key === 'Tab') return;
     e.stopPropagation();
     // Don't preventDefault on keydown/keyup for the button itself
-    if (e.target && (e.target.id === 'eo-continue-btn' || e.target.id === 'eo-support-btn')) return;
+    if (e.target && (e.target.id === 'eo-continue-btn' || e.target.id === 'eo-support-btn' || e.target.closest?.('#eo-copy-license-btn'))) return;
     e.preventDefault();
   }
 

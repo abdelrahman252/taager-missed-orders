@@ -192,9 +192,11 @@
 
   function scoreWindow(summary, minSample) {
     if (!summary || summary.netOrders < minSample) return -1;
-    var volumeBonus = Math.min(summary.netOrders, 240) / 240 * 4;
-    var deliveryBonus = Math.min(summary.delivered, 120) / 120 * 2;
-    return summary.ndrPct + volumeBonus + deliveryBonus;
+    // The minimum sample already provides the trust threshold. Adding volume
+    // bonuses here allowed a larger, lower-NDR window to beat a genuinely
+    // better NDR window. That made "Use in simulator" lower the assumption it
+    // was supposed to improve. Rank by NDR; use volume only as a tie-breaker.
+    return summary.ndrPct;
   }
 
   function periodFromData(data, opts) {
@@ -238,7 +240,8 @@
       cycles.push(summary);
       if (summary.score >= 0 && (!best ||
           summary.score > best.score ||
-          (summary.ndrPct === best.ndrPct && summary.netOrders > best.netOrders))) {
+          (summary.score === best.score && summary.netOrders > best.netOrders) ||
+          (summary.score === best.score && summary.netOrders === best.netOrders && summary.delivered > best.delivered))) {
         best = summary;
       }
     }

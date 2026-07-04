@@ -66,7 +66,7 @@ async function launchElectronForQa() {
     if (process.env.TAAGER_QA_FORCE_CDP === "1") throw new Error("CDP forced by TAAGER_QA_FORCE_CDP");
     const app = await withTimeout(electron.launch({
       cwd: ROOT,
-      args: [ROOT],
+      args: [ROOT, "--disable-gpu", "--disable-software-rasterizer", "--no-sandbox"],
       env: {
         ...process.env,
         ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
@@ -86,7 +86,7 @@ async function launchElectronForQa() {
 
   const executablePath = require("electron");
   const port = Number(process.env.TAAGER_QA_CDP_PORT || 9339);
-  const child = spawn(executablePath, [ROOT, "--remote-debugging-port=" + port], {
+  const child = spawn(executablePath, [ROOT, "--remote-debugging-port=" + port, "--disable-gpu", "--disable-software-rasterizer", "--no-sandbox"], {
     cwd: ROOT,
     env: {
       ...process.env,
@@ -140,6 +140,11 @@ async function launchElectronForQa() {
       localStorage.setItem("kbot_tour_completed_dashboard", "true");
       localStorage.setItem("kbot_tour_completed_analytics", "true");
       localStorage.setItem("kbot_tour_completed_operations", "true");
+      localStorage.setItem("taager_currency_rates_v1", JSON.stringify({
+        source: "manual",
+        updatedAt: new Date().toISOString(),
+        rates: { USD: 1, SAR: 3.75, EGP: 52, AED: 3.6725, IQD: 1310, OMR: 0.385 },
+      }));
     } catch (err) {}
     window.monitoring = {
       captureException: noop,
@@ -288,6 +293,11 @@ async function mountDashboard(page) {
       localStorage.setItem("kbot_tour_completed_dashboard", "true");
       localStorage.setItem("kbot_tour_completed_analytics", "true");
       localStorage.setItem("kbot_tour_completed_operations", "true");
+      localStorage.setItem("taager_currency_rates_v1", JSON.stringify({
+        source: "manual",
+        updatedAt: new Date().toISOString(),
+        rates: { USD: 1, SAR: 3.75, EGP: 52, AED: 3.6725, IQD: 1310, OMR: 0.385 },
+      }));
     } catch (err) {}
     document.querySelectorAll(".taager-tour-prompt, .taager-tour-root").forEach((node) => node.remove());
   });
@@ -299,7 +309,7 @@ async function mountDashboard(page) {
       checkLicenseNocache: async () => ({ valid: true, customerName: "QA", daysLeft: 30, key: "QA" }),
       getCredentials: async () => ({
         accounts: [
-          { id: "sa-main", easyEmail: "qa@example.com", label: "Saudi Main Store" },
+          { id: "sa-main", easyEmail: "qa@example.com", label: "Saudi Main Store", accountType: "live" },
         ],
         maxAccounts: 5,
         analyticsEnabled: true,
@@ -513,7 +523,13 @@ async function mountDashboard(page) {
 
     window._kbotLang = "ar";
     window._kbotTheme = "dark";
+    window._kbotAccounts = [
+      { id: "sa-main", easyEmail: "qa@example.com", label: "Saudi Main Store", accountType: "live" },
+    ];
+    window._analyticsEnabled = true;
+    window._operationsEnabled = true;
     window._dashboardEnabled = true;
+    window._teamLeaderEnabled = false;
     window.dashboardAccountsList = [
       { id: "__all__", label: "كل الحسابات المشتركة", orderCount: orders.length },
       { id: "sa-main", label: "Saudi Main Store", orderCount: orders.length },
@@ -1281,9 +1297,19 @@ async function verifyProductReactiveInteractions(page) {
       !modalSynced.hasTopCitiesByQuantity || !modalSynced.hasRows || !modalSynced.paginationChanged) {
     throw new Error("Product Details modal did not render required analysis blocks: " + JSON.stringify(modalSynced));
   }
-  await page.evaluate(() => window.DashboardRoiState.set({ currency: "EGP" }, "__all__"));
+  await page.evaluate(() => {
+    const accountId = window.dashboardGeoData?.meta?.activeAccountId ||
+      (typeof window.getActiveAccountId === "function" ? window.getActiveAccountId() : "__all__") ||
+      "__all__";
+    window.DashboardRoiState.set({ currency: "EGP" }, accountId);
+  });
   await page.waitForFunction(() => document.querySelector("#s5-product-modal")?.textContent.includes("EGP"));
-  await page.evaluate(() => window.DashboardRoiState.set({ currency: "USD" }, "__all__"));
+  await page.evaluate(() => {
+    const accountId = window.dashboardGeoData?.meta?.activeAccountId ||
+      (typeof window.getActiveAccountId === "function" ? window.getActiveAccountId() : "__all__") ||
+      "__all__";
+    window.DashboardRoiState.set({ currency: "USD" }, accountId);
+  });
   await page.waitForFunction(() => document.querySelector("#s5-product-modal")?.textContent.includes("USD"));
   await page.evaluate(() => document.querySelector("#s5-modal-close")?.click());
   await page.waitForTimeout(250);
@@ -1669,13 +1695,162 @@ async function captureDashboardSection(page, sectionId, size) {
   }
 }
 
+async function verifyVisualSystemCascade(page) {
+  const result = await page.evaluate(async () => {
+    if (window.taagerFontsReady) await window.taagerFontsReady;
+    const stylesheets = Array.from(document.head.querySelectorAll('link[rel="stylesheet"]'));
+    const visualSystem = document.querySelector('link[data-visual-system="true"]');
+    const visibleTooSmall = Array.from(document.querySelectorAll("#page-dashboard *"))
+      .filter((el) => {
+        const style = getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0 && parseFloat(style.fontSize) > 0 && parseFloat(style.fontSize) < 10;
+      })
+      .slice(0, 10)
+      .map((el) => ({
+        tag: el.tagName,
+        className: String(el.className || ""),
+        size: getComputedStyle(el).fontSize,
+        markup: el.outerHTML.slice(0, 320),
+        parentClass: String(el.parentElement?.className || ""),
+      }));
+    return {
+      visualSystemLast: !!visualSystem && stylesheets[stylesheets.length - 1] === visualSystem,
+      inter: document.fonts.check("400 14px Inter"),
+      arabic: document.fonts.check('400 14px "IBM Plex Sans Arabic"'),
+      bodyFamily: getComputedStyle(document.body).fontFamily,
+      visibleTooSmall,
+    };
+  });
+  if (!result.visualSystemLast || !result.inter || !result.arabic || result.visibleTooSmall.length) {
+    throw new Error("visual-system cascade verification failed: " + JSON.stringify(result));
+  }
+  console.log("[qa] visual-system cascade verified", result.bodyFamily);
+}
+
+async function diagnoseDashboardIdlePulse(page, durationMs) {
+  await page.waitForTimeout(1800);
+  return page.evaluate((duration) => new Promise((resolve) => {
+    const targets = [
+      document.documentElement,
+      document.getElementById('main-titlebar'),
+      document.querySelector('#page-dashboard .dash-shell'),
+      document.querySelector('#page-dashboard .s8-kpi-card, #page-dashboard .dash-kpi-card'),
+    ].filter(Boolean);
+    const names = targets.map((target) => target.id || target.className || target.tagName);
+    const mutations = [];
+    const observer = new MutationObserver((records) => {
+      records.forEach((record) => mutations.push({
+        target: record.target.id || record.target.className || record.target.nodeName,
+        type: record.type,
+        attribute: record.attributeName || '',
+      }));
+    });
+    targets.forEach((target) => observer.observe(target, {
+      attributes: true,
+      childList: true,
+      characterData: true,
+      subtree: true,
+      attributeFilter: ['class', 'style', 'hidden', 'data-theme', 'dir', 'lang'],
+    }));
+    const layoutShifts = [];
+    let perfObserver = null;
+    if (window.PerformanceObserver) {
+      try {
+        perfObserver = new PerformanceObserver((list) => {
+          list.getEntries().forEach((entry) => {
+            if (!entry.hadRecentInput) layoutShifts.push(entry.value);
+          });
+        });
+        perfObserver.observe({ type: 'layout-shift', buffered: false });
+      } catch (_) {}
+    }
+    const initialRects = targets.map((target) => target.getBoundingClientRect().toJSON());
+    let rectChanges = 0;
+    let frame = 0;
+    const sample = () => {
+      targets.forEach((target, index) => {
+        const current = target.getBoundingClientRect();
+        const initial = initialRects[index];
+        if (Math.abs(current.x - initial.x) > 0.1 || Math.abs(current.y - initial.y) > 0.1 ||
+            Math.abs(current.width - initial.width) > 0.1 || Math.abs(current.height - initial.height) > 0.1) {
+          rectChanges += 1;
+        }
+      });
+      frame = requestAnimationFrame(sample);
+    };
+    frame = requestAnimationFrame(sample);
+    setTimeout(() => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      if (perfObserver) perfObserver.disconnect();
+      resolve({
+        duration,
+        targets: names,
+        rectChanges,
+        layoutShiftCount: layoutShifts.length,
+        layoutShiftValue: layoutShifts.reduce((sum, value) => sum + value, 0),
+        mutationCount: mutations.length,
+        mutations: mutations.slice(0, 40),
+        activeAnimations: document.getAnimations().map((animation) => ({
+          name: animation.animationName || '',
+          target: animation.effect && animation.effect.target
+            ? (animation.effect.target.id || animation.effect.target.className || animation.effect.target.tagName)
+            : '',
+          playState: animation.playState,
+        })).filter((item) => item.playState === 'running'),
+      });
+    }, duration);
+  }), durationMs || 5000);
+}
+
+async function diagnoseAdminSyncLifecycle(page) {
+  const before = await page.evaluate(() => ({
+    timeOrigin: performance.timeOrigin,
+    debugCount: window.TaagerDebug && Array.isArray(window.TaagerDebug.records) ? window.TaagerDebug.records.length : 0,
+    activeSection: document.getElementById('db-shell-mount') && document.getElementById('db-shell-mount')._dashboardActiveSection,
+  }));
+  await page.locator('#btn-admin-refresh').evaluate((button) => button.click());
+  await page.waitForFunction(() => {
+    return window.TaagerDebug && window.TaagerDebug.records.some((record) => record.scope === 'admin-sync' && record.event === 'complete');
+  }, null, { timeout: 30000 });
+  await page.waitForTimeout(900);
+  return page.evaluate((start) => {
+    const records = window.TaagerDebug && Array.isArray(window.TaagerDebug.records)
+      ? window.TaagerDebug.records.slice(start.debugCount)
+      : [];
+    const count = (scope, event) => records.filter((record) => record.scope === scope && record.event === event).length;
+    const curtain = document.getElementById('taager-route-curtain');
+    const mount = document.getElementById('db-shell-mount');
+    return {
+      sameRenderer: performance.timeOrigin === start.timeOrigin,
+      startupPreloaderPresent: !!document.getElementById('preloader'),
+      curtainVisible: !!(curtain && !curtain.hidden && curtain.classList.contains('is-visible')),
+      dashboardRenders: count('dashboard-data', 'renderDashboard:start'),
+      curtainShows: count('route-curtain', 'show'),
+      curtainHides: count('route-curtain', 'hideWhenStable:done'),
+      beforeSection: start.activeSection,
+      afterSection: mount && mount._dashboardActiveSection,
+      activeAnimations: document.getAnimations().filter((animation) => {
+        const target = animation.effect && animation.effect.target;
+        return animation.playState === 'running' && target && target.getClientRects().length > 0;
+      }).map((animation) => ({
+        name: animation.animationName || '',
+        target: animation.effect && animation.effect.target
+          ? (animation.effect.target.id || String(animation.effect.target.className || '') || animation.effect.target.tagName)
+          : '',
+      })),
+    };
+  }, before);
+}
+
 (async () => {
   const app = await launchElectronForQa();
   try {
     console.log("[qa] electron launched via " + app.mode);
     const page = await app.firstWindow();
     page.on("console", (msg) => console.log("[renderer]", msg.type(), msg.text()));
-    page.on("pageerror", (err) => console.log("[renderer:error]", err.message));
+    page.on("pageerror", (err) => console.log("[renderer:error]", err.stack || err.message));
     console.log("[qa] first window ready");
     await page.waitForLoadState("domcontentloaded", { timeout: 20000 });
     console.log("[qa] domcontentloaded");
@@ -1683,6 +1858,15 @@ async function captureDashboardSection(page, sectionId, size) {
     console.log("[qa] dashboard scripts ready");
     await mountDashboard(page);
     console.log("[qa] dashboard mounted");
+    await verifyVisualSystemCascade(page);
+    if (process.env.TAAGER_QA_IDLE_DIAGNOSTIC === "1") {
+      console.log("[qa] dashboard idle diagnostic", JSON.stringify(await diagnoseDashboardIdlePulse(page, 5000)));
+      return;
+    }
+    if (process.env.TAAGER_QA_ADMIN_SYNC_DIAGNOSTIC === "1") {
+      console.log("[qa] admin Sync diagnostic", JSON.stringify(await diagnoseAdminSyncLifecycle(page)));
+      return;
+    }
     if (process.env.TAAGER_QA_AI_SMOKE_ONLY === "1") {
       await verifyLiveTaagerAiSmoke(page);
       console.log("[qa] live Taager AI smoke verification complete");

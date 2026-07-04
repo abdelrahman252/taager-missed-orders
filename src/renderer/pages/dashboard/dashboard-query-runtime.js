@@ -6,6 +6,7 @@
   var requestSeq = {};
   var latest = {};
   var prewarmKeys = {};
+  var incompleteScopeWarnings = {};
   var DEFAULT_QUERY_TIMEOUT_MS = 25000;
 
   function loadFlags() {
@@ -93,6 +94,27 @@
     });
   }
 
+  function legacyHasRows(kind, data) {
+    if (!data) return false;
+    if (kind === "orders") return Array.isArray(data.orders) && data.orders.length > 0;
+    if (kind === "products" || kind === "product-options" || kind === "product-details") {
+      return !!(data.products && Array.isArray(data.products.rankedList) && data.products.rankedList.length);
+    }
+    return false;
+  }
+
+  function incompleteScope(kind, payload, result, data) {
+    if (!result || !result.ok || !result.scope) return false;
+    var requested = Array.isArray(payload.accountIds) ? payload.accountIds.map(String) : [];
+    var ignored = Array.isArray(result.scope.ignoredAccountIds) ? result.scope.ignoredAccountIds.map(String) : [];
+    var ignoredRequested = requested.filter(function (id) { return ignored.indexOf(id) !== -1; });
+    if (ignoredRequested.length) return { requested: requested, ignored: ignoredRequested };
+    if (legacyHasRows(kind, data) && Number(result.scope.accountCount || 0) === 0) {
+      return { requested: requested, ignored: ignored, reason: "no-query-accounts" };
+    }
+    return false;
+  }
+
   function query(kind, params, data) {
     if (!window.api || typeof window.api.queryDashboardData !== "function") {
       return Promise.resolve({ ok: false, error: "DASHBOARD_QUERY_UNAVAILABLE" });
@@ -109,6 +131,28 @@
     ]).then(function (result) {
       if (requestSeq[requestKey] !== seq) return { ok: false, stale: true };
       if (result && result.timeout) requestSeq[requestKey] = (requestSeq[requestKey] || 0) + 1;
+      var scopeProblem = incompleteScope(kind, payload, result, data);
+      if (scopeProblem) {
+        var warningKey = kind + "|" + (payload.requestChannel || "active") + "|" +
+          (payload.accountIds || []).join(",") + "|" + (payload.dateFrom || "") + "|" + (payload.dateTo || "");
+        if (!incompleteScopeWarnings[warningKey]) {
+          incompleteScopeWarnings[warningKey] = true;
+          console.warn("[DashboardQuery] incomplete scope; using legacy dashboard data", {
+            kind: kind,
+            requestChannel: payload.requestChannel || "active",
+            scope: result.scope,
+            detail: scopeProblem
+          });
+        }
+        return {
+          ok: false,
+          fallback: true,
+          error: "DASHBOARD_QUERY_SCOPE_INCOMPLETE",
+          kind: kind,
+          scope: result.scope,
+          detail: scopeProblem
+        };
+      }
       if (result && result.ok) latest[kind] = result;
       return result;
     }).catch(function (error) {
@@ -396,7 +440,13 @@
       mismatchCount: mismatches.length,
       mismatches: mismatches
     };
-    if (mismatches.length) console.warn("[DashboardQuery][shadow] rollout mismatch", payload);
+    if (mismatches.length) {
+      console.warn("[DashboardQuery][shadow] rollout mismatch", payload);
+      // DevTools collapses nested objects in forwarded Electron logs. Keep a
+      // deterministic JSON line so field/value/identity differences survive
+      // log collection and can be replayed from customer diagnostics.
+      console.warn("[DashboardQuery][shadow] mismatch-details " + JSON.stringify(payload));
+    }
     else console.info("[DashboardQuery][shadow] rollout verified", payload);
   }
 

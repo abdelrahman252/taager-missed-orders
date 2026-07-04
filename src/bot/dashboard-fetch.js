@@ -16,6 +16,7 @@ const {
   TAAGER_COUNTRY_NAMES: NORMALIZED_TAAGER_COUNTRY_NAMES,
 } = require("./taager-country");
 const { createEasyOrdersExportFlow } = require("./easy-orders-export");
+const { createLightFunnelsFlow } = require("./lightfunnels-flow");
 const { createTaagerOrdersExportFlow } = require("./taager-orders-export-flow");
 const {
   installTaagerInterruptionAutoDismiss,
@@ -38,6 +39,20 @@ const easyOrdersFlow = createEasyOrdersExportFlow({
   config,
   log,
   emit: (message) => process.send && process.send(message),
+});
+const lightFunnelsFlow = createLightFunnelsFlow({
+  config,
+  log,
+  emit: (message) => process.send && process.send(message),
+  waitForManualGoogleLogin,
+  closeForManualGoogle: closeActiveContextForManualGoogle,
+  chromePathProvider: () => config.chromePath || findChrome(),
+  relaunchAfterManualGoogle: async (stage, targetUrl) => {
+    await closeActiveContextForManualGoogle();
+    const relaunched = await launchDashboardContext(config.profilePath, config.chromePath || findChrome());
+    await gotoWithNetworkRetries(relaunched.page, targetUrl, `LightFunnels ${stage} relaunch`, { attempts: 3, timeout: 45000, waitMs: 5000 });
+    return relaunched.page;
+  },
 });
 const TAAGER_COUNTRY = normalizeTaagerCountry(config.taagerCountry || config.taagerCountry || "sa");
 const taagerCountryUrl = (pathname) => taagerUrl(TAAGER_COUNTRY, pathname);
@@ -1599,6 +1614,18 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
         enrichmentError = enrichmentErr.message || String(enrichmentErr);
         log(`Dashboard enrichment - EasyOrders failed, continuing with Taager-only data: ${enrichmentErr.message}`);
         emitStage("easyorders.enrichment", "warning", `Continuing Taager-only: ${enrichmentError}`);
+      }
+    } else if (DASHBOARD_ENRICHMENT_PROVIDER === "lightfunnels") {
+      try {
+        emitStage("lightfunnels.login", "started", "Validating LightFunnels account");
+        log(`Dashboard enrichment - LightFunnels login/select only for "${config.lightfunnelsAccountName || ""}"`);
+        page = await lightFunnelsFlow.login(page);
+        emitStage("lightfunnels.login", "ok", `LightFunnels account verified: ${config.lightfunnelsAccountName || "configured account"}`);
+        emitStage("lightfunnels.enrichment", "warning", "LightFunnels order export is not implemented yet; continuing Taager-only");
+      } catch (enrichmentErr) {
+        enrichmentError = enrichmentErr.message || String(enrichmentErr);
+        log(`Dashboard enrichment - LightFunnels validation failed, continuing with Taager-only data: ${enrichmentErr.message}`);
+        emitStage("lightfunnels.login", "warning", `Continuing Taager-only: ${enrichmentError}`);
       }
     } else {
       emitStage("easyorders.enrichment", "ok", "EasyOrders enrichment disabled for this account");

@@ -573,6 +573,8 @@
     var duration  = Math.min(opts.duration || 520, 700);
     var decimals  = opts.decimals  || 0;
     var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var suppressMotion = (window.TaagerIsUiStabilizing && window.TaagerIsUiStabilizing()) ||
+      !!(el.closest && el.closest('.dash-section-no-entrance, .dash-section-refreshing'));
     var start     = performance.now();
     var fmt = function (n) {
       if (opts.compact && window.formatDashboardNumber) {
@@ -587,18 +589,40 @@
         maximumFractionDigits: decimals
       });
     };
-    if (reduceMotion || duration <= 16 || !document.body.contains(el)) {
+    if (suppressMotion || reduceMotion || duration <= 16 || !document.body.contains(el)) {
+      if (window.TaagerDebugLog) window.TaagerDebugLog('dashboard-animation', 'animateNumber:direct-set', {
+        to: to,
+        duration: duration,
+        suppressMotion: suppressMotion,
+        reduceMotion: reduceMotion,
+        inDom: document.body.contains(el),
+        className: String(el.className || ''),
+        dataId: el.getAttribute('data-id') || ''
+      });
       el.textContent = fmt(to);
       el.dataset.animatedTo = String(to);
       return;
     }
+    if (window.TaagerDebugLog) window.TaagerDebugLog('dashboard-animation', 'animateNumber:start', {
+      to: to,
+      duration: duration,
+      decimals: decimals,
+      className: String(el.className || ''),
+      dataId: el.getAttribute('data-id') || ''
+    });
     function tick(now) {
       if (!document.body.contains(el)) return;
       var t      = Math.min(1, (now - start) / duration);
       var eased  = 1 - Math.pow(1 - t, 3);
       el.textContent = fmt(to * eased);
       if (t < 1) requestAnimationFrame(tick);
-      else el.dataset.animatedTo = String(to);
+      else {
+        el.dataset.animatedTo = String(to);
+        if (window.TaagerDebugLog) window.TaagerDebugLog('dashboard-animation', 'animateNumber:done', {
+          to: to,
+          dataId: el.getAttribute('data-id') || ''
+        });
+      }
     }
     requestAnimationFrame(tick);
   };
@@ -627,7 +651,7 @@
     var arrow = positive ? '↑' : '↓';
     var value = window.dashboardI18n ? window.dashboardI18n.number(Math.abs(delta), { maximumFractionDigits: 1 }) : Math.abs(delta);
     return '<span style="display:inline-flex;align-items:center;gap:4px;padding:5px 14px;' +
-      'border-radius:8px;font-size:13px;font-weight:700;background:' + clr + '22;' +
+      'border-radius:var(--dash-radius-sm);font-size:var(--type-control);font-weight:var(--weight-semibold);background:' + clr + '22;' +
       'color:' + clr + ';border:1px solid ' + clr + '40;letter-spacing:0.3px;white-space:nowrap;">' +
       arrow + ' ' + value + '%</span>';
   };
@@ -638,10 +662,10 @@
     title = window.dashboardI18n ? window.dashboardI18n.raw(title) : title;
     var align = window.dashboardI18n && !window.dashboardI18n.isRtl() ? 'flex-start' : 'flex-end';
     return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;justify-content:' + align + ';">' +
-      '<span style="font-size:14px;font-weight:700;color:#fff;">' + title + '</span>' +
+      '<span style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#fff;">' + title + '</span>' +
       '<div style="width:26px;height:26px;border-radius:50%;background:' + color + '22;' +
       'border:1.5px solid ' + color + '80;display:flex;align-items:center;justify-content:center;' +
-      'font-size:11px;font-weight:900;color:' + color + ';flex-shrink:0;">' + num + '</div>' +
+      'font-size:var(--type-caption);font-weight:var(--weight-semibold);color:' + color + ';flex-shrink:0;">' + num + '</div>' +
       '</div>';
   };
 
@@ -660,19 +684,19 @@
     var liveLabel = tr ? tr.t('shell.lastUpdateToday') : 'آخر تحديث: اليوم';
     return '<div class="dash-topbar" style="display:flex;justify-content:space-between;align-items:center;' +
       'padding:11px 32px;border-bottom:1px solid rgba(255,255,255,0.05);' +
-      'background:#080b12;position:sticky;top:0;z-index:10;flex-shrink:0;" dir="' + (tr ? tr.dir() : 'rtl') + '">' +
+      'background:var(--dash-bg);position:sticky;top:0;z-index:10;flex-shrink:0;" dir="' + (tr ? tr.dir() : 'rtl') + '">' +
       /* right side: account + month chips */
       '<div class="dash-topbar-right" style="display:flex;gap:10px;">' +
-        '<div id="topbar-account-selector" style="display:flex;align-items:center;gap:7px;padding:6px 14px;border-radius:9px;' +
+        '<div id="topbar-account-selector" style="display:flex;align-items:center;gap:7px;padding:6px 14px;border-radius:var(--dash-radius-sm);' +
           'border:1px solid rgba(255,255,255,0.11);background:rgba(255,255,255,0.04);cursor:pointer;">' +
           window.icon('user', {size:13, color:'rgba(255,255,255,0.45)'}) +
-          '<span style="font-size:12px;color:rgba(255,255,255,0.65);font-weight:600;">' + account + '</span>' +
-          '<span style="color:rgba(255,255,255,0.3);font-size:9px;">▾</span>' +
+          '<span style="font-size:var(--type-label);color:rgba(255,255,255,0.65);font-weight:var(--weight-semibold);">' + account + '</span>' +
+          '<span style="color:rgba(255,255,255,0.3);font-size:var(--type-micro);">▾</span>' +
         '</div>' +
-        '<div style="display:flex;align-items:center;gap:7px;padding:6px 14px;border-radius:9px;' +
+        '<div style="display:flex;align-items:center;gap:7px;padding:6px 14px;border-radius:var(--dash-radius-sm);' +
           'border:1px solid rgba(255,255,255,0.11);background:rgba(255,255,255,0.04);">' +
           window.icon('calendar', {size:13, color:'rgba(255,255,255,0.4)'}) +
-          '<span style="font-size:12px;color:#f59e0b;font-weight:700;">' + month + '</span>' +
+          '<span style="font-size:var(--type-label);color:#f59e0b;font-weight:var(--weight-semibold);">' + month + '</span>' +
         '</div>' +
       '</div>' +
       /* center: dots + title + dots */
@@ -681,7 +705,7 @@
           '<span style="width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,0.2);display:inline-block;"></span>' +
           '<span style="width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,0.2);display:inline-block;"></span>' +
         '</div>' +
-        '<span style="font-size:16px;font-weight:700;color:#fff;letter-spacing:0.5px;">' + title + '</span>' +
+        '<span style="font-size:var(--type-subtitle);font-weight:var(--weight-semibold);color:#fff;letter-spacing:0.5px;">' + title + '</span>' +
         '<div style="display:flex;gap:5px;">' +
           '<span style="width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,0.2);display:inline-block;"></span>' +
           '<span style="width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,0.2);display:inline-block;"></span>' +
@@ -691,9 +715,9 @@
       '<div class="dash-topbar-left" style="display:flex;align-items:center;gap:14px;">' +
         '<div style="display:flex;align-items:center;gap:6px;">' +
           '<span style="width:8px;height:8px;border-radius:50%;background:#00e676;display:inline-block;box-shadow:0 0 8px #00e676aa;"></span>' +
-          '<span style="font-size:11px;color:rgba(255,255,255,0.45);">' + liveLabel + '</span>' +
+          '<span style="font-size:var(--type-caption);color:rgba(255,255,255,0.45);">' + liveLabel + '</span>' +
         '</div>' +
-        '<span style="font-size:13px;color:rgba(255,255,255,0.7);font-weight:600;">' + _liveTime + '</span>' +
+        '<span style="font-size:var(--type-control);color:rgba(255,255,255,0.7);font-weight:var(--weight-semibold);">' + _liveTime + '</span>' +
         '<button style="background:none;border:none;cursor:pointer;padding:4px;display:flex;flex-direction:column;gap:4px;">' +
           '<span style="display:block;width:20px;height:2px;border-radius:1px;background:rgba(255,255,255,0.55);"></span>' +
           '<span style="display:block;width:14px;height:2px;border-radius:1px;background:rgba(255,255,255,0.55);"></span>' +
@@ -737,16 +761,48 @@
       style.id = styleId;
       style.textContent = 
         '@keyframes supposed-pulse { 0% { opacity: 0.95; } 50% { opacity: 0.6; } 100% { opacity: 0.95; } }\n' +
-        '.supposed-badge { display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:850;line-height:1.1;color:#fbbf24;margin-inline-start:4px;vertical-align:middle;white-space:nowrap;animation:supposed-pulse 2s infinite ease-in-out;unicode-bidi:isolate; }\n' +
+        '.supposed-badge { display:inline-flex;align-items:center;justify-content:center;font-size:var(--type-micro);font-weight:var(--weight-semibold);line-height:1.1;color:#fbbf24;margin-inline-start:4px;vertical-align:middle;white-space:nowrap;animation:supposed-pulse 2s infinite ease-in-out;unicode-bidi:isolate; }\n' +
         '.expected-value-stack { display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:0;max-width:100%;line-height:1.05;vertical-align:middle;text-align:center;unicode-bidi:isolate; }\n' +
         '.expected-value-stack .expected-value-main { display:block;max-width:100%;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }\n' +
-        '.expected-value-stack > .supposed-badge { margin-inline-start:0;font-size:9.5px;max-width:100%;white-space:normal;text-align:center;overflow-wrap:anywhere; }';
+        '.expected-value-stack > .supposed-badge { margin-inline-start:0;font-size:var(--type-micro);max-width:100%;white-space:normal;text-align:center;overflow-wrap:anywhere; }';
       document.head.appendChild(style);
     }
   })();
 
+  window.dashboardMarketingLoadingHtml = function () {
+    var label = window.dashboardI18n && window.dashboardI18n.pick
+      ? window.dashboardI18n.pick('Loading marketing spend...', 'جار تحميل الإنفاق التسويقي...')
+      : 'Loading marketing spend...';
+    return '<span class="dashboard-marketing-value-loading" role="status" aria-live="polite">' +
+      '<span class="dashboard-marketing-value-spinner" aria-hidden="true"></span>' +
+      '<span>' + label + '</span>' +
+    '</span>';
+  };
+
+  window.dashboardMarketingUnavailableHtml = function () {
+    var label = window.dashboardI18n && window.dashboardI18n.pick
+      ? window.dashboardI18n.pick('Marketing spend unavailable', 'الإنفاق التسويقي غير متاح')
+      : 'Marketing spend unavailable';
+    return '<span class="dashboard-marketing-value-loading dashboard-marketing-value-unavailable" role="status">' + label + '</span>';
+  };
+
+  (function () {
+    var styleId = 'dashboard-marketing-loading-styles';
+    if (document.getElementById(styleId)) return;
+    var style = document.createElement('style');
+    style.id = styleId;
+    style.textContent =
+      '@keyframes dashboard-marketing-value-spin{to{transform:rotate(360deg)}}' +
+      '.dashboard-marketing-value-loading{display:inline-flex;align-items:center;justify-content:center;gap:7px;max-width:100%;font-size:var(--type-micro);font-weight:var(--weight-semibold);color:#94a3b8;white-space:normal;line-height:1.25;text-align:center}' +
+      '.dashboard-marketing-value-spinner{width:12px;height:12px;flex:0 0 12px;border-radius:50%;border:2px solid rgba(148,163,184,.28);border-top-color:#60a5fa;animation:dashboard-marketing-value-spin .75s linear infinite}';
+    document.head.appendChild(style);
+  })();
+
   /* ── kpiCard (full-size, portrait — Section 1 / Sections 1–4 of S8) ─────── */
   window.kpiCard = function (opts) {
+    var loading  = opts.loading === true;
+    var unavailable = opts.unavailable === true;
+    var blocked = loading || unavailable;
     var label    = window.dashboardI18n ? window.dashboardI18n.raw(opts.label || '') : (opts.label || '');
     var value    = opts.value        || 0;
     var rawDisplayValue = opts.displayValue != null ? opts.displayValue : value;
@@ -761,7 +817,9 @@
     var id       = opts.id           || ('kpi-' + Math.random().toString(36).slice(2));
     var tooltip  = opts.tooltip      || '';
     var decimals = opts.decimals != null ? Number(opts.decimals || 0) : (unit === '%' || unit === 'x' ? 1 : 0);
-    var displayValue = opts.displayValue != null ? rawDisplayValue : window.formatDashboardNumber(value, { decimals: decimals, compact: true });
+    var displayValue = blocked
+      ? (loading ? window.dashboardMarketingLoadingHtml() : window.dashboardMarketingUnavailableHtml())
+      : (opts.displayValue != null ? rawDisplayValue : window.formatDashboardNumber(value, { decimals: decimals, compact: true }));
     var fullValue = window.formatDashboardNumber(value, { decimals: unit === 'SAR' ? 2 : decimals, compact: false });
 
     var accent     = window.COLOR_MAP[color] || color;
@@ -772,8 +830,8 @@
     var numSize    = compact ? '22px' : 'clamp(18px, 1.15vw, 22px)';
     var unitSize   = compact ? '9px' : '11px';
 
-    return '<div class="kpi-card dash-kpi-card" style="background:#0b1120;border:1px solid ' + accent + '35;' +
-      'border-radius:16px;box-shadow:0 0 0 1px ' + accent + '20,8px 0 40px ' + accent + '15,inset 0 0 60px ' + accent + '08;' +
+    return '<div class="kpi-card dash-kpi-card" style="background:var(--dash-surface);border:1px solid ' + accent + '35;' +
+      'border-radius:var(--dash-radius-xl);box-shadow:0 0 0 1px ' + accent + '20,8px 0 40px ' + accent + '15,inset 0 0 60px ' + accent + '08;' +
       'padding:' + pad + ';position:relative;overflow:hidden;flex:1;min-width:150px;' +
       'display:flex;flex-direction:column;min-height:' + minH + ';box-sizing:border-box;">' +
       /* right-edge stripe */
@@ -793,20 +851,20 @@
       /* middle wrapper to distribute spacing */
       '<div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:12px 0;">' +
         /* value */
-        '<div class="dash-kpi-value" title="' + fullValue + (unit ? ' ' + unit : '') + '" style="font-size:' + numSize + ';font-weight:900;color:#fff;line-height:1;letter-spacing:0;' +
+        '<div class="dash-kpi-value" title="' + fullValue + (unit ? ' ' + unit : '') + '" style="font-size:' + numSize + ';font-weight:var(--weight-bold);color:#fff;line-height:1;letter-spacing:0;' +
           'position:relative;z-index:2;text-align:center;max-width:100%;min-width:0;">' +
-          '<span class="expected-value-stack dash-expected-value-stack"><span class="' + ((hideDelta || staticDisplay) ? 'expected-value-main' : 'expected-value-main kpi-num') + '" data-id="' + id + '" data-decimals="' + decimals + '" data-compact="true" ' + ((hideDelta || staticDisplay) ? '' : 'data-to="' + value + '"') + '>' + ((hideDelta || staticDisplay) ? displayValue : '0') + '</span>' + window.supposedBadgeHtml(opts.label) + '</span>' +
+          '<span class="expected-value-stack dash-expected-value-stack"><span class="' + ((blocked || hideDelta || staticDisplay) ? 'expected-value-main' : 'expected-value-main kpi-num') + '" data-id="' + id + '" data-decimals="' + decimals + '" data-compact="true" ' + ((blocked || hideDelta || staticDisplay) ? '' : 'data-to="' + value + '"') + '>' + ((blocked || hideDelta || staticDisplay) ? displayValue : '0') + '</span>' + (blocked ? '' : window.supposedBadgeHtml(opts.label)) + '</span>' +
         '</div>' +
         /* unit */
-        '<div style="font-size:' + unitSize + ';color:' + accent + ';font-weight:700;margin-top:8px;' +
-          'letter-spacing:1.5px;position:relative;z-index:2;text-align:center;">' + unit + '</div>' +
+        '<div style="font-size:' + unitSize + ';color:' + accent + ';font-weight:var(--weight-bold);margin-top:8px;' +
+          'letter-spacing:1.5px;position:relative;z-index:2;text-align:center;">' + (blocked ? '' : unit) + '</div>' +
       '</div>' +
       /* bottom row: sparkline + delta (full size only) */
       (!compact ?
         '<div style="display:flex;justify-content:space-between;align-items:flex-end;width:100%;' +
           'position:relative;z-index:2;direction:ltr;">' +
           (spark.length > 1 ? window.sparklineSvg(spark, accent) : '') +
-          (hideDelta ? '' : window.deltaBadge(delta, accent)) +
+          ((blocked || hideDelta) ? '' : window.deltaBadge(delta, accent)) +
         '</div>'
       : (!hideDelta && delta !== undefined ?
           '<div style="margin-top:auto;position:relative;z-index:2;direction:ltr;display:flex;justify-content:flex-end;">' + window.deltaBadge(delta, accent) + '</div>'
@@ -816,6 +874,9 @@
 
   /* ── s8KpiCard (compact landscape — Section 8 master dashboard) ──────────── */
   window.s8KpiCard = function (opts) {
+    var loading  = opts.loading === true;
+    var unavailable = opts.unavailable === true;
+    var blocked = loading || unavailable;
     var label    = window.dashboardI18n ? window.dashboardI18n.raw(opts.label || '') : (opts.label || '');
     var value    = opts.value        || 0;
     var rawDisplayValue = opts.displayValue != null ? opts.displayValue : value;
@@ -830,7 +891,9 @@
     var id       = opts.id           || ('s8kpi-' + Math.random().toString(36).slice(2));
     var tooltip  = opts.tooltip      || '';
     var decimals = opts.decimals != null ? Number(opts.decimals || 0) : (unit === '%' || unit === 'x' ? 1 : 0);
-    var displayValue = opts.displayValue != null ? rawDisplayValue : window.formatDashboardNumber(value, { decimals: decimals, compact: true });
+    var displayValue = blocked
+      ? (loading ? window.dashboardMarketingLoadingHtml() : window.dashboardMarketingUnavailableHtml())
+      : (opts.displayValue != null ? rawDisplayValue : window.formatDashboardNumber(value, { decimals: decimals, compact: true }));
     var fullValue = window.formatDashboardNumber(value, { decimals: unit === 'SAR' ? 2 : decimals, compact: false });
 
     var accent     = window.COLOR_MAP[color] || color;
@@ -859,8 +922,8 @@
       '</svg>';
     }
 
-    return '<div class="s8-kpi-card" style="background:#0b1120;border:1px solid rgba(255,255,255,0.08);' +
-      'border-radius:14px;overflow:hidden;position:relative;direction:ltr;display:flex;flex-direction:row;' +
+    return '<div class="s8-kpi-card" style="background:var(--dash-surface);border:1px solid var(--dash-border-soft);' +
+      'border-radius:var(--dash-radius-lg);overflow:hidden;position:relative;direction:ltr;display:flex;flex-direction:row;' +
       'align-items:stretch;padding:10px 12px;gap:10px;flex:1;min-width:0;">' +
       /* radial glow */
       '<div style="position:absolute;inset:0;background:radial-gradient(ellipse at 8% 50%,'+accent+'1c 0%,transparent 58%);pointer-events:none;"></div>' +
@@ -872,14 +935,14 @@
       '</div>' +
       /* content */
       '<div style="flex:1;min-width:0;display:flex;flex-direction:column;z-index:1;">' +
-        '<div class="dash-kpi-label" style="font-size:10px;text-align:' + (window.dashboardI18n && !window.dashboardI18n.isRtl() ? 'left' : 'right') + ';direction:inherit;margin-bottom:3px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + label + helpHtml(tooltip) + '</div>' +
+        '<div class="dash-kpi-label" style="font-size:var(--type-micro);text-align:' + (window.dashboardI18n && !window.dashboardI18n.isRtl() ? 'left' : 'right') + ';direction:inherit;margin-bottom:3px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + label + helpHtml(tooltip) + '</div>' +
         '<div style="display:flex;align-items:baseline;justify-content:flex-end;gap:4px;line-height:1;">' +
-          '<span title="' + fullValue + (unit ? ' ' + unit : '') + '" style="font-size:18px;font-weight:900;color:#fff;letter-spacing:0;line-height:1;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums;" class="dash-kpi-value ' + ((hideDelta || staticDisplay) ? '' : 'kpi-num') + '" data-id="'+id+'" data-decimals="' + decimals + '" data-compact="true" ' + ((hideDelta || staticDisplay) ? '' : 'data-to="'+value+'"') + '>' + ((hideDelta || staticDisplay) ? displayValue : '0') + '</span>' +
-          '<span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.5);direction:inherit;">'+unit+'</span>' + window.supposedBadgeHtml(opts.label) +
+          '<span title="' + (blocked ? '' : fullValue + (unit ? ' ' + unit : '')) + '" style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff;letter-spacing:0;line-height:1;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums;" class="dash-kpi-value ' + ((blocked || hideDelta || staticDisplay) ? '' : 'kpi-num') + '" data-id="'+id+'" data-decimals="' + decimals + '" data-compact="true" ' + ((blocked || hideDelta || staticDisplay) ? '' : 'data-to="'+value+'"') + '>' + ((blocked || hideDelta || staticDisplay) ? displayValue : '0') + '</span>' +
+          (blocked ? '' : '<span style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:var(--dash-text-faint);direction:inherit;">'+unit+'</span>' + window.supposedBadgeHtml(opts.label)) +
         '</div>' +
-        (hideDelta ? '' : '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin-top:4px;">' +
-          '<span style="font-size:12px;font-weight:700;color:'+dColor+';line-height:1;">'+(isPositive?'↑':'↓')+'&nbsp;'+Math.abs(delta)+'%</span>' +
-          '<span style="font-size:9px;color:rgba(255,255,255,0.28);direction:inherit;line-height:1;">' + deltaLabel + '</span>' +
+        ((blocked || hideDelta) ? '' : '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin-top:4px;">' +
+          '<span style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:'+dColor+';line-height:1;">'+(isPositive?'↑':'↓')+'&nbsp;'+Math.abs(delta)+'%</span>' +
+          '<span style="font-size:var(--type-micro);color:rgba(255,255,255,0.28);direction:inherit;line-height:1;">' + deltaLabel + '</span>' +
         '</div>') +
         sparkHtml +
       '</div>' +
@@ -926,7 +989,7 @@
     }
     var tipKey = isRisk ? 'kpi.score.risk.tooltip' : (type === 'scale' ? 'kpi.score.scale.tooltip' : (type === 'profit' ? 'kpi.score.profit.tooltip' : 'kpi.score.health.tooltip'));
     return '<span data-tooltip="' + dashText(tipKey, '') + '" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;' +
-      'border-radius:6px;font-size:10px;font-weight:800;white-space:nowrap;' +
+      'border-radius:var(--dash-radius-sm);font-size:var(--type-micro);font-weight:var(--weight-semibold);white-space:nowrap;' +
       'background:' + color + '18;color:' + color + ';border:1px solid ' + color + '44;">' +
       score + ' ' + label + '</span>';
   };
@@ -1111,6 +1174,28 @@
     return en;
   }
 
+  // Product names are merchant data, not interface copy. Always render them
+  // through this helper so dashboard localization never translates words
+  // inside the original name (for example Arabic "عرض" into English "Show").
+  window.dashboardProductNameHtml = function (name, opts) {
+    opts = opts || {};
+    var value = window.dashboardI18n && typeof window.dashboardI18n.dataText === 'function'
+      ? window.dashboardI18n.dataText(name)
+      : String(name == null ? '' : name);
+    var allowedTags = { span: true, div: true, strong: true };
+    var tag = String(opts.tag || (opts.block ? 'div' : 'span')).toLowerCase();
+    if (!allowedTags[tag]) tag = 'span';
+    var className = opts.className ? ' class="' + escapeDashboardSku(opts.className) + '"' : '';
+    var style = opts.style ? ' style="' + escapeDashboardSku(opts.style) + '"' : '';
+    var titleValue = opts.title === false ? '' : (opts.title != null ? opts.title : value);
+    var title = titleValue === '' ? '' : ' title="' + escapeDashboardSku(titleValue) + '"';
+    // The outer element inherits the dashboard direction so its alignment and
+    // column position stay stable. BDI isolates only the name's character
+    // direction, allowing Arabic and English names to coexist safely.
+    return '<' + tag + ' data-dashboard-product-name data-dashboard-data-text data-i18n-preserve' + className + style + title + '>' +
+      '<bdi dir="auto">' + escapeDashboardSku(value) + '</bdi></' + tag + '>';
+  };
+
   function dashboardSkuCopyIcon() {
     return '<svg class="dash-sku-copy-icon dash-sku-copy-icon-copy" viewBox="0 0 24 24" aria-hidden="true">' +
       '<rect x="9" y="9" width="10" height="10" rx="2"></rect>' +
@@ -1163,19 +1248,15 @@
       '.dash-sku-copy-wrap{position:relative;display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:100%;vertical-align:middle;color:inherit}' +
       '.dash-sku-copy-wrap.is-block{display:flex;width:100%}' +
       '.dash-sku-copy-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit}' +
-      '.dash-sku-copy-btn{position:relative;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;border:1px solid rgba(45,212,191,.28);background:rgba(45,212,191,.08);color:#5eead4;border-radius:7px;cursor:pointer;padding:0;font:inherit;transition:background .16s,border-color .16s,color .16s,transform .16s;flex:0 0 auto}' +
+      '.dash-sku-copy-btn{position:relative;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;border:1px solid rgba(45,212,191,.28);background:rgba(45,212,191,.08);color:#5eead4;border-radius:var(--dash-radius-sm);cursor:pointer;padding:0;font:inherit;transition:background .16s,border-color .16s,color .16s,transform .16s;flex:0 0 auto}' +
       '.dash-sku-copy-btn:hover,.dash-sku-copy-btn:focus-visible{background:rgba(45,212,191,.16);border-color:rgba(45,212,191,.55);color:#99f6e4;outline:none;transform:translateY(-1px)}' +
       '.dash-sku-copy-icon{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;position:absolute;transition:opacity .14s,transform .14s}' +
       '.dash-sku-copy-icon-check{opacity:0;transform:scale(.75);color:#22c55e}' +
       '.dash-sku-copy-btn.is-copied{background:rgba(34,197,94,.14);border-color:rgba(34,197,94,.55);color:#22c55e}' +
       '.dash-sku-copy-btn.is-copied .dash-sku-copy-icon-copy{opacity:0;transform:scale(.75)}' +
       '.dash-sku-copy-btn.is-copied .dash-sku-copy-icon-check{opacity:1;transform:scale(1)}' +
-      '.dash-sku-copy-tooltip{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translate(-50%,4px);opacity:0;pointer-events:none;white-space:nowrap;background:#052e22;border:1px solid rgba(34,197,94,.48);color:#86efac;border-radius:7px;padding:5px 8px;font-size:10px;font-weight:900;line-height:1.1;box-shadow:0 8px 24px rgba(0,0,0,.24);transition:opacity .14s,transform .14s;z-index:100000}' +
-      '.dash-sku-copy-tooltip::after{content:"";position:absolute;left:50%;top:100%;width:8px;height:8px;background:#052e22;border-right:1px solid rgba(34,197,94,.48);border-bottom:1px solid rgba(34,197,94,.48);transform:translate(-50%,-4px) rotate(45deg)}' +
-      '.dash-sku-copy-btn:hover + .dash-sku-copy-tooltip,.dash-sku-copy-btn:focus-visible + .dash-sku-copy-tooltip,.dash-sku-copy-btn.is-copied + .dash-sku-copy-tooltip{opacity:1;transform:translate(-50%,0)}' +
       '[data-theme="light"] .dash-sku-copy-btn{background:rgba(20,184,166,.1);border-color:rgba(13,148,136,.24);color:#0f766e}' +
-      '[data-theme="light"] .dash-sku-copy-btn:hover,[data-theme="light"] .dash-sku-copy-btn:focus-visible{background:rgba(20,184,166,.18);border-color:rgba(13,148,136,.45);color:#0d9488}' +
-      '[data-theme="light"] .dash-sku-copy-tooltip,[data-theme="light"] .dash-sku-copy-tooltip::after{background:#ecfdf5;border-color:rgba(22,163,74,.34);color:#15803d}';
+      '[data-theme="light"] .dash-sku-copy-btn:hover,[data-theme="light"] .dash-sku-copy-btn:focus-visible{background:rgba(20,184,166,.18);border-color:rgba(13,148,136,.45);color:#0d9488}';
     (document.head || document.documentElement).appendChild(tag);
   }
 
@@ -1193,9 +1274,9 @@
     var copied = dashboardSkuText('Copied to clipboard', 'Copied to clipboard');
     return '<span class="' + escapeDashboardSku(className) + '" data-i18n-preserve title="' + escapeDashboardSku(title) + '"' + style + '>' +
       '<span class="dash-sku-copy-text" dir="ltr">' + escapeDashboardSku(prefix + display) + '</span>' +
-      (value ? '<button type="button" class="dash-sku-copy-btn" data-dashboard-copy-sku="' + escapeDashboardSku(value) + '" aria-label="' + escapeDashboardSku(tooltip) + '">' +
+      (value ? '<button type="button" class="dash-sku-copy-btn" data-dashboard-copy-sku="' + escapeDashboardSku(value) + '" data-tooltip="' + escapeDashboardSku(tooltip) + '" data-tooltip-variant="success" aria-label="' + escapeDashboardSku(tooltip) + '">' +
         dashboardSkuCopyIcon() +
-      '</button><span class="dash-sku-copy-tooltip">' + escapeDashboardSku(tooltip) + '</span>' : '') +
+      '</button>' : '') +
       '<span class="dash-sku-copy-tooltip-template" data-copy-text="' + escapeDashboardSku(tooltip) + '" data-copied-text="' + escapeDashboardSku(copied) + '" hidden></span>' +
     '</span>';
   };
@@ -1215,16 +1296,21 @@
         var template = host ? host.querySelector('.dash-sku-copy-tooltip-template') : null;
         var copiedText = template ? template.getAttribute('data-copied-text') : dashboardSkuText('Copied to clipboard', 'Copied to clipboard');
         var copyText = template ? template.getAttribute('data-copy-text') : dashboardSkuText('Copy SKU', 'Copy SKU');
-        var tooltip = host ? host.querySelector('.dash-sku-copy-tooltip') : null;
         button.classList.add('is-copied');
         button.setAttribute('aria-label', copiedText);
-        if (tooltip) tooltip.textContent = copiedText;
+        button.setAttribute('data-tooltip', copiedText);
+        if (window.TaagerTooltip && typeof window.TaagerTooltip.refresh === 'function') {
+          window.TaagerTooltip.refresh(button);
+        }
         showDashboardSkuToast(dashboardSkuText('SKU copied to clipboard', 'SKU copied to clipboard'), 'success');
         if (button._dashboardSkuCopyTimer) clearTimeout(button._dashboardSkuCopyTimer);
         button._dashboardSkuCopyTimer = setTimeout(function () {
           button.classList.remove('is-copied');
           button.setAttribute('aria-label', copyText);
-          if (tooltip) tooltip.textContent = copyText;
+          button.setAttribute('data-tooltip', copyText);
+          if (button.matches(':hover, :focus-visible') && window.TaagerTooltip && typeof window.TaagerTooltip.refresh === 'function') {
+            window.TaagerTooltip.refresh(button);
+          }
           button._dashboardSkuCopyTimer = null;
         }, 1800);
       }).catch(function (error) {

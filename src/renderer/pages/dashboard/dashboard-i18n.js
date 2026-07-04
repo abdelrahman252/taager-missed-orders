@@ -7,13 +7,31 @@
   var applying = false;
   var pendingRoots = new Set();
   var pendingFrame = 0;
+  var pendingMutationCount = 0;
+  var observerFlushCount = 0;
+  var lastObserverFlushAt = 0;
+
+  function i18nDebug(event, detail) {
+    if (window.TaagerDebugLog) window.TaagerDebugLog('dashboard-i18n', event, detail || {});
+  }
+
+  function normalizeLang(value) {
+    value = String(value || '').trim().toLowerCase();
+    if (!value) return DEFAULT_LANG;
+    if (value.indexOf('ar') === 0) return 'ar';
+    if (value.indexOf('en') === 0) return 'en';
+    return value;
+  }
 
   function lang() {
-    return window._kbotLang || localStorage.getItem('kbot-lang') || DEFAULT_LANG;
+    var saved = DEFAULT_LANG;
+    try { saved = localStorage.getItem('kbot-lang') || saved; } catch (e) {}
+    return normalizeLang(window._kbotLang || saved);
   }
 
   function pack(nextLang) {
-    return localeCache[nextLang || lang()] || localeCache.en || localeCache.ar || { dir: 'rtl', locale: 'ar-EG-u-nu-latn', strings: {}, raw: {} };
+    var requested = normalizeLang(nextLang || lang());
+    return localeCache[requested] || localeCache[DEFAULT_LANG] || localeCache.en || { dir: 'rtl', locale: 'ar-EG-u-nu-latn', strings: {}, raw: {} };
   }
 
   function interpolate(value, params) {
@@ -490,6 +508,17 @@
       .sort(function (a, b) { return b.length - a.length; })
       .forEach(function (source) {
         if (!source) return;
+        // A short Arabic UI label can also be part of merchant data. For
+        // example, "عرض" means "Show" in the interface but "offer" inside
+        // a product name. Only translate these labels when they are the whole
+        // text value; substring replacement would corrupt the source data.
+        if (/^[\u0600-\u06FF]+$/.test(source)) {
+          var trimmed = output.trim();
+          if (trimmed === source) {
+            output = output.replace(source, map[source]);
+          }
+          return;
+        }
         output = output.split(source).join(map[source]);
       });
     protectedMap.forEach(function (entry) {
@@ -579,7 +608,7 @@
     }).format(d);
   }
 
-  var preserveSelector = '.taager-help,.s7-tip-badge,[data-preserve-question-mark],[data-i18n-preserve],.s5-product-title,.s5-product-data-text,.s9-product-cell';
+  var preserveSelector = '.taager-help,.s7-tip-badge,[data-preserve-question-mark],[data-i18n-preserve],[data-dashboard-data-text],[data-dashboard-product-name],.s5-product-title,.s5-product-data-text,.s9-product-cell';
 
   function localizeTextNode(node) {
     if (!node || !node.nodeValue) return;
@@ -596,7 +625,11 @@
       if (!el.hasAttribute || !el.hasAttribute(attr)) return;
       var value = el.getAttribute(attr);
       if (!/[\u0600-\u06FF]|[\u00c3\u00c2\u00d8\u00d9\u00d0\u00d1\u00f0\u00e2]/.test(value || '') && !isQuestionMarkText(value)) return;
-      el.setAttribute(attr, cleanText(value));
+      var localized = cleanText(value);
+      // Setting an observed attribute to the same value still queues a
+      // MutationRecord in Chromium. That made the observer wake itself on
+      // every animation frame, especially on Section 8's tooltip-heavy DOM.
+      if (localized !== value) el.setAttribute(attr, localized);
     });
   }
 
@@ -639,6 +672,10 @@
     function queueRoot(node) {
       var root = node && node.nodeType === Node.ELEMENT_NODE ? node : (node && node.parentElement);
       if (!root || !page.contains(root)) return;
+      // Dashboard preloaders already receive localized strings directly. Their
+      // live percentage/activity updates must not trigger a full translation
+      // tree walk on every progress sample.
+      if (root.closest && root.closest('[data-dashboard-preloader="true"]')) return;
       var pane = root.closest && root.closest('.dash-section-cache-pane');
       if (pane && pane.hidden) return;
       pendingRoots.forEach(function (queued) {
@@ -651,11 +688,24 @@
       pendingFrame = 0;
       if (applying) return;
       var roots = Array.from(pendingRoots);
+      var mutationCount = pendingMutationCount;
       pendingRoots.clear();
+      pendingMutationCount = 0;
+      observerFlushCount += 1;
+      var now = Date.now();
+      i18nDebug('observer:flush', {
+        flushCount: observerFlushCount,
+        mutationCount: mutationCount,
+        rootCount: roots.length,
+        sincePreviousMs: lastObserverFlushAt ? now - lastObserverFlushAt : null,
+        activeSection: document.getElementById('db-shell-mount') && document.getElementById('db-shell-mount')._dashboardActiveSection
+      });
+      lastObserverFlushAt = now;
       roots.forEach(function (root) { if (root && root.isConnected) apply(root); });
     }
     observer = new MutationObserver(function (mutations) {
       if (applying) return;
+      pendingMutationCount += mutations.length;
       mutations.forEach(function (mutation) {
         if (mutation.type === 'childList') {
           Array.prototype.forEach.call(mutation.addedNodes || [], queueRoot);
@@ -684,6 +734,7 @@
     isRtl: isRtl,
     locale: locale,
     decodeMojibake: decodeMojibake,
+    dataText: decodeMojibake,
     number: formatNumber,
     currency: formatCurrency,
     monthName: monthName,

@@ -32,8 +32,8 @@
 [data-theme="dark"] #page-dashboard .s9-profit-value.s9-profit-zero,
 #page-dashboard .s9-profit-cell.s9-profit-zero,
 #page-dashboard .s9-profit-value.s9-profit-zero {
-  color: rgba(255,255,255,0.6) !important;
-  -webkit-text-fill-color: rgba(255,255,255,0.6) !important;
+  color:var(--dash-text-muted) !important;
+  -webkit-text-fill-color:var(--dash-text-muted) !important;
 }
 
 [data-theme="light"] #page-dashboard .s9-root {

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co https://generativelanguage.googleapis.com https://open.er-api.com https://*.ingest.sentry.io https://sentry.io;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co https://generativelanguage.googleapis.com https://open.er-api.com https://*.ingest.sentry.io https://sentry.io;">
     <title>Taager Bot</title>
     <script>
       (function () {
@@ -15,13 +15,36 @@
         document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
       })();
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Load fonts async so a slow/offline network never blocks first paint -->
-    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Syne:wght@400..800&family=Tajawal:wght@200;300;400;500;700;800;900&display=swap" onload="this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Syne:wght@400..800&family=Tajawal:wght@200;300;400;500;700;800;900&display=swap"></noscript>
     <link rel="stylesheet" href="../../node_modules/country-flag-icons/3x2/flags.css" />
     <link rel="stylesheet" href="styles/main.css" />
+    <link rel="stylesheet" href="styles/typography.css" data-visual-system="true" />
+    <script>
+      // Start every UI face together. Font preloads are intentionally avoided:
+      // Electron's file:// loader assigns them a different credentials mode from
+      // CSS font requests, so Chromium cannot reuse them. Waiting for
+      // document.fonts.ready first also made
+      // less common weights load in later waves, producing repeated metric swaps.
+      window.taagerFontsReady = document.fonts
+        ? Promise.all([
+            document.fonts.load('400 14px Inter'),
+            document.fonts.load('500 14px Inter'),
+            document.fonts.load('600 14px Inter'),
+            document.fonts.load('700 14px Inter'),
+            document.fonts.load('800 14px Inter'),
+            document.fonts.load('400 14px "IBM Plex Sans Arabic"'),
+            document.fonts.load('500 14px "IBM Plex Sans Arabic"'),
+            document.fonts.load('600 14px "IBM Plex Sans Arabic"'),
+            document.fonts.load('700 14px "IBM Plex Sans Arabic"'),
+            document.fonts.load('400 12px "DM Mono"'),
+            document.fonts.load('500 12px "DM Mono"'),
+            document.fonts.load('700 28px Syne'),
+            document.fonts.load('800 32px Syne'),
+          ]).then(function () {
+            document.documentElement.classList.add('fonts-ready');
+            return true;
+          }).catch(function () { return false; })
+        : Promise.resolve(false);
+    </script>
     <style>
       /* ── Preloader Reset ── */
       html, body {
@@ -82,9 +105,10 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        font-weight: 800;
+        font-family: var(--font-brand, var(--font-ui, Arial, Tahoma, sans-serif));
+        font-weight: var(--weight-bold, 700);
         color: white;
-        font-size: 16px;
+        font-size: 1rem;
         letter-spacing: 2px;
       }
       .preloader-copy {
@@ -93,9 +117,10 @@
         gap: 8px;
         width: min(320px, 100%);
         max-width: 320px;
-        font-family: 'Tajawal', 'Segoe UI', sans-serif;
+        font-family: var(--font-ui, Arial, Tahoma, sans-serif);
       }
-      .preloader-title { color:#fff; font-size:15px; font-weight:800; line-height:1.35; }
+      [dir="rtl"] .preloader-copy { font-family: var(--font-arabic, Tahoma, Arial, sans-serif); }
+      .preloader-title { color:#fff; font-size:var(--type-component-title, .9375rem); font-weight:var(--weight-semibold, 600); line-height:1.35; }
       [lang="ar"] [data-preloader-lang="en"],
       [lang="en"] [data-preloader-lang="ar"] {
         display: none;
@@ -104,29 +129,19 @@
         position: relative;
         min-height: 20px;
         color:rgba(226,232,240,.72);
-        font-size:12px;
-        font-weight:600;
+        font-size:var(--type-label, .75rem);
+        font-weight:var(--weight-semibold, 600);
         line-height:1.55;
         overflow: hidden;
       }
       .preloader-body .preloader-phrase {
-        position: absolute;
-        inset: 0;
-        opacity: 0;
-        transform: translateY(8px);
-        animation: preloader-phrase 7.2s ease-in-out infinite;
+        display: none;
       }
-      .preloader-body .preloader-phrase:nth-child(2) { animation-delay: 2.4s; }
-      .preloader-body .preloader-phrase:nth-child(3) { animation-delay: 4.8s; }
+      .preloader-body .preloader-phrase:first-child { display: block; }
       @keyframes preloader-spin { to { transform: rotate(360deg); } }
       @keyframes preloader-pulse {
         0%,100% { transform: scale(.9); opacity:.5; }
         50% { transform: scale(1.2); opacity:1; }
-      }
-      @keyframes preloader-phrase {
-        0%, 12% { opacity: 0; transform: translateY(8px); }
-        18%, 44% { opacity: 1; transform: translateY(0); }
-        52%, 100% { opacity: 0; transform: translateY(-8px); }
       }
       [data-theme="light"] #preloader { background:#f6f7f9; }
       [data-theme="light"] .logo { color:#1e2535; }
@@ -134,9 +149,7 @@
       [data-theme="light"] .preloader-body { color:#64748b; }
       @media (prefers-reduced-motion: reduce) {
         .ring,
-        .glow,
-        .preloader-body .preloader-phrase { animation: none; }
-        .preloader-body .preloader-phrase:first-child { opacity: 1; transform: none; }
+        .glow { animation: none; }
       }
       /* ── Titlebar overrides ── */
       .titlebar {
@@ -174,8 +187,8 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 9px;
-        font-weight: 800;
+        font-size:var(--type-micro);
+        font-weight:var(--weight-semibold);
         color: #fff;
         flex-shrink: 0;
         pointer-events: auto;
@@ -187,13 +200,13 @@
         pointer-events: auto;
       }
       #top-bar-name {
-        font-size: 11px;
-        font-weight: 700;
+        font-size:var(--type-caption);
+        font-weight:var(--weight-semibold);
         color: var(--text);
         line-height: 1.15;
       }
       #top-bar-days {
-        font-size: 10px;
+        font-size:var(--type-micro);
         color: var(--text2);
         line-height: 1.15;
       }
@@ -225,7 +238,7 @@
         align-items: center;
         height: 28px;
         border: 1px solid var(--border);
-        border-radius: 7px;
+        border-radius:var(--radius-xs);
         background: color-mix(in srgb, var(--bg2) 84%, var(--accent) 16%);
         overflow: hidden;
         -webkit-app-region: no-drag;
@@ -238,16 +251,16 @@
         background: transparent;
         color: var(--text2);
         cursor: pointer;
-        font-family: "Segoe UI", Arial, sans-serif;
-        font-weight: 800;
+        font-family:var(--font-ui);
+        font-weight:var(--weight-bold);
         line-height: 1;
       }
-      .tb-zoom-btn { width: 27px; font-size: 16px; }
+      .tb-zoom-btn { width: 27px; font-size:var(--type-subtitle); }
       .tb-zoom-value {
         min-width: 48px;
         padding: 0 6px;
         border-inline: 1px solid var(--border);
-        font-size: 10px;
+        font-size:var(--type-micro);
       }
       .tb-zoom-btn:hover,
       .tb-zoom-value:hover {
@@ -291,9 +304,9 @@
         top: 50%;
         transform: translateY(-50%);
         pointer-events: none;
-        font-family: "Segoe UI", Arial, sans-serif;
-        font-weight: 700;
-        font-size: 11px;
+        font-family:var(--font-ui);
+        font-weight:var(--weight-semibold);
+        font-size:var(--type-caption);
         text-transform: uppercase;
         width: 50%;
         text-align: center;
@@ -378,11 +391,11 @@
         height: 26px;
         padding: 0 10px;
         border: 1px solid rgba(124, 106, 247, 0.35);
-        border-radius: 6px;
+        border-radius:var(--radius-xs);
         background: rgba(124, 106, 247, 0.10);
         color: #a89cf7;
-        font-size: 11px;
-        font-weight: 600;
+        font-size:var(--type-caption);
+        font-weight:var(--weight-semibold);
         letter-spacing: 0.04em;
         cursor: pointer;
         white-space: nowrap;
@@ -414,14 +427,6 @@
         height: 13px;
         display: block;
       }
-      #btn-admin-refresh.refreshing .refresh-icon {
-        animation: spin-once 0.7s linear forwards;
-      }
-      @keyframes spin-once {
-        from { transform: rotate(0deg); }
-        to   { transform: rotate(360deg); }
-      }
-
       /* ── Copy License button ── */
       .titlebar-btn-copy {
         display: none;
@@ -430,7 +435,7 @@
         width: 26px;
         height: 26px;
         border: 1px solid var(--border);
-        border-radius: 6px;
+        border-radius:var(--radius-xs);
         background: rgba(255, 255, 255, 0.03);
         color: var(--text2);
         cursor: pointer;
@@ -457,7 +462,7 @@
 
       /* ── Theme toggle (sun/moon switch) ── */
       .tb-theme-switch {
-        font-size: 14px;
+        font-size:var(--type-body);
         position: relative;
         display: inline-flex;
         align-items: center;
@@ -501,7 +506,6 @@
         width: 18px;
         height: 18px;
         pointer-events: none;
-        animation: tb-rotate 15s linear infinite;
       }
       .tb-moon svg {
         fill: #73c0fc;
@@ -512,29 +516,6 @@
         width: 16px;
         height: 16px;
         pointer-events: none;
-        animation: tb-tilt 5s linear infinite;
-      }
-      @keyframes tb-rotate {
-        0% {
-          transform: rotate(0deg);
-        }
-        100% {
-          transform: rotate(360deg);
-        }
-      }
-      @keyframes tb-tilt {
-        0% {
-          transform: rotate(0deg);
-        }
-        25% {
-          transform: rotate(-30deg);
-        }
-        75% {
-          transform: rotate(15deg);
-        }
-        100% {
-          transform: rotate(0deg);
-        }
       }
       .tb-theme-input:checked + .tb-theme-slider {
         background-color: #183153;
@@ -596,7 +577,7 @@
           <div id="top-bar-name">—</div>
           <div style="display:flex;align-items:center;gap:8px">
             <div id="top-bar-days"></div>
-            <div id="top-bar-accounts" style="display:none;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:rgba(124,106,247,.15);border:1px solid rgba(124,106,247,.35);color:#a89cf7;border-radius:99px;padding:2px 8px"></div>
+            <div id="top-bar-accounts" style="display:none;font-size:var(--type-micro);font-weight:var(--weight-semibold);letter-spacing:.06em;text-transform:uppercase;background:rgba(124,106,247,.15);border:1px solid rgba(124,106,247,.35);color:#a89cf7;border-radius:var(--radius-pill);padding:2px 8px"></div>
           </div>
         </div>
         <div class="titlebar-divider"></div>
@@ -725,40 +706,40 @@
         z-index: 9999;
         background: var(--bg2);
         border: 1px solid rgba(123,92,240,.45);
-        border-radius: 14px;
+        border-radius:var(--radius-md);
         padding: 14px 18px;
         min-width: 260px;
         max-width: 320px;
         box-shadow: 0 8px 32px rgba(0,0,0,.4);
-        font-family: 'Tajawal', 'Segoe UI', sans-serif;
+        font-family:var(--font-ui);
       }
-      #updateTitle { font-weight: 700; font-size: 13px; color: var(--text); }
-      #updateSub   { font-size: 11px; color: var(--text2); margin-top: 1px; }
+      #updateTitle { font-weight:var(--weight-semibold); font-size:var(--type-control); color: var(--text); }
+      #updateSub   { font-size:var(--type-caption); color: var(--text2); margin-top: 1px; }
       [data-theme="light"] #updateToast { box-shadow: 0 8px 32px rgba(0,0,0,.12); }
     </style>
     <div id="updateToast">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-        <div style="width:32px;height:32px;border-radius:8px;background:rgba(123,92,240,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <div style="width:32px;height:32px;border-radius:var(--radius-xs);background:rgba(123,92,240,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         </div>
         <div>
           <div id="updateTitle">Update Available</div>
           <div id="updateSub"></div>
         </div>
-        <button onclick="document.getElementById('updateToast').style.display='none'" style="margin-inline-start:auto;background:none;border:none;color:var(--text2);cursor:pointer;padding:2px;font-size:16px;line-height:1;">✖</button>
+        <button onclick="document.getElementById('updateToast').style.display='none'" style="margin-inline-start:auto;background:none;border:none;color:var(--text2);cursor:pointer;padding:2px;font-size:var(--type-subtitle);line-height:1;">✖</button>
       </div>
       <!-- progress bar (hidden until download starts) -->
       <div id="updateProgressWrap" style="display:none;margin-bottom:10px;">
-        <div style="background:var(--border);border-radius:99px;height:5px;overflow:hidden;">
-          <div id="updateProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,#7b5cf0,#a78bfa);border-radius:99px;transition:width .3s;"></div>
+        <div style="background:var(--border);border-radius:var(--radius-pill);height:5px;overflow:hidden;">
+          <div id="updateProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,#7b5cf0,#a78bfa);border-radius:var(--radius-pill);transition:width .3s;"></div>
         </div>
-        <div id="updateProgressLabel" style="font-size:11px;color:var(--text2);margin-top:4px;text-align:end;">0%</div>
+        <div id="updateProgressLabel" style="font-size:var(--type-caption);color:var(--text2);margin-top:4px;text-align:end;">0%</div>
       </div>
       <div style="display:flex;gap:8px;">
         <button id="updateActionBtn" onclick="handleUpdateAction()" style="
-          flex:1;padding:8px 12px;border-radius:8px;border:none;cursor:pointer;
+          flex:1;padding:8px 12px;border-radius:var(--radius-xs);border:none;cursor:pointer;
           background:linear-gradient(135deg,#7b5cf0,#a78bfa);color:#fff;
-          font-weight:700;font-size:12px;font-family:'DM Sans',sans-serif;
+          font-weight:var(--weight-semibold);font-size:var(--type-label);font-family:var(--font-ui);
         ">Download Update</button>
       </div>
     </div>

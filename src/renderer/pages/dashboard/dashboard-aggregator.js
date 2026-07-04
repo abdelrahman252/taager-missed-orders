@@ -900,11 +900,12 @@
       acc.rawOrders += item.rawOrders;
       acc.canceledByYou += item.canceledByYou;
       acc.netOrders += item.netOrders;
+      acc.confirmedOrders += item.confirmationCount;
       acc.delivered += item.delivered;
       acc.deliveredProfit += item.deliveredProfit;
       acc.deliveredSales += item.deliveredSales;
       return acc;
-    }, { sourceCount: sources.length, rawOrders: 0, canceledByYou: 0, netOrders: 0, delivered: 0, deliveredProfit: 0, deliveredSales: 0 });
+    }, { sourceCount: sources.length, rawOrders: 0, canceledByYou: 0, netOrders: 0, confirmedOrders: 0, delivered: 0, deliveredProfit: 0, deliveredSales: 0 });
     summary.ndr = summary.netOrders > 0 ? parseFloat(((summary.delivered / summary.netOrders) * 100).toFixed(2)) : 0;
     summary.deliveredProfit = roundMoney(summary.deliveredProfit);
     summary.deliveredSales = roundMoney(summary.deliveredSales);
@@ -1038,7 +1039,7 @@
       { bucket: 'failed', order: 90, businessGroup: 'lost', color: '#ef4444' },
       { bucket: 'return_verified', order: 100, businessGroup: 'lost', color: '#a855f7' },
       { bucket: 'out_of_stock', order: 110, businessGroup: 'lost', color: '#eab308' },
-      { bucket: 'on_hold', order: 120, businessGroup: 'lost', color: '#64748b' },
+      { bucket: 'on_hold', order: 120, businessGroup: 'incoming', color: '#64748b' },
       { bucket: 'after_sales_done', order: 130, businessGroup: 'lost', color: '#8b5cf6' },
       { bucket: 'canceled_by_you', order: 140, businessGroup: 'excluded', color: '#94a3b8' }
     ];
@@ -1073,6 +1074,7 @@
       bucket === 'delivery_suspended' ||
       bucket === 'confirmed' ||
       bucket === 'waiting' ||
+      bucket === 'on_hold' ||
       bucket === 'after_sales_progress';
   }
 
@@ -1083,7 +1085,6 @@
     return bucket === 'failed' ||
       bucket === 'return_verified' ||
       bucket === 'customer_refused_confirmation' ||
-      bucket === 'on_hold' ||
       bucket === 'out_of_stock' ||
       bucket === 'after_sales_done';
   }
@@ -3008,6 +3009,8 @@
         city.drDeliveredOrders = 0;
         city.prepaidNdrBaseOrders = 0;
         city.codNdrBaseOrders = 0;
+        city.prepaidDeliveredCount = 0;
+        city.codDeliveredCount = 0;
         city.prepaidDrBaseOrders = 0;
         city.prepaidDrDeliveredOrders = 0;
         city.codDrBaseOrders = 0;
@@ -3023,6 +3026,8 @@
           cp.confirmed = 0;
           cp.prepaidNdrBaseOrders = 0;
           cp.codNdrBaseOrders = 0;
+          cp.prepaidDelivered = 0;
+          cp.codDelivered = 0;
         });
       });
 
@@ -3039,6 +3044,8 @@
           product.cityMap[cityKey].ndrBaseOrders = 0;
           product.cityMap[cityKey].ndrDelivered = 0;
           product.cityMap[cityKey].confirmed = 0;
+          product.cityMap[cityKey].prepaidDelivered = 0;
+          product.cityMap[cityKey].codDelivered = 0;
         });
       });
 
@@ -3089,6 +3096,8 @@
           }
           if (bucket === 'delivered' && rowIsNetOrder && addOnce(rateSeen, 'cityNdrDelivered:' + cityOrderKey)) {
             city.ndrDeliveredOrders++;
+            if (rowIsPrepaid) city.prepaidDeliveredCount++;
+            else city.codDeliveredCount++;
             if (rowInConfirmedBase) {
               city.drDeliveredOrders++;
               if (rowIsPrepaid) city.prepaidDrDeliveredOrders++;
@@ -3121,7 +3130,11 @@
               var pcmOrderKey = productKey + ':' + cityKey + ':' + orderKey;
               if (ndrEligible && addOnce(rateSeen, 'productCityNdr:' + pcmOrderKey)) pcm.ndrBaseOrders++;
               if (rowInConfirmedBase && addOnce(rateSeen, 'productCityDr:' + pcmOrderKey)) pcm.confirmed++;
-              if (bucket === 'delivered' && rowIsNetOrder && addOnce(rateSeen, 'productCityNdrDelivered:' + pcmOrderKey)) pcm.ndrDelivered++;
+              if (bucket === 'delivered' && rowIsNetOrder && addOnce(rateSeen, 'productCityNdrDelivered:' + pcmOrderKey)) {
+                pcm.ndrDelivered++;
+                if (rowIsPrepaid) pcm.prepaidDelivered++;
+                else pcm.codDelivered++;
+              }
             }
           }
         }
@@ -3152,6 +3165,10 @@
             if (rowInConfirmedBase && addOnce(rateSeen, 'cityProductDr:' + cpOrderKey)) {
               cityProduct.activeOrders++;
               cityProduct.confirmed++;
+            }
+            if (bucket === 'delivered' && rowIsNetOrder && addOnce(rateSeen, 'cityProductPaymentDelivered:' + cpOrderKey)) {
+              if (rowIsPrepaid) cityProduct.prepaidDelivered++;
+              else cityProduct.codDelivered++;
             }
           }
         }
@@ -4317,7 +4334,7 @@
         stages: pipelineStages,
         legacyStages: [
           stage('received',    'تم استلام الطلب', pendingCount,    placedCount, '#3b82f6', 'معدل التأكيد',  placedCount > 0 ? parseFloat((((placedCount - pendingCount) / placedCount) * 100).toFixed(1)) : 0),
-          stage('confirmed',   'مؤكد',            confirmedCount,  placedCount, '#3b82f6'),
+          stage('confirmed',   'التأكيد',            statusGroupCounts.confirmation,  placedCount, '#3b82f6'),
           stage('processing',  'قيد المعالجة',    processingCount, placedCount, '#3b82f6'),
           stage('waiting',     'قيد الانتظار',    waitingCount,    placedCount, '#64748b'),
           stage('shipping',    'قيد الشحن',        shippingCount,   placedCount, '#f59e0b', null, null, null, incomingCommission),

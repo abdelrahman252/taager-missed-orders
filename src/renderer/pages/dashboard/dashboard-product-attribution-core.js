@@ -237,6 +237,30 @@
     });
   }
 
+  function entrySkuCompacts(entry) {
+    var seen = {};
+    return (entry && entry.skus || []).map(function (sku) {
+      return sku.compact;
+    }).filter(function (sku) {
+      if (!sku || seen[sku]) return false;
+      seen[sku] = true;
+      return true;
+    });
+  }
+
+  function entryHasAllSkus(entry, skus) {
+    var owned = entrySkuCompacts(entry);
+    return skus.every(function (sku) { return owned.indexOf(sku) !== -1; });
+  }
+
+  function exactSingleSkuEntry(entries, sku) {
+    var exact = entries.filter(function (entry) {
+      var owned = entrySkuCompacts(entry);
+      return owned.length === 1 && owned[0] === sku;
+    });
+    return exact.length === 1 ? exact[0] : null;
+  }
+
   function skuMatch(normalizedCampaign, compactCampaign, entries) {
     var matches = [];
     entries.forEach(function (entry) {
@@ -263,6 +287,19 @@
         multiSeen[match.entry.id] = true;
         multiEntries.push(match.entry);
       });
+      var coveringEntries = multiEntries.filter(function (entry) {
+        return entryHasAllSkus(entry, detectedSkus);
+      });
+      if (coveringEntries.length === 1) {
+        return matched(
+          coveringEntries[0],
+          "sku",
+          "multiple_skus_same_product",
+          "high",
+          maximal.filter(function (match) { return match.entry.id === coveringEntries[0].id; })
+            .map(function (match) { return match.sku.raw; }).join(", ")
+        );
+      }
       if (multiEntries.length > 1) return ambiguous("multiple_skus", multiEntries);
       return matched(
         multiEntries[0],
@@ -280,7 +317,21 @@
       seenEntries[match.entry.id] = true;
       uniqueEntries.push(match.entry);
     });
-    if (uniqueEntries.length !== 1) return ambiguous("duplicate_sku_products", uniqueEntries);
+    if (uniqueEntries.length !== 1) {
+      var exactSingle = exactSingleSkuEntry(uniqueEntries, detectedSkus[0]);
+      if (exactSingle) {
+        var exactMatch = skuMatches.find(function (match) { return match.entry.id === exactSingle.id && match.separated; }) ||
+          skuMatches.find(function (match) { return match.entry.id === exactSingle.id; });
+        return matched(
+          exactSingle,
+          "sku",
+          exactMatch.separated ? "separated_sku" : "glued_sku",
+          "high",
+          exactMatch.sku.raw
+        );
+      }
+      return ambiguous("duplicate_sku_products", uniqueEntries);
+    }
     var winningEntry = uniqueEntries[0];
     var winningMatch = skuMatches.find(function (match) { return match.entry.id === winningEntry.id && match.separated; }) ||
       skuMatches.find(function (match) { return match.entry.id === winningEntry.id; });

@@ -51,9 +51,9 @@
   /* ── Helper: metric pill ─────────────────────────────────────────────────── */
   function metricPill(label, value) {
     return '<div style="display:flex;flex-direction:column;align-items:center;' +
-      'background:rgba(255,255,255,0.05);border-radius:8px;padding:5px 10px;min-width:52px;">' +
-      '<span style="font-size:14px;font-weight:900;color:#fff;line-height:1;">' + value + '</span>' +
-      '<span style="font-size:9px;color:rgba(255,255,255,0.35);margin-top:2px;">' + label + '</span>' +
+      'background:rgba(255,255,255,0.05);border-radius:var(--dash-radius-sm);padding:5px 10px;min-width:52px;">' +
+      '<span style="font-size:var(--type-body);font-weight:var(--weight-semibold);color:#fff;line-height:1;">' + value + '</span>' +
+      '<span style="font-size:var(--type-micro);color:rgba(255,255,255,0.35);margin-top:2px;">' + label + '</span>' +
     '</div>';
   }
 
@@ -117,7 +117,7 @@
       }
 
       if (evidence.length) {
-        reasonHtml += '<div style="margin-top:8px;font-size:10px;color:rgba(255,255,255,0.42);line-height:1.45;">' + evidence.slice(0, 2).join(' · ') + '</div>';
+        reasonHtml += '<div style="margin-top:8px;font-size:var(--type-micro);color:rgba(255,255,255,0.42);line-height:1.45;">' + evidence.slice(0, 2).join(' · ') + '</div>';
       }
 
       recsState.data[t].push({
@@ -169,8 +169,8 @@
 
     if (items.length === 0) {
       container.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;gap:12px;">' +
-          '<div style="font-size:32px;opacity:0.6;">✨</div>' +
-          '<div style="color:' + C.muted + ';font-size:13px;">' + sTx('No insights in this category', 'لا توجد رؤى في هذه الفئة') + '</div>' +
+          '<div style="font-size:var(--type-display);opacity:0.6;">✨</div>' +
+          '<div style="color:' + C.muted + ';font-size:var(--type-control);">' + sTx('No insights in this category', 'لا توجد رؤى في هذه الفئة') + '</div>' +
         '</div>';
       return;
     }
@@ -239,8 +239,8 @@
           ? '<button class="sc-ins-cta" data-city="' + card.city + '" ' +
               'data-product="' + (card.product || '') + '" ' +
               'style="margin-top:auto;width:100%;padding:6px;border:1px solid rgba(255,255,255,0.04);' +
-              'background:rgba(255,255,255,0.015);color:rgba(255,255,255,0.4);border-radius:6px;' +
-              'font-size:10px;font-weight:600;cursor:pointer;transition:all 0.2s cubic-bezier(0.22, 1, 0.36, 1);box-shadow:none;transform:translateY(0);" ' +
+              'background:rgba(255,255,255,0.015);color:var(--dash-text-faint);border-radius:var(--dash-radius-sm);' +
+              'font-size:var(--type-micro);font-weight:var(--weight-semibold);cursor:pointer;transition:all 0.2s cubic-bezier(0.22, 1, 0.36, 1);box-shadow:none;transform:translateY(0);" ' +
               'onmouseover="this.style.background=\'' + btnHoverBg + '\';this.style.color=\'' + card.accentColor + '\';this.style.borderColor=\'' + btnHoverBorder + '\';this.style.boxShadow=\'' + btnHoverShadow + '\';this.style.transform=\'translateY(-1px)\'" ' +
               'onmouseout="this.style.background=\'rgba(255,255,255,0.015)\';this.style.color=\'rgba(255,255,255,0.4)\';this.style.borderColor=\'rgba(255,255,255,0.04)\';this.style.boxShadow=\'none\';this.style.transform=\'translateY(0)\'">' +
               sTx('Details →', 'التفاصيل ←') +
@@ -248,7 +248,7 @@
           : '';
 
         return '<div class="sc-ins-card" style="background:' + bg + ';border:' + border + ';' +
-          'border-radius:12px;padding:' + padding + ';position:relative;overflow:hidden;' +
+          'border-radius:var(--dash-radius-md);padding:' + padding + ';position:relative;overflow:hidden;' +
           'display:flex;flex-direction:column;' +
           'transition:all 0.2s ease;' + shadow + '" ' +
           'onmouseover="this.style.transform=\'' + hoverTransform + '\';this.style.borderColor=\'' + card.accentColor + '33\';this.style.cssText += \'' + hoverShadow + '\'" ' +
@@ -257,11 +257,11 @@
             'opacity:' + barOpacity + ';border-radius:0 12px 12px 0;"></div>' +
           '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;min-width:0;">' +
             '<span style="font-size:' + emojiSize + ';opacity:0.9;">' + card.emoji + '</span>' +
-            '<span title="' + card.title.replace(/"/g, '&quot;') + '" style="font-size:' + titleSize + ';font-weight:700;letter-spacing:0.2px;color:' + titleColor + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;display:inline-block;vertical-align:bottom;">' + formattedTitle + '</span>' +
+            '<span title="' + card.title.replace(/"/g, '&quot;') + '" style="font-size:' + titleSize + ';font-weight:var(--weight-bold);letter-spacing:0.2px;color:' + titleColor + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;display:inline-block;vertical-align:bottom;">' + formattedTitle + '</span>' +
           '</div>' +
           '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">' +
-            '<span style="font-size:9px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:' + card.accentColor + ';background:' + card.accentColor + '18;border:1px solid ' + card.accentColor + '33;border-radius:999px;padding:2px 7px;">' + (card.trust || 'Measured') + '</span>' +
-            '<span style="font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:rgba(255,255,255,0.42);background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.06);border-radius:999px;padding:2px 7px;">' + (card.confidence || 'limited') + '</span>' +
+            '<span style="font-size:var(--type-micro);font-weight:var(--weight-semibold);letter-spacing:.04em;text-transform:uppercase;color:' + card.accentColor + ';background:' + card.accentColor + '18;border:1px solid ' + card.accentColor + '33;border-radius:var(--radius-pill);padding:2px 7px;">' + (card.trust || 'Measured') + '</span>' +
+            '<span style="font-size:var(--type-micro);font-weight:var(--weight-semibold);letter-spacing:.04em;text-transform:uppercase;color:rgba(255,255,255,0.42);background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.06);border-radius:var(--radius-pill);padding:2px 7px;">' + (card.confidence || 'limited') + '</span>' +
           '</div>' +
           '<div style="font-size:' + reasonSize + ';color:' + reasonColor + ';line-height:1.5;margin-bottom:10px;">' + card.reason + '</div>' +
           card.metricsHtml + 
@@ -312,9 +312,9 @@
     if (totalPages <= 1) return '';
     var html = '<div style="display:flex;justify-content:center;gap:4px;margin-top:16px;">';
     
-    var btnStyle = 'padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:rgba(255,255,255,0.7);transition:all 0.2s;';
-    var activeStyle = 'padding:6px 12px;border-radius:6px;font-size:12px;font-weight:800;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.1);color:#fff;';
-    var disabledStyle = 'padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;border:1px solid rgba(255,255,255,0.02);background:transparent;color:rgba(255,255,255,0.2);cursor:not-allowed;';
+    var btnStyle = 'padding:6px 12px;border-radius:var(--dash-radius-sm);font-size:var(--type-label);font-weight:var(--weight-semibold);border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:rgba(255,255,255,0.7);transition:all 0.2s;';
+    var activeStyle = 'padding:6px 12px;border-radius:var(--dash-radius-sm);font-size:var(--type-label);font-weight:var(--weight-semibold);border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.1);color:#fff;';
+    var disabledStyle = 'padding:6px 12px;border-radius:var(--dash-radius-sm);font-size:var(--type-label);font-weight:var(--weight-semibold);border:1px solid rgba(255,255,255,0.02);background:transparent;color:rgba(255,255,255,0.2);cursor:not-allowed;';
 
     // Prev
     html += '<button class="' + btnClass + '" data-page="' + (currentPage - 1) + '" style="' + (currentPage === 1 ? disabledStyle : btnStyle + 'cursor:pointer;') + '" ' + (currentPage === 1 ? 'disabled' : '') + '>←</button>';
@@ -352,7 +352,7 @@
     var totalActive = 0;
     tabs.forEach(function(t) { totalActive += t.count; });
 
-    var tabsHtml = '<div id="sc-ins-tabs" style="display:flex;gap:4px;background:rgba(255,255,255,0.015);padding:3px;border-radius:8px;overflow-x:auto;border:1px solid rgba(255,255,255,0.03);">' +
+    var tabsHtml = '<div id="sc-ins-tabs" style="display:flex;gap:4px;background:rgba(255,255,255,0.015);padding:3px;border-radius:var(--dash-radius-sm);overflow-x:auto;border:1px solid rgba(255,255,255,0.03);">' +
       tabs.map(function(t) {
         var isActive = recsState.activeTab === t.id;
         var bg = isActive ? 'rgba(255,255,255,0.06)' : 'transparent';
@@ -360,32 +360,32 @@
         var color = isActive ? t.color : 'rgba(255,255,255,0.4)';
         var fontWeight = isActive ? '600' : '500';
         return '<button class="sc-ins-tab-btn" data-tab="' + t.id + '" ' +
-          'style="display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;' +
+          'style="display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:var(--dash-radius-sm);' +
           'background:' + bg + ';border:' + border + ';color:' + color + ';' +
-          'font-size:11px;font-weight:' + fontWeight + ';cursor:pointer;transition:all 0.15s;white-space:nowrap;box-shadow:' + (isActive ? '0 2px 4px rgba(0,0,0,0.1)' : 'none') + '" ' +
+          'font-size:var(--type-caption);font-weight:' + fontWeight + ';cursor:pointer;transition:all 0.15s;white-space:nowrap;box-shadow:' + (isActive ? '0 2px 4px rgba(0,0,0,0.1)' : 'none') + '" ' +
           'onmouseover="if(!this.style.background.includes(\'rgba(255,255,255,0.06)\')) this.style.color=\'rgba(255,255,255,0.8)\'" ' +
           'onmouseout="if(!this.style.background.includes(\'rgba(255,255,255,0.06)\')) this.style.color=\'rgba(255,255,255,0.4)\'">' +
-          '<span style="font-size:12px;opacity:0.8;">' + t.icon + '</span>' +
+          '<span style="font-size:var(--type-label);opacity:0.8;">' + t.icon + '</span>' +
           '<span>' + t.label + '</span>' +
-          '<span class="sc-ins-tab-count" style="background:rgba(255,255,255,0.05);padding:1px 5px;border-radius:8px;font-size:10px;color:' + (isActive ? t.color : 'rgba(255,255,255,0.3)') + ';">' + t.count + '</span>' +
+          '<span class="sc-ins-tab-count" style="background:rgba(255,255,255,0.05);padding:1px 5px;border-radius:var(--dash-radius-sm);font-size:var(--type-micro);color:' + (isActive ? t.color : 'rgba(255,255,255,0.3)') + ';">' + t.count + '</span>' +
         '</button>';
       }).join('') +
     '</div>';
 
-    var legendHtml = '<div style="display:flex;align-items:center;gap:12px;margin-right:auto;font-size:10px;color:rgba(255,255,255,0.4);">' +
-      '<div style="display:flex;align-items:center;gap:4px;"><span style="color:#F4B860;font-size:14px;line-height:0.5;">●</span> ' + sTx('Risks', 'مخاطر') + '</div>' +
-      '<div style="display:flex;align-items:center;gap:4px;"><span style="color:#81C784;font-size:14px;line-height:0.5;">●</span> ' + sTx('Opportunities', 'فرص') + '</div>' +
-      '<div style="display:flex;align-items:center;gap:4px;"><span style="color:#9FA8DA;font-size:14px;line-height:0.5;">●</span> ' + sTx('Recommendations', 'توصيات') + '</div>' +
-      '<div style="display:flex;align-items:center;gap:4px;"><span style="color:#90CAF9;font-size:14px;line-height:0.5;">●</span> ' + sTx('Observations', 'ملاحظات') + '</div>' +
+    var legendHtml = '<div style="display:flex;align-items:center;gap:12px;margin-right:auto;font-size:var(--type-micro);color:var(--dash-text-faint);">' +
+      '<div style="display:flex;align-items:center;gap:4px;"><span style="color:#F4B860;font-size:var(--type-body);line-height:0.5;">●</span> ' + sTx('Risks', 'مخاطر') + '</div>' +
+      '<div style="display:flex;align-items:center;gap:4px;"><span style="color:#81C784;font-size:var(--type-body);line-height:0.5;">●</span> ' + sTx('Opportunities', 'فرص') + '</div>' +
+      '<div style="display:flex;align-items:center;gap:4px;"><span style="color:#9FA8DA;font-size:var(--type-body);line-height:0.5;">●</span> ' + sTx('Recommendations', 'توصيات') + '</div>' +
+      '<div style="display:flex;align-items:center;gap:4px;"><span style="color:#90CAF9;font-size:var(--type-body);line-height:0.5;">●</span> ' + sTx('Observations', 'ملاحظات') + '</div>' +
     '</div>';
 
     var headerHtml = '<div style="display:flex;flex-direction:column;gap:14px;margin-bottom:16px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">' +
         '<div style="display:flex;align-items:center;gap:10px;">' +
-          '<div style="font-size:24px;">💡</div>' +
+          '<div style="font-size:var(--type-metric);">💡</div>' +
           '<div>' +
-            '<div style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.9);letter-spacing:0.3px;">' + sTx('Smart Insights', 'الرؤى الذكية') + '</div>' +
-            '<div id="sc-ins-subtitle" style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px;">' + totalActive + sTx(' active insights', ' رؤية نشطة') + '</div>' +
+            '<div style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.9);letter-spacing:0.3px;">' + sTx('Smart Insights', 'الرؤى الذكية') + '</div>' +
+            '<div id="sc-ins-subtitle" style="font-size:var(--type-caption);color:var(--dash-text-faint);margin-top:2px;">' + totalActive + sTx(' active insights', ' رؤية نشطة') + '</div>' +
           '</div>' +
         '</div>' +
         legendHtml +
@@ -396,7 +396,7 @@
     var containerHtml = '<div id="sc-ins-content" style="min-height:100px;"></div>';
 
     return '<div style="background:' + C.card + ';border:1px solid ' + C.border + ';' +
-      'border-radius:16px;padding:22px 24px;">' +
+      'border-radius:var(--dash-radius-xl);padding:22px 24px;">' +
       headerHtml + containerHtml +
     '</div>';
   }
@@ -456,9 +456,9 @@
       mountEl.innerHTML =
         '<div dir="' + (isAr ? 'rtl' : 'ltr') + '" style="display:flex;align-items:center;gap:10px;' +
           'padding:16px 20px;background:rgba(255,255,255,0.02);' +
-          'border:1px solid rgba(255,255,255,0.06);border-radius:14px;' +
-          'color:rgba(255,255,255,0.3);font-size:12px;font-weight:600;">' +
-          '<span style="font-size:18px">💡</span>' +
+          'border:1px solid rgba(255,255,255,0.06);border-radius:var(--dash-radius-lg);' +
+          'color:rgba(255,255,255,0.3);font-size:var(--type-label);font-weight:var(--weight-semibold);">' +
+          '<span style="font-size:var(--type-section-title)">💡</span>' +
           sTx('No insights yet — they will be generated after loading data', 'لا توجد رؤى بعد — سيتم توليدها بعد تحميل البيانات') +
         '</div>';
       return;

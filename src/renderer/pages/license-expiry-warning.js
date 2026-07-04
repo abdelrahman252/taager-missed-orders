@@ -90,7 +90,7 @@
         }
         .lew-card {
           position: relative; width: min(460px, calc(100vw - 40px)); overflow: hidden; padding: 30px;
-          border: 1px solid rgba(245,158,11,.28); border-radius: 24px; color: #f8fafc;
+          border: 1px solid rgba(245,158,11,.28); border-radius:var(--radius-lg); color: #f8fafc;
           background: radial-gradient(circle at 100% 0, rgba(245,158,11,.17), transparent 34%), linear-gradient(145deg,#171c29,#10141f 72%);
           box-shadow: 0 28px 90px rgba(0,0,0,.58), 0 0 0 1px rgba(255,255,255,.025);
           animation: lew-card-in .34s cubic-bezier(.22,1,.36,1) both;
@@ -101,33 +101,33 @@
         }
         .lew-close {
           position: absolute; top: 16px; inset-inline-end: 16px; width: 34px; height: 34px;
-          border: 1px solid rgba(255,255,255,.09); border-radius: 10px; color: #94a3b8;
-          background: rgba(255,255,255,.045); cursor: pointer; font-size: 22px; line-height: 1;
+          border: 1px solid rgba(255,255,255,.09); border-radius:var(--radius-sm); color: #94a3b8;
+          background: rgba(255,255,255,.045); cursor: pointer; font-size:var(--type-metric-sm); line-height: 1;
         }
         .lew-close:hover { color: #fff; border-color: rgba(245,158,11,.35); }
         .lew-topline { display: flex; align-items: center; gap: 11px; margin-bottom: 20px; }
         .lew-icon {
           display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid rgba(245,158,11,.35);
-          border-radius: 13px; color: #fbbf24; background: rgba(245,158,11,.11); box-shadow: 0 8px 24px rgba(245,158,11,.1);
+          border-radius:var(--radius-md); color: #fbbf24; background: rgba(245,158,11,.11); box-shadow: 0 8px 24px rgba(245,158,11,.1);
         }
         .lew-icon svg { width: 22px; height: 22px; }
-        .lew-kicker { color: #fbbf24; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-        .lew-card h2 { margin: 0 0 10px; font-size: 27px; line-height: 1.2; letter-spacing: -.035em; }
-        .lew-copy { margin: 0; color: #aab4c5; font-size: 14px; line-height: 1.75; }
+        .lew-kicker { color: #fbbf24; font-size:var(--type-caption); font-weight:var(--weight-semibold); letter-spacing: .12em; text-transform: uppercase; }
+        .lew-card h2 { margin: 0 0 10px; font-size:var(--type-page-title); line-height: 1.2; letter-spacing: -.035em; }
+        .lew-copy { margin: 0; color: #aab4c5; font-size:var(--type-body); line-height: 1.75; }
         .lew-countdown {
           display: flex; align-items: baseline; gap: 10px; margin: 24px 0 14px; padding: 17px 19px;
-          border: 1px solid rgba(245,158,11,.2); border-radius: 15px; background: rgba(245,158,11,.075);
+          border: 1px solid rgba(245,158,11,.2); border-radius:var(--radius-md); background: rgba(245,158,11,.075);
         }
-        .lew-countdown strong { color: #fbbf24; font-size: 34px; line-height: 1; }
-        .lew-countdown span { color: #cbd5e1; font-size: 13px; font-weight: 700; }
+        .lew-countdown strong { color: #fbbf24; font-size:var(--type-display); line-height: 1; }
+        .lew-countdown span { color: #cbd5e1; font-size:var(--type-control); font-weight:var(--weight-semibold); }
         .lew-license {
           display: flex; justify-content: space-between; gap: 14px; margin-bottom: 22px; color: #7f8ba0;
-          font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+          font-size:var(--type-caption); font-weight:var(--weight-semibold); text-transform: uppercase; letter-spacing: .07em;
         }
-        .lew-license span { color: #aeb8c8; font-family: monospace; text-transform: none; letter-spacing: .04em; }
+        .lew-license span { color: #aeb8c8; font-family:var(--font-mono); text-transform: none; letter-spacing: .04em; }
         .lew-actions { display: grid; gap: 10px; margin-top: 22px; }
         .lew-btn {
-          width: 100%; padding: 13px 16px; border-radius: 11px; cursor: pointer; font-size: 14px; font-weight: 800;
+          width: 100%; padding: 13px 16px; border-radius:var(--radius-sm); cursor: pointer; font-size:var(--type-body); font-weight:var(--weight-semibold);
           transition: transform .15s ease, opacity .15s ease, border-color .15s ease;
         }
         .lew-btn:active { transform: scale(.985); }
@@ -148,7 +148,7 @@
         @keyframes lew-fade-in { from { opacity: 0; } to { opacity: 1; } }
         @keyframes lew-fade-out { from { opacity: 1; } to { opacity: 0; } }
         @keyframes lew-card-in { from { opacity: 0; transform: translateY(16px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
-        @media (max-width: 520px) { .lew-card { padding: 26px 22px 22px; border-radius: 19px; } .lew-card h2 { font-size: 23px; } }
+        @media (max-width: 520px) { .lew-card { padding: 26px 22px 22px; border-radius: 19px; } .lew-card h2 { font-size:var(--type-metric); } }
       </style>
     `;
 
