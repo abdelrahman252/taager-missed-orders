@@ -22,6 +22,11 @@
 
   window.renderSectionProductForecast = function (mountEl, data, ctx) {
     if (!mountEl) return;
+    if (typeof window.renderSectionProductForecastHydratedEntry === 'function') {
+      var immediateCleanup = window.renderSectionProductForecastHydratedEntry(mountEl, data, ctx);
+      mountEl.dataset.dashboardReady = 'productForecast';
+      return typeof immediateCleanup === 'function' ? immediateCleanup : mountEl._dashboardSectionCleanup;
+    }
     var state = { cancelled: false, cleanup: null };
     mountEl._s9HydrationState = state;
     mountEl.innerHTML = forecastHydratedSkeleton();

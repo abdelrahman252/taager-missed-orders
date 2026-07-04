@@ -22,6 +22,11 @@
 
   window.renderSectionMarketingConnections = function (mountEl, data, ctx) {
     if (!mountEl) return;
+    if (typeof window.renderSectionMarketingConnectionsHydratedEntry === 'function') {
+      var immediateCleanup = window.renderSectionMarketingConnectionsHydratedEntry(mountEl, data, ctx);
+      mountEl.dataset.dashboardReady = 'marketing';
+      return typeof immediateCleanup === 'function' ? immediateCleanup : mountEl._dashboardSectionCleanup;
+    }
     var state = { cancelled: false, cleanup: null };
     mountEl._marketingHydrationState = state;
     mountEl.innerHTML = marketingHydratedSkeleton();

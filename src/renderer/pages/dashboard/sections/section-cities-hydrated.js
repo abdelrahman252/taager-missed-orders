@@ -4193,7 +4193,8 @@ window.renderSectionCitiesHydratedEntry = function (mountEl, data, ctx) {
     : null;
   var queryMayRun = !mountEl._citiesQueryDone && !(flags && flags.cities === false) &&
     window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.flags === "function";
-  var shouldDefer = !!(data && data.meta && data.meta.lazyHeavyModels) || !!queryMayRun;
+  var shouldDefer = !(ctx && ctx._atomicFirstVisit) &&
+    (!!(data && data.meta && data.meta.lazyHeavyModels) || !!queryMayRun);
   var hydratedCtx = Object.assign({}, ctx || {}, { _citiesHydrated: true });
 
   if (!shouldDefer) {

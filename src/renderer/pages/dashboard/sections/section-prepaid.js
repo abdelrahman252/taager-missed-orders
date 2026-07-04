@@ -22,6 +22,11 @@
 
   window.renderSectionPrepaid = function (mountEl, data, ctx) {
     if (!mountEl) return;
+    if (typeof window.renderSectionPrepaidHydratedEntry === 'function') {
+      var immediateCleanup = window.renderSectionPrepaidHydratedEntry(mountEl, data, ctx);
+      mountEl.dataset.dashboardReady = 'prepaid';
+      return typeof immediateCleanup === 'function' ? immediateCleanup : mountEl._dashboardSectionCleanup;
+    }
     var state = { cancelled: false, cleanup: null };
     mountEl._prepaidHydrationState = state;
     mountEl.innerHTML = prepaidHydratedSkeleton();

@@ -22,6 +22,11 @@
 
   window.renderSectionCities = function (mountEl, data, ctx) {
     if (!mountEl) return;
+    if (typeof window.renderSectionCitiesHydratedEntry === 'function') {
+      var immediateCleanup = window.renderSectionCitiesHydratedEntry(mountEl, data, ctx);
+      mountEl.dataset.dashboardReady = 'cities';
+      return typeof immediateCleanup === 'function' ? immediateCleanup : mountEl._dashboardSectionCleanup;
+    }
     var state = { cancelled: false, cleanup: null };
     mountEl._citiesWrapperHydrationState = state;
     mountEl.innerHTML = citiesHydratedSkeleton();

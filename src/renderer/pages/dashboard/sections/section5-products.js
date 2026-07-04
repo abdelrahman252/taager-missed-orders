@@ -22,6 +22,12 @@
 
   window.renderSection5 = function (mountEl, data, ctx) {
     if (!mountEl) return;
+    if (typeof window.renderSection5HydratedEntry === 'function') {
+      window.renderSection5HydratedEntry(mountEl, data, ctx);
+      mountEl.dataset.dashboardReady = 'products';
+      mountEl.dataset.s5ProductsReady = mountEl.querySelector('.s5-product-row') ? '1' : '0';
+      return mountEl._dashboardSectionCleanup;
+    }
     var state = { cancelled: false, cleanup: null };
     mountEl._s5HydrationState = state;
     mountEl.innerHTML = productsHydrationSkeleton();

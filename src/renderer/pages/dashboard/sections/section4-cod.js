@@ -22,6 +22,11 @@
 
   window.renderSection4 = function (mountEl, data, ctx) {
     if (!mountEl) return;
+    if (typeof window.renderSection4HydratedEntry === 'function') {
+      var immediateCleanup = window.renderSection4HydratedEntry(mountEl, data, ctx);
+      mountEl.dataset.dashboardReady = 'cod';
+      return typeof immediateCleanup === 'function' ? immediateCleanup : mountEl._dashboardSectionCleanup;
+    }
     var state = { cancelled: false, cleanup: null };
     mountEl._s4HydrationState = state;
     mountEl.innerHTML = codHydratedSkeleton();

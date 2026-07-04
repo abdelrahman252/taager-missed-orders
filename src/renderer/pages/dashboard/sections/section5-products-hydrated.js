@@ -5295,7 +5295,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
 window.renderSection5HydratedEntry = function (mountEl, data, ctx) {
   if (!mountEl) return;
-  var shouldDefer = !!(data && data.meta && data.meta.lazyHeavyModels);
+  var shouldDefer = !(ctx && ctx._atomicFirstVisit) && !!(data && data.meta && data.meta.lazyHeavyModels);
   if (!shouldDefer) {
     renderSection5Hydrated(mountEl, data, ctx);
     mountEl.dataset.dashboardReady = 'products';

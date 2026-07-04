@@ -22,6 +22,11 @@
 
   window.renderSection6 = function (mountEl, data, ctx) {
     if (!mountEl) return;
+    if (typeof window.renderSection6HydratedEntry === 'function') {
+      var immediateCleanup = window.renderSection6HydratedEntry(mountEl, data, ctx);
+      mountEl.dataset.dashboardReady = 'commission';
+      return typeof immediateCleanup === 'function' ? immediateCleanup : mountEl._dashboardSectionCleanup;
+    }
     var state = { cancelled: false, cleanup: null };
     mountEl._s6HydrationState = state;
     mountEl.innerHTML = commissionHydratedSkeleton();

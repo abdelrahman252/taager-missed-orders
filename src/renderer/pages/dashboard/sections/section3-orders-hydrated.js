@@ -682,10 +682,16 @@ window.renderSection3HydratedEntry = function (mountEl, data, ctx) {
   // in-memory rows unless the main-process flag explicitly enables orders.
   var backendOrdersEnabled = false;
   var backendOrdersRequest = 0;
+  var denseHydrationSeq = 0;
   if (window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.flags === 'function') {
     window.DashboardQueryRuntime.flags().then(function (flags) {
       backendOrdersEnabled = !!(flags && flags.orders);
-      if (backendOrdersEnabled && mountEl.isConnected) refreshTableData();
+      // The first paint always comes from the already-aggregated in-memory rows.
+      // A late feature-flag response must not replace those rows with a skeleton
+      // while an IPC-backed page request is pending.
+      if (backendOrdersEnabled && mountEl.isConnected && mountEl.querySelector('.s3-order-row')) {
+        refreshTableData({ preserveRows: true });
+      }
     });
   }
   var filteredCacheKey = '';
@@ -882,6 +888,29 @@ window.renderSection3HydratedEntry = function (mountEl, data, ctx) {
       if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 2500 });
       else run();
     }, 2500);
+  }
+
+  function isActiveOrdersMount(seq) {
+    if (seq && seq !== denseHydrationSeq) return false;
+    if (!mountEl || !mountEl.isConnected || mountEl.hidden) return false;
+    var shellEl = mountEl.closest && mountEl.closest('.dash-shell');
+    return !shellEl || (shellEl._dashboardActiveSection === 'orders' && shellEl._dashboardActivePane === mountEl);
+  }
+
+  function runAfterPaint(fn) {
+    if (window.requestAnimationFrame) {
+      requestAnimationFrame(function () { setTimeout(fn, 0); });
+      return;
+    }
+    setTimeout(fn, 0);
+  }
+
+  function runWhenIdle(fn, timeout) {
+    if (window.requestIdleCallback) {
+      requestIdleCallback(fn, { timeout: timeout || 500 });
+      return;
+    }
+    setTimeout(fn, 16);
   }
 
   (function buildStageCounts() {
@@ -1589,16 +1618,17 @@ window.renderSection3HydratedEntry = function (mountEl, data, ctx) {
     rowsEl.innerHTML = html.join('');
   }
 
-  function setOrdersTableBusy(isBusy, rowsEl) {
+  function setOrdersTableBusy(isBusy, rowsEl, preserveRows) {
     var tableWrap = mountEl.querySelector('.s3-table-scroll');
     if (tableWrap) {
       tableWrap.classList.toggle('s3-table-loading', !!isBusy);
       tableWrap.setAttribute('aria-busy', isBusy ? 'true' : 'false');
     }
-    if (isBusy) renderOrdersTableSkeleton(rowsEl || mountEl.querySelector('#s3-rows'));
+    if (isBusy && !preserveRows) renderOrdersTableSkeleton(rowsEl || mountEl.querySelector('#s3-rows'));
   }
 
-  async function refreshTableData() {
+  async function refreshTableData(options) {
+    options = options || {};
     var requestId = ++backendOrdersRequest;
     var isRtl = window.dashboardI18n ? window.dashboardI18n.isRtl() : true;
     var rowsEl = mountEl.querySelector('#s3-rows');
@@ -1607,9 +1637,10 @@ window.renderSection3HydratedEntry = function (mountEl, data, ctx) {
 
     // Filter, search, and sort records
     var backendPage = null;
-    if (canUseBackendOrdersPage()) {
+    if (!options.forceLocal && canUseBackendOrdersPage()) {
       var backendSort = backendOrderSort();
-      setOrdersTableBusy(true, rowsEl);
+      var preserveRows = !!options.preserveRows && !!rowsEl.querySelector('.s3-order-row');
+      setOrdersTableBusy(true, rowsEl, preserveRows);
       backendPage = await window.DashboardQueryRuntime.query('orders', {
         page: currentPage,
         pageSize: perPage,
@@ -1801,16 +1832,20 @@ window.renderSection3HydratedEntry = function (mountEl, data, ctx) {
     mountEl.innerHTML = html;
     
     // Draw the lightweight chrome immediately; hydrate dense row data after paint.
+    var hydrationSeq = ++denseHydrationSeq;
     refreshPipeline();
     refreshTableContainer();
-    var hydrateDenseOrders = function () {
-      if (!mountEl.isConnected) return;
-      refreshDetails();
-      refreshTableData();
-      scheduleProductCityOptionsWarm();
-    };
-    if (window.requestAnimationFrame) requestAnimationFrame(hydrateDenseOrders);
-    else setTimeout(hydrateDenseOrders, 0);
+    setOrdersTableBusy(true, mountEl.querySelector('#s3-rows'));
+    runAfterPaint(function () {
+      if (!isActiveOrdersMount(hydrationSeq)) return;
+      refreshTableData({ forceLocal: true });
+      runWhenIdle(function () {
+        if (!isActiveOrdersMount(hydrationSeq)) return;
+        refreshDetails();
+        scheduleProductCityOptionsWarm();
+        if (backendOrdersEnabled) refreshTableData({ preserveRows: true });
+      }, 700);
+    });
     
     // Show the final settled state immediately.
     animate();

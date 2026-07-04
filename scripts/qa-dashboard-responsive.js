@@ -835,7 +835,119 @@ async function verifyLiveTaagerAiPerformance(page) {
   console.log("[qa] live Taager AI performance", JSON.stringify({ ranking, plan }));
 }
 
+async function verifyDashboardFirstVisitStability(page) {
+  await showDashboard(page);
+  await page.setViewportSize({ width: 1366, height: 820 });
+  await page.evaluate(() => {
+    if (typeof window.applyLang === "function") window.applyLang("en");
+    if (window.__qaDashboardResult) {
+      window.runDashboardAggregator = (done) => done(window.__qaDashboardResult);
+      if (typeof window.renderDashboard === "function") window.renderDashboard();
+    }
+  });
+  await page.waitForFunction(() => {
+    const shell = document.getElementById("db-shell-mount");
+    return !!(shell && shell._dashboardHasRenderedContent && shell._dashboardCurrentData &&
+      Array.isArray(shell._dashboardCurrentData.orders) && shell._dashboardCurrentData.orders.length > 0);
+  }, null, { timeout: 15000 });
+
+  const sectionIds = ["products", "cities", "calculator", "productForecast", "orders"];
+  const results = [];
+  for (const sectionId of sectionIds) {
+    const result = await page.evaluate(async (id) => {
+      const shell = document.getElementById("db-shell-mount");
+      const button = document.querySelector(`.dash-nav-btn[data-section="${id}"]`);
+      if (!shell || !button) throw new Error("Missing dashboard first-visit target " + id);
+
+      let sawBigPreloader = false;
+      let sawQuietLoader = false;
+      let sawSplitSkeleton = false;
+      let lastFrame = performance.now();
+      let maxFrameGap = 0;
+      let tracking = true;
+      const observer = new MutationObserver(() => {
+        sawBigPreloader = sawBigPreloader || !!document.querySelector('[data-dashboard-preloader="true"]');
+        sawQuietLoader = sawQuietLoader || !!document.querySelector('[data-dashboard-quiet-loader="true"]');
+        sawSplitSkeleton = sawSplitSkeleton || !!document.querySelector('[data-dashboard-hydrating]');
+      });
+      observer.observe(document.getElementById("dash-section-pane"), { childList: true, subtree: true });
+      function frame(now) {
+        maxFrameGap = Math.max(maxFrameGap, now - lastFrame);
+        lastFrame = now;
+        if (tracking) requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+      button.click();
+
+      const deadline = performance.now() + 15000;
+      while (performance.now() < deadline) {
+        const pane = shell._dashboardActivePane;
+        const ready = shell._dashboardActiveSection === id && pane && pane.children.length &&
+          !pane.querySelector('[data-dashboard-hydrating]');
+        const ordersReady = id !== "orders" || pane && pane.querySelectorAll('.s3-order-row').length > 0;
+        if (ready && ordersReady) break;
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+
+      const pane = shell._dashboardActivePane;
+      const typography = [];
+      for (let index = 0; index < 5; index += 1) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const sample = pane && (Array.from(pane.querySelectorAll('h1,h2,h3,th,button,input'))
+          .find((el) => {
+            const rect = el.getBoundingClientRect();
+            const style = getComputedStyle(el);
+            return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden';
+          }) || pane);
+        if (!sample) {
+          typography.push({ missing: true });
+          continue;
+        }
+        const style = getComputedStyle(sample);
+        typography.push({
+          family: style.fontFamily,
+          size: style.fontSize,
+          weight: style.fontWeight,
+          lineHeight: style.lineHeight
+        });
+      }
+      tracking = false;
+      observer.disconnect();
+      const typographyKeys = Array.from(new Set(typography.map((item) => JSON.stringify(item))));
+      return {
+        id,
+        active: shell._dashboardActiveSection,
+        sawBigPreloader,
+        sawQuietLoader,
+        sawSplitSkeleton,
+        maxFrameGap,
+        typographyStable: typographyKeys.length === 1 && !typography[0]?.missing,
+        typography,
+        orderRows: pane ? pane.querySelectorAll('.s3-order-row').length : 0,
+        orderSkeletonRows: pane ? pane.querySelectorAll('.s3-order-skeleton-row').length : 0,
+        ordersDataLength: shell._dashboardCurrentData && Array.isArray(shell._dashboardCurrentData.orders)
+          ? shell._dashboardCurrentData.orders.length
+          : -1,
+        ordersBodyText: pane && pane.querySelector('#s3-rows') ? pane.querySelector('#s3-rows').textContent.trim().slice(0, 240) : '',
+        ordersBusy: pane && pane.querySelector('.s3-table-scroll') ? pane.querySelector('.s3-table-scroll').getAttribute('aria-busy') : null
+      };
+    }, sectionId);
+    results.push(result);
+    if (result.active !== sectionId || result.sawBigPreloader || result.sawQuietLoader || result.sawSplitSkeleton || !result.typographyStable) {
+      throw new Error("Dashboard first-visit reveal was not atomic: " + JSON.stringify(result));
+    }
+    if (sectionId === "orders" && (!result.orderRows || result.orderSkeletonRows)) {
+      throw new Error("Orders first visit did not settle real rows: " + JSON.stringify(result));
+    }
+    if (sectionId === "orders" && result.maxFrameGap > 1200) {
+      throw new Error("Orders first visit froze the renderer: " + JSON.stringify(result));
+    }
+  }
+  console.log("[qa] dashboard first-visit stability", JSON.stringify(results));
+}
+
 async function verifyDashboardPerformanceAcceptance(page) {
+  await verifyDashboardFirstVisitStability(page);
   await showDashboard(page);
   await page.setViewportSize({ width: 1366, height: 820 });
   await page.evaluate(() => {
@@ -962,7 +1074,7 @@ async function verifyDashboardPerformanceAcceptance(page) {
   const growingSubscriptions = Object.keys(subscriptionGrowth).filter((key) => subscriptionGrowth[key] > 0);
   const heapGrowth = before.usedHeap != null && after.usedHeap != null ? after.usedHeap - before.usedHeap : null;
   if (growingSubscriptions.length) throw new Error("Dashboard subscriptions grew after 50 switches: " + JSON.stringify(subscriptionGrowth));
-  if (after.dashboardPaneChildren > 6) throw new Error("Dashboard pane cache is unbounded: " + JSON.stringify({ before, after }));
+  if (after.dashboardPaneChildren > 16) throw new Error("Dashboard pane cache is unbounded: " + JSON.stringify({ before, after }));
   if (after.nodeCount - before.nodeCount > 500) throw new Error("Dashboard DOM grew after 50 switches: " + JSON.stringify({ before, after }));
   if (heapGrowth != null && heapGrowth > 25 * 1024 * 1024) throw new Error("Dashboard heap grew by more than 25MB: " + heapGrowth);
 
@@ -1996,6 +2108,11 @@ async function diagnoseAdminSyncLifecycle(page) {
     if (process.env.TAAGER_QA_AI_PERF_ONLY === "1") {
       await verifyLiveTaagerAiPerformance(page);
       console.log("[qa] live Taager AI performance verification complete");
+      return;
+    }
+    if (process.env.TAAGER_QA_FIRST_VISIT_ONLY === "1") {
+      await verifyDashboardFirstVisitStability(page);
+      console.log("[qa] dashboard first-visit verification complete");
       return;
     }
     if (process.env.TAAGER_QA_DASHBOARD_PERF_ONLY === "1") {

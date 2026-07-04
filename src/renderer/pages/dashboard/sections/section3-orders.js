@@ -22,6 +22,11 @@
 
   window.renderSection3 = function (mountEl, data, ctx) {
     if (!mountEl) return;
+    if (typeof window.renderSection3HydratedEntry === 'function') {
+      var immediateCleanup = window.renderSection3HydratedEntry(mountEl, data, ctx);
+      mountEl.dataset.dashboardReady = 'orders';
+      return typeof immediateCleanup === 'function' ? immediateCleanup : mountEl._dashboardSectionCleanup;
+    }
     var state = { cancelled: false, cleanup: null };
     mountEl._s3HydrationState = state;
     mountEl.innerHTML = ordersHydratedSkeleton();

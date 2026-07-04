@@ -22,6 +22,11 @@
 
   window.renderSection7 = function (mountEl, data, ctx) {
     if (!mountEl) return;
+    if (typeof window.renderSection7HydratedEntry === 'function') {
+      var immediateCleanup = window.renderSection7HydratedEntry(mountEl, data, ctx);
+      mountEl.dataset.dashboardReady = 'calculator';
+      return typeof immediateCleanup === 'function' ? immediateCleanup : mountEl._dashboardSectionCleanup;
+    }
     var state = { cancelled: false, cleanup: null };
     mountEl._s7HydrationState = state;
     mountEl.innerHTML = calculatorHydratedSkeleton();
