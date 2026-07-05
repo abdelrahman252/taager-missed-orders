@@ -26,7 +26,7 @@ window.renderSetup = function (onComplete, initialStep) {
   let step = (initialStep === "run" || initialStep === "accounts") ? initialStep : "accounts";
   if (window._teamLeaderEnabled) step = "accounts";
   let runFlowStep = "users"; // "users" | "date"
-  window._setupCurrentStep = step; // exposed so adminRefresh() can re-render at the correct step
+  window._setupCurrentStep = step; // exposed so a full app refresh can restore the correct step
 
   // Date state
   const todayStr = (() => {

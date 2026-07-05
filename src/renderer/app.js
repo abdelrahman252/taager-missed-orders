@@ -18,7 +18,7 @@ const _STRINGS = {
     "topbar.operations":  "Operations",
     "topbar.dashboard":   "Dashboard",
     "titlebar.sync":      "Sync",
-    "titlebar.sync_tooltip": "Sync license and account permissions, then refresh the app.",
+    "titlebar.sync_tooltip": "Refresh the whole app.",
     "titlebar.lang_tooltip": "Switch between English and Arabic.",
     "titlebar.theme_tooltip": "Switch between light and dark theme.",
     "titlebar.zoom_group": "Application zoom",
@@ -577,7 +577,7 @@ const _STRINGS = {
     "topbar.operations": "العمليات",
     "topbar.dashboard":  "لوحة التحكم",
     "titlebar.sync":     "مزامنة",
-    "titlebar.sync_tooltip": "مزامنة الترخيص وصلاحيات الحسابات ثم تحديث التطبيق.",
+    "titlebar.sync_tooltip": "تحديث التطبيق بالكامل.",
     "titlebar.lang_tooltip": "التبديل بين العربية والإنجليزية.",
     "titlebar.theme_tooltip": "التبديل بين الوضع الفاتح والداكن.",
     "titlebar.minimize": "تصغير النافذة",
@@ -3984,6 +3984,7 @@ async function runAutoRunTick(dateFrom, dateTo) {
 //   1. License validity, expiry, max_accounts (busts the 60-second cache)
 //   2. Per-account unlock status from license_accounts table (busts 15-second cred cache)
 //   3. Refreshes the current page in place without recreating the startup preloader
+// Retained for internal/manual use; the titlebar button uses a full reload.
 async function adminRefresh() {
   const btn = document.getElementById("btn-admin-refresh");
   if (!btn || btn.classList.contains("refreshing")) return;
@@ -4084,9 +4085,11 @@ async function init() {
   if (window.api.onAppZoomChanged) window.api.onAppZoomChanged(updateAppZoomDisplay);
   installAppZoomShortcuts();
 
-  // Wire up admin sync button (shown only after license is validated below)
+  // The Sync button now performs the same full renderer refresh as Ctrl+R.
   const _refreshBtn = document.getElementById("btn-admin-refresh");
-  if (_refreshBtn) _refreshBtn.addEventListener("click", adminRefresh);
+  if (_refreshBtn) {
+    _refreshBtn.addEventListener("click", () => reloadAppPreservingRoute("admin-refresh"));
+  }
   window.api.removeAllListeners("reset-cache");
   window.api.on("reset-cache", handleAdminCacheReset);
 

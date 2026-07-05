@@ -6,6 +6,27 @@
 window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
   "use strict";
 
+  // Unicode escapes keep icons stable if this file passes through a tool with
+  // a different text encoding.
+  var S7_ICONS = Object.freeze({
+    info: "\u2139\uFE0F",
+    orders: "\u{1F4E6}",
+    delivered: "\u{1F69A}",
+    spend: "\u{1F4B3}",
+    cost: "\u{1F4B8}",
+    money: "\u{1F4B0}",
+    profit: "\u{1F4C8}",
+    loss: "\u{1F4C9}",
+    target: "\u{1F3AF}",
+    warning: "\u26A0\uFE0F",
+    critical: "\u{1F6A8}",
+    rocket: "\u{1F680}",
+    lightning: "\u26A1",
+    idea: "\u{1F4A1}",
+    receipt: "\u{1F9FE}",
+    reset: "\u21BB",
+  });
+
   var calcUpdateFrame = null;
   var calcUpdateTimer = null;
   var calcVisualTimer = null;
@@ -882,7 +903,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     if (!containerEl) return;
     var cls = currency.toLowerCase();
     var label =
-      currency === "SAR" ? s7Txt("SA", "?") : currency === "USD" ? "US" : "EG";
+      currency === "SAR" ? s7Txt("SA", "\u0633") : currency === "USD" ? "US" : "EG";
 
     var existingBadge = containerEl.querySelector(".s7-currency-badge");
     if (existingBadge) {
@@ -1603,7 +1624,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       tipFormula,
       tipIcon,
     ) {
-      var badge = _tip(tipIcon || "??", tipTitle, tipDesc, tipFormula);
+      var badge = _tip(tipIcon || S7_ICONS.info, tipTitle, tipDesc, tipFormula);
       return (
         '<div class="sfe-metric-card ' +
         cls +
@@ -1637,7 +1658,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
           "صافي الطلبات المدخل في المحاكاة. يمكنك تعديله للاختبار.",
         ),
         null,
-        "??",
+        S7_ICONS.orders,
       ) +
       card(
         "sfe-neutral sfe-metric-delivered",
@@ -1650,7 +1671,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
           "طلبات وصلت للعميل بناء على معدل التسليم في المحاكاة.",
         ),
         "delivered = netOrders * NDR",
-        "?",
+        S7_ICONS.delivered,
       ) +
       card(
         "sfe-neutral sfe-metric-sales",
@@ -1676,7 +1697,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
           "إجمالي الدخل المتوقع من الطلبات المسلمة مضروبا في متوسط الربح لكل طلب مسلم.",
         ),
         "totalProfitBeforeAdSpend = expectedDeliveriesExact * averageProfitPerDeliveredOrder",
-        "??",
+        S7_ICONS.money,
       ) +
       card(
         profCls + " sfe-metric-profit",
@@ -1693,7 +1714,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
           "صافي الربح أو الخسارة بعد طرح الإنفاق الإعلاني من الإيرادات.",
         ),
         "netProfit = revenue - adSpend",
-        "??",
+        S7_ICONS.profit,
       ) +
       card(
         roiCls + " sfe-metric-roi",
@@ -1710,7 +1731,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
           "نسبة العائد مقارنة بالإنفاق. 100% تعني مضاعفة أموالك.",
         ),
         "ROI = (netProfit / adSpend) * 100%",
-        "??",
+        S7_ICONS.target,
       ) +
       card(
         "sfe-neutral sfe-metric-cpa",
@@ -1723,7 +1744,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
           "تكلفة اكتساب طلب واحد. يجب أن تكون أقل من متوسط الربح لكل طلب مسلم للبقاء مربحا.",
         ),
         "CPA = adSpend / netOrders",
-        "??",
+        S7_ICONS.cost,
       );
   }
 
@@ -1946,7 +1967,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     if (c.netProfit < 0) {
       insights.push({
         type: "critical",
-        icon: "??",
+        icon: S7_ICONS.critical,
         cat: s7Txt("PROFITABILITY BLOCKER", "عائق الربحية"),
         text:
           s7Txt(
@@ -1969,7 +1990,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     } else {
       insights.push({
         type: "positive",
-        icon: "??",
+        icon: S7_ICONS.profit,
         cat: s7Txt("PROFITABILITY STATUS", "حالة الربحية"),
         text:
           s7Txt(
@@ -1987,7 +2008,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     if (c.cpa > c.revenuePerDel && s.adSpend > 0) {
       insights.push({
         type: "negative",
-        icon: "??",
+        icon: S7_ICONS.loss,
         cat: s7Txt("UNIT ECONOMICS", "اقتصاديات الوحدة"),
         text:
           s7Txt(
@@ -2008,7 +2029,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     } else if (c.revenuePerDel > 0 && s.adSpend > 0) {
       insights.push({
         type: "positive",
-        icon: "??",
+        icon: S7_ICONS.profit,
         cat: s7Txt("UNIT ECONOMICS", "اقتصاديات الوحدة"),
         text:
           s7Txt(
@@ -2032,7 +2053,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     if (s.ndr < 0.20) {
       insights.push({
         type: "negative",
-        icon: "??",
+        icon: S7_ICONS.critical,
         cat: s7Txt("NDR ANALYSIS", "تحليل معدل التسليم الصافي"),
         text:
           s7Txt(
@@ -2053,7 +2074,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     } else if (s.ndr < 0.30) {
       insights.push({
         type: "warning",
-        icon: "??",
+        icon: S7_ICONS.warning,
         cat: s7Txt("NDR ANALYSIS", "تحليل معدل التسليم الصافي"),
         text:
           s7Txt(
@@ -2069,7 +2090,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     } else if (s.ndr >= 0.40) {
       insights.push({
         type: "positive",
-        icon: "?",
+        icon: S7_ICONS.delivered,
         cat: s7Txt("NDR ANALYSIS", "تحليل معدل التسليم الصافي"),
         text:
           s7Txt(
@@ -2090,7 +2111,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     if (lossPerDel > 0) {
       insights.push({
         type: "negative",
-        icon: "??",
+        icon: S7_ICONS.cost,
         cat: s7Txt("COST ANALYSIS", "تحليل التكلفة"),
         text:
           s7Txt(
@@ -2109,7 +2130,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     if (c.projNet < 0 && c.netProfit < 0) {
       insights.push({
         type: "critical",
-        icon: "??",
+        icon: S7_ICONS.critical,
         cat: s7Txt("SCALING SAFETY", "أمان التوسع"),
         text:
           s7Txt(
@@ -2130,7 +2151,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     } else if (c.projNet > 0 && c.netProfit > 0) {
       insights.push({
         type: "positive",
-        icon: "??",
+        icon: S7_ICONS.rocket,
         cat: s7Txt("SCALING OPPORTUNITY", "فرصة التوسع"),
         text:
           s7Txt(
@@ -2168,7 +2189,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
             " " + state.currency + "</span> لكل تسليم (من ",
           ) +
           s.avgCommission +
-          " ? " +
+          " \u2192 " +
           Math.ceil(c.commRequired) +
           s7Txt(" " + state.currency + ") would achieve break-even.", " " + state.currency + ") تحقق التعادل."),
       });
@@ -2466,7 +2487,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         ) +
         " " +
         _tip(
-          "??",
+          S7_ICONS.target,
           s7Txt(
             "Return per Currency Unit (ROAS)",
             "العائد لكل وحدة عملة (ROAS)",
@@ -2496,7 +2517,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     var tipParent =
       tipEl && tipEl.parentElement && tipEl.parentElement.parentElement;
     var tip = "",
-      tipIcon = "??",
+      tipIcon = S7_ICONS.info,
       tipTitle = s7Txt("Campaign Status", "حالة الحملة"),
       tipBg,
       tipBorder;
@@ -2505,7 +2526,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         "This budget is creating a loss. Improve targeting or increase delivery rate (NDR) before adding more spend.",
         "هذه الميزانية تسبب خسارة. حسّن الاستهداف أو ارفع معدل التسليم (NDR) قبل إضافة إنفاق أكبر.",
       );
-      tipIcon = "??";
+      tipIcon = S7_ICONS.critical;
       tipBg = "rgba(239,68,68,0.1)";
       tipBorder = "rgba(239,68,68,0.2)";
       if (tipEl)
@@ -2516,7 +2537,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         "Weak performance close to break-even. Profit margin is thin. Improve performance before scaling.",
         "أداء ضعيف قريب من التعادل. هامش الربح محدود. حسّن الأداء قبل التوسع.",
       );
-      tipIcon = "?";
+      tipIcon = S7_ICONS.warning;
       tipBg = "rgba(245,158,11,0.1)";
       tipBorder = "rgba(245,158,11,0.2)";
       if (tipEl)
@@ -2527,7 +2548,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         "Excellent and profitable performance. Your campaign is generating a healthy return. Continue or raise budget carefully.",
         "أداء ممتاز ومربح. حملتك تحقق عائدا صحيا. استمر أو ارفع الميزانية بحذر.",
       );
-      tipIcon = "??";
+      tipIcon = S7_ICONS.profit;
       tipBg =
         document.documentElement.getAttribute("data-theme") === "light"
           ? "rgba(16,185,129,0.1)"
@@ -3100,7 +3121,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         ? "#cbd5e1"
         : "rgba(255,255,255,0.06)") +
       ';border-radius:var(--dash-radius-xl);padding:24px">' +
-      '<div style="font-size:var(--type-control);font-weight:var(--weight-semibold);display:flex;align-items:center;gap:8px;margin-bottom:16px"><span style="color:#f59e0b">?</span> ' +
+      '<div style="font-size:var(--type-control);font-weight:var(--weight-semibold);display:flex;align-items:center;gap:8px;margin-bottom:16px"><span style="color:#f59e0b">' + S7_ICONS.delivered + '</span> ' +
       s7Txt("Real Bot Indicators", "مؤشرات البوت الحقيقية") +
       "</div>" +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
@@ -3112,7 +3133,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         document.documentElement.getAttribute("data-theme") === "light"
           ? "#1e293b"
           : "#fff",
-        "??",
+        S7_ICONS.orders,
         s7Txt("Net Orders", "صافي الطلبات"),
         s7Txt(
           "Total number of orders received from the bot during the selected period.",
@@ -3138,7 +3159,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         document.documentElement.getAttribute("data-theme") === "light"
           ? "#10b981"
           : "#00e676",
-        "?",
+        S7_ICONS.delivered,
         s7Txt("Delivered Orders", "الطلبات المسلمة"),
         s7Txt(
           isExpectedRateMode
@@ -3164,7 +3185,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         s7Txt("Delivery Rate NDR", "معدل التسليم NDR"),
         '<span id="s7-real-ndr-pct">' + s7PctValue(realNdrPct) + "%</span>",
         "#f59e0b",
-        "??",
+        S7_ICONS.target,
         s7Txt("Delivery Rate (NDR)", "معدل التسليم (NDR)"),
         s7Txt(
           "Percentage of orders delivered successfully. Healthy benchmark starts at 30%, with top tier at 40%+.",
@@ -3188,7 +3209,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         s7Txt("Average Profit", "متوسط الربح"),
         '<span id="s7-real-average-profit">' + realAvgCommission.toLocaleString("en-US", { maximumFractionDigits: 2 }) + " " + nativeCurrency + "</span>",
         "#3b82f6",
-        "??",
+        S7_ICONS.money,
         s7Txt("Average Profit", "متوسط الربح"),
         s7Txt(
           "Average profit per delivered order in the selected period.",
@@ -3208,7 +3229,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         ? "#cbd5e1"
         : "rgba(255,255,255,0.06)") +
       ';border-radius:var(--dash-radius-xl);padding:20px">' +
-      '<div style="font-size:var(--type-control);font-weight:var(--weight-semibold);margin-bottom:14px;display:flex;align-items:center;gap:8px"><span style="color:#3b82f6">??</span> ' +
+      '<div style="font-size:var(--type-control);font-weight:var(--weight-semibold);margin-bottom:14px;display:flex;align-items:center;gap:8px"><span style="color:#3b82f6">' + S7_ICONS.lightning + '</span> ' +
       s7Txt("Quick Budget Scenarios", "سيناريوهات ميزانية سريعة") +
       "</div>" +
       '<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr 0.7fr;text-align:center;padding-bottom:10px;border-bottom:1px solid ' +
@@ -3244,7 +3265,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         : "rgba(255,255,255,0.07)") +
       '">' +
       '<div style="display:flex;align-items:center;gap:9px;font-size:var(--type-component-title);font-weight:var(--weight-semibold);letter-spacing:-.01em">' +
-      '<span style="color:#f5a623;font-size:var(--type-component-title)">?</span>' +
+      '<span style="color:#f5a623;font-size:var(--type-component-title)">' + S7_ICONS.target + '</span>' +
       '<span style="color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#1e293b"
@@ -3267,7 +3288,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       s7Txt("Total Spend", "إجمالي الإنفاق") +
       " " +
       _tip(
-        "??",
+        S7_ICONS.spend,
         s7Txt("Total Spend", "إجمالي الإنفاق"),
         s7Txt(
           "Calculator spend after converting the entered or synced spend into the selected calculator currency.",
@@ -3275,7 +3296,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         ),
         "calculatorSpend = convert(spend, sourceCurrency -> calculatorCurrency)",
       ) +
-      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold)"><span>??</span><span id="s7-out-spend">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
+      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold)"><span>' + S7_ICONS.spend + '</span><span id="s7-out-spend">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.5)") +
@@ -3290,7 +3311,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       s7Txt("Cost per Order CPA", "تكلفة الطلب CPA") +
       " " +
       _tip(
-        "??",
+        S7_ICONS.cost,
         s7Txt("Cost per Order (CPA)", "تكلفة الطلب (CPA)"),
         s7Txt(
           "Cost to acquire one order. Lower CPA means the campaign is more efficient.",
@@ -3298,7 +3319,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         ),
         "CPA = adSpend / netOrders",
       ) +
-      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold)"><span style="color:#a855f7">??</span><span id="s7-out-cpa">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
+      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold)"><span style="color:#a855f7">' + S7_ICONS.cost + '</span><span id="s7-out-cpa">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.5)") +
@@ -3313,7 +3334,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       s7Txt("Break-even CPA", "تكلفة التعادل") +
       " " +
       _tip(
-        "??",
+        S7_ICONS.target,
         s7Txt("Break-even CPA", "تكلفة التعادل"),
         s7Txt(
           "Maximum CPA before the campaign starts losing money. This simulator uses the editable Taager profit per delivered order assumption multiplied by NDR.",
@@ -3321,7 +3342,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         ),
         "Break-even CPA = taagerProfitPerDeliveredOrder * NDR",
       ) +
-      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold)"><span style="color:#f59e0b">??</span><span id="s7-out-breakeven-cpa">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
+      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold)"><span style="color:#f59e0b">' + S7_ICONS.target + '</span><span id="s7-out-breakeven-cpa">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.5)") +
@@ -3336,7 +3357,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       s7Txt("Total Profit Before Ad Spend", "إجمالي الربح قبل الإنفاق الإعلاني") +
       " " +
       _tip(
-        "??",
+        S7_ICONS.money,
         s7Txt("Total Profit Before Ad Spend", "إجمالي الربح قبل الإنفاق الإعلاني"),
         s7Txt(
           isExpectedRateMode
@@ -3348,7 +3369,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
           ? "totalProfitBeforeAdSpend = expectedDeliveriesExact * averageProfitPerDeliveredOrder"
           : "totalProfitBeforeAdSpend = actualEarnedProfitAfterTax",
       ) +
-      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold)"><span style="color:#3b82f6">??</span><span id="s7-out-revenue">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
+      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold)"><span style="color:#3b82f6">' + S7_ICONS.money + '</span><span id="s7-out-revenue">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.5)") +
@@ -3363,7 +3384,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       s7Txt("Account Net Profit", "صافي ربح الحساب") +
       " " +
       _tip(
-        "??",
+        S7_ICONS.profit,
         s7Txt("Account Net Profit", "صافي ربح الحساب"),
         s7Txt(
           "Whole-account profit after subtracting total synced ad spend. This can differ from SKU-matched Campaigns profit.",
@@ -3371,7 +3392,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         ),
         "netProfit = revenue - adSpend",
       ) +
-      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold)"><span style="color:#00e676">??</span><span id="s7-out-net" dir="ltr">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
+      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold)"><span style="color:#00e676">' + S7_ICONS.profit + '</span><span id="s7-out-net" dir="ltr">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.5)") +
@@ -3386,7 +3407,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       s7Txt("Net Total Delivered Sales", "صافي مبيعات الطلبات المسلمة") +
       " " +
       _tip(
-        "??",
+        S7_ICONS.money,
         s7Txt("Net Total Delivered Sales", "صافي مبيعات الطلبات المسلمة"),
         s7Txt(
           "Same dashboard metric used in the overview: net delivered sales for delivered net orders only.",
@@ -3394,7 +3415,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         ),
         "netDeliveredSales = sum(delivered net order sales)",
       ) +
-      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold);min-width:0"><span style="color:#10b981">??</span><span id="s7-out-delivered-sales" dir="ltr">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
+      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold);min-width:0"><span style="color:#10b981">' + S7_ICONS.money + '</span><span id="s7-out-delivered-sales" dir="ltr">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.5)") +
@@ -3409,7 +3430,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       s7Txt("Average Order Value (Delivered)", "متوسط قيمة الطلب المسلم") +
       " " +
       _tip(
-        "??",
+        S7_ICONS.receipt,
         s7Txt("Average Order Value (Delivered)", "متوسط قيمة الطلب المسلم"),
         s7Txt(
           "Same dashboard metric used in the overview: net delivered sales divided by delivered orders.",
@@ -3417,7 +3438,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         ),
         "deliveredAOV = netDeliveredSales / deliveredOrders",
       ) +
-      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold);min-width:0"><span style="color:#38bdf8">??</span><span id="s7-out-delivered-aov" dir="ltr">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
+      '</div><div style="display:flex;align-items:center;gap:8px;font-size:var(--type-metric-sm);font-weight:var(--weight-semibold);min-width:0"><span style="color:#38bdf8">' + S7_ICONS.receipt + '</span><span id="s7-out-delivered-aov" dir="ltr">--</span></div><div class="s7-curr-lbl" style="font-size:var(--type-micro);color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#64748b"
         : "rgba(255,255,255,0.5)") +
@@ -3444,7 +3465,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       s7Txt("Return on Investment (ROI)", "العائد على الاستثمار (ROI)") +
       " " +
       _tip(
-        "??",
+        S7_ICONS.target,
         s7Txt("Return on Investment (ROI)", "العائد على الاستثمار (ROI)"),
         s7Txt(
           "Measures campaign profitability. Zero means break-even, positive means profit, negative means loss.",
@@ -3469,7 +3490,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       s7Txt("For each 1 ", "لكل 1 ") + state.currency + s7Txt(" spent", " يتم إنفاقه") +
       " " +
       _tip(
-        "??",
+        S7_ICONS.profit,
         s7Txt("Return per Currency Unit (ROAS)", "العائد لكل وحدة عملة (ROAS)"),
         s7Txt(
           "For each unit spent, how much revenue do you get back? More than 1 means revenue exceeds spend.",
@@ -3481,7 +3502,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       '<div style="font-size:var(--type-metric-sm);font-weight:var(--weight-bold);color:#00e676" id="s7-out-return">--</div>' +
       '<div style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:#22d3ee;margin-top:6px;display:flex;align-items:center;gap:5px" id="s7-net-roas-row"><span id="s7-out-net-roas">--</span> ' +
       _tip(
-        "??",
+        S7_ICONS.money,
         s7Txt("Net ROAS", "العائد الصافي على الإعلان"),
         s7Txt(
           "Actual delivered sales divided by ad spend. This ignores pending and canceled orders.",
@@ -3492,7 +3513,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       "</div>" +
       "</div>" +
       '<div id="s7-smart-tip-wrap" style="background:linear-gradient(135deg,rgba(0,230,118,0.1),transparent);border:1px solid rgba(0,230,118,0.2);border-radius:var(--dash-radius-md);padding:14px;display:flex;gap:12px;align-items:flex-start">' +
-      '<div style="font-size:var(--type-metric-sm);margin-top:2px">??</div>' +
+      '<div style="font-size:var(--type-metric-sm);margin-top:2px">' + S7_ICONS.idea + '</div>' +
       "<div>" +
       '<div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:#00e676;margin-bottom:4px">' +
       s7Txt("Campaign Status", "حالة الحملة") +
@@ -3517,7 +3538,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         : "rgba(255,255,255,0.06)") +
       ';border-radius:var(--dash-radius-xl);padding:24px">' +
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:16px;flex-wrap:wrap">' +
-      '<div><div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);display:flex;align-items:center;gap:8px"><span style="color:#00e676">??</span> ' +
+      '<div><div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);display:flex;align-items:center;gap:8px"><span style="color:#00e676">' + S7_ICONS.profit + '</span> ' +
       s7Txt("Budget Scenario Forecast", "توقع سيناريو الميزانية") +
       "</div>" +
       '<div style="font-size:var(--type-caption);color:' +
@@ -3554,7 +3575,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         : "rgba(255,255,255,0.07)") +
       ';margin-bottom:20px">' +
       '<div style="display:flex;align-items:center;gap:9px;font-size:var(--type-component-title);font-weight:var(--weight-semibold);letter-spacing:-.01em">' +
-      '<span style="color:#f5a623;font-size:var(--type-component-title)">?</span>' +
+      '<span style="color:#f5a623;font-size:var(--type-component-title)">' + S7_ICONS.target + '</span>' +
       '<span style="color:' +
       (document.documentElement.getAttribute("data-theme") === "light"
         ? "#1e293b"
@@ -3587,7 +3608,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       '<span class="sfe-sim-dot"></span>' +
       s7Txt("SIMULATION MODE — local only", "وضع المحاكاة - محلي فقط") +
       "</div>" +
-      '<button class="sfe-reset-btn" id="sfe-reset-btn">? ' +
+      '<button class="sfe-reset-btn" id="sfe-reset-btn">' + S7_ICONS.reset + ' ' +
       s7Txt("Reset to Real Data", "إعادة البيانات الحقيقية") +
       "</button>" +
       "</div>" +
