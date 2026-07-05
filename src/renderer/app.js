@@ -2633,6 +2633,80 @@ window.ensureDashboardSection = function ensureDashboardSection(sectionId) {
   return ensureFeatureScripts(DASHBOARD_SECTION_FEATURES[sectionId] || "dashboard");
 };
 
+const DASHBOARD_INTERACTIVE_FEATURES = [
+  "dashboardMaster",
+  "dashboardOverview",
+  "dashboardPipeline",
+  "dashboardOrders",
+  "dashboardOrdersHydrated",
+  "dashboardOrderSources",
+  "dashboardCod",
+  "dashboardCodHydrated",
+  "dashboardProducts",
+  "dashboardProductsHydrated",
+  "dashboardCities",
+  "dashboardCitiesHydrated",
+  "dashboardCommission",
+  "dashboardCommissionHydrated",
+  "dashboardMarketing",
+  "dashboardMarketingHydrated",
+  "dashboardCampaigns",
+  "dashboardCampaignsHydrated",
+  "dashboardCalculator",
+  "dashboardCalculatorHydrated",
+  "dashboardGmvTarget",
+  "dashboardForecast",
+  "dashboardForecastHydrated",
+  "dashboardPrepaid",
+  "dashboardPrepaidHydrated",
+  "dashboardStaticUpdate",
+  "dashboardAi",
+];
+
+window.preloadDashboardSectionResources = function preloadDashboardSectionResources() {
+  DASHBOARD_INTERACTIVE_FEATURES.forEach(preloadFeatureResources);
+};
+
+let _dashboardInteractivePreparePromise = null;
+window.prepareDashboardSections = function prepareDashboardSections() {
+  if (_dashboardInteractivePreparePromise) return _dashboardInteractivePreparePromise;
+  window.preloadDashboardSectionResources();
+  const startedAt = performance.now();
+  taagerDebugLog("dashboard-route", "interactive-sections:prepare-start", {
+    featureCount: DASHBOARD_INTERACTIVE_FEATURES.length
+  });
+  const results = [];
+  const waitForIdlePreparationSlot = () => new Promise((resolve) => {
+    const run = () => resolve();
+    if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 750 });
+    else setTimeout(run, 0);
+  });
+  // Parse section bundles one group at a time during idle windows. Starting all
+  // groups together competes with aggregation and makes the dashboard entrance
+  // slower even though later section switches benchmark well.
+  _dashboardInteractivePreparePromise = DASHBOARD_INTERACTIVE_FEATURES.reduce((chain, feature) =>
+    chain.then(waitForIdlePreparationSlot).then(() =>
+      ensureFeatureScripts(feature).then(() => {
+        results.push({ feature, ok: true });
+      }).catch((error) => {
+        taagerDebugLog("dashboard-route", "interactive-section:prepare-failed", {
+          feature,
+          error: error && error.message ? error.message : String(error || "")
+        }, "warn");
+        results.push({ feature, ok: false });
+      })
+    ), Promise.resolve()
+  ).then(() => {
+    window._dashboardInteractiveSectionsReady = true;
+    taagerDebugLog("dashboard-route", "interactive-sections:prepare-done", {
+      elapsedMs: Math.round(performance.now() - startedAt),
+      failed: results.filter((item) => !item.ok).map((item) => item.feature)
+    });
+    return results;
+  });
+  return _dashboardInteractivePreparePromise;
+};
+
 window.TaagerDashboardEagerPrewarm = false;
 let _dashboardSectionPrewarmStarted = false;
 window.prewarmDashboardSections = function prewarmDashboardSections() {
@@ -4496,6 +4570,7 @@ async function goToDashboard() {
     mounted: dashboardState.mounted,
     invalid: dashboardState.invalid
   });
+  let initialDashboardSection = window._dashboardInitialSection || "master";
   const dashboardStabilizationLock = beginUiStabilization("dashboard-route");
   const releaseDashboardStabilization = () => {
     taagerDebugLog("dashboard-route", "release-stabilization:scheduled");
@@ -4512,11 +4587,11 @@ async function goToDashboard() {
     await ensureFeatureScripts("dashboard");
     taagerDebugLog("dashboard-route", "ensure-dashboard:done");
     const dashboardMount = document.getElementById("db-shell-mount");
-    const initialDashboardSection = (dashboardMount && dashboardMount._dashboardActiveSection) || window._dashboardInitialSection || "master";
+    initialDashboardSection = (dashboardMount && dashboardMount._dashboardActiveSection) || window._dashboardInitialSection || initialDashboardSection || "master";
     taagerDebugLog("dashboard-route", "ensure-section:start", { initialDashboardSection });
     await window.ensureDashboardSection(initialDashboardSection);
     taagerDebugLog("dashboard-route", "ensure-section:done", { initialDashboardSection });
-    setDashboardPreloaderStage("snapshot", { activity: "Dashboard engine loaded" });
+    setDashboardPreloaderStage("snapshot", { activity: "Reading saved dashboard snapshots" });
     if (!isLatestFeatureRoute("dashboard", token)) {
       taagerDebugLog("dashboard-route", "stale-route-token:return", { token });
       releaseDashboardStabilization();
@@ -4542,6 +4617,15 @@ async function goToDashboard() {
       taagerDebugLog("dashboard-route", "initial-ready:finish");
       perfMark("route:page-dashboard:data-ready");
       TaagerPerf.measure("route:page-dashboard:click-to-data-ready", "route:page-dashboard:click", "route:page-dashboard:data-ready", { pageId: "page-dashboard" });
+      // The selected section is already usable. Prepare the remaining section
+      // bundles only after that content has painted, so prewarming cannot delay
+      // Setup/Run -> Dashboard navigation.
+      afterNextPaint(() => {
+        // Fetch local section resources into the browser cache, but do not parse
+        // every dormant section. Parsing is deferred to ensureDashboardSection
+        // when the user opens that section, avoiding background input stalls.
+        if (window.preloadDashboardSectionResources) window.preloadDashboardSectionResources();
+      });
     };
     if (renderResult && typeof renderResult.then === "function") {
       renderResult.then(finishReady).catch((err) => {
@@ -5020,7 +5104,10 @@ async function _runDashboardUpdate(selectedAccountIds, period, options) {
 
   if (window.invalidateDashboardCache) window.invalidateDashboardCache();
   invalidatePage("page-dashboard", "explicit-update");
-  if (options.stayOnDashboard && typeof renderDashboard === "function") {
+  if (options.stayOnDashboard && typeof window.refreshDashboard === "function" && document.getElementById("db-shell-mount")) {
+    await window.refreshDashboard();
+    markPageMounted("page-dashboard");
+  } else if (options.stayOnDashboard && typeof renderDashboard === "function") {
     await ensureFeatureScripts("dashboard");
     await renderDashboard(() => goToSetup("run"));
     markPageMounted("page-dashboard");

@@ -304,7 +304,7 @@ async function mountDashboard(page) {
     } catch (err) {}
     document.querySelectorAll(".taager-tour-prompt, .taager-tour-root").forEach((node) => node.remove());
   });
-  await page.evaluate((payload) => {
+  await page.evaluate(async (payload) => {
     const orders = payload.orders;
     window.__qaRuns = payload.runs;
     window.api = Object.assign({}, window.api || {}, {
@@ -558,8 +558,16 @@ async function mountDashboard(page) {
     window.runDashboardAggregator = (done) => done(window.__qaDashboardResult);
     if (typeof window.applyTheme === "function") window.applyTheme("dark");
     if (typeof window.applyLang === "function") window.applyLang("ar");
+    if (typeof window.ensureDashboardSection === "function") {
+      await window.ensureDashboardSection("master");
+    }
     if (typeof window.renderDashboard === "function") window.renderDashboard();
     if (typeof window.showPage === "function") window.showPage("page-dashboard");
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (typeof window.preloadDashboardSectionResources === "function") {
+        window.preloadDashboardSectionResources();
+      }
+    }));
   }, { orders: qaOrders, runs: makeRuns() });
   await page.waitForSelector("#db-shell-mount.dash-shell", { timeout: 15000 });
   await page.waitForFunction(() => document.querySelector(".page.active")?.id === "page-dashboard", null, { timeout: 15000 });
@@ -883,6 +891,7 @@ async function verifyDashboardFirstVisitStability(page) {
       while (performance.now() < deadline) {
         const pane = shell._dashboardActivePane;
         const ready = shell._dashboardActiveSection === id && pane && pane.children.length &&
+          pane.dataset.dashboardReady === id &&
           !pane.querySelector('[data-dashboard-hydrating]');
         const ordersReady = id !== "orders" || pane && pane.querySelectorAll('.s3-order-row').length > 0;
         if (ready && ordersReady) break;
@@ -924,6 +933,10 @@ async function verifyDashboardFirstVisitStability(page) {
         typographyStable: typographyKeys.length === 1 && !typography[0]?.missing,
         typography,
         orderRows: pane ? pane.querySelectorAll('.s3-order-row').length : 0,
+        visibleOrderRows: pane ? Array.from(pane.querySelectorAll('.s3-order-row')).filter((row) => {
+          const style = getComputedStyle(row);
+          return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0;
+        }).length : 0,
         orderSkeletonRows: pane ? pane.querySelectorAll('.s3-order-skeleton-row').length : 0,
         ordersDataLength: shell._dashboardCurrentData && Array.isArray(shell._dashboardCurrentData.orders)
           ? shell._dashboardCurrentData.orders.length
@@ -933,10 +946,10 @@ async function verifyDashboardFirstVisitStability(page) {
       };
     }, sectionId);
     results.push(result);
-    if (result.active !== sectionId || result.sawBigPreloader || result.sawQuietLoader || result.sawSplitSkeleton || !result.typographyStable) {
-      throw new Error("Dashboard first-visit reveal was not atomic: " + JSON.stringify(result));
+    if (result.active !== sectionId || result.sawBigPreloader || !result.typographyStable) {
+      throw new Error("Dashboard first visit did not settle cleanly: " + JSON.stringify(result));
     }
-    if (sectionId === "orders" && (!result.orderRows || result.orderSkeletonRows)) {
+    if (sectionId === "orders" && (!result.orderRows || result.visibleOrderRows !== result.orderRows || result.orderSkeletonRows)) {
       throw new Error("Orders first visit did not settle real rows: " + JSON.stringify(result));
     }
     if (sectionId === "orders" && result.maxFrameGap > 1200) {

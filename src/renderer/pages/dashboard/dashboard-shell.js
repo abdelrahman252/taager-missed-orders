@@ -51,19 +51,6 @@
     taagerAi:     'renderSectionTaagerAi'
   };
 
-  var SECTION_HYDRATED_ASSETS = {
-    orders: { feature: 'dashboardOrdersHydrated', renderer: 'renderSection3HydratedEntry' },
-    cod: { feature: 'dashboardCodHydrated', renderer: 'renderSection4HydratedEntry' },
-    products: { feature: 'dashboardProductsHydrated', renderer: 'renderSection5HydratedEntry' },
-    cities: { feature: 'dashboardCitiesHydrated', renderer: 'renderSectionCitiesHydratedEntry' },
-    commission: { feature: 'dashboardCommissionHydrated', renderer: 'renderSection6HydratedEntry' },
-    marketing: { feature: 'dashboardMarketingHydrated', renderer: 'renderSectionMarketingConnectionsHydratedEntry' },
-    campaigns: { feature: 'dashboardCampaignsHydrated', renderer: 'renderSectionCampaignsHydratedEntry' },
-    calculator: { feature: 'dashboardCalculatorHydrated', renderer: 'renderSection7HydratedEntry' },
-    productForecast: { feature: 'dashboardForecastHydrated', renderer: 'renderSectionProductForecastHydratedEntry' },
-    prepaid: { feature: 'dashboardPrepaidHydrated', renderer: 'renderSectionPrepaidHydratedEntry' }
-  };
-
   var DATA_KEY = {
     overview: 'overview',
     pipeline: 'pipeline',
@@ -679,6 +666,12 @@
     '</div>';
   }
 
+  // Reuse the canonical dashboard progress UI for async gates that happen
+  // after the shell has mounted (for example, connected marketing spend).
+  window.dashboardProgressLoaderHTML = function (sectionId) {
+    return loaderHTML(sectionId || 'master');
+  };
+
   function quietSectionLoaderHTML(sectionId) {
     var label = navLabel(navItemById(sectionId || 'master'));
     return '<div class="dash-section-quiet-loader" data-dashboard-quiet-loader="true" data-dashboard-section="' + esc(sectionId || 'master') + '" role="status" aria-live="polite" aria-label="' + esc(tr('shell.loading')) + ' ' + esc(label) + '" ' +
@@ -694,38 +687,6 @@
   function shouldUseLiveSectionPreloader(pane) {
     var shellEl = pane && typeof pane.closest === 'function' ? pane.closest('.dash-shell') : null;
     return !(shellEl && shellEl._dashboardHasRenderedContent);
-  }
-
-  function sectionAssetsReady(sectionId) {
-    var rendererName = SECTION_FN[sectionId];
-    if (!rendererName || typeof window[rendererName] !== 'function') return false;
-    var hydrated = SECTION_HYDRATED_ASSETS[sectionId];
-    return !hydrated || typeof window[hydrated.renderer] === 'function';
-  }
-
-  function ensureSectionAssets(sectionId) {
-    var base = typeof window.ensureDashboardSection === 'function'
-      ? window.ensureDashboardSection(sectionId)
-      : Promise.resolve();
-    return base.then(function () {
-      var hydrated = SECTION_HYDRATED_ASSETS[sectionId];
-      if (!hydrated || typeof window[hydrated.renderer] === 'function' || typeof window.ensureFeatureScripts !== 'function') return;
-      return window.ensureFeatureScripts(hydrated.feature);
-    });
-  }
-
-  function setSectionAssetPending(shellEl, sectionId, pending) {
-    if (!shellEl) return;
-    shellEl.classList.toggle('dash-section-asset-loading', !!pending);
-    var button = shellEl.querySelector('.dash-nav-btn[data-section="' + sectionId + '"]');
-    if (!button) return;
-    if (pending) {
-      button.setAttribute('aria-busy', 'true');
-      button.dataset.sectionLoading = 'true';
-    } else {
-      button.removeAttribute('aria-busy');
-      delete button.dataset.sectionLoading;
-    }
   }
 
   function getDataVersion(data) {
@@ -1827,59 +1788,6 @@
       }
     }
 
-    // First visits load the section stylesheet, lightweight wrapper, and split
-    // renderer as one unit. Once dashboard content exists, keep the current pane
-    // visible until that unit is ready instead of exposing a loader followed by
-    // a second skeleton/content paint.
-    if (data && data._loaded && !data._loading && !sectionAssetsReady(sectionId) &&
-        (typeof window.ensureDashboardSection === 'function' || typeof window.ensureFeatureScripts === 'function')) {
-      var assetLoadToken = (shellEl._dashboardAssetLoadToken || 0) + 1;
-      shellEl._dashboardAssetLoadToken = assetLoadToken;
-      if (shellEl._dashboardPendingAssetSection && shellEl._dashboardPendingAssetSection !== sectionId) {
-        setSectionAssetPending(shellEl, shellEl._dashboardPendingAssetSection, false);
-      }
-      shellEl._dashboardPendingAssetSection = sectionId;
-      setSectionAssetPending(shellEl, sectionId, true);
-      dbg('switch:asset-gate-start', {
-        sectionId: sectionId,
-        keepCurrentPane: !!shellEl._dashboardHasRenderedContent
-      });
-
-      if (!shellEl._dashboardHasRenderedContent) {
-        syncDashboardCountryState(data);
-        setSidebarActive(shellEl, sectionId);
-        updateTopbar(shellEl, data, ctx.options);
-        updateFirstRunGuidance(shellEl, data);
-        var startupContainer = shellEl.querySelector('#dash-section-pane');
-        if (startupContainer) {
-          var startupPane = prepareFreshSectionPane(shellEl, startupContainer, sectionId, sectionId + '|assets-loading', false);
-          showSectionLoader(startupPane, sectionId);
-        }
-      }
-
-      ensureSectionAssets(sectionId).then(function () {
-        if (!shellEl.isConnected || shellEl._dashboardAssetLoadToken !== assetLoadToken) return;
-        setSectionAssetPending(shellEl, sectionId, false);
-        shellEl._dashboardPendingAssetSection = null;
-        shellEl._dashboardAtomicSection = sectionId;
-        dbg('switch:asset-gate-ready', { sectionId: sectionId });
-        finishSectionSwitch({ ok: true, assetsReady: true });
-        switchSection(shellEl, sectionId, data, ctx, true);
-      }).catch(function (err) {
-        if (shellEl._dashboardAssetLoadToken !== assetLoadToken) return;
-        setSectionAssetPending(shellEl, sectionId, false);
-        shellEl._dashboardPendingAssetSection = null;
-        dbg('switch:asset-gate-failed', {
-          sectionId: sectionId,
-          error: err && err.message ? err.message : String(err || '')
-        }, 'error');
-        finishSectionSwitch({ ok: false, assetLoadFailed: true });
-        if (window.TaagerUI && typeof window.TaagerUI.toast === 'function') {
-          window.TaagerUI.toast(trText('misc.loadFailed', 'Section failed to load'), { kind: 'error' });
-        }
-      });
-      return;
-    }
     syncDashboardCountryState(data);
     setSidebarActive(shellEl, sectionId);
     updateTopbar(shellEl, data, ctx.options);
@@ -1959,7 +1867,7 @@
         var groupLoadTimer = window.TaagerPerf && typeof window.TaagerPerf.start === 'function'
           ? window.TaagerPerf.start('dashboard:section-group:load', { sectionId: sectionId })
           : null;
-        ensureSectionAssets(sectionId).then(function () {
+        window.ensureDashboardSection(sectionId).then(function () {
           dbg('switch:lazy-section-loaded', { sectionId: requestedSection });
           if (window.TaagerPerf && typeof window.TaagerPerf.end === 'function' && groupLoadTimer) {
             window.TaagerPerf.end(groupLoadTimer, { ok: true, sectionId: requestedSection });
@@ -2044,12 +1952,10 @@
       var slice = key ? (data[key] || null) : data;
       var sectionCtx = Object.assign({}, ctx, {
         data: data,
-        sectionId: sectionId,
-        _atomicFirstVisit: shellEl._dashboardAtomicSection === sectionId
+        sectionId: sectionId
       });
       pane._dashboardSectionContext = sectionCtx;
       var lifecycle = normalizeSectionLifecycle(runSectionPhase(sectionId, 'render-body', function () { return fn(pane, slice, sectionCtx); }));
-      if (shellEl._dashboardAtomicSection === sectionId) shellEl._dashboardAtomicSection = null;
       dbg('switch:render-body-done', {
         sectionId: sectionId,
         paneChildren: pane.children.length,

@@ -47,12 +47,26 @@ function _isExactValid(digits, cfg) {
   return digits.length === cfg.length && _hasValidStart(digits, cfg);
 }
 
+function _trailingDialCodeCandidate(raw, cfg) {
+  if (!raw || !cfg || !cfg.dialCode || !raw.endsWith(cfg.dialCode)) return null;
+  let candidate = raw.slice(0, -cfg.dialCode.length);
+  if (cfg.domesticPrefix && candidate.startsWith(cfg.domesticPrefix)) {
+    candidate = candidate.slice(cfg.domesticPrefix.length);
+  }
+  return _isExactValid(candidate, cfg) ? candidate : null;
+}
+
 function _normalizeCore(phone, country) {
   const prepared = _preparePhone(phone, country);
   if (!prepared) return null;
 
   const { cc, cfg } = prepared;
   let digits = prepared.digits;
+
+  const trailingDialCodeCandidate = _trailingDialCodeCandidate(digits, cfg);
+  if (trailingDialCodeCandidate) {
+    return { digits: trailingDialCodeCandidate, uncertain: false, correction: "trailing_dial_code" };
+  }
 
   if (cc === "sa" && digits.length === 10 && digits.endsWith("0")) {
     digits = digits.slice(0, 9);
@@ -117,6 +131,12 @@ function normalizePhoneCandidatesWithMeta(phone, country) {
     seen.add(digits);
     candidates.push({ digits, uncertain, correction });
   };
+
+  const trailingDialCodeCandidate = _trailingDialCodeCandidate(raw, cfg);
+  if (trailingDialCodeCandidate) {
+    add(trailingDialCodeCandidate, "trailing_dial_code");
+    if (candidates.length) return candidates;
+  }
 
   // A common domestic-prefix correction typo:
   //   intended 058... -> typed 5, inserted 0, then continued -> 50...

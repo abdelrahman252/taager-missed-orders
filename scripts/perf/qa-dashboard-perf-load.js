@@ -95,6 +95,8 @@ const THRESHOLDS = {
   // worse than baseline), not an absolute production SLA.
   aggregationMs: 2500,       // real Pass-1 aggregation over the full raw snapshot
   shellMountMs: 500,         // dashboard:shell:mount measure
+  routeVisibleMs: 750,       // Setup/Run click to the real dashboard shell becoming visible
+  routeDataReadyMs: 2500,    // Setup/Run click to selected section usable with the 5K fixture
   coldSectionRenderMs: 600,  // first-ever render FUNCTION call against this dataset (excludes lazy script fetch)
   coldSectionVisibleMs: 2500, // true wall clock incl. first-visit lazy section-script load, generous for a cold visit
   cachedRestoreMs: 100,      // identical to the developer's existing bar (qa-dashboard-responsive.js)
@@ -387,34 +389,18 @@ async function mountDashboardWithRealAggregator(page, fixture) {
   }, { accountId: fixture.accountId, dateFrom: fixtureDateFrom, dateTo: fixtureDateTo });
   console.log("[perf] fixture API probe:", JSON.stringify(apiProbe));
 
-  // The dashboard bundle is lazy-loaded by renderDashboard/ensureFeatureScripts.
-  // Waiting for runDashboardAggregator before loading that bundle creates a
-  // circular wait, because dashboard-aggregator.js defines that function.
+  // Exercise the real Setup/Run -> Dashboard route. Directly calling
+  // renderDashboard() would hide route-level asset and orchestration regressions.
   await page.evaluate(async ({ dateFrom, dateTo }) => {
-    if (typeof window.showPage === "function") window.showPage("page-dashboard");
-    if (typeof window.ensureFeatureScripts !== "function") {
-      throw new Error("Dashboard startup: window.ensureFeatureScripts is unavailable");
-    }
-    await window.ensureFeatureScripts("dashboard");
-    if (window.DashboardPeriodState && typeof window.DashboardPeriodState.setCustomRange === "function") {
-      window.DashboardPeriodState.setCustomRange(dateFrom, dateTo);
-    }
-    if (window.DashboardDeliveredDateState && typeof window.DashboardDeliveredDateState.set === "function") {
-      window.DashboardDeliveredDateState.set("actual");
-    }
-    if (typeof window.runDashboardAggregator !== "function") {
-      throw new Error("Dashboard startup: dashboard bundle loaded without runDashboardAggregator");
-    }
-    if (typeof window.renderDashboard !== "function") {
-      throw new Error("Dashboard startup: dashboard bundle loaded without renderDashboard");
-    }
-    await window.renderDashboard();
-    if (typeof window.showPage === "function") window.showPage("page-dashboard");
+    if (typeof window.showPage === "function") window.showPage("page-setup");
+    window._dashboardInitialSection = "master";
+    if (typeof window.goToDashboard !== "function") throw new Error("Dashboard startup: goToDashboard is unavailable");
+    await window.goToDashboard();
   }, { dateFrom: fixtureDateFrom, dateTo: fixtureDateTo });
   await page.waitForSelector("#db-shell-mount.dash-shell", { timeout: 30000 });
   await page.waitForFunction(() => {
     const mount = document.getElementById("db-shell-mount");
-    return !!(mount && mount._dashboardActiveSection);
+    return !!(mount && mount._dashboardActiveSection && mount._dashboardCurrentData && mount._dashboardCurrentData._loaded);
   }, null, { timeout: 30000 });
 }
 
@@ -597,6 +583,24 @@ async function main() {
     const mountWallClockMs = Date.now() - mountStart;
     report.initialLoad = { wallClockMs: mountWallClockMs };
     console.log(`[perf] initial mount complete in ${mountWallClockMs}ms (wall clock)`);
+
+    report.routeTimings = await page.evaluate(() => {
+      const entries = window.TaagerPerf ? window.TaagerPerf.entries() : [];
+      const latest = (name) => entries.filter((entry) => entry.type === "measure" && entry.name === name).pop();
+      const visible = latest("route:page-dashboard:click-to-visible");
+      const ready = latest("route:page-dashboard:click-to-data-ready");
+      return {
+        clickToVisibleMs: visible ? Math.round(visible.durationMs * 10) / 10 : null,
+        clickToDataReadyMs: ready ? Math.round(ready.durationMs * 10) / 10 : null
+      };
+    });
+    console.log("[perf] real Setup/Run -> Dashboard route:", JSON.stringify(report.routeTimings));
+    if (report.routeTimings.clickToVisibleMs == null || report.routeTimings.clickToVisibleMs > THRESHOLDS.routeVisibleMs) {
+      failures.push(`Dashboard route visible took ${report.routeTimings.clickToVisibleMs == null ? "no measurement" : report.routeTimings.clickToVisibleMs + "ms"} (limit ${THRESHOLDS.routeVisibleMs}ms)`);
+    }
+    if (report.routeTimings.clickToDataReadyMs == null || report.routeTimings.clickToDataReadyMs > THRESHOLDS.routeDataReadyMs) {
+      failures.push(`Dashboard route data-ready took ${report.routeTimings.clickToDataReadyMs == null ? "no measurement" : report.routeTimings.clickToDataReadyMs + "ms"} (limit ${THRESHOLDS.routeDataReadyMs}ms)`);
+    }
 
     report.dataIntegrity = await page.evaluate(() => ({
       activeAccountId: window.dashboardGeoData && window.dashboardGeoData.meta

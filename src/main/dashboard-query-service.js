@@ -933,8 +933,23 @@ function createDashboardQueryService(options) {
     });
   }
 
+  function productRankCompare(a, b) {
+    return (number(b.deliveredCount) - number(a.deliveredCount)) ||
+      (number(b.commission) - number(a.commission)) ||
+      String(a.key || "").localeCompare(String(b.key || ""));
+  }
+
   function productRows(input) {
     return cached("products", input, () => {
+      // Product aggregation is the expensive part of this query. Sorting,
+      // filtering, and pagination are only views over that aggregation, so do
+      // not let those controls create a fresh O(order-count) cache entry.
+      const baseInput = { ...(input || {}) };
+      [
+        "kind", "page", "pageSize", "sortBy", "sortDir", "filters",
+        "requestChannel", "timeoutMs", "allRows"
+      ].forEach((key) => { delete baseInput[key]; });
+      const base = cached("products-base", baseInput, () => {
       const { rows, ndrRows, scope, accounts } = scopedRows(input, { includeNdrUnion: true, includeCreatedUnion: true });
       const products = new Map();
       const globalOrderKeys = new Set();
@@ -1192,13 +1207,14 @@ function createDashboardQueryService(options) {
           campaignCount: 0,
         };
       });
+      const productByKey = new Map(list.map((product) => [product.key, product]));
       assignCampaignProducts(
         scopedCampaigns(scope, accounts, "all", input),
         list,
         input && input.productNameOverrides
       ).forEach((campaign) => {
         if (!campaign.attributionVerified) return;
-        const product = list.find((item) => item.key === campaign.productKey);
+        const product = productByKey.get(campaign.productKey);
         if (!product) return;
         product.adSpend += number(campaign.spend ?? campaign.convertedSpend ?? campaign.rawSpend);
         product.campaignCount += 1;
@@ -1231,6 +1247,24 @@ function createDashboardQueryService(options) {
         product.profitLoss = product.netProfit;
         product.scalingScore = Math.round(Math.max(0, Math.min(100, product.ndrPct + product.drRate)));
       });
+      // Rank is a property of the complete product set. Keeping it on the
+      // cached base also prevents filters or ascending sorts from renumbering
+      // products differently from the dashboard's default ranking.
+      const defaultRanked = list.slice().sort(productRankCompare);
+      const ranks = new Map(defaultRanked.map((product, index) => [product.key, index + 1]));
+      list.forEach((product) => { product.rank = ranks.get(product.key) || 0; });
+      return {
+        scope,
+        list,
+        isExpected,
+        totalOrders: globalNetOrderKeys.size,
+        totalOrderCount: globalOrderKeys.size,
+        rawTotalOrders: globalOrderKeys.size,
+        actualTotalCommission: globalDeliveredCommission,
+      };
+      });
+
+      let list = base.list.slice();
       const query = lower(input.filters && input.filters.search);
       if (query) list = list.filter((product) => lower(product.name + " " + product.sku).includes(query));
       const statusKey = text(input.filters && input.filters.statusKey);
@@ -1244,26 +1278,21 @@ function createDashboardQueryService(options) {
         }[statusKey];
         if (field) list = list.filter((product) => number(product[field]) > 0);
       }
-      // Sort matches legacy aggregator: deliveredCount desc, commission desc, key as alphabetical tie-breaker.
-      const productRankCompare = (a, b) => (number(b.deliveredCount) - number(a.deliveredCount)) || (number(b.commission) - number(a.commission)) || String(a.key || "").localeCompare(String(b.key || ""));
-      const defaultRanked = list.slice().sort(productRankCompare);
-      const ranks = new Map(defaultRanked.map((product, index) => [product.key, index + 1]));
-      list.forEach((product) => { product.rank = ranks.get(product.key) || 0; });
       const sortBy = text(input.sortBy) || "deliveredCount";
       list.sort(sortBy === "deliveredCount" && input.sortDir !== "asc" ? productRankCompare : compareRows(sortBy, input.sortDir === "asc" ? "asc" : "desc"));
       const pagination = pageInfo(input, list.length);
       return {
         ok: true,
         kind: "products",
-        scope,
+        scope: base.scope,
         summary: {
           uniqueProducts: list.length,
-          totalOrders: globalNetOrderKeys.size,
-          netOrderCount: globalNetOrderKeys.size,
-          totalOrderCount: globalOrderKeys.size,
-          rawTotalOrders: globalOrderKeys.size,
+          totalOrders: base.totalOrders,
+          netOrderCount: base.totalOrders,
+          totalOrderCount: base.totalOrderCount,
+          rawTotalOrders: base.rawTotalOrders,
           totalPieces: list.reduce((sum, product) => sum + product.totalPieces, 0),
-          totalCommission: isExpected ? list.reduce((sum, p) => sum + p.commission, 0) : globalDeliveredCommission,
+          totalCommission: base.isExpected ? list.reduce((sum, p) => sum + p.commission, 0) : base.actualTotalCommission,
           deliveredOrders: list.reduce((sum, product) => sum + product.deliveredCount, 0),
           campaignSpend: list.reduce((sum, product) => sum + product.allocatedAdSpend, 0),
           ndrPct: list.reduce((sum, product) => sum + product.netOrderCount, 0)

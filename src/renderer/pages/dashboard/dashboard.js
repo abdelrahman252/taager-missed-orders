@@ -141,6 +141,7 @@
       var sectionId = shellMount._dashboardActiveSection || 'master';
       if (marketingUiSections.indexOf(sectionId) === -1) {
         if (existing) existing.remove();
+        if (shellMount._dashboardActivePane) shellMount._dashboardActivePane.removeAttribute('aria-busy');
         return;
       }
       var accountId = window.getActiveAccountId ? window.getActiveAccountId() : '__all__';
@@ -151,11 +152,14 @@
       var unavailable = !!(state && state.status === 'connected' && state.error && !state.manualOverride);
       if (!pending && !unavailable) {
         if (existing) existing.remove();
+        if (shellMount._dashboardActivePane) shellMount._dashboardActivePane.removeAttribute('aria-busy');
         return;
       }
       var pane = shellMount._dashboardActivePane;
       if (!pane || !pane.isConnected) return;
       pane.style.position = 'relative';
+      if (pending) pane.setAttribute('aria-busy', 'true');
+      else pane.removeAttribute('aria-busy');
       var overlay = document.createElement('div');
       overlay.className = 'dashboard-marketing-pending-overlay';
       overlay.setAttribute('role', 'status');
@@ -181,6 +185,24 @@
         return;
       }
       if (existing) existing.remove();
+      if (pending && typeof window.dashboardProgressLoaderHTML === 'function') {
+        overlay.classList.add('dashboard-marketing-progress-overlay');
+        overlay.style.cssText = 'position:absolute;inset:0;z-index:40;display:flex;background:var(--dash-bg);border-radius:var(--dash-radius-xl);';
+        overlay.innerHTML = window.dashboardProgressLoaderHTML(sectionId);
+        pane.appendChild(overlay);
+        if (window.TaagerPreloader && typeof window.TaagerPreloader.dashboardRefresh === 'function') {
+          window.TaagerPreloader.dashboardRefresh({
+            smooth: true,
+            activity: 'Syncing connected marketing spend'
+          });
+        }
+        if (window.TaagerPreloader && typeof window.TaagerPreloader.dashboardStage === 'function') {
+          window.TaagerPreloader.dashboardStage('marketing', {
+            activity: 'Syncing connected marketing spend'
+          });
+        }
+        return;
+      }
       overlay.innerHTML = '<div style="width:min(440px,100%);padding:24px;border-radius:var(--dash-radius-xl);border:1px solid rgba(96,165,250,.25);background:var(--dash-surface);box-shadow:0 18px 60px rgba(0,0,0,.4);text-align:center;">' +
         (pending && window.dashboardMarketingLoadingHtml ? window.dashboardMarketingLoadingHtml() : '') +
         '<div style="margin-top:12px;font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:#f8fafc;">' + title + '</div>' +
@@ -283,7 +305,7 @@
     if (window._dashboardFetchState) setDashboardUpdateOverlay(window._dashboardFetchState);
 
     window.refreshDashboard = function () {
-      runAggregator(true);
+      return runAggregator(true);
     };
 
     function ensureMarketingStatusLoaded(data) {
@@ -765,11 +787,16 @@
     function syncMarketingAndRunAggregator(showLoader, reason) {
       dbg('syncMarketingAndRunAggregator:start', { showLoader: !!showLoader, reason: reason || '' });
       var marketingPromise = triggerMarketingSync(reason);
-      // On the first mount, run data aggregation and marketing concurrently but
-      // do not mount Section 8 until both are settled. Mounting it earlier makes
-      // the marketing/ROI notifications rebuild the entire visible section.
-      var initialRenderGate = dashboardHasCompletedInitialLoad ? null : marketingPromise;
-      return runAggregator(showLoader, initialRenderGate);
+      // Marketing and non-selected section bundles are background enhancements.
+      // The saved snapshot is enough to render the selected section, so neither
+      // may gate the first usable dashboard paint.
+      marketingPromise.catch(function (error) {
+        dbg('marketing-sync:background-failed', {
+          reason: reason || 'dashboard',
+          error: error && error.message ? error.message : String(error || '')
+        }, 'warn');
+      });
+      return runAggregator(showLoader, null);
     }
 
     window.syncDashboardMarketingOnOpen = function () {

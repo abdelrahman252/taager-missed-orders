@@ -4872,6 +4872,13 @@ button {
   transition-duration: 0s !important;
 }
 
+/* Row entrance animations start at opacity:0 in analytics.css. Dashboard motion
+   is intentionally disabled above, so settle those rows in their final state. */
+#page-dashboard .explorer-table tbody tr {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
 #dashboard-live-preloader .dashboard-live-ring {
   transition: --dashboard-loader-progress 280ms linear !important;
 }

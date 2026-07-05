@@ -45,7 +45,7 @@
     "verify:performance": "node scripts/verify-performance-architecture.js",
     "verify:marketing-optimization": "node scripts/verify-marketing-optimization.js",
     "verify:actual-financials": "node scripts/verify-actual-mode-financials.js",
-    "verify:dashboard-query": "node scripts/verify-dashboard-query-service.js",
+    "verify:dashboard-query": "node scripts/verify-dashboard-query-service.js && node tests/dashboard-product-sort-cache.test.js",
     "verify:dashboard:confirmation": "node scripts/verify-dashboard-confirmation-logic.js",
     "verify:dashboard-rollout": "node scripts/verify-dashboard-rollout.js",
     "qa:dashboard": "node scripts/qa-dashboard-responsive.js",

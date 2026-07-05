@@ -815,6 +815,20 @@ function renderSection5Hydrated(mountEl, data, ctx) {
   let backendProductDetailsCache = new Map();
   let backendProductOptions = [];
   let backendProductOptionsKey = '';
+  let backendDetailPrefetchTimer = null;
+  let backendDetailPrefetchIdle = null;
+
+  function cancelBackendDetailPrefetch() {
+    if (backendDetailPrefetchTimer) {
+      clearTimeout(backendDetailPrefetchTimer);
+      backendDetailPrefetchTimer = null;
+    }
+    if (backendDetailPrefetchIdle != null && typeof cancelIdleCallback === 'function') {
+      cancelIdleCallback(backendDetailPrefetchIdle);
+    }
+    backendDetailPrefetchIdle = null;
+  }
+  addProductCleanup(cancelBackendDetailPrefetch);
 
   const STATUS_PILLS = [
     { key:'all',        label: s5Txt('All', 'الكل'),          color:'#fff'     },
@@ -1895,14 +1909,14 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       </div>
 
       <!-- Actions cell -->
-      <div class="s5-cell s5-cell-actions" style="width:58px;min-width:58px;height:100%;min-height:${minH};flex-shrink:0;display:grid;grid-template-columns:repeat(2, 22px);grid-auto-rows:22px;align-content:center;justify-content:center;column-gap:4px;row-gap:5px;
-                  background-color:#080b12;background-image:${hs.bg.includes('linear-gradient') ? hs.bg : 'none'};position:sticky;right:0;z-index:2;border-left:1px solid var(--dash-border-soft, rgba(255,255,255,0.08));
-                  padding:4px;box-sizing:border-box;">
+      <div class="s5-cell s5-cell-actions" style="width:72px;min-width:72px;height:100%;min-height:${minH};flex-shrink:0;display:grid;grid-template-columns:repeat(2, 28px);grid-auto-rows:28px;align-content:center;justify-content:center;gap:6px;
+                  background:transparent;position:sticky;right:0;z-index:2;border-left:1px solid var(--dash-border-soft, rgba(255,255,255,0.08));
+                  padding:5px;box-sizing:border-box;">
         
         <!-- T-22: Show on map button -->
         <button class="s5-map-btn" data-product-key="${attr(productKey)}" data-tooltip="${s5Txt('Analyze cities for this product', 'تحليل المدن لهذا المنتج')}"
                 style="width:28px;height:28px;border-radius:var(--dash-radius-sm);border:1px solid rgba(20,184,166,0.3);
-                       background:rgba(20,184,166,0.1);color:#14b8a6;font-size:var(--type-label);
+                background:rgba(20,184,166,0.1);color:#14b8a6;font-size:var(--type-label);
                        display:flex;align-items:center;justify-content:center;cursor:pointer;
                        flex-shrink:0;padding:0;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none"><path d="M14.5 4.5 9.5 2 3 5.5v16l6.5-3.5 5 2.5 6.5-3.5v-16l-6.5 3.5Z"/><path d="M9.5 2v16"/><path d="M14.5 4.5v16"/></svg>
@@ -1911,7 +1925,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         <!-- Modal Details Button -->
         <button class="s5-modal-btn" data-modal-open="1" data-product-key="${attr(productKey)}" data-tooltip="${s5Txt('View full product details', 'عرض تفاصيل المنتج كاملة')}"
                 style="width:28px;height:28px;border-radius:var(--dash-radius-sm);border:1px solid rgba(139,92,246,0.3);
-                       background:rgba(139,92,246,0.1);color:#8b5cf6;
+                background:rgba(139,92,246,0.1);color:#8b5cf6;
                        display:flex;align-items:center;justify-content:center;cursor:pointer;
                        flex-shrink:0;padding:0;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
@@ -1920,7 +1934,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         <!-- Compare product button -->
         <button class="s5-compare-row-btn" data-compare-open="1" data-product-key="${attr(productKey)}" data-tooltip="${s5Txt('Compare this product', 'قارن هذا المنتج')}"
                 style="width:28px;height:28px;border-radius:var(--dash-radius-sm);border:1px solid rgba(245,158,11,0.38);
-                       background:rgba(245,158,11,0.12);color:#f59e0b;
+                background:rgba(245,158,11,0.12);color:#f59e0b;
                        display:flex;align-items:center;justify-content:center;cursor:pointer;
                        flex-shrink:0;padding:0;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none"><path d="M12 3v18"/><path d="M5 7h14"/><path d="M6 7l-4 7h8L6 7z"/><path d="M18 7l-4 7h8l-4-7z"/></svg>
@@ -1944,7 +1958,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     <!-- Detail panel -->
     <div class="s5-detail-panel" id="s5-detail-${i}"
          style="display:none;max-height:none;overflow:hidden;opacity:1;
-                padding:0 24px;
+                padding:0;
+                width:100%;max-width:var(--s5-detail-width, 100%);
                 margin-bottom:0;border-radius:var(--dash-radius-lg);
                 background:rgba(255,255,255,0.02);
                 border:1px solid rgba(255,255,255,0);
@@ -2068,11 +2083,11 @@ function renderSection5Hydrated(mountEl, data, ctx) {
   function statCardHTML(c, i) {
     const displayValue = c.displayValue != null ? String(c.displayValue) : productCompactNumber(c.value, 0, 10000);
     const titleValue = c.displayValue != null ? String(c.displayValue) : productNumber(c.value, 0);
-    return `<div class="s5-stat-card" style="flex:1;background:var(--dash-surface);border:1px solid ${c.color}28;border-radius:var(--dash-radius-lg);padding:14px 16px;direction:${isAr ? 'ltr' : 'rtl'};display:flex;flex-direction:row;align-items:center;gap:14px;position:relative;overflow:hidden">
+    return `<div class="s5-stat-card" style="min-height:112px;min-width:0;background:var(--dash-surface);border:1px solid ${c.color}28;border-radius:var(--dash-radius-lg);padding:16px 18px;direction:${isAr ? 'ltr' : 'rtl'};display:flex;flex-direction:row;align-items:center;gap:14px;position:relative;overflow:hidden;box-sizing:border-box">
       <div style="position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 20% 50%,${c.color}10 0%,transparent 65%)"></div>
       <div class="s5-stat-icon" style="width:46px;height:46px;border-radius:var(--dash-radius-md);flex-shrink:0;background:${c.color}22;border:1.5px solid ${c.color}35;display:flex;align-items:center;justify-content:center;position:relative;z-index:1">${statIconHTML(c.iconType, c.color)}</div>
-      <div style="flex:1;text-align:right;direction:${isAr ? 'rtl' : 'ltr'};position:relative;z-index:1">
-        <div class="s5-stat-label" style="font-size:var(--type-micro);color:rgba(255,255,255,0.35);font-weight:var(--weight-semibold);margin-bottom:4px;line-height:1.3">${c.label}</div>
+      <div style="flex:1;min-width:0;text-align:right;direction:${isAr ? 'rtl' : 'ltr'};position:relative;z-index:1">
+        <div class="s5-stat-label" style="min-height:32px;display:flex;align-items:flex-end;justify-content:flex-end;font-size:var(--type-micro);color:rgba(255,255,255,0.35);font-weight:var(--weight-semibold);margin-bottom:4px;line-height:1.3">${c.label}</div>
         <div id="s5-stat-${i}" class="s5-stat-value s5-number-fit" title="${attr(titleValue)}" style="font-size:var(--type-page-title);font-weight:var(--weight-bold);color:#fff;line-height:1;letter-spacing:0">${esc(displayValue)}</div>
         <div class="s5-stat-unit" data-stat-unit="${i}" style="font-size:var(--type-micro);color:${c.color};font-weight:var(--weight-bold);margin-top:4px;letter-spacing:0.3px">${c.unit}</div>
       </div>
@@ -2318,7 +2333,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       <div style="width:1px"></div>
       ${colHeaderBtn(s5Txt('Taager Profit After Tax', 'ربح تاجر بعد الضريبة'),'commission','flex:0 0 80px')}
       <div style="width:1px"></div>
-      <div class="s5-header-actions" style="width:58px;flex:0 0 58px;text-align:center;font-size:var(--type-micro);color:rgba(255,255,255,0.3);font-weight:var(--weight-bold);position:sticky;right:0;background:var(--dash-bg, #080b12);z-index:10;border-left:1px solid var(--dash-border-soft, rgba(255,255,255,0.08));">${s5Txt('Actions', 'إجراءات')}</div>
+      <div class="s5-header-actions" style="width:72px;flex:0 0 72px;text-align:center;font-size:var(--type-micro);color:rgba(255,255,255,0.3);font-weight:var(--weight-bold);position:sticky;right:0;background:var(--dash-bg, #080b12);z-index:10;border-left:1px solid var(--dash-border-soft, rgba(255,255,255,0.08));">${s5Txt('Actions', 'إجراءات')}</div>
     </div>`;
   }
 
@@ -2328,17 +2343,24 @@ function renderSection5Hydrated(mountEl, data, ctx) {
   mountEl.innerHTML = `
     <style>
       .s5-root {
+        --s5-track-width: 2100px;
         --s5-row-num-size: 13px;
         --s5-row-num-size-strong: 16px;
         --s5-name-size: 13px;
         --s5-sku-size: 10px;
       }
       #page-dashboard .dash-shell:not(.dash-size-sm):not(.dash-size-xs) .s5-metrics-track {
-        min-width: 1468px !important;
-        width: max-content !important;
+        min-width: var(--s5-track-width) !important;
+        width: 100% !important;
       }
       #page-dashboard .dash-shell:not(.dash-size-sm):not(.dash-size-xs) .s5-product-row {
         max-width: none !important;
+      }
+      .s5-detail-panel {
+        min-width: 0;
+      }
+      .s5-detail-panel > * {
+        min-width: 0;
       }
       .s5-number-fit {
         display: inline-block;
@@ -2358,46 +2380,46 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         box-sizing: border-box;
         overflow: hidden;
       }
-      .s5-cell-identity { flex-basis:188px !important; min-width:188px !important; padding-inline:8px !important; }
+      .s5-cell-identity { flex-basis:260px !important; min-width:260px !important; padding-inline:14px !important; }
       .s5-cell-orders,
       .s5-cell-net-orders,
       .s5-cell-confirmed-count,
       .s5-cell-shipping,
       .s5-cell-delivered-count,
-      .s5-cell-failed { flex-basis:58px !important; min-width:58px !important; }
-      .s5-cell-pieces { flex-basis:62px !important; min-width:62px !important; }
-      .s5-cell-canceled-raw { flex-basis:60px !important; min-width:60px !important; }
+      .s5-cell-failed { flex-basis:78px !important; min-width:78px !important; }
+      .s5-cell-pieces { flex-basis:82px !important; min-width:82px !important; }
+      .s5-cell-canceled-raw { flex-basis:82px !important; min-width:82px !important; }
       .s5-cell-confirmation,
       .s5-cell-cancel,
       .s5-cell-pending,
-      .s5-cell-delivery { flex-basis:64px !important; min-width:64px !important; }
-      .s5-cell-ndr { flex-basis:60px !important; min-width:60px !important; }
+      .s5-cell-delivery { flex-basis:88px !important; min-width:88px !important; }
+      .s5-cell-ndr { flex-basis:82px !important; min-width:82px !important; }
       .s5-cell-average-profit,
       .s5-cell-ad-spend,
-      .s5-cell-commission { flex-basis:72px !important; min-width:72px !important; }
-      .s5-cell-cpa { flex-basis:64px !important; min-width:64px !important; }
+      .s5-cell-commission { flex-basis:104px !important; min-width:104px !important; }
+      .s5-cell-cpa { flex-basis:90px !important; min-width:90px !important; }
       .s5-cell-breakeven,
-      .s5-cell-pnl { flex-basis:68px !important; min-width:68px !important; }
-      .s5-header-cols > .s5-header-product { flex-basis:188px !important; min-width:188px !important; }
+      .s5-cell-pnl { flex-basis:100px !important; min-width:100px !important; }
+      .s5-header-cols > .s5-header-product { flex-basis:260px !important; min-width:260px !important; }
       .s5-header-cols .s5-sort-col[data-field="totalOrderCount"],
       .s5-header-cols .s5-sort-col[data-field="netOrderCount"],
       .s5-header-cols .s5-sort-col[data-field="confirmationStatusCount"],
       .s5-header-cols .s5-sort-col[data-field="shippingCount"],
       .s5-header-cols .s5-sort-col[data-field="deliveredCount"],
-      .s5-header-cols .s5-sort-col[data-field="failedCount"] { flex-basis:58px !important; min-width:58px !important; }
-      .s5-header-cols .s5-sort-col[data-field="totalPieces"] { flex-basis:62px !important; min-width:62px !important; }
-      .s5-header-cols .s5-sort-col[data-field="canceledCount"] { flex-basis:60px !important; min-width:60px !important; }
+      .s5-header-cols .s5-sort-col[data-field="failedCount"] { flex-basis:78px !important; min-width:78px !important; }
+      .s5-header-cols .s5-sort-col[data-field="totalPieces"] { flex-basis:82px !important; min-width:82px !important; }
+      .s5-header-cols .s5-sort-col[data-field="canceledCount"] { flex-basis:82px !important; min-width:82px !important; }
       .s5-header-cols .s5-sort-col[data-field="confirmationPct"],
       .s5-header-cols .s5-sort-col[data-field="cancelPct"],
       .s5-header-cols .s5-sort-col[data-field="pendingPct"],
-      .s5-header-cols .s5-sort-col[data-field="drRate"] { flex-basis:64px !important; min-width:64px !important; }
-      .s5-header-cols .s5-sort-col[data-field="ndrPct"] { flex-basis:60px !important; min-width:60px !important; }
+      .s5-header-cols .s5-sort-col[data-field="drRate"] { flex-basis:88px !important; min-width:88px !important; }
+      .s5-header-cols .s5-sort-col[data-field="ndrPct"] { flex-basis:82px !important; min-width:82px !important; }
       .s5-header-cols .s5-sort-col[data-field="averageProfit"],
       .s5-header-cols .s5-sort-col[data-field="allocatedAdSpend"],
-      .s5-header-cols .s5-sort-col[data-field="commission"] { flex-basis:72px !important; min-width:72px !important; }
-      .s5-header-cols .s5-sort-col[data-field="cpa"] { flex-basis:64px !important; min-width:64px !important; }
+      .s5-header-cols .s5-sort-col[data-field="commission"] { flex-basis:104px !important; min-width:104px !important; }
+      .s5-header-cols .s5-sort-col[data-field="cpa"] { flex-basis:90px !important; min-width:90px !important; }
       .s5-header-cols .s5-sort-col[data-field="breakEvenCpa"],
-      .s5-header-cols .s5-sort-col[data-field="profitLoss"] { flex-basis:68px !important; min-width:68px !important; }
+      .s5-header-cols .s5-sort-col[data-field="profitLoss"] { flex-basis:100px !important; min-width:100px !important; }
       .s5-cell > div {
         max-width: 100%;
       }
@@ -2409,8 +2431,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         font-size: var(--s5-sku-size) !important;
       }
       .s5-cell-actions button {
-        width: 22px !important;
-        height: 22px !important;
+        width: 28px !important;
+        height: 28px !important;
       }
       .s5-cell [data-financial-currency] {
         font-size:var(--type-micro) !important;
@@ -2502,6 +2524,9 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       .s5-qty-city-grid {
         grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
       }
+      .s5-detail-panel .s5-qty-city-grid {
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)) !important;
+      }
       .s5-modal-analysis-wide {
         grid-column: 1 / -1 !important;
       }
@@ -2513,10 +2538,12 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       }
       @media (max-width: 1180px) {
         .s5-qty-city-grid, .s5-quick-analysis-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+        .s5-detail-panel .s5-qty-city-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
         .s5-qty-city-grid.s5-modal-qty-city-grid { grid-template-columns: 1fr !important; }
       }
       @media (max-width: 760px) {
         .s5-qty-city-grid, .s5-quick-analysis-grid { grid-template-columns: 1fr !important; }
+        .s5-detail-panel .s5-qty-city-grid { grid-template-columns: 1fr !important; }
         .s5-modal-analysis-grid { grid-template-columns: 1fr !important; padding: 16px !important; }
       }
 
@@ -2703,9 +2730,10 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       }
       @media (max-width: 1366px) {
         #page-dashboard .dash-shell:not(.dash-size-sm):not(.dash-size-xs) .s5-metrics-track {
-          min-width: 1400px !important;
+          min-width: var(--s5-track-width) !important;
         }
         .s5-root {
+          --s5-track-width: 2100px;
           --s5-row-num-size: 12px;
           --s5-row-num-size-strong: 14px;
           --s5-name-size: 12px;
@@ -2748,9 +2776,9 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           padding-inline: 3px !important;
         }
         .s5-cell-identity {
-          flex-basis: 176px !important;
-          min-width: 176px !important;
-          padding: 8px 7px !important;
+          flex-basis: 260px !important;
+          min-width: 260px !important;
+          padding: 8px 14px !important;
           gap: 7px !important;
         }
         .s5-cell-identity button.s5-product-name-edit {
@@ -2764,33 +2792,32 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         .s5-cell-net-orders,
         .s5-cell-confirmed-count,
         .s5-cell-shipping,
-        .s5-cell-delivered-count { flex-basis: 58px !important; min-width: 58px !important; }
-        .s5-cell-pieces { flex-basis: 62px !important; min-width: 62px !important; }
-        .s5-cell-failed { flex-basis: 62px !important; min-width: 62px !important; }
-        .s5-cell-canceled-raw { flex-basis: 62px !important; min-width: 62px !important; }
+        .s5-cell-delivered-count { flex-basis: 78px !important; min-width: 78px !important; }
+        .s5-cell-pieces { flex-basis: 82px !important; min-width: 82px !important; }
+        .s5-cell-failed { flex-basis: 78px !important; min-width: 78px !important; }
+        .s5-cell-canceled-raw { flex-basis: 82px !important; min-width: 82px !important; }
         .s5-cell-confirmation,
         .s5-cell-cancel,
         .s5-cell-pending,
-        .s5-cell-delivery { flex-basis: 66px !important; min-width: 66px !important; }
-        .s5-cell-ndr { flex-basis: 60px !important; min-width: 60px !important; }
-        .s5-cell-average-profit { flex-basis: 72px !important; min-width: 72px !important; }
-        .s5-cell-ad-spend { flex-basis: 70px !important; min-width: 70px !important; }
-        .s5-cell-cpa { flex-basis: 64px !important; min-width: 64px !important; }
-        .s5-cell-breakeven { flex-basis: 68px !important; min-width: 68px !important; }
-        .s5-cell-pnl { flex-basis: 68px !important; min-width: 68px !important; }
-        .s5-cell-commission { flex-basis: 70px !important; min-width: 70px !important; }
+        .s5-cell-delivery { flex-basis: 88px !important; min-width: 88px !important; }
+        .s5-cell-ndr { flex-basis: 82px !important; min-width: 82px !important; }
+        .s5-cell-average-profit { flex-basis: 104px !important; min-width: 104px !important; }
+        .s5-cell-ad-spend { flex-basis: 104px !important; min-width: 104px !important; }
+        .s5-cell-cpa { flex-basis: 90px !important; min-width: 90px !important; }
+        .s5-cell-breakeven { flex-basis: 100px !important; min-width: 100px !important; }
+        .s5-cell-pnl { flex-basis: 100px !important; min-width: 100px !important; }
+        .s5-cell-commission { flex-basis: 104px !important; min-width: 104px !important; }
         .s5-cell-actions {
-          width: 56px !important;
-          min-width: 56px !important;
-          grid-template-columns: repeat(2, 21px) !important;
-          grid-auto-rows: 21px !important;
-          column-gap: 4px !important;
-          row-gap: 5px !important;
-          padding: 4px !important;
+          width: 72px !important;
+          min-width: 72px !important;
+          grid-template-columns: repeat(2, 28px) !important;
+          grid-auto-rows: 28px !important;
+          gap: 6px !important;
+          padding: 5px !important;
         }
         .s5-cell-actions button {
-          width: 21px !important;
-          height: 21px !important;
+          width: 28px !important;
+          height: 28px !important;
         }
         .s5-cell .s5-number-fit {
           font-size: var(--s5-row-num-size) !important;
@@ -2801,9 +2828,9 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           font-size: var(--s5-row-num-size-strong) !important;
         }
         .s5-header-cols > div:first-child {
-          flex-basis: 176px !important;
-          min-width: 176px !important;
-          padding-inline-start: 7px !important;
+          flex-basis: 260px !important;
+          min-width: 260px !important;
+          padding-inline-start: 14px !important;
           padding-right: 0 !important;
           font-size:var(--type-micro) !important;
           text-align: start !important;
@@ -2816,25 +2843,25 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         .s5-header-cols .s5-sort-col[data-field="netOrderCount"],
         .s5-header-cols .s5-sort-col[data-field="confirmationStatusCount"],
         .s5-header-cols .s5-sort-col[data-field="shippingCount"],
-        .s5-header-cols .s5-sort-col[data-field="deliveredCount"] { flex-basis: 58px !important; min-width: 58px !important; }
-        .s5-header-cols .s5-sort-col[data-field="totalPieces"] { flex-basis: 62px !important; min-width: 62px !important; }
-        .s5-header-cols .s5-sort-col[data-field="failedCount"] { flex-basis: 62px !important; min-width: 62px !important; }
-        .s5-header-cols .s5-sort-col[data-field="canceledCount"] { flex-basis: 62px !important; min-width: 62px !important; }
+        .s5-header-cols .s5-sort-col[data-field="deliveredCount"] { flex-basis: 78px !important; min-width: 78px !important; }
+        .s5-header-cols .s5-sort-col[data-field="totalPieces"] { flex-basis: 82px !important; min-width: 82px !important; }
+        .s5-header-cols .s5-sort-col[data-field="failedCount"] { flex-basis: 78px !important; min-width: 78px !important; }
+        .s5-header-cols .s5-sort-col[data-field="canceledCount"] { flex-basis: 82px !important; min-width: 82px !important; }
         .s5-header-cols .s5-sort-col[data-field="confirmationPct"],
         .s5-header-cols .s5-sort-col[data-field="cancelPct"],
         .s5-header-cols .s5-sort-col[data-field="pendingPct"],
-        .s5-header-cols .s5-sort-col[data-field="drRate"] { flex-basis: 66px !important; min-width: 66px !important; }
-        .s5-header-cols .s5-sort-col[data-field="ndrPct"] { flex-basis: 60px !important; min-width: 60px !important; }
-        .s5-header-cols .s5-sort-col[data-field="averageProfit"] { flex-basis: 72px !important; min-width: 72px !important; }
-        .s5-header-cols .s5-sort-col[data-field="allocatedAdSpend"] { flex-basis: 70px !important; min-width: 70px !important; }
-        .s5-header-cols .s5-sort-col[data-field="cpa"] { flex-basis: 64px !important; min-width: 64px !important; }
-        .s5-header-cols .s5-sort-col[data-field="breakEvenCpa"] { flex-basis: 68px !important; min-width: 68px !important; }
-        .s5-header-cols .s5-sort-col[data-field="profitLoss"] { flex-basis: 68px !important; min-width: 68px !important; }
-        .s5-header-cols .s5-sort-col[data-field="commission"] { flex-basis: 70px !important; min-width: 70px !important; }
+        .s5-header-cols .s5-sort-col[data-field="drRate"] { flex-basis: 88px !important; min-width: 88px !important; }
+        .s5-header-cols .s5-sort-col[data-field="ndrPct"] { flex-basis: 82px !important; min-width: 82px !important; }
+        .s5-header-cols .s5-sort-col[data-field="averageProfit"] { flex-basis: 104px !important; min-width: 104px !important; }
+        .s5-header-cols .s5-sort-col[data-field="allocatedAdSpend"] { flex-basis: 104px !important; min-width: 104px !important; }
+        .s5-header-cols .s5-sort-col[data-field="cpa"] { flex-basis: 90px !important; min-width: 90px !important; }
+        .s5-header-cols .s5-sort-col[data-field="breakEvenCpa"] { flex-basis: 100px !important; min-width: 100px !important; }
+        .s5-header-cols .s5-sort-col[data-field="profitLoss"] { flex-basis: 100px !important; min-width: 100px !important; }
+        .s5-header-cols .s5-sort-col[data-field="commission"] { flex-basis: 104px !important; min-width: 104px !important; }
         .s5-header-cols > div:last-child {
-          width: 56px !important;
-          min-width: 56px !important;
-          flex: 0 0 56px !important;
+          width: 72px !important;
+          min-width: 72px !important;
+          flex: 0 0 72px !important;
           font-size:var(--type-micro) !important;
         }
       }
@@ -2896,7 +2923,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
       <!-- Non-scrolling block -->
       <div style="padding:22px 28px 0;flex-shrink:0">
-        <div class="s5-stat-row" style="display:flex;gap:12px;margin-bottom:20px;align-items:stretch">
+        <div class="s5-stat-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:20px;align-items:stretch">
           ${STAT_CARDS.map((c, i) => statCardHTML(c, i)).join('')}
         </div>
         ${filterBarHTML(initialProductList)}
@@ -2904,7 +2931,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
       <!-- Scroll wrapper -->
       <div id="s5-scroll-wrapper" style="flex:0 0 auto;overflow-x:auto;overflow-y:visible;min-height:0;width:100%">
-        <div style="padding:0 28px 22px;width:max-content;min-width:100%;box-sizing:border-box">
+        <div style="padding:0 28px 22px;min-width:100%;box-sizing:border-box">
           ${columnHeadersHTML()}
           <div id="s5-rows">
             ${initialPageProducts.length ? initialPageProducts.map((p, i) => productRowHTML(p, i)).join('') : `
@@ -2934,6 +2961,35 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     </div>`;
 
   // ── Sort arrows sync ──────────────────────────────────────────────────────
+  function syncProductDetailWidth() {
+    var wrapper = mountEl.querySelector('#s5-scroll-wrapper');
+    var root = mountEl.querySelector('.s5-root') || mountEl;
+    var available = (wrapper && wrapper.clientWidth) || mountEl.clientWidth || window.innerWidth || 0;
+    var width = Math.max(320, available - 56);
+    root.style.setProperty('--s5-detail-width', width + 'px');
+  }
+
+  function alignDetailPanelToViewport(panel) {
+    if (!panel) return;
+    var wrapper = mountEl.querySelector('#s5-scroll-wrapper');
+    var scrollLeft = wrapper ? Number(wrapper.scrollLeft || 0) : 0;
+    panel.style.marginInlineStart = Math.max(0, scrollLeft) + 'px';
+  }
+
+  syncProductDetailWidth();
+  var s5ResizeObserver = null;
+  if (typeof ResizeObserver === 'function') {
+    var resizeTarget = mountEl.querySelector('#s5-scroll-wrapper') || mountEl;
+    s5ResizeObserver = new ResizeObserver(syncProductDetailWidth);
+    s5ResizeObserver.observe(resizeTarget);
+  } else {
+    window.addEventListener('resize', syncProductDetailWidth);
+  }
+  addProductCleanup(function () {
+    if (s5ResizeObserver) s5ResizeObserver.disconnect();
+    else window.removeEventListener('resize', syncProductDetailWidth);
+  });
+
   function updateSortArrows() {
     mountEl.querySelectorAll('.s5-sort-arrow').forEach(arrow => {
       if (arrow.dataset.field === sortState.field) {
@@ -2961,6 +3017,15 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     }, 0);
   }
 
+  function productSortRenderOptions() {
+    return {
+      keepFilterBar: true,
+      interactionStartedAt: typeof performance !== 'undefined' && performance.now
+        ? performance.now()
+        : null
+    };
+  }
+
   function renderProductPage(options) {
     options = options || {};
     if (backendProductsEnabled && !options.backendReady) {
@@ -2970,13 +3035,19 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       if (isCached) {
         options.backendReady = true;
       } else {
-        // Pre-render the filter bar so clicked pills/options immediately show active state
+        // Reflect the interaction immediately while the backend returns the
+        // newly sorted page. This mirrors Section 9's instant table controls.
         const filterBarEl = mountEl.querySelector('#s5-filter-bar');
-        if (filterBarEl && !options.keepFilterBar) {
+        if (filterBarEl) {
           const list = currentList();
-          filterBarEl.outerHTML = filterBarHTML(list);
-          bindFilterBar();
+          if (options.keepFilterBar) {
+            _refreshFilterBarInPlace(list);
+          } else {
+            filterBarEl.outerHTML = filterBarHTML(list);
+            bindFilterBar();
+          }
         }
+        updateSortArrows();
 
         requestBackendProductPage(false).then(function (ok) {
           if (ok && mountEl.isConnected && !mountEl.hidden && mountEl._s5RenderToken === renderToken) {
@@ -3029,25 +3100,36 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     updateSortArrows();
     _bindProductRowClicks();
     if (_s5SelectedProductKey) _selectS5Row(_s5SelectedProductKey);
+    if (options.interactionStartedAt != null && typeof performance !== 'undefined' && performance.now) {
+      mountEl._s5LastSortDurationMs = performance.now() - options.interactionStartedAt;
+    }
 
     // ── Eager prefetch: load backend details for all visible products now ─────
     // So when a user clicks any row, loadBackendProductDetails returns from
     // cache (Promise.resolve) instead of firing a real query.
+    cancelBackendDetailPrefetch();
     if (window.DashboardQueryRuntime && typeof window.DashboardQueryRuntime.query === 'function') {
       var _prefetchKeys = visibleProducts
         .filter(function (p) { return p && p.key && !backendProductDetailsCache.has(p.key); })
         .map(function (p) { return p.key; });
       if (_prefetchKeys.length) {
         var _doPrefetch = function () {
+          backendDetailPrefetchIdle = null;
           if (mountEl.isConnected && !mountEl.hidden && mountEl._s5RenderToken === renderToken) {
             loadBackendProductDetails(_prefetchKeys);
           }
         };
-        if (typeof requestIdleCallback === 'function') {
-          requestIdleCallback(_doPrefetch, { timeout: 800 });
-        } else {
-          setTimeout(_doPrefetch, 100);
-        }
+        // A fresh sort/page interaction should win over speculative detail
+        // work. Wait briefly, then use idle time; a subsequent render cancels
+        // this task before it can compete with the visible table update.
+        backendDetailPrefetchTimer = setTimeout(function () {
+          backendDetailPrefetchTimer = null;
+          if (typeof requestIdleCallback === 'function') {
+            backendDetailPrefetchIdle = requestIdleCallback(_doPrefetch, { timeout: 1000 });
+          } else {
+            _doPrefetch();
+          }
+        }, 250);
       }
     }
   }
@@ -3246,7 +3328,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           '<span style="font-size:var(--type-body);line-height:1">' + opt.icon + '</span><span>' + opt.label + '</span>' +
         '</button>';
       }).join('');
-    bodyMenu.style.cssText = 'position:fixed;display:none;background:#0f1523;border:1px solid rgba(255,255,255,0.14);border-radius:var(--dash-radius-md);overflow-y:auto;overflow-x:hidden;z-index:2147483647;min-width:180px;max-height:min(360px,48vh);direction:' + (isAr ? 'rtl' : 'ltr');
+    bodyMenu.style.cssText = 'position:fixed;display:none;background:#0f1523;border:1px solid rgba(255,255,255,0.14);border-radius:var(--dash-radius-md);overflow-y:auto;overflow-x:hidden;z-index:2147483647;min-width:180px;max-height:min(520px,calc(100vh - 96px));direction:' + (isAr ? 'rtl' : 'ltr');
     document.body.appendChild(bodyMenu);
     bodyMenu.addEventListener('click', function (event) {
       const option = event.target.closest('.s5-sort-option');
@@ -3255,7 +3337,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       sortState.dir = sortState.field === 'default' ? 'asc' : 'desc';
       currentPage = 1;
       closeProductSortMenu();
-      renderProductPage({ keepFilterBar: true });
+      renderProductPage(productSortRenderOptions());
       updateSortArrows();
     });
 
@@ -3291,8 +3373,14 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     const rect = trigger.getBoundingClientRect();
     bodyMenu.style.display = 'block';
     const menuWidth = bodyMenu.offsetWidth || 180;
-    bodyMenu.style.top = (rect.bottom + 6) + 'px';
-    bodyMenu.style.left = Math.max(8, rect.right - menuWidth) + 'px';
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
+    const spaceBelow = Math.max(80, viewportHeight - rect.bottom - 14);
+    const spaceAbove = Math.max(80, rect.top - 14);
+    const openAbove = spaceBelow < 240 && spaceAbove > spaceBelow;
+    const availableHeight = Math.max(140, Math.min(520, openAbove ? spaceAbove : spaceBelow));
+    bodyMenu.style.maxHeight = availableHeight + 'px';
+    bodyMenu.style.top = (openAbove ? Math.max(8, rect.top - availableHeight - 6) : rect.bottom + 6) + 'px';
+    bodyMenu.style.left = Math.max(8, Math.min(rect.right - menuWidth, (window.innerWidth || document.documentElement.clientWidth || 1280) - menuWidth - 8)) + 'px';
     trigger.classList.add('open');
     _dropdownOpen = true;
   }
@@ -3334,18 +3422,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       });
     }
 
-    const clearBtn = mountEl.querySelector('#s5-search-clear');
-    if (clearBtn) clearBtn.addEventListener('click', () => {
-      filterState.search = '';
-      currentPage = 1;
-      const searchInput = mountEl.querySelector('#s5-search');
-      if (searchInput) {
-        searchInput.value = '';
-        searchInput.focus();
-      }
-      syncSearchClearButton();
-      renderProductPage({ keepFilterBar: true });
-    });
+    // Search clearing is handled by the root delegated listener. Keeping a
+    // second listener here caused two renders and two backend requests.
     syncSearchClearButton();
     bindProductCurrencySelect();
 
@@ -3576,7 +3654,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         currentPage = 1;
         const headers = mountEl.querySelector('.s5-header-cols');
         if (headers) headers.outerHTML = columnHeadersHTML();
-        renderProductPage({ keepFilterBar: true });
+        renderProductPage(productSortRenderOptions());
         updateSortArrows();
         return;
       }
@@ -3591,7 +3669,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           sortState.dir   = 'desc';
         }
         currentPage = 1;
-        renderProductPage({ keepFilterBar: true });
+        renderProductPage(productSortRenderOptions());
         updateSortArrows();
         return;
       }
@@ -3599,7 +3677,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       if (target.closest('#s5-sort-dir-btn')) {
         sortState.dir = sortState.dir === 'desc' ? 'asc' : 'desc';
         currentPage = 1;
-        renderProductPage({ keepFilterBar: true });
+        renderProductPage(productSortRenderOptions());
         updateSortArrows();
         return;
       }
@@ -3607,7 +3685,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       if (target.closest('#s5-clear-sort')) {
         sortState = { field: 'default', dir: 'asc' };
         currentPage = 1;
-        renderProductPage({ keepFilterBar: true });
+        renderProductPage(productSortRenderOptions());
         updateSortArrows();
         return;
       }
@@ -3655,7 +3733,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         const isOpen = panel && panel.style.display !== 'none';
         mountEl.querySelectorAll('.s5-detail-panel').forEach(function (item) {
           item.style.display = 'none';
-          item.style.padding = '0 24px';
+          item.style.padding = '0';
+          item.style.marginInlineStart = '0';
           item.style.marginBottom = '0';
           item.style.borderColor = 'rgba(255,255,255,0)';
         });
@@ -3666,6 +3745,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
           // Show the panel open immediately with a skeleton, fill content next frame
           panel.innerHTML = _s5ExpandSkeleton();
+          syncProductDetailWidth();
+          alignDetailPanelToViewport(panel);
           panel.style.display = 'block';
           panel.style.padding = '20px 24px';
           panel.style.marginBottom = '8px';
@@ -3783,12 +3864,14 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
   function scrollToRows() {
     const root = mountEl.querySelector('.s5-root');
+    const wrapper = mountEl.querySelector('#s5-scroll-wrapper');
     if (root) {
       root.scrollTop = 0;
-      return;
     }
-    const wrapper = mountEl.querySelector('#s5-scroll-wrapper');
-    if (wrapper) wrapper.scrollTop = 0;
+    if (wrapper) {
+      wrapper.scrollTop = 0;
+      wrapper.scrollLeft = 0;
+    }
   }
 
   function aiTextKey(value) {
@@ -4358,9 +4441,9 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       var displaySku = product ? String(product.sku || '') : '';
       var placeholder = s5Txt('Search products...', 'ابحث عن منتج...');
       var triggerInner = product
-        ? '<span style="display:flex;flex-direction:column;align-items:flex-start;min-width:0;flex:1;gap:1px"><span class="s5-product-data-text" data-i18n-preserve style="font-size:var(--type-label);font-weight:var(--weight-bold);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">' + displayName + '</span>' +
+        ? '<span style="display:flex;flex-direction:column;align-items:flex-start;min-width:0;max-width:100%;overflow:hidden;flex:1 1 0;gap:1px"><span class="s5-product-data-text" data-i18n-preserve style="font-size:var(--type-label);font-weight:var(--weight-bold);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">' + displayName + '</span>' +
           (displaySku ? skuCopyHtml(displaySku, { style: 'font-size:var(--type-micro);color:rgba(255,255,255,0.42);font-weight:var(--weight-bold)' }) : '') + '</span>'
-        : '<span style="font-size:var(--type-label);color:rgba(255,255,255,0.35);font-weight:var(--weight-bold);flex:1">' + placeholder + '</span>';
+        : '<span style="font-size:var(--type-label);color:rgba(255,255,255,0.35);font-weight:var(--weight-bold);flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + placeholder + '</span>';
       var options = productOptionSource().map(function (pr, idx) {
         var key = productKeyOf(pr, idx);
         var name = pr.name || s5Txt('Unnamed', 'بدون اسم');
@@ -4375,16 +4458,16 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           (selected ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="' + sideColor + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '') +
         '</div>';
       }).join('');
-      return '<div class="s5-cmp-dd-wrap" data-side="' + side + '" style="margin-bottom:14px;position:relative">' +
+      return '<div class="s5-cmp-dd-wrap" data-side="' + side + '" style="margin-bottom:14px;position:relative;min-width:0">' +
         '<div style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:' + sideColor + ';margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px">' + label + '</div>' +
-        '<div role="button" tabindex="0" class="s5-cmp-dd-trigger" data-side="' + side + '" style="width:100%;min-height:44px;border-radius:var(--dash-radius-md);border:1px solid ' + (product ? sideColor + '55' : 'rgba(255,255,255,0.12)') + ';background:' + (product ? 'rgba(255,255,255,0.055)' : 'rgba(255,255,255,0.035)') + ';color:#fff;padding:0 12px;font-size:var(--type-label);font-weight:var(--weight-bold);font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:10px;text-align:start;box-sizing:border-box;outline:none">' +
+        '<div role="button" tabindex="0" class="s5-cmp-dd-trigger" data-side="' + side + '" style="width:100%;min-height:44px;min-width:0;border-radius:var(--dash-radius-md);border:1px solid ' + (product ? sideColor + '55' : 'rgba(255,255,255,0.12)') + ';background:' + (product ? 'rgba(255,255,255,0.055)' : 'rgba(255,255,255,0.035)') + ';color:#fff;padding:0 12px;font-size:var(--type-label);font-weight:var(--weight-bold);font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:10px;text-align:start;box-sizing:border-box;outline:none;overflow:hidden">' +
           (product ? '<span style="width:28px;height:28px;border-radius:var(--dash-radius-sm);flex-shrink:0;background:' + sideColor + '22;border:1px solid ' + sideColor + '55;color:' + sideColor + ';display:flex;align-items:center;justify-content:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>' : '<span style="width:28px;height:28px;border-radius:var(--dash-radius-sm);flex-shrink:0;background:rgba(255,255,255,0.05);border:1px solid var(--dash-border-soft);color:rgba(255,255,255,0.3);display:flex;align-items:center;justify-content:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>') +
           triggerInner +
           '<svg class="s5-cmp-dd-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:rgba(255,255,255,0.35)"><polyline points="6 9 12 15 18 9"/></svg>' +
         '</div>' +
-        '<div class="s5-cmp-dd-panel" data-side="' + side + '" style="display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:99999;background:#0d1526;border:1px solid rgba(255,255,255,0.13);border-radius:var(--dash-radius-lg);overflow:hidden;flex-direction:column;max-height:min(320px,42vh)">' +
+        '<div class="s5-cmp-dd-panel" data-side="' + side + '" style="display:none;position:absolute;top:calc(100% + 6px);inset-inline:0;z-index:30;background:#0d1526;border:1px solid rgba(255,255,255,0.13);border-radius:var(--dash-radius-lg);overflow:hidden;flex-direction:column;max-height:min(320px,42vh);width:100%;box-sizing:border-box;box-shadow:0 18px 36px rgba(0,0,0,0.38)">' +
           '<div style="padding:10px 10px 8px;border-bottom:1px solid rgba(255,255,255,0.07)"><input type="text" class="s5-cmp-dd-search" placeholder="' + attr(placeholder) + '" style="width:100%;height:36px;border-radius:var(--dash-radius-sm);border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:#fff;padding:0 10px;font-size:var(--type-label);font-weight:var(--weight-bold);font-family:inherit;outline:none;box-sizing:border-box;direction:' + (isAr ? 'rtl' : 'ltr') + '"></div>' +
-          '<div class="s5-cmp-dd-list" style="max-height:220px;overflow-y:auto;padding:6px">' + options + '</div>' +
+          '<div class="s5-cmp-dd-list" style="max-height:min(250px,34vh);overflow-y:auto;padding:6px">' + options + '</div>' +
         '</div>' +
       '</div>';
     }
@@ -4546,7 +4629,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           '<div style="display:flex;align-items:center;gap:12px"><div style="width:42px;height:42px;border-radius:var(--dash-radius-lg);background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.35);color:#fbbf24;display:flex;align-items:center;justify-content:center"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 7h14"/><path d="M6 7l-4 7h8L6 7z"/><path d="M18 7l-4 7h8l-4-7z"/></svg></div>' +
           '<div><div style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:#fff">' + s5Txt('Product Comparison', 'مقارنة المنتجات') + '</div><div style="font-size:var(--type-caption);color:rgba(255,255,255,0.38);font-weight:var(--weight-bold);margin-top:3px">' + s5Txt('Volumes, rates, financials, and scale verdict', 'الحجم والنسب والماليات وحكم الأداء') + '</div></div></div>' +
           tabsHTML() +
-          '<button id="s5-compare-close" style="width:36px;height:36px;border-radius:var(--dash-radius-md);border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.65);cursor:pointer;font-size:var(--type-metric-sm);line-height:1;display:flex;align-items:center;justify-content:center;font-family:var(--font-ui);</button>' +
+          '<button id="s5-compare-close" style="width:36px;height:36px;border-radius:var(--dash-radius-md);border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.65);cursor:pointer;font-size:var(--type-metric-sm);line-height:1;display:flex;align-items:center;justify-content:center;font-family:var(--font-ui);">&times;</button>' +
         '</div>' +
         bodyHtml +
       '</div>';
@@ -5295,7 +5378,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
 window.renderSection5HydratedEntry = function (mountEl, data, ctx) {
   if (!mountEl) return;
-  var shouldDefer = !(ctx && ctx._atomicFirstVisit) && !!(data && data.meta && data.meta.lazyHeavyModels);
+  var shouldDefer = !window._dashboardInteractiveSectionsReady && !!(data && data.meta && data.meta.lazyHeavyModels);
   if (!shouldDefer) {
     renderSection5Hydrated(mountEl, data, ctx);
     mountEl.dataset.dashboardReady = 'products';
