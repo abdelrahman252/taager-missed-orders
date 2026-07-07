@@ -1340,6 +1340,12 @@ function mergeTaagerRowIntoOrder(order, taagerRow) {
   if (!taagerRow) return order;
   const next = { ...order };
   if (taagerRow.orderStatus) next.orderStatus = taagerRow.orderStatus;
+  const statusBucket = taagerRow.orderStatusBucket || taagerRow.exactStatusBucket || taagerRow.statusBucket;
+  if (statusBucket) {
+    next.orderStatusBucket = statusBucket;
+    next.exactStatusBucket = statusBucket;
+    next.statusBucket = statusBucket;
+  }
   if (taagerRow.taagerOrderNumber) next.taagerOrderNumber = taagerRow.taagerOrderNumber;
   const amountDue = parseDashboardMoney(taagerRow.amountDueRaw || taagerRow.amountDue);
   const marketerCommission = parseDashboardMoney(taagerRow.marketerCommission);
@@ -2863,6 +2869,7 @@ function getLocalCredentialsSnapshot() {
     autoRunAccountIds: store.get("autoRunAccountIds", []),
     launchMinimized:  store.get("launchMinimized", false),
     autoConfirm:      store.get("autoConfirm",     false),
+    missingOrdersUploadEnabled: store.get("missingOrdersUploadEnabled", false),
     startupCached:    true,
   };
 }
@@ -2991,6 +2998,7 @@ ipcMain.handle("get-credentials", async () => {
     autoRunAccountIds: store.get("autoRunAccountIds", []),
     launchMinimized:  store.get("launchMinimized", false),
     autoConfirm:      store.get("autoConfirm",     false),
+    missingOrdersUploadEnabled: store.get("missingOrdersUploadEnabled", false),
   };
   _credCache = result;
   _credCacheAt = Date.now();
@@ -3067,6 +3075,7 @@ function safeAccountForStorage(a) {
     cmsProvider,
     easyEmail:  a.easyEmail,
     easyStore:  a.easyStore  || "",
+    missingOrdersStoreName: String(a.missingOrdersStoreName || "").trim(),
     lightfunnelsAccountName: a.lightfunnelsAccountName || "",
     lightfunnelsLoginMethod: lightfunnelsLoginMethodOf(a),
     lightfunnelsEmail: a.lightfunnelsEmail || "",
@@ -3331,7 +3340,7 @@ function buildAccountPatchForUpdate(patch) {
   const src = patch && typeof patch === "object" ? patch : {};
   const next = {};
   [
-    "memberName", "label", "cmsProvider", "easyEmail", "easyStore",
+    "memberName", "label", "cmsProvider", "easyEmail", "easyStore", "missingOrdersStoreName",
     "lightfunnelsAccountName", "lightfunnelsLoginMethod", "lightfunnelsEmail",
     "dashboardEnrichmentProvider",
     "easyOrdersLookbackDays", "taagerLoginMethod", "taagerEmail", "taagerPhone",
@@ -3677,6 +3686,12 @@ ipcMain.handle("set-auto-run-accounts", (_, ids) => {
 ipcMain.handle("get-auto-run-progress", () => getAutoRunProgress());
 ipcMain.handle("set-launch-minimized", (_, v) => { store.set("launchMinimized", v); return true; });
 ipcMain.handle("set-auto-confirm", (_, v) => { store.set("autoConfirm", v); return true; });
+ipcMain.handle("set-missing-orders-upload-enabled", (_, v) => {
+  store.set("missingOrdersUploadEnabled", v === true);
+  _credCache = null;
+  _credCacheAt = 0;
+  return true;
+});
 
 let currentBotChild = null;
 const pendingGoogleLoginRequests = new Map();
@@ -5955,6 +5970,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
   // only to exports from this run.
   lastExportTimestamp = 0;
   const autoConfirm = store.get("autoConfirm", false);
+  const missingOrdersUploadEnabled = store.get("missingOrdersUploadEnabled", false) === true;
 
   // ── Build account list to run ──
   const allAccounts = store.get("accounts", null);
@@ -5972,6 +5988,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
         taagerPassword: store.get(`pwd_taager_${a.id}`, ""),
         taagerPassword: store.get(`pwd_taager_${a.id}`, store.get(`pwd_taager_${a.id}`, "")),
         autoConfirm,
+        missingOrdersUploadEnabled,
       }));
   }
 
@@ -5993,6 +6010,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
       taagerCountry: store.get("taagerCountry", store.get("taagerCountry", "sa")),
       taagerAffiliateCode: store.get("taagerAffiliateCode", ""),
       autoConfirm,
+      missingOrdersUploadEnabled,
     }];
   }
 
@@ -6074,6 +6092,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
       dateTo,
       launchMinimized: store.get("launchMinimized", false),
       autoConfirm,
+      missingOrdersUploadEnabled,
       needsSnapshot: false,
       operationsSuiteEnabled,
       dashboardEnabled,
@@ -6253,6 +6272,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
       dateTo,
       launchMinimized: store.get("launchMinimized", false),
       autoConfirm,
+      missingOrdersUploadEnabled,
       needsSnapshot: false,
       operationsSuiteEnabled,
       dashboardEnabled,

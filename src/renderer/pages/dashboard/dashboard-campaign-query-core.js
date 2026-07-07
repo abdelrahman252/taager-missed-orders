@@ -307,7 +307,9 @@ function normalizeProducts(productRows, reportingCurrency, egpRate, orderCurrenc
     const totalOrderCount = number(row.totalOrderCount ?? row.rawTotalOrders ?? orders);
     const delivered = number(row.deliveredCount ?? row.units ?? row.delivered);
     const ndrPct = number(row.ndrPct ?? row.deliveryRate ?? row.deliveryPct);
-    const avgDeliveredProfit = delivered ? round(profit / delivered) : 0;
+    const netOrderProfit = round(convert(row.netOrderProfitAfterTax ?? row.totalPlacedCommission ?? 0, sourceCurrency, reportingCurrency, egpRate, ratesOverride));
+    const averageProfitSource = delivered > 0 ? "delivered_orders" : (orders > 0 ? "net_orders_fallback" : "unavailable");
+    const avgDeliveredProfit = delivered ? round(profit / delivered) : (orders ? round(netOrderProfit / orders) : 0);
     return {
       id: text(row.key || row.id || productKey(row, row.accountId || row.dashboardAccountId)).toLowerCase(),
       accountId: text(row.accountId || row.dashboardAccountId),
@@ -320,6 +322,8 @@ function normalizeProducts(productRows, reportingCurrency, egpRate, orderCurrenc
       delivered,
       canceled: number(row.canceledCount || row.canceled),
       profit,
+      netOrderProfitAfterTax: netOrderProfit,
+      averageProfitSource,
       totalSales,
       deliveredSales,
       ndrPct,
@@ -448,6 +452,8 @@ function buildCampaignIntelligence(input) {
         taagerOrders: product.orders, taagerDelivered: product.delivered, taagerNdrPct: product.ndrPct,
         netOrderCount: product.netOrderCount, totalOrderCount: product.totalOrderCount,
         cancelPct: product.cancelPct, taagerProfit: product.profit,
+        netOrderProfitAfterTax: product.netOrderProfitAfterTax,
+        averageProfitSource: product.averageProfitSource,
         totalSales: product.totalSales,
         deliveredSales: product.deliveredSales,
         breakEvenCpa: product.breakEvenCpa,
@@ -471,6 +477,7 @@ function buildCampaignIntelligence(input) {
       netOrders: group.taagerOrders,
       actualDeliveredOrders: group.taagerDelivered,
       actualEarnedProfitAfterTax: group.taagerProfit,
+      netOrderProfitAfterTax: group.netOrderProfitAfterTax,
       actualDeliveredSales: group.deliveredSales,
       currentTotalSales: group.totalSales,
       expectedNdrRate: group.taagerNdrPct / 100,
@@ -493,6 +500,7 @@ function buildCampaignIntelligence(input) {
       taagerCpa: round(taagerCpa),
       deliveredCpa: round(deliveredCpa),
       avgDeliveredProfit: round(avgDeliveredProfit),
+      averageProfitSource: financials.averageProfitSource,
       trafficViews: round(trafficViews, 0),
       conversionRateAvailable: trafficViews > 0,
       realConversionRatePct: trafficViews ? round(group.taagerOrders / trafficViews * 100) : 0,

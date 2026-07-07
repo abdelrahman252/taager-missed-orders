@@ -208,7 +208,12 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
     var realNdr   = orders > 0 ? (delivered / orders) : 0;
     var expectedDeliveriesExact = p.expectedDeliveriesExact != null ? Number(p.expectedDeliveriesExact || 0) : null;
     var actCommission = p.actualCommission !== undefined ? p.actualCommission : (p.commission || 0);
-    var realComm = actDelivered > 0 ? (actCommission / actDelivered) : 0;
+    var realComm = window.DashboardOrderMetrics
+      ? window.DashboardOrderMetrics.averageProfit(p)
+      : (actDelivered > 0 ? (actCommission / actDelivered) : (orders > 0 ? Number(p.netOrderProfitAfterTax || p.totalPlacedCommission || 0) / orders : 0));
+    var averageProfitSource = window.DashboardOrderMetrics
+      ? window.DashboardOrderMetrics.averageProfitSource(p)
+      : (actDelivered > 0 ? 'delivered_orders' : (orders > 0 ? 'net_orders_fallback' : 'unavailable'));
 
     var realTaagerProfitAfterTax = Number(expectedRateMode ? p.commission || 0 : actCommission);
     var realConfirmationRate = Number(p.confirmationPct || p.confirmationRate || 0) / 100;
@@ -271,6 +276,7 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
       realConfirmed: Math.max(0, Math.round(Number(realConfirmed) || 0)),
       realNdr:       realNdr,
       realCommission:realComm,
+      averageProfitSource: averageProfitSource,
       realTaagerProfitAfterTax: realTaagerProfitAfterTax,
       realConfirmationRate: realConfirmationRate,
       realDr: realDr,
@@ -1174,11 +1180,13 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
     var detailMetricsHtml =
       '<div class="s9-kpi-grid s9-kpi-grid--details">' +
         _kpiMiniTip(
-          p9Txt('Average Profit', 'متوسط الربح'),
+          p9Txt('Average Profit', 'متوسط الربح') + (s.averageProfitSource === 'net_orders_fallback' ? ' · ' + p9Txt('Estimated from net orders', 'تقديري من صافي الطلبات') : ''),
           valueStack(formatMoney(s.realCommission, true), 'profit', 's9-card-value-stack'), '#3b82f6', '💵',
           p9Txt('Average Profit', 'متوسط الربح'),
-          p9Txt('Average profit per delivered order for this selected product.', 'متوسط الربح لكل طلب مسلم لهذا المنتج المحدد.'),
-          'averageProfit = productProfitAfterTax / deliveredOrders'
+          s.averageProfitSource === 'net_orders_fallback'
+            ? p9Txt('Estimated average profit from net orders because this product has no delivered orders.', 'متوسط ربح تقديري من صافي الطلبات لأن هذا المنتج لا يحتوي على طلبات مسلمة.')
+            : p9Txt('Average profit per delivered order for this selected product.', 'متوسط الربح لكل طلب مسلم لهذا المنتج المحدد.'),
+          s.averageProfitSource === 'net_orders_fallback' ? 'estimatedAverageProfit = netOrderProfitAfterTax / netOrders' : 'averageProfit = productProfitAfterTax / deliveredOrders'
         ) +
         _kpiMiniTip(
           p9Txt('Confirmation Rate', 'نسبة التأكيد'),

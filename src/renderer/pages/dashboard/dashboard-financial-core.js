@@ -50,11 +50,18 @@
     var netOrders = nonNegative(input.netOrders);
     var actualDeliveredOrders = nonNegative(input.actualDeliveredOrders);
     var actualEarnedProfit = number(input.actualEarnedProfitAfterTax);
+    var netOrderProfit = number(input.netOrderProfitAfterTax);
+    var hasNetOrderProfit = input.netOrderProfitAfterTax != null;
     var currentTotalSales = nonNegative(input.currentTotalSales);
     var adSpend = nonNegative(input.adSpend);
     var expectedNdrRate = rate(input.expectedNdrRate);
 
-    var averageProfit = divide(actualEarnedProfit, actualDeliveredOrders);
+    var averageProfitSource = actualDeliveredOrders > 0
+      ? "delivered_orders"
+      : (netOrders > 0 && hasNetOrderProfit ? "net_orders_fallback" : "unavailable");
+    var averageProfit = averageProfitSource === "delivered_orders"
+      ? divide(actualEarnedProfit, actualDeliveredOrders)
+      : (averageProfitSource === "net_orders_fallback" ? divide(netOrderProfit, netOrders) : 0);
     var actualNetProfit = actualEarnedProfit - adSpend;
     var actualDeliveredSales = nonNegative(input.actualDeliveredSales);
     var expectedDeliveriesExact = netOrders * expectedNdrRate;
@@ -70,6 +77,7 @@
       expectedNdrRate: expectedNdrRate,
       insufficientHistory: !!input.insufficientHistory,
       averageProfit: averageProfit,
+      averageProfitSource: averageProfitSource,
       cpa: divide(adSpend, netOrders),
       breakEvenCpa: averageProfit * expectedNdrRate,
       aov: divide(currentTotalSales, netOrders),

@@ -57,6 +57,7 @@ window.renderSetup = function (onComplete, initialStep) {
           cmsProvider: "easyorders",
           easyEmail: creds.easyEmail,
           easyStore: creds.easyStore || "",
+          missingOrdersStoreName: creds.missingOrdersStoreName || "",
           taagerEmail: creds.taagerEmail || "",
           taagerCountry: creds.taagerCountry || "sa",
           taagerLoginMethod: creds.taagerLoginMethod || "email",
@@ -418,7 +419,7 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-section-copy { font-size:var(--type-label); color: var(--text2); line-height: 1.45; }
         .sv3-settings-dock {
           display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+          grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 22px;
           min-width: 330px;
         }
@@ -439,6 +440,10 @@ window.renderSetup = function (onComplete, initialStep) {
             radial-gradient(circle at 12% 18%, rgba(79,142,247,.14), transparent 34%),
             rgba(24,33,50,.82);
         }
+        .sv3-setting-card--compact {
+          align-self: start;
+          min-height: 0;
+        }
         .sv3-setting-row {
           display: flex;
           align-items: flex-start;
@@ -446,6 +451,68 @@ window.renderSetup = function (onComplete, initialStep) {
           gap: 12px;
         }
         .sv3-setting-title { font-size:var(--type-label); font-weight:var(--weight-semibold); color: var(--text); margin-bottom: 0; }
+        .sv3-setting-title-line {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          min-width: 0;
+        }
+        .sv3-setting-title-line .sv3-setting-title { margin-bottom: 0; }
+        .sv3-setting-help {
+          position: relative;
+          display: inline-flex;
+          flex-shrink: 0;
+        }
+        .sv3-setting-help-btn {
+          width: 18px;
+          height: 18px;
+          padding: 0;
+          border: 1px solid rgba(167,139,250,.48);
+          border-radius: 50%;
+          background: rgba(124,106,247,.14);
+          color: #c5bfff;
+          font: 700 12px/1 system-ui, sans-serif;
+          cursor: help;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          transition: background .18s, border-color .18s, color .18s;
+        }
+        .sv3-setting-help-btn:hover,
+        .sv3-setting-help-btn:focus-visible {
+          outline: none;
+          color: #fff;
+          background: rgba(124,106,247,.38);
+          border-color: rgba(197,191,255,.9);
+        }
+        .sv3-setting-tooltip {
+          position: absolute;
+          z-index: 20;
+          top: calc(100% + 9px);
+          inset-inline-start: 50%;
+          width: min(270px, calc(100vw - 40px));
+          padding: 9px 11px;
+          border: 1px solid rgba(167,139,250,.32);
+          border-radius:var(--radius-sm);
+          background: #111827;
+          box-shadow: 0 12px 28px rgba(0,0,0,.35);
+          color: #d7deea;
+          font-size:var(--type-caption);
+          font-weight:var(--weight-regular);
+          line-height: 1.45;
+          text-align: start;
+          opacity: 0;
+          visibility: hidden;
+          pointer-events: none;
+          transform: translateX(-50%) translateY(-3px);
+          transition: opacity .16s, visibility .16s, transform .16s;
+        }
+        .sv3-setting-help:hover .sv3-setting-tooltip,
+        .sv3-setting-help:focus-within .sv3-setting-tooltip {
+          opacity: 1;
+          visibility: visible;
+          transform: translateX(-50%) translateY(0);
+        }
         .sv3-setting-desc {
           width: 100%;
           margin-top: 9px;
@@ -580,13 +647,23 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-users-panel .sv3-settings-dock {
           margin-top: 34px;
+          padding: 12px;
+          border-radius:var(--radius-md);
+          background: rgba(10,16,27,.22);
+          border: 1px solid rgba(125,148,186,.13);
         }
         .sv3-users-panel .sv3-setting-row {
-          align-items: flex-start;
+          min-height: 100%;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          grid-template-rows: 1fr auto;
+          gap: 14px 12px;
+          align-items: start;
         }
         .sv3-users-panel .sv3-setting-title {
-          font-size:var(--type-section-title);
-          margin-bottom: 10px;
+          font-size:var(--type-subtitle);
+          line-height: 1.18;
+          margin-bottom: 0;
         }
         .sv3-users-panel .sv3-setting-desc {
           max-width: 285px;
@@ -594,20 +671,84 @@ window.renderSetup = function (onComplete, initialStep) {
           line-height: 1.5;
           color: #aab6ca;
         }
+        .sv3-users-panel .sv3-setting-card {
+          position: relative;
+          min-height: 116px;
+          padding: 16px;
+          border-radius:var(--radius-sm);
+          background: linear-gradient(180deg, rgba(24,33,50,.88), rgba(18,27,42,.72));
+        }
+        .sv3-users-panel .sv3-setting-card::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          border-radius: inherit;
+          background: linear-gradient(180deg, rgba(255,255,255,.045), transparent 52%);
+          opacity: .8;
+        }
+        .sv3-users-panel .sv3-setting-card > * {
+          position: relative;
+        }
+        .sv3-users-panel .sv3-setting-card.is-on {
+          border-color: rgba(0,214,143,.42);
+          background:
+            radial-gradient(circle at 88% 0%, rgba(0,214,143,.12), transparent 38%),
+            linear-gradient(180deg, rgba(24,36,50,.94), rgba(17,30,43,.78));
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 12px 28px rgba(0,0,0,.18);
+        }
+        .sv3-users-panel .sv3-setting-card.is-on.is-accent {
+          border-color: rgba(124,106,247,.48);
+          background:
+            radial-gradient(circle at 88% 0%, rgba(124,106,247,.16), transparent 40%),
+            linear-gradient(180deg, rgba(27,34,55,.94), rgba(20,27,46,.78));
+        }
+        .sv3-users-panel .sv3-setting-card.is-on.is-warning {
+          border-color: rgba(245,158,11,.44);
+          background:
+            radial-gradient(circle at 88% 0%, rgba(245,158,11,.14), transparent 40%),
+            linear-gradient(180deg, rgba(34,32,25,.94), rgba(28,26,20,.78));
+        }
+        .sv3-users-panel .sv3-setting-copy {
+          grid-column: 1 / -1;
+          align-items: center;
+          gap: 10px;
+        }
+        .sv3-users-panel .sv3-setting-title-line {
+          align-items: flex-start;
+          gap: 6px;
+        }
+        .sv3-users-panel .sv3-setting-control {
+          grid-column: 1 / -1;
+          align-self: end;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding-top: 12px;
+          border-top: 1px solid rgba(125,148,186,.12);
+        }
         .sv3-users-panel .sv3-toggle-btn {
-          width: 62px;
-          height: 34px;
+          --sv3-toggle-travel: 24px;
+          width: 54px;
+          height: 30px;
           background: rgba(30,41,59,.9);
           border: 1px solid rgba(125,148,186,.22);
           box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
         }
         .sv3-users-panel .sv3-toggle-btn span {
-          width: 28px;
-          height: 28px;
+          width: 24px;
+          height: 24px;
         }
         .sv3-users-panel .sv3-toggle-label {
-          font-size:var(--type-control);
-          min-width: 34px;
+          min-width: 36px;
+          padding: 3px 7px;
+          border-radius:var(--radius-pill);
+          background: rgba(125,148,186,.1);
+          text-align: center;
+          font-size:var(--type-micro);
+          line-height: 1;
+          letter-spacing: .06em;
         }
         .sv3-section-hd {
           display: flex;
@@ -1382,10 +1523,12 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-users-panel .sv3-settings-dock {
           margin-top: 22px;
+          padding: 10px;
         }
         .sv3-settings-dock {
           gap: 14px;
         }
+        .sv3-users-panel .sv3-setting-card,
         .sv3-setting-card {
           min-height: 104px;
           padding: 18px 20px;
@@ -1402,7 +1545,7 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-users-panel .sv3-setting-title {
           font-size:var(--type-subtitle);
-          margin-bottom: 5px;
+          margin-bottom: 0;
         }
         .sv3-users-panel .sv3-setting-desc {
           font-size:var(--type-label);
@@ -1410,7 +1553,8 @@ window.renderSetup = function (onComplete, initialStep) {
           max-width: 250px;
         }
         .sv3-users-panel .sv3-toggle-btn {
-          width: 52px;
+          --sv3-toggle-travel: 22px;
+          width: 50px;
           height: 28px;
         }
         .sv3-users-panel .sv3-toggle-btn span {
@@ -1615,12 +1759,14 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-users-panel .sv3-settings-dock {
           margin-top: 18px;
+          padding: 8px;
         }
         .sv3-settings-dock {
           gap: 10px;
         }
+        .sv3-users-panel .sv3-setting-card,
         .sv3-setting-card {
-          min-height: 84px;
+          min-height: 104px;
           padding: 14px 16px;
           border-radius:var(--radius-sm);
           background: rgba(24,33,50,.58);
@@ -1637,7 +1783,7 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-users-panel .sv3-setting-title {
           font-size:var(--type-body);
-          margin-bottom: 3px;
+          margin-bottom: 0;
         }
         .sv3-users-panel .sv3-setting-desc {
           font-size:var(--type-caption);
@@ -1645,12 +1791,13 @@ window.renderSetup = function (onComplete, initialStep) {
           max-width: 230px;
         }
         .sv3-users-panel .sv3-toggle-btn {
+          --sv3-toggle-travel: 20px;
           width: 46px;
-          height: 24px;
+          height: 26px;
         }
         .sv3-users-panel .sv3-toggle-btn span {
-          width: 18px;
-          height: 18px;
+          width: 20px;
+          height: 20px;
         }
         .sv3-users-panel .sv3-toggle-label {
           font-size:var(--type-micro);
@@ -1877,12 +2024,14 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-users-panel .sv3-settings-dock {
           margin-top: 14px;
+          padding: 8px;
         }
         .sv3-settings-dock {
           gap: 10px;
         }
+        .sv3-users-panel .sv3-setting-card,
         .sv3-setting-card {
-          min-height: 72px;
+          min-height: 98px;
           padding: 12px 14px;
           border-radius:var(--radius-sm);
           background: rgba(24,33,50,.5);
@@ -1906,7 +2055,7 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-users-panel .sv3-setting-title {
           font-size:var(--type-control);
-          margin-bottom: 2px;
+          margin-bottom: 0;
         }
         .sv3-users-panel .sv3-setting-desc {
           font-size:var(--type-caption);
@@ -1914,6 +2063,7 @@ window.renderSetup = function (onComplete, initialStep) {
           max-width: 260px;
         }
         .sv3-users-panel .sv3-toggle-btn {
+          --sv3-toggle-travel: 20px;
           width: 42px;
           height: 22px;
           border-radius:var(--radius-pill);
@@ -2389,6 +2539,7 @@ window.renderSetup = function (onComplete, initialStep) {
           .sv3-settings-dock {
             width: 100%;
             min-width: 0;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
           }
           .sv3-review-grid {
             grid-template-columns: 1fr;
@@ -2539,18 +2690,19 @@ window.renderSetup = function (onComplete, initialStep) {
         .sv3-users-panel .sv3-settings-dock {
           width: 100%;
           min-width: 0;
-          margin: 14px 0 16px;
-          padding: 12px;
+          margin: 14px 0 28px;
+          padding: 10px;
           display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 12px;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
           border-radius:var(--radius-sm);
           background: rgba(10,16,27,.22);
           border: 1px solid rgba(125,148,186,.12);
         }
+        .sv3-users-panel .sv3-setting-card,
         .sv3-setting-card {
-          min-height: 92px;
-          padding: 12px 14px;
+          min-height: 98px;
+          padding: 12px;
           border-radius:var(--radius-xs);
         }
         .sv3-setting-icon {
@@ -2561,6 +2713,7 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         .sv3-users-panel .sv3-setting-title {
           font-size:var(--type-label);
+          line-height: 1.18;
         }
         .sv3-users-panel .sv3-setting-desc {
           font-size:var(--type-micro);
@@ -3151,58 +3304,89 @@ window.renderSetup = function (onComplete, initialStep) {
         </div>
 
         <div class="sv3-settings-dock">
-            <div class="sv3-setting-card">
+            <div class="sv3-setting-card sv3-setting-card--compact">
               <div class="sv3-setting-row">
                 <div class="sv3-setting-copy">
                   <div class="sv3-setting-icon">🚀</div>
-                  <div>
+                  <div class="sv3-setting-title-line">
                     <div class="sv3-setting-title">${t("welcome.launch_min")}</div>
+                    <span class="sv3-setting-help">
+                      <button type="button" class="sv3-setting-help-btn" aria-label="${t("welcome.launch_min")}" aria-describedby="sv3-launchmin-tooltip">?</button>
+                      <span id="sv3-launchmin-tooltip" class="sv3-setting-tooltip" role="tooltip">${t("welcome.launch_min_desc")}</span>
+                    </span>
                   </div>
                 </div>
-                <div style="display:flex;align-items:center;gap:7px;flex-shrink:0">
-                  <button id="sv3-btn-launchmin" class="sv3-toggle-btn">
+                <div class="sv3-setting-control">
+                  <span id="sv3-launchmin-label" class="sv3-toggle-label">${t("welcome.off")}</span>
+                  <button id="sv3-btn-launchmin" class="sv3-toggle-btn" type="button" aria-pressed="false">
                     <span id="sv3-launchmin-knob"></span>
                   </button>
-                  <span id="sv3-launchmin-label" class="sv3-toggle-label">${t("welcome.off")}</span>
                 </div>
               </div>
-              <div class="sv3-setting-desc">${t("welcome.launch_min_desc")}</div>
             </div>
 
-            <div class="sv3-setting-card">
+            <div class="sv3-setting-card sv3-setting-card--compact">
               <div class="sv3-setting-row">
                 <div class="sv3-setting-copy">
                   <div class="sv3-setting-icon">🤖</div>
-                  <div>
+                  <div class="sv3-setting-title-line">
                     <div class="sv3-setting-title">${t("welcome.autoconfirm_title")}</div>
+                    <span class="sv3-setting-help">
+                      <button type="button" class="sv3-setting-help-btn" aria-label="${t("welcome.autoconfirm_title")}" aria-describedby="sv3-autoconfirm-tooltip">?</button>
+                      <span id="sv3-autoconfirm-tooltip" class="sv3-setting-tooltip" role="tooltip">${t("welcome.autoconfirm_desc")}</span>
+                    </span>
                   </div>
                 </div>
-                <div style="display:flex;align-items:center;gap:7px;flex-shrink:0">
-                  <button id="sv3-btn-autoconfirm" class="sv3-toggle-btn">
+                <div class="sv3-setting-control">
+                  <span id="sv3-autoconfirm-label" class="sv3-toggle-label">${t("welcome.off")}</span>
+                  <button id="sv3-btn-autoconfirm" class="sv3-toggle-btn" type="button" aria-pressed="false">
                     <span id="sv3-autoconfirm-knob"></span>
                   </button>
-                  <span id="sv3-autoconfirm-label" class="sv3-toggle-label">${t("welcome.off")}</span>
                 </div>
               </div>
-              <div class="sv3-setting-desc">${t("welcome.autoconfirm_desc")}</div>
             </div>
 
-            <div class="sv3-setting-card">
+            <div class="sv3-setting-card sv3-setting-card--compact">
+              <div class="sv3-setting-row">
+                <div class="sv3-setting-copy">
+                  <div class="sv3-setting-icon">📥</div>
+                  <div class="sv3-setting-title-line">
+                    <div class="sv3-setting-title">${t("welcome.missing_orders_title")}</div>
+                    <span class="sv3-setting-help">
+                      <button type="button" class="sv3-setting-help-btn" aria-label="${t("welcome.missing_orders_title")}" aria-describedby="sv3-missing-orders-tooltip">?</button>
+                      <span id="sv3-missing-orders-tooltip" class="sv3-setting-tooltip" role="tooltip">${t("welcome.missing_orders_desc")} ${esc(setupText("setup.missing_orders_store_hint", "Used in Taager's Missing Orders upload modal. Required when Route Missed Orders is ON."))}</span>
+                    </span>
+                  </div>
+                </div>
+                <div class="sv3-setting-control">
+                  <span id="sv3-missing-orders-label" class="sv3-toggle-label">${t("welcome.off")}</span>
+                  <button id="sv3-btn-missing-orders" class="sv3-toggle-btn" type="button" aria-pressed="false">
+                    <span id="sv3-missing-orders-knob"></span>
+                  </button>
+                </div>
+              </div>
+              <div id="sv3-missing-orders-store-row" class="sv3-setting-meta" style="display:none"></div>
+            </div>
+
+            <div class="sv3-setting-card sv3-setting-card--compact">
               <div class="sv3-setting-row">
                 <div class="sv3-setting-copy">
                   <div class="sv3-setting-icon">✓</div>
-                  <div>
+                  <div class="sv3-setting-title-line">
                     <div class="sv3-setting-title">${t("welcome.autorun")}</div>
+                    <span class="sv3-setting-help">
+                      <button type="button" class="sv3-setting-help-btn" aria-label="${t("welcome.autorun")}" aria-describedby="sv3-autorun-tooltip">?</button>
+                      <span id="sv3-autorun-tooltip" class="sv3-setting-tooltip" role="tooltip">${t("welcome.autorun_desc")}</span>
+                    </span>
                   </div>
                 </div>
-                <div style="display:flex;align-items:center;gap:7px;flex-shrink:0">
-                  <button id="sv3-btn-autorun" class="sv3-toggle-btn">
+                <div class="sv3-setting-control">
+                  <span id="sv3-autorun-label" class="sv3-toggle-label">${t("welcome.off")}</span>
+                  <button id="sv3-btn-autorun" class="sv3-toggle-btn" type="button" aria-pressed="false">
                     <span id="sv3-autorun-knob"></span>
                   </button>
-                  <span id="sv3-autorun-label" class="sv3-toggle-label">${t("welcome.off")}</span>
                 </div>
               </div>
-              <div class="sv3-setting-desc">${t("welcome.autorun_desc")}</div>
               <div id="sv3-autorun-interval-row" class="sv3-setting-meta" style="display:none">
                 <div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${t("welcome.run_every")}</div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap" id="sv3-interval-options">
@@ -3328,6 +3512,7 @@ window.renderSetup = function (onComplete, initialStep) {
         selectedIds = [...allIds];
       }
       updateRunCards();
+      sv3RenderMissingOrdersStoreInputs();
       if (typeof sv3AutoRunEnabled !== "undefined" && sv3AutoRunEnabled) {
         window.api.setAutoRunAccounts(selectedIds).catch(() => {});
       }
@@ -3344,6 +3529,7 @@ window.renderSetup = function (onComplete, initialStep) {
           selectedIds.push(id);
         }
         updateRunCards();
+        sv3RenderMissingOrdersStoreInputs();
         if (typeof sv3AutoRunEnabled !== "undefined" && sv3AutoRunEnabled) {
           window.api.setAutoRunAccounts(selectedIds).catch(() => {});
         }
@@ -3385,20 +3571,45 @@ window.renderSetup = function (onComplete, initialStep) {
 
     // ── Launch Minimized toggle (setup page) ──
     let sv3LaunchMinEnabled = false;
+    function sv3SetSettingToggleVisual(btn, knob, label, enabled, tone) {
+      if (!btn || !knob || !label) return;
+      const tones = {
+        accent: { color: "var(--accent)", shadow: "0 0 0 3px rgba(124,106,247,.14)", cardClass: "is-accent", pill: "rgba(124,106,247,.14)" },
+        success: { color: "var(--success)", shadow: "0 0 0 3px rgba(0,214,143,.12)", cardClass: "is-success", pill: "rgba(0,214,143,.12)" },
+        warning: { color: "var(--warning)", shadow: "0 0 0 3px rgba(245,158,11,.12)", cardClass: "is-warning", pill: "rgba(245,158,11,.12)" }
+      };
+      const current = tones[tone] || tones.accent;
+      const card = btn.closest(".sv3-setting-card");
+      btn.classList.toggle("is-on", enabled);
+      btn.setAttribute("aria-pressed", enabled ? "true" : "false");
+      if (card) {
+        card.classList.toggle("is-on", enabled);
+        card.classList.toggle("is-accent", enabled && current.cardClass === "is-accent");
+        card.classList.toggle("is-success", enabled && current.cardClass === "is-success");
+        card.classList.toggle("is-warning", enabled && current.cardClass === "is-warning");
+      }
+      if (enabled) {
+        btn.style.background = current.color;
+        btn.style.boxShadow = current.shadow;
+        knob.style.transform = "translateX(var(--sv3-toggle-travel, 24px))";
+        label.textContent = t("welcome.on");
+        label.style.color = current.color;
+        label.style.background = current.pill;
+      } else {
+        btn.style.background = "var(--border)";
+        btn.style.boxShadow = "none";
+        knob.style.transform = "translateX(0)";
+        label.textContent = t("welcome.off");
+        label.style.color = "var(--text2)";
+        label.style.background = "rgba(125,148,186,.1)";
+      }
+    }
     function sv3UpdateLaunchMinUI() {
       const btn   = document.getElementById("sv3-btn-launchmin");
       const knob  = document.getElementById("sv3-launchmin-knob");
       const label = document.getElementById("sv3-launchmin-label");
       if (!btn) return;
-      if (sv3LaunchMinEnabled) {
-        btn.style.background = "var(--accent)";
-        knob.style.transform = "translateX(20px)";
-        label.textContent = t("welcome.on"); label.style.color = "var(--accent)";
-      } else {
-        btn.style.background = "var(--border)";
-        knob.style.transform = "translateX(0)";
-        label.textContent = t("welcome.off"); label.style.color = "var(--text2)";
-      }
+      sv3SetSettingToggleVisual(btn, knob, label, sv3LaunchMinEnabled, "accent");
     }
     document.getElementById("sv3-btn-launchmin")?.addEventListener("click", async () => {
       sv3LaunchMinEnabled = !sv3LaunchMinEnabled;
@@ -3413,25 +3624,81 @@ window.renderSetup = function (onComplete, initialStep) {
       const knob  = document.getElementById("sv3-autoconfirm-knob");
       const label = document.getElementById("sv3-autoconfirm-label");
       if (!btn) return;
-      if (sv3AutoConfirmEnabled) {
-        btn.style.background = "var(--success)";
-        btn.style.boxShadow = "0 0 0 3px rgba(0,214,143,.12)";
-        knob.style.transform = "translateX(23px)";
-        label.textContent = t("welcome.on");
-        label.style.color = "var(--success)";
-      } else {
-        btn.style.background = "var(--border)";
-        btn.style.boxShadow = "none";
-        knob.style.transform = "translateX(0)";
-        label.textContent = t("welcome.off");
-        label.style.color = "var(--text2)";
-      }
+      sv3SetSettingToggleVisual(btn, knob, label, sv3AutoConfirmEnabled, "success");
     }
 
     document.getElementById("sv3-btn-autoconfirm")?.addEventListener("click", async () => {
       sv3AutoConfirmEnabled = !sv3AutoConfirmEnabled;
       await window.api.setAutoConfirm(sv3AutoConfirmEnabled);
       sv3UpdateAutoConfirmUI();
+    });
+
+    let sv3MissingOrdersEnabled = false;
+    let sv3MissingOrdersStoreSaveTimer = null;
+    function sv3RenderMissingOrdersStoreInputs() {
+      const row = document.getElementById("sv3-missing-orders-store-row");
+      if (!row) return;
+      const selected = accounts.filter(a => a.accountType !== "static" && selectedIds.includes(a.id) && (a.cmsProvider || "easyorders") === "easyorders");
+      if (!sv3MissingOrdersEnabled) {
+        row.style.display = "none";
+        row.innerHTML = "";
+        return;
+      }
+      row.style.display = "block";
+      if (!selected.length) {
+        row.innerHTML = `<div style="font-size:var(--type-caption);color:var(--warning)">${esc(setupText("setup.missing_orders_store_no_accounts", "Select at least one EasyOrders account to set the Missing Orders store name."))}</div>`;
+        return;
+      }
+      row.innerHTML = `
+        <div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${esc(setupText("setup.missing_orders_store_label", "Missing Orders Store Name"))}</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${selected.map(acc => {
+            const value = acc.missingOrdersStoreName || "";
+            return `<label style="display:flex;flex-direction:column;gap:6px;font-size:var(--type-caption);color:var(--text2)">
+              <span title="${esc(accountUiLabel(acc))}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(accountUiLabel(acc))}</span>
+              <input class="sv3-missing-orders-store-input" data-account-id="${esc(acc.id)}" type="text" value="${esc(value)}" placeholder="${esc(setupText("setup.missing_orders_store_ph", "Enter the Taager Missing Orders store name"))}" style="display:block;width:100%;min-width:0;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-xs);padding:8px 10px;color:var(--text);font-size:var(--type-label);outline:none" />
+            </label>`;
+          }).join("")}
+        </div>
+      `;
+      row.querySelectorAll(".sv3-missing-orders-store-input").forEach(input => {
+        input.addEventListener("input", () => {
+          const accountId = input.dataset.accountId;
+          const idx = accounts.findIndex(a => a.id === accountId);
+          if (idx >= 0) accounts[idx] = { ...accounts[idx], missingOrdersStoreName: input.value.trim() };
+          clearTimeout(sv3MissingOrdersStoreSaveTimer);
+          sv3MissingOrdersStoreSaveTimer = setTimeout(() => input.dispatchEvent(new Event("change")), 650);
+        });
+        input.addEventListener("change", async () => {
+          const accountId = input.dataset.accountId;
+          const value = input.value.trim();
+          const idx = accounts.findIndex(a => a.id === accountId);
+          if (idx >= 0) accounts[idx] = { ...accounts[idx], missingOrdersStoreName: value };
+          try {
+            if (window.api.updateAccount) {
+              await window.api.updateAccount({ accountId, patch: { missingOrdersStoreName: value } });
+            } else {
+              await window.api.saveAllAccounts(accounts);
+            }
+          } catch (err) {
+            console.warn("Failed to save Missing Orders store name:", err);
+          }
+        });
+      });
+    }
+    function sv3UpdateMissingOrdersUI() {
+      const btn = document.getElementById("sv3-btn-missing-orders");
+      const knob = document.getElementById("sv3-missing-orders-knob");
+      const label = document.getElementById("sv3-missing-orders-label");
+      if (!btn) return;
+      sv3SetSettingToggleVisual(btn, knob, label, sv3MissingOrdersEnabled, "accent");
+      sv3RenderMissingOrdersStoreInputs();
+    }
+
+    document.getElementById("sv3-btn-missing-orders")?.addEventListener("click", async () => {
+      sv3MissingOrdersEnabled = !sv3MissingOrdersEnabled;
+      await window.api.setMissingOrdersUploadEnabled(sv3MissingOrdersEnabled);
+      sv3UpdateMissingOrdersUI();
     });
 
     // ── Auto-Run toggle (setup page) ──
@@ -3448,17 +3715,12 @@ window.renderSetup = function (onComplete, initialStep) {
       const next   = document.getElementById("sv3-autorun-next");
       const intRow = document.getElementById("sv3-autorun-interval-row");
       if (!btn) return;
+      sv3SetSettingToggleVisual(btn, knob, label, sv3AutoRunEnabled, "warning");
       if (sv3AutoRunEnabled) {
-        btn.style.background = "var(--warning)";
-        knob.style.transform = "translateX(20px)";
-        label.textContent = t("welcome.on"); label.style.color = "var(--warning)";
         next.style.display = "block";
         intRow.style.display = "block";
         sv3StartCountdown(remainingMs);
       } else {
-        btn.style.background = "var(--border)";
-        knob.style.transform = "translateX(0)";
-        label.textContent = t("welcome.off"); label.style.color = "var(--text2)";
         next.style.display = "none";
         intRow.style.display = "none";
         sv3StopCountdown();
@@ -3535,6 +3797,7 @@ window.renderSetup = function (onComplete, initialStep) {
     window.api.getCredentials().then(async (creds) => {
       sv3LaunchMinEnabled    = creds.launchMinimized || false;
       sv3AutoConfirmEnabled  = creds.autoConfirm     || false;
+      sv3MissingOrdersEnabled = creds.missingOrdersUploadEnabled === true;
       sv3AutoRunEnabled      = creds.autoRun         || false;
       sv3AutoRunIntervalMins = creds.autoRunInterval  || 30;
       const savedAutoRunIds = Array.isArray(creds.autoRunAccountIds)
@@ -3546,6 +3809,7 @@ window.renderSetup = function (onComplete, initialStep) {
       }
       sv3UpdateLaunchMinUI();
       sv3UpdateAutoConfirmUI();
+      sv3UpdateMissingOrdersUI();
       if (sv3AutoRunEnabled) {
         const allIds = runnableAccounts.map(a => a.id);
         const autoRunIds = selectedIds.length ? selectedIds : allIds;
@@ -3934,6 +4198,11 @@ window.renderSetup = function (onComplete, initialStep) {
           <input type="text" id="sv3-easy-store" placeholder="${t("setup.store_ph")}" value="${esc(acc?.easyStore||"")}" ${isLockedEdit ? "disabled" : ""} />
         </div>
         <div class="form-group" data-cms-field="easyorders">
+          <label>${esc(setupText("setup.missing_orders_store_label", "Missing Orders Store Name"))}</label>
+          <input type="text" id="sv3-missing-orders-store" placeholder="${esc(setupText("setup.missing_orders_store_ph", "Enter the Taager Missing Orders store name"))}" value="${esc(acc?.missingOrdersStoreName || "")}" ${isLockedEdit ? "disabled" : ""} />
+          <div class="sv3-field-hint">${esc(setupText("setup.missing_orders_store_hint", "Used in Taager's Missing Orders upload modal. Required when Route Missed Orders is ON."))}</div>
+        </div>
+        <div class="form-group" data-cms-field="easyorders">
           <label>${t("setup.email_label")} ${cmsRequiredMark}</label>
           <input type="email" id="sv3-easy-email" placeholder="${t("setup.email_ph")}" value="${esc(acc?.easyEmail||"")}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
         </div>
@@ -4265,6 +4534,7 @@ window.renderSetup = function (onComplete, initialStep) {
       const easyEmail    = document.getElementById("sv3-easy-email").value.trim();
       const easyPassword = document.getElementById("sv3-easy-pass").value;
       const easyStore    = document.getElementById("sv3-easy-store").value.trim();
+      const missingOrdersStoreName = (document.getElementById("sv3-missing-orders-store")?.value || "").trim();
       const cmsProvider = document.getElementById("sv3-cms-provider")?.value === "lightfunnels" ? "lightfunnels" : "easyorders";
       const lightfunnelsAccountName = (document.getElementById("sv3-lightfunnels-account")?.value || "").trim();
       const lightfunnelsLoginMethod = document.getElementById("sv3-lightfunnels-login-method")?.value === "google" ? "google" : "email";
@@ -4284,6 +4554,7 @@ window.renderSetup = function (onComplete, initialStep) {
 
       const currentAccount = isEdit ? accounts.find(a => a.id === editId) : null;
       const nextEasyStore = isEdit ? (easyStore || currentAccount?.easyStore || "") : easyStore;
+      const nextMissingOrdersStoreName = missingOrdersStoreName || "";
       const nextEasyEmail = isEdit ? (easyEmail || currentAccount?.easyEmail || "") : easyEmail;
       const nextLightfunnelsAccountName = isEdit ? (lightfunnelsAccountName || currentAccount?.lightfunnelsAccountName || "") : lightfunnelsAccountName;
       const nextLightfunnelsEmail = isEdit ? (lightfunnelsEmail || currentAccount?.lightfunnelsEmail || "") : lightfunnelsEmail;
@@ -4324,6 +4595,7 @@ window.renderSetup = function (onComplete, initialStep) {
           cmsProvider,
           easyEmail: nextEasyEmail,
           easyStore: nextEasyStore,
+          missingOrdersStoreName: nextMissingOrdersStoreName,
           lightfunnelsAccountName: nextLightfunnelsAccountName,
           lightfunnelsLoginMethod,
           lightfunnelsEmail: nextLightfunnelsEmail,
@@ -4364,6 +4636,7 @@ window.renderSetup = function (onComplete, initialStep) {
           easyEmail,
           easyPassword,
           easyStore,
+          missingOrdersStoreName,
           lightfunnelsAccountName,
           lightfunnelsLoginMethod,
           lightfunnelsEmail,

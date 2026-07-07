@@ -467,6 +467,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
     function renderOrderRow(o, i, attrs) {
       const createdAt = orderCreatedAtText(o);
+      const destination = o.destination === "missing-orders" ? t("results.destination_missing") : t("results.destination_cart");
       return `<tr ${attrs || ""}>
         <td class="res-index">${i + 1}</td>
         <td class="res-name" title="${String(o.name || "").replace(/"/g,"")}">${o.name || "—"}</td>
@@ -474,6 +475,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         <td class="res-product" title="${(o.productName||"").replace(/"/g,"")}">${o.productName || "—"}</td>
         <td class="res-number">${o.qty || 1}</td>
         <td class="res-number res-price">${o.subtotal || "—"}</td>
+        <td class="res-destination">${destination || "â€”"}</td>
         <td class="res-date" title="${String(createdAt).replace(/"/g,"")}">${createdAt}</td>
         <td class="res-city" title="${String(o.city || "").replace(/"/g,"")}">${o.city || "—"}</td>
       </tr>`;
@@ -481,7 +483,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
     function renderOrderRows(rows) {
       if (!rows || rows.length === 0) {
-        return `<tr><td colspan="8" style="text-align:center;padding:14px;color:var(--text2);font-size:var(--type-label)">${t("results.no_orders_found") || "No orders match your search"}</td></tr>`;
+        return `<tr><td colspan="9" style="text-align:center;padding:14px;color:var(--text2);font-size:var(--type-label)">${t("results.no_orders_found") || "No orders match your search"}</td></tr>`;
       }
       return buildPagedItems(rows, renderOrderRow, `orders-${tableUid}`).itemsHtml;
     }
@@ -495,13 +497,14 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         (o.name || "").toLowerCase().includes(q) ||
         (o.phone || "").toLowerCase().includes(q) ||
         (o.productName || "").toLowerCase().includes(q) ||
+        (o.destination || "").toLowerCase().includes(q) ||
         (o.easyCreatedAt || o.createdAt || o.date || "").toLowerCase().includes(q)
       ) : allRows;
       const tbody = document.getElementById(`${uid}-tbody`);
       const pagerHost = document.getElementById(`${uid}-pager`);
       if (!tbody) return;
       if (!filtered.length) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:14px;color:var(--text2);font-size:var(--type-label)">${t("results.no_orders_found") || "No orders match your search"}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:14px;color:var(--text2);font-size:var(--type-label)">${t("results.no_orders_found") || "No orders match your search"}</td></tr>`;
         if (pagerHost) pagerHost.innerHTML = "";
         return;
       }
@@ -533,6 +536,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
               <col style="width:430px">
               <col style="width:70px">
               <col style="width:90px">
+              <col style="width:150px">
               <col style="width:190px">
               <col style="width:180px">
             </colgroup>
@@ -543,6 +547,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
               <th style="text-align:right">${t("results.product_col")}</th>
               <th style="text-align:right">${t("results.qty_col")}</th>
               <th style="text-align:right">${t("results.price_col")}</th>
+              <th>${t("results.destination_col")}</th>
               <th>${t("results.easy_created_at_col")}</th>
               <th style="text-align:right">${t("results.city_col")}</th>
             </tr></thead>

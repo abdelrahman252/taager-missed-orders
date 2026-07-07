@@ -995,6 +995,7 @@ function createDashboardQueryService(options) {
           products.set(key, {
             key, legacyKey: sku || name, sku, name, country,
             totalOrderCount: 0, netOrderCount: 0, deliveredCount: 0, totalPieces: 0, commission: 0, revenue: 0,
+            netOrderProfitAfterTax: 0,
             calculatorDeliveredCount: 0, calculatorEarnedProfitAfterTax: 0,
             statusTotalCount: 0, confirmationStatusCount: 0, cancelStatusCount: 0, pendingStatusCount: 0,
             failedCount: 0, canceledCount: 0, confirmedCount: 0, shippingCount: 0,
@@ -1024,6 +1025,7 @@ function createDashboardQueryService(options) {
           product.totalOrderCount += 1;
           if (bucket !== "canceled_by_you") {
             product.netOrderCount += 1;
+            product.netOrderProfitAfterTax += rowProfit(row);
             product.statusTotalCount += 1;
             const group = productStatusGroup(bucket);
             if (group === "confirmation") product.confirmationStatusCount += 1;
@@ -1150,6 +1152,7 @@ function createDashboardQueryService(options) {
           netOrders: product.netOrderCount,
           actualDeliveredOrders: product.calculatorDeliveredCount,
           actualEarnedProfitAfterTax: product.calculatorEarnedProfitAfterTax,
+          netOrderProfitAfterTax: product.netOrderProfitAfterTax,
           currentTotalSales: product.revenue,
           expectedNdrRate: ndrRate,
           adSpend: 0,
@@ -1223,12 +1226,14 @@ function createDashboardQueryService(options) {
         const financialSpend = convertMoney(product.adSpend, reportingCurrency, financialCurrency, financialInput);
         const financialCommission = convertMoney(product.commission, reportingCurrency, financialCurrency, financialInput);
         const actualFinancialCommission = convertMoney(product.actualCommission, reportingCurrency, financialCurrency, financialInput);
+        const netOrderFinancialProfit = convertMoney(product.netOrderProfitAfterTax, reportingCurrency, financialCurrency, financialInput);
         const financialSales = convertMoney(product.totalSales, reportingCurrency, financialCurrency, financialInput);
         const productFinancials = financialCore.calculate({
           mode: isExpected ? "expected" : "actual",
           netOrders: product.netOrderCount,
           actualDeliveredOrders: product.actualDeliveredCount,
           actualEarnedProfitAfterTax: actualFinancialCommission,
+          netOrderProfitAfterTax: netOrderFinancialProfit,
           currentTotalSales: financialSales,
           expectedNdrRate: product.expectedNdrRate,
           adSpend: financialSpend,
@@ -1237,6 +1242,7 @@ function createDashboardQueryService(options) {
         product.allocatedAdSpend = financialSpend;
         product.cpa = productFinancials.cpa;
         product.averageProfit = productFinancials.averageProfit;
+        product.averageProfitSource = productFinancials.averageProfitSource;
         product.breakEvenCpa = productFinancials.breakEvenCpa;
         product.expectedDeliveredCpa = productFinancials.expectedDeliveredCpa;
         product.expectedNetProfit = productFinancials.expectedNetProfit;
@@ -1661,7 +1667,7 @@ function createDashboardQueryService(options) {
             canceledCount: 0, shippingCount: 0, confirmedCount: 0, processingCount: 0,
             statusTotalCount: 0, confirmationStatusCount: 0, cancelStatusCount: 0, pendingStatusCount: 0,
             earnedProfitAfterTax: 0,
-            earnedCommission: 0, incomingCommission: 0, lostCommission: 0,
+            earnedCommission: 0, incomingCommission: 0, lostCommission: 0, netOrderProfitAfterTax: 0,
             totalRevenue: 0,
             prepaidCount: 0, codCount: 0,
             prepaidDeliveredCount: 0, codDeliveredCount: 0,
@@ -1723,6 +1729,7 @@ function createDashboardQueryService(options) {
 
         if (inPrimaryPeriod && rowIsNetOrder && addOnce('financial:' + uniqueOrderKey)) {
           cs.totalRevenue += priceVal;
+          cs.netOrderProfitAfterTax += commissionVal;
         }
 
         if (inNdrCohort && rowIsNetOrder && addOnce('ndr:' + uniqueOrderKey)) {
@@ -1948,6 +1955,7 @@ function createDashboardQueryService(options) {
           netOrders: stat.count,
           actualDeliveredOrders: stat.deliveredOrders,
           actualEarnedProfitAfterTax: stat.earnedProfitAfterTax,
+          netOrderProfitAfterTax: stat.netOrderProfitAfterTax,
           currentTotalSales: stat.totalRevenue,
           expectedNdrRate: rateResolution.rate,
           adSpend: 0,
@@ -2007,7 +2015,8 @@ function createDashboardQueryService(options) {
           actualEarnedProfitAfterTax: stat.earnedProfitAfterTax,
           expectedTotalProfitBeforeAdSpend: cityProjection.expectedTotalProfitBeforeAdSpend,
           expectedDeliveredSales: cityProjection.expectedDeliveredSales,
-          averageProfit: stat.deliveredOrders > 0 ? stat.earnedProfitAfterTax / stat.deliveredOrders : 0,
+          averageProfit: cityProjection.averageProfit,
+          averageProfitSource: cityProjection.averageProfitSource,
           incomingCommission: stat.incomingCommission,
           lostCommission: stat.lostCommission,
           canceledCount: stat.canceledCount,
@@ -2048,10 +2057,323 @@ function createDashboardQueryService(options) {
     });
   }
 
+  function dailyPerformanceQuery(input) {
+    const baseInput = { ...(input || {}) };
+    [
+      "page", "pageSize",
+      "accountPage", "accountPageSize",
+      "productPage", "productPageSize",
+      "requestChannel", "timeoutMs"
+    ].forEach((key) => { delete baseInput[key]; });
+    const base = cached("daily-performance-base", baseInput, () => {
+      const { rows, scope, accounts } = scopedRows(input);
+      const reportingCurrency = cleanCurrency(input && (input.reportingCurrency || input.currency) || "SAR", "SAR");
+      const financialCurrency = cleanCurrency(input && (input.productFinancialCurrency || input.financialCurrency) || reportingCurrency, reportingCurrency);
+      const dayMap = new Map();
+      const productTotals = new Map();
+      const productNameOverrides = sanitizeProductNameOverrides(input && input.productNameOverrides);
+
+      function orderSourceRawValue(row) {
+        return text(
+          row && (
+            row.rawOrderSource != null ? row.rawOrderSource :
+            row.orderSource != null ? row.orderSource :
+            row.receivedBy != null ? row.receivedBy :
+            row.orderReceivedBy
+          )
+        ) || "Unknown";
+      }
+
+      function productIdentity(row) {
+        const sku = rowSku(row);
+        const name = productNameOverride(sku, rowProduct(row) || sku || "Unknown Product", productNameOverrides);
+        const country = lower(row && (row.taagerCountry || row.country) || "unknown");
+        return {
+          key: sku ? country + "|sku:" + lower(sku) : text(row.accountId || row.dashboardAccountId) + "|name:" + lower(name),
+          sku,
+          name,
+          country,
+        };
+      }
+
+      function blankStatus() {
+        return {
+          rawOrders: 0, netOrders: 0, confirmedOrders: 0, deliveredOrders: 0,
+          failedOrders: 0, canceledByYou: 0, pendingOrders: 0, shippingOrders: 0,
+          processingOrders: 0, waitingOrders: 0,
+          totalSales: 0, deliveredSales: 0, deliveredProfit: 0, netOrderProfitAfterTax: 0,
+          adSpend: 0,
+        };
+      }
+
+      function dayBucket(day) {
+        if (!dayMap.has(day)) {
+          dayMap.set(day, {
+            date: day,
+            metrics: blankStatus(),
+            sourceMap: new Map(),
+            platformSpend: {},
+            products: new Map(),
+            _seen: new Set(),
+          });
+        }
+        return dayMap.get(day);
+      }
+
+      function sourceBucket(day, source) {
+        const key = source || "Unknown";
+        if (!day.sourceMap.has(key)) {
+          day.sourceMap.set(key, Object.assign({ label: key }, blankStatus()));
+        }
+        return day.sourceMap.get(key);
+      }
+
+      function productBucket(day, identity) {
+        if (!day.products.has(identity.key)) {
+          day.products.set(identity.key, Object.assign({
+            key: identity.key,
+            sku: identity.sku,
+            name: identity.name,
+            country: identity.country,
+          }, blankStatus()));
+        }
+        if (!productTotals.has(identity.key)) {
+          productTotals.set(identity.key, { key: identity.key, sku: identity.sku, name: identity.name, country: identity.country, netOrders: 0, campaignSpend: 0 });
+        }
+        return day.products.get(identity.key);
+      }
+
+      function addOrderMetrics(target, bucket, row) {
+        if (bucket !== "canceled_by_you") {
+          target.netOrders += 1;
+          target.netOrderProfitAfterTax += rowProfit(row);
+          target.totalSales += rowTotal(row);
+        } else {
+          target.canceledByYou += 1;
+        }
+        target.rawOrders += 1;
+        if (isConfirmedBucket(bucket)) target.confirmedOrders += 1;
+        if (bucket === "delivered") {
+          target.deliveredOrders += 1;
+          target.deliveredProfit += rowProfit(row);
+          target.deliveredSales += rowTotal(row);
+        }
+        if (isFailedBucket(bucket)) target.failedOrders += 1;
+        if (bucket === "shipping") target.shippingOrders += 1;
+        if (bucket === "processing") target.processingOrders += 1;
+        if (bucket === "waiting") target.waitingOrders += 1;
+        if (bucket === "received" || bucket === "pending") target.pendingOrders += 1;
+      }
+
+      rows.forEach((row, index) => {
+        if (!inCreatedRange(row, scope)) return;
+        const dayKey = dateKey(row.createdAt || row.date || row.dashboardDate);
+        if (!dayKey) return;
+        const day = dayBucket(dayKey);
+        const bucket = statusBucket(row);
+        const uniqueOrderKey = orderKey(row, index);
+        if (!day._seen.has("account:" + uniqueOrderKey)) {
+          day._seen.add("account:" + uniqueOrderKey);
+          addOrderMetrics(day.metrics, bucket, row);
+        }
+        const source = orderSourceRawValue(row);
+        const sourceMetric = sourceBucket(day, source);
+        if (!day._seen.has("source:" + source + ":" + uniqueOrderKey)) {
+          day._seen.add("source:" + source + ":" + uniqueOrderKey);
+          addOrderMetrics(sourceMetric, bucket, row);
+        }
+        const identity = productIdentity(row);
+        const product = productBucket(day, identity);
+        if (!day._seen.has("product:" + identity.key + ":" + uniqueOrderKey)) {
+          day._seen.add("product:" + identity.key + ":" + uniqueOrderKey);
+          addOrderMetrics(product, bucket, row);
+          if (bucket !== "canceled_by_you") productTotals.get(identity.key).netOrders += 1;
+        }
+      });
+
+      function extractSpend(row, fallbackCurrency) {
+        const raw = number(row && (row.rawSpend ?? row.nativeRawSpend ?? row.spend ?? row.adSpend ?? row.cost ?? row.amount_spent ?? row.amount));
+        if (raw <= 0) return 0;
+        const currency = cleanCurrency(row && (row.rawCurrency || row.nativeRawCurrency || row.currency || row.account_currency) || fallbackCurrency || reportingCurrency, reportingCurrency);
+        return convertMoney(raw, currency, reportingCurrency, input || {});
+      }
+
+      const platformTotals = {};
+      let exactDailySpend = false;
+      let periodSpend = 0;
+      scope.accountIds.forEach((accountId) => {
+        const marketing = accounts[accountId] && accounts[accountId].marketing || {};
+        Object.keys(marketing).forEach((platform) => {
+          const status = marketing[platform] || {};
+          const summary = status.summary || {};
+          const fallbackCurrency = cleanCurrency(summary.currency || status.currency || reportingCurrency, reportingCurrency);
+          const exactRows = [];
+          if (Array.isArray(summary.dailyPlatformBreakdown) && summary.dailyPlatformBreakdown.length) {
+            exactRows.push.apply(exactRows, summary.dailyPlatformBreakdown);
+          } else if (Array.isArray(summary.dailyBreakdown) && summary.dailyBreakdown.length) {
+            exactRows.push.apply(exactRows, summary.dailyBreakdown);
+          } else {
+            (Array.isArray(summary.sourceBreakdown) ? summary.sourceBreakdown : []).forEach((source) => {
+              if (Array.isArray(source && source.dailyBreakdown)) exactRows.push.apply(exactRows, source.dailyBreakdown);
+            });
+          }
+          exactRows.forEach((item) => {
+            const day = dateKey(item && (item.date || item.day || item.dashboardDate || item.startDate));
+            if (!day || (scope.dateFrom && day < scope.dateFrom) || (scope.dateTo && day > scope.dateTo)) return;
+            const spend = extractSpend(item, fallbackCurrency);
+            if (spend <= 0) return;
+            exactDailySpend = true;
+            const dayRow = dayBucket(day);
+            const platformKey = text(item && (item.platform || item.source || platform)) || platform;
+            dayRow.platformSpend[platformKey] = (dayRow.platformSpend[platformKey] || 0) + spend;
+          });
+          const total = extractSpend({
+            rawSpend: summary.rawSpend != null ? summary.rawSpend : summary.adSpend,
+            rawCurrency: summary.rawCurrency || summary.currency || status.currency
+          }, fallbackCurrency);
+          periodSpend += total;
+          platformTotals[platform] = (platformTotals[platform] || 0) + total;
+        });
+      });
+
+      const manualSpend = convertMoney(
+        number(input && (input.accountAdSpend || input.adSpend || 0)),
+        cleanCurrency(input && (input.accountSpendCurrency || input.currency) || reportingCurrency, reportingCurrency),
+        reportingCurrency,
+        input || {}
+      );
+      if (periodSpend <= 0 && manualSpend > 0) {
+        periodSpend = manualSpend;
+        platformTotals.manual = manualSpend;
+      }
+
+      const days = Array.from(dayMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+      const totalNetOrders = days.reduce((sum, day) => sum + day.metrics.netOrders, 0);
+      if (!exactDailySpend && periodSpend > 0) {
+        days.forEach((day) => {
+          const ratio = totalNetOrders > 0 ? day.metrics.netOrders / totalNetOrders : (days.length ? 1 / days.length : 0);
+          Object.keys(platformTotals).forEach((platform) => {
+            const value = platformTotals[platform] * ratio;
+            if (value > 0) day.platformSpend[platform] = (day.platformSpend[platform] || 0) + value;
+          });
+        });
+      }
+
+      const productIndexList = Array.from(productTotals.values()).map((product) => ({
+        key: product.key,
+        sku: product.sku,
+        name: product.name,
+        country: product.country,
+      }));
+      assignCampaignProducts(scopedCampaigns(scope, accounts, "all", input), productIndexList, productNameOverrides).forEach((campaign) => {
+        if (!campaign.attributionVerified || !campaign.productKey) return;
+        const total = productTotals.get(campaign.productKey);
+        if (!total) return;
+        total.campaignSpend += number(campaign.spend ?? campaign.convertedSpend ?? campaign.rawSpend);
+      });
+
+      function applyFinancials(metrics, adSpend) {
+        const ndrRate = metrics.netOrders > 0 ? metrics.deliveredOrders / metrics.netOrders : 0;
+        const calc = financialCore.calculate({
+          mode: "actual",
+          netOrders: metrics.netOrders,
+          actualDeliveredOrders: metrics.deliveredOrders,
+          actualEarnedProfitAfterTax: metrics.deliveredProfit,
+          netOrderProfitAfterTax: metrics.netOrderProfitAfterTax,
+          currentTotalSales: metrics.totalSales,
+          expectedNdrRate: ndrRate,
+          adSpend,
+        });
+        return Object.assign(metrics, {
+          adSpend,
+          cpa: calc.cpa,
+          deliveredCpa: calc.actualDeliveredCpa,
+          confirmationRate: metrics.netOrders > 0 ? metrics.confirmedOrders / metrics.netOrders * 100 : 0,
+          ndr: metrics.netOrders > 0 ? metrics.deliveredOrders / metrics.netOrders * 100 : 0,
+          avgProfit: calc.averageProfit,
+          breakEvenCpa: calc.breakEvenCpa,
+          netProfit: calc.actualNetProfit,
+          roi: calc.actualRoi,
+          profitRoas: calc.actualProfitRoas,
+          salesRoas: calc.actualSalesRoas,
+          financialCurrency,
+        });
+      }
+
+      const resultDays = days.map((day) => {
+        const adSpend = Object.keys(day.platformSpend).reduce((sum, key) => sum + number(day.platformSpend[key]), 0);
+        const productRows = Array.from(day.products.values());
+        productRows.forEach((product) => {
+          const total = productTotals.get(product.key) || {};
+          let spend = 0;
+          if (number(total.campaignSpend) > 0 && number(total.netOrders) > 0) {
+            spend = number(total.campaignSpend) * (product.netOrders / number(total.netOrders));
+          } else if (day.metrics.netOrders > 0) {
+            spend = adSpend * (product.netOrders / day.metrics.netOrders);
+          }
+          applyFinancials(product, spend);
+        });
+        productRows.sort((a, b) => number(b.netOrders) - number(a.netOrders) || number(b.deliveredProfit) - number(a.deliveredProfit) || String(a.name).localeCompare(String(b.name)));
+        const sources = Array.from(day.sourceMap.values()).map((source) => applyFinancials(source, 0))
+          .sort((a, b) => number(b.netOrders) - number(a.netOrders) || String(a.label).localeCompare(String(b.label)));
+        return {
+          date: day.date,
+          metrics: applyFinancials(day.metrics, adSpend),
+          platformSpend: day.platformSpend,
+          sources: sources.slice(0, 8),
+          products: productRows.slice(0, 20),
+          productCount: productRows.length,
+          spendSource: exactDailySpend ? "daily_platform" : (periodSpend > 0 ? "period_allocated" : "none"),
+        };
+      }).sort((a, b) => b.date.localeCompare(a.date));
+
+      const summaryMetrics = resultDays.reduce((acc, day) => {
+        const m = day.metrics || {};
+        acc.rawOrders += number(m.rawOrders);
+        acc.netOrders += number(m.netOrders);
+        acc.confirmedOrders += number(m.confirmedOrders);
+        acc.deliveredOrders += number(m.deliveredOrders);
+        acc.failedOrders += number(m.failedOrders);
+        acc.canceledByYou += number(m.canceledByYou);
+        acc.deliveredProfit += number(m.deliveredProfit);
+        acc.netOrderProfitAfterTax += number(m.netOrderProfitAfterTax);
+        acc.totalSales += number(m.totalSales);
+        acc.adSpend += number(m.adSpend);
+        return acc;
+      }, blankStatus());
+
+      return {
+        ok: true,
+        kind: "daily-performance",
+        scope,
+        currency: reportingCurrency,
+        summary: applyFinancials(summaryMetrics, summaryMetrics.adSpend),
+        days: resultDays,
+      };
+    });
+    const accountPagination = pageInfo({
+      page: input && (input.accountPage || input.page) || 1,
+      pageSize: input && (input.accountPageSize || input.pageSize) || 7
+    }, base.days.length);
+    const productPagination = pageInfo({
+      page: input && (input.productPage || input.page) || 1,
+      pageSize: input && (input.productPageSize || input.pageSize) || 7
+    }, base.days.length);
+    return Object.assign({}, base, {
+      days: base.days.slice(accountPagination.start, accountPagination.end),
+      accountDays: base.days.slice(accountPagination.start, accountPagination.end),
+      productDays: base.days.slice(productPagination.start, productPagination.end),
+      pagination: accountPagination,
+      accountPagination,
+      productPagination,
+    });
+  }
+
   function query(input = {}) {
     if (input.kind === "orders") return orderRows(input);
     if (input.kind === "products") return productRows(input);
     if (input.kind === "cities") return citiesQuery(input);
+    if (input.kind === "daily-performance") return dailyPerformanceQuery(input);
     if (input.kind === "product-options") {
       const result = productRows({ ...input, kind: "products", allRows: true, page: 1, filters: {} });
       return {

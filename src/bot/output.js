@@ -3,6 +3,7 @@
 const XLSX = require("xlsx");
 const { formatPhone } = require("./phone");
 const { normalizeTaagerCountry } = require("./taager-country");
+const { groupMissingOrders } = require("./missing-orders");
 
 const config = JSON.parse(process.env.BOT_CONFIG || "{}");
 const COUNTRY = normalizeTaagerCountry(config.taagerCountry || config.taagerCountry || "sa");
@@ -359,6 +360,55 @@ function buildOutputExcel(orders, options = {}) {
   return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 }
 
+function buildMissingOrdersExcel(orders, options = {}) {
+  if (COUNTRY !== "sa") throw new Error(`MISSING_ORDERS_UNSUPPORTED_COUNTRY: ${COUNTRY}`);
+  const cfg = COUNTRY_CONFIG[COUNTRY];
+  const headers = [
+    "Customer Name",
+    "Phone Number",
+    "Phone Number 2",
+    "Province",
+    "Zone",
+    "District",
+    "Saudi National Address",
+    "Note",
+    "SKUs",
+    "Product Names",
+    "Prices",
+    "Quantities",
+  ];
+
+  const rows = groupMissingOrders(orders).map((group) => {
+    const first = group[0] || {};
+    const fallback = fallbackProvinceForOrder(first, options, COUNTRY, cfg.defaultProvince);
+    const province = normalizeProvince(first.city, COUNTRY, { fallbackProvince: fallback.province });
+    return [
+      truncate(first.name || "", 50),
+      formatPhone(first.normPhone || first.phone || "", COUNTRY) || first.phone || "",
+      "",
+      province,
+      "",
+      "",
+      "",
+      first.address || first.notes || "",
+      group.map((order) => String(order.sku || "").trim()).join(","),
+      "",
+      group.map((order) => Number(order.unitPrice) || 0).join(","),
+      group.map((order) => Number(order.qty) || 1).join(","),
+    ];
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws["!cols"] = [
+    { wch: 25 }, { wch: 18 }, { wch: 18 }, { wch: 24 },
+    { wch: 20 }, { wch: 20 }, { wch: 28 }, { wch: 40 },
+    { wch: 34 }, { wch: 45 }, { wch: 24 }, { wch: 18 },
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Missing Orders");
+  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+}
+
 function buildSummarySheet(orders) {
   const groups = {};
   for (const order of orders) {
@@ -481,4 +531,4 @@ function buildSkippedExcel(skippedOrders) {
   return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 }
 
-module.exports = { buildOutputExcel, buildFailedExcel, buildSkippedExcel, normalizeProvince, normalizeProvinceMatch, COUNTRY_CONFIG };
+module.exports = { buildOutputExcel, buildMissingOrdersExcel, buildFailedExcel, buildSkippedExcel, normalizeProvince, normalizeProvinceMatch, COUNTRY_CONFIG };

@@ -14,24 +14,26 @@ function _prevPeriodLabel(activeFilter) {
 // Taager dashboard/status/NDR migration: analytics KPI percentages use the
 // same Arabic Taager status map as Dashboard and Operations.
 function _analyticsStatusBucket(order) {
+  if (typeof analyticsStatusBucketFromOrder === "function") return analyticsStatusBucketFromOrder(order);
   if (window.TaagerStatus) return window.TaagerStatus.normalize(order && order.orderStatus).bucket;
   return String(order && order.orderStatus || "").toLowerCase();
 }
 
 function _analyticsIsDelivered(order) {
-  return window.TaagerStatus
-    ? window.TaagerStatus.isDelivered(order && order.orderStatus)
+  return typeof analyticsIsDeliveredOrder === "function"
+    ? analyticsIsDeliveredOrder(order)
     : _analyticsStatusBucket(order) === "delivered";
 }
 
 function _analyticsIsFailed(order) {
-  var bucket = _analyticsStatusBucket(order);
-  return bucket === "failed" || bucket === "return_verified" || bucket === "customer_refused_confirmation";
+  return typeof analyticsIsFailedOrder === "function"
+    ? analyticsIsFailedOrder(order)
+    : ["failed", "return_verified", "customer_refused_confirmation", "out_of_stock", "after_sales_done"].includes(_analyticsStatusBucket(order));
 }
 
 function _analyticsIsNdrEligible(order) {
-  return window.TaagerStatus
-    ? window.TaagerStatus.isEligibleForNdr(order && order.orderStatus)
+  return typeof analyticsIsNdrEligibleOrder === "function"
+    ? analyticsIsNdrEligibleOrder(order)
     : _analyticsStatusBucket(order) !== "canceled_by_you";
 }
 

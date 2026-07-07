@@ -585,7 +585,7 @@
         '<td class="campaign-num">' + deliveredCpaLabel + window.supposedBadgeHtml('delivered') + '</td>' +
         '<td class="campaign-num">' + money(group.breakEvenCpa, currency) + '</td>' +
         '<td class="campaign-num">' + money(group.taagerProfit, currency) + window.supposedBadgeHtml('profit') + '</td>' +
-        '<td class="campaign-num">' + money(group.avgDeliveredProfit, currency) + '</td>' +
+        '<td class="campaign-num">' + money(group.avgDeliveredProfit, currency) + (group.averageProfitSource === 'net_orders_fallback' ? '<small>' + esc('Estimated from net orders') + '</small>' : '') + '</td>' +
         '<td class="campaign-num campaign-financial-cell campaign-financial-cell-' + netState + '"><strong class="campaign-financial-' + netState + '">' + signedMoney(group.netProfit, currency) + window.supposedBadgeHtml('profit') + '</strong><small class="campaign-financial-' + roiState + '">' + percent(group.roiPct) + ' ROI</small></td>' +
         '<td class="campaign-num"><strong>' + roas(group.profitRoas) + window.supposedBadgeHtml('roas') + '</strong><small>' + money(totalSales, currency) + window.supposedBadgeHtml('sales') + ' total sales · ' + roas(totalSalesRoas) + ' sales ROAS</small></td>' +
         '<td class="campaign-decision-cell"><button type="button" class="campaign-decision ' + esc(group.decision) + '" data-tooltip-template="' + esc(templateId) + '" aria-label="' + esc(decisionAria) + '">' + esc(displayDecision) + '</button>' +
@@ -713,6 +713,7 @@
           netOrders: group.taagerOrders,
           actualDeliveredOrders: oldDelivered,
           actualEarnedProfitAfterTax: oldProfit,
+          netOrderProfitAfterTax: group.netOrderProfitAfterTax,
           currentTotalSales: oldSales,
           expectedNdrRate: expectedNdrRate,
           adSpend: group.spend || 0
@@ -723,6 +724,7 @@
         group.taagerDelivered = projection.expectedDeliveriesDisplay;
         group.taagerNdrPct = expectedNdrRate * 100;
         group.avgDeliveredProfit = projection.averageProfit;
+        group.averageProfitSource = projection.averageProfitSource;
         group.taagerProfit = projection.expectedTotalProfitBeforeAdSpend;
         group.netProfit = projection.expectedNetProfit;
         group.roiPct = projection.expectedRoi;
@@ -1408,6 +1410,7 @@
             netOrders: group.taagerOrders,
             actualDeliveredOrders: oldDelivered,
             actualEarnedProfitAfterTax: oldProfit,
+            netOrderProfitAfterTax: group.netOrderProfitAfterTax,
             currentTotalSales: oldSales,
             expectedNdrRate: expectedNdrRate,
             adSpend: group.spend || 0
@@ -1418,6 +1421,7 @@
           group.taagerDelivered = projection.expectedDeliveriesDisplay;
           group.taagerNdrPct = expectedNdrRate * 100;
           group.avgDeliveredProfit = projection.averageProfit;
+          group.averageProfitSource = projection.averageProfitSource;
           group.taagerProfit = projection.expectedTotalProfitBeforeAdSpend;
           group.netProfit = projection.expectedNetProfit;
           group.roiPct = projection.expectedRoi;

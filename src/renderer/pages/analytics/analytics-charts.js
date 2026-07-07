@@ -312,9 +312,14 @@ function _renderRealVsMissed(orders) {
   var canvas = document.getElementById("canvas-real-vs-missed");
   if (!canvas || !window.Chart) return;
 
-  var real   = orders.filter(function(o) { return o.source !== "missed"; }).length;
-  var missed = orders.filter(function(o) { return o.source === "missed"; }).length;
-  var total  = real + missed;
+  var counts = {};
+  (orders || []).forEach(function (order) {
+    var bucket = typeof analyticsStatusBucketFromOrder === "function"
+      ? analyticsStatusBucketFromOrder(order)
+      : (window.TaagerStatus ? window.TaagerStatus.normalize(order && order.orderStatus).bucket : String(order && order.orderStatus || "other").toLowerCase());
+    counts[bucket || "other"] = (counts[bucket || "other"] || 0) + 1;
+  });
+  var total  = (orders || []).length;
 
   if (total === 0) { _showChartEmpty(canvas); return; }
 
@@ -325,42 +330,53 @@ function _renderRealVsMissed(orders) {
     delete _chartRegistry["real-vs-missed"];
   }
 
-  var realPct = total > 0 ? Math.round((real / total) * 100) : 0;
-  var missedPct = total > 0 ? Math.round((missed / total) * 100) : 0;
+  var palette = ["#3b82f6", "#10b981", "#14b8a6", "#f59e0b", "#8b5cf6", "#ef4444", "#64748b", "#eab308"];
+  function statusRank(bucket) {
+    return window.TaagerStatus ? (window.TaagerStatus.statusInfo(bucket).order || 999) : 999;
+  }
+  function statusColor(bucket, index) {
+    return window.TaagerStatus && typeof window.TaagerStatus.color === "function"
+      ? window.TaagerStatus.color(bucket)
+      : palette[index % palette.length];
+  }
+  var entries = Object.keys(counts).map(function (bucket) {
+    return { bucket: bucket, count: counts[bucket] || 0 };
+  }).sort(function (a, b) {
+    var rankDiff = statusRank(a.bucket) - statusRank(b.bucket);
+    return rankDiff || b.count - a.count;
+  });
 
   var legendRoot = document.getElementById("donut-legend-root");
   if (legendRoot) {
-    legendRoot.innerHTML = `
-      <div class="donut-legend-item">
-        <div class="legend-item-title">
-          <span class="legend-dot green"></span>
-          <span class="legend-label">` + window.t_anl('charts.delivered') + `</span>
-        </div>
-        <div class="legend-item-numbers">
-          <strong>${real}</strong>
-          <span class="legend-sub">(${realPct}%)</span>
-        </div>
-      </div>
-      <div class="donut-legend-item">
-        <div class="legend-item-title">
-          <span class="legend-dot red"></span>
-          <span class="legend-label">` + window.t_anl('charts.failed') + `</span>
-        </div>
-        <div class="legend-item-numbers">
-          <strong>${missed}</strong>
-          <span class="legend-sub">(${missedPct}%)</span>
-        </div>
-      </div>
-    `;
+    legendRoot.style.flexWrap = "wrap";
+    legendRoot.style.rowGap = "12px";
+    legendRoot.innerHTML = entries.map(function (entry, index) {
+      var pct = total > 0 ? Math.round((entry.count / total) * 100) : 0;
+      var label = typeof analyticsStatusLabel === "function" ? analyticsStatusLabel(entry.bucket) : entry.bucket;
+      var color = statusColor(entry.bucket, index);
+      return `
+        <div class="donut-legend-item">
+          <div class="legend-item-title">
+            <span class="legend-dot" style="background:${color}"></span>
+            <span class="legend-label">${label}</span>
+          </div>
+          <div class="legend-item-numbers">
+            <strong>${entry.count}</strong>
+            <span class="legend-sub">(${pct}%)</span>
+          </div>
+        </div>`;
+    }).join("");
   }
 
   _chartRegistry["real-vs-missed"] = new Chart(canvas, {
     type: "doughnut",
     data: {
-      labels: [window.t_anl('charts.delivered'), window.t_anl('charts.failed')],
+      labels: entries.map(function (entry) {
+        return typeof analyticsStatusLabel === "function" ? analyticsStatusLabel(entry.bucket) : entry.bucket;
+      }),
       datasets: [{
-        data: [real, missed],
-        backgroundColor: ["#10b981", "#ef4444"],
+        data: entries.map(function (entry) { return entry.count; }),
+        backgroundColor: entries.map(function (entry, index) { return statusColor(entry.bucket, index); }),
         borderWidth: 0,
         hoverOffset: 6,
       }],
@@ -920,7 +936,9 @@ function _renderDeliveryFunnel(orders) {
     shippingVal = 0;
     deliveredVal = 0;
     orders.forEach(function (o) {
-      var bucket = window.TaagerStatus.normalize(o && o.orderStatus).bucket;
+      var bucket = typeof analyticsStatusBucketFromOrder === "function"
+        ? analyticsStatusBucketFromOrder(o)
+        : window.TaagerStatus.normalize(o && o.orderStatus).bucket;
       if (bucket === "delivered") deliveredVal++;
       else if (bucket === "confirmed") confirmedVal++;
       else if (bucket === "shipping" || bucket === "delivery_suspended") shippingVal++;

@@ -16,22 +16,26 @@ var _insightsPanelState = {
 // Smart insights must classify the real Taager Arabic statuses through the
 // shared helper instead of comparing old English TAAGER status strings.
 function _insightStatusBucket(orderOrStatus) {
+  if (typeof analyticsStatusBucketFromOrder === "function") return analyticsStatusBucketFromOrder(orderOrStatus);
   var status = orderOrStatus && typeof orderOrStatus === "object"
-    ? orderOrStatus.orderStatus
+    ? (orderOrStatus.orderStatus || orderOrStatus.status)
     : orderOrStatus;
   if (window.TaagerStatus) return window.TaagerStatus.normalize(status).bucket;
   return String(status || "").toLowerCase();
 }
 
 function _insightIsDelivered(order) {
-  return window.TaagerStatus
-    ? window.TaagerStatus.isDelivered(order && order.orderStatus)
-    : _insightStatusBucket(order) === "delivered";
+  return _insightStatusBucket(order) === "delivered";
 }
 
 function _insightIsFailed(order) {
+  if (typeof analyticsIsFailedOrder === "function") return analyticsIsFailedOrder(order);
   var bucket = _insightStatusBucket(order);
-  return bucket === "failed" || bucket === "return_verified" || bucket === "customer_refused_confirmation";
+  return bucket === "failed" ||
+    bucket === "return_verified" ||
+    bucket === "customer_refused_confirmation" ||
+    bucket === "out_of_stock" ||
+    bucket === "after_sales_done";
 }
 
 function _insightIsBucket(order, buckets) {

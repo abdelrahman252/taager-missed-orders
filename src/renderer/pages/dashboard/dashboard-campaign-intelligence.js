@@ -411,8 +411,11 @@
     var targetCurrency = String(reportingCurrency || sourceCurrency || "SAR").toUpperCase();
     var commissionNative = num(product && product.commission, 2);
     var commission = num(convertReportingMoney(commissionNative, sourceCurrency, targetCurrency, egpRate), 2);
-    var avgCommissionNative = delivered > 0 ? commissionNative / delivered : 0;
-    var avgCommission = delivered > 0 ? commission / delivered : 0;
+    var netOrderProfitNative = num(product && (product.netOrderProfitAfterTax != null ? product.netOrderProfitAfterTax : product.totalPlacedCommission), 2);
+    var netOrderProfit = num(convertReportingMoney(netOrderProfitNative, sourceCurrency, targetCurrency, egpRate), 2);
+    var averageProfitSource = delivered > 0 ? 'delivered_orders' : (orders > 0 ? 'net_orders_fallback' : 'unavailable');
+    var avgCommissionNative = delivered > 0 ? commissionNative / delivered : (orders > 0 ? netOrderProfitNative / orders : 0);
+    var avgCommission = delivered > 0 ? commission / delivered : (orders > 0 ? netOrderProfit / orders : 0);
     var ndr = num(product && (product.ndrPct || product.deliveryRate || product.deliveryPct));
     var dr = num(product && (product.drRate || product.deliveryPct));
     var breakEvenNative = avgCommissionNative * (ndr / 100);
@@ -442,6 +445,8 @@
       totalSalesNative: totalSalesNative,
       commission: commission,
       commissionNative: commissionNative,
+      netOrderProfitAfterTax: netOrderProfit,
+      averageProfitSource: averageProfitSource,
       deliveredAov: delivered > 0 ? num(deliveredSales / delivered, 2) : 0,
       breakEvenCpaSar: num(convertReportingMoney(breakEvenNative, sourceCurrency, "SAR", egpRate), 2),
       breakEvenCpaNative: num(breakEvenNative, 2),

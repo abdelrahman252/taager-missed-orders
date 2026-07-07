@@ -316,6 +316,7 @@
         netOrders: orders,
         actualDeliveredOrders: actualDelivered,
         actualEarnedProfitAfterTax: actualCommission,
+        netOrderProfitAfterTax: p.netOrderProfitAfterTax != null ? p.netOrderProfitAfterTax : p.totalPlacedCommission,
         currentTotalSales: Number(p.totalSales || p.revenue || 0),
         expectedNdrRate: ndr,
         adSpend: 0
@@ -326,6 +327,7 @@
         orders: orders,
         currentNdrPct: pct(ndr),
         avgCommission: num(calculation.averageProfit, 2),
+        averageProfitSource: calculation.averageProfitSource,
         expectedDeliveriesExact: num(calculation.expectedDeliveriesExact, 2),
         expectedTotalProfitBeforeAdSpend: num(calculation.expectedTotalProfitBeforeAdSpend, 2),
         expectedRevenue: num(calculation.expectedTotalProfitBeforeAdSpend, 2),

@@ -585,6 +585,9 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       var avgCommissionSar = window.DashboardOrderMetrics
         ? window.DashboardOrderMetrics.averageProfit(p)
         : (delivered > 0 ? (Number(commissionVal) || 0) / delivered : 0);
+      p.averageProfitSource = window.DashboardOrderMetrics
+        ? window.DashboardOrderMetrics.averageProfitSource(p)
+        : (delivered > 0 ? 'delivered_orders' : (placed > 0 ? 'net_orders_fallback' : 'unavailable'));
       p.averageProfit = sarToSelectedCurrency(avgCommissionSar);
       var breakEvenSar = avgCommissionSar * ((Number(p.ndrPct) || 0) / 100);
       p.breakEvenCpa = sarToSelectedCurrency(breakEvenSar);
@@ -1753,6 +1756,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     const failedText = productCompactNumber(p.failedCount || 0, 0, 10000);
     const canceledText = productCompactNumber(p.canceledCount || 0, 0, 10000);
     const averageProfitText = productCompactNumber(p.averageProfit || 0, 2, 10000);
+    const averageProfitFallback = p.averageProfitSource === 'net_orders_fallback';
     const adSpendText = productCompactNumber(p.allocatedAdSpend || 0, 2, 10000);
     const cpaText = productCompactNumber(p.cpa || 0, 2, 10000);
     const breakEvenText = productCompactNumber(p.breakEvenCpa || 0, 2, 10000);
@@ -1866,9 +1870,10 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       ${DIV}
 
       <!-- Col 11: Average Profit -->
-      <div class="s5-cell s5-cell-average-profit" title="${attr(s5Txt('Average profit per delivered order', 'متوسط الربح لكل طلب مسلم'))}" style="flex:0 0 80px;min-width:80px;text-align:center;padding:0 5px">
+      <div class="s5-cell s5-cell-average-profit" title="${attr(averageProfitFallback ? s5Txt('Estimated average profit from net orders', 'متوسط ربح تقديري من صافي الطلبات') : s5Txt('Average profit per delivered order', 'متوسط الربح لكل طلب مسلم'))}" style="flex:0 0 80px;min-width:80px;text-align:center;padding:0 5px">
         <div class="s5-number-fit" data-financial-value="averageProfit" title="${attr(productMoney(p.averageProfit || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:var(--weight-bold);color:#38bdf8;white-space:nowrap">${averageProfitText}</div>
         <div data-financial-currency="averageProfit" style="font-size:var(--type-micro);color:rgba(56,189,248,0.55);font-weight:var(--weight-bold);margin-top:2px">${selectedCurrency()}</div>
+        ${averageProfitFallback ? `<div style="font-size:9px;color:#f59e0b;margin-top:1px;white-space:nowrap">${s5Txt('from net orders', 'من صافي الطلبات')}</div>` : ''}
       </div>
       ${DIV}
 
@@ -4195,6 +4200,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         netOrders: placed,
         actualDeliveredOrders: actualDelivered,
         actualEarnedProfitAfterTax: actualCommission,
+        netOrderProfitAfterTax: product.netOrderProfitAfterTax != null ? product.netOrderProfitAfterTax : product.totalPlacedCommission,
         currentTotalSales: totalSalesValue(product),
         expectedNdrRate: ndrRate,
         adSpend: Number(product.allocatedAdSpend) || 0
@@ -4206,6 +4212,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         expectedDeliveriesExact: calculation.expectedDeliveriesExact,
         commission: calculation.expectedTotalProfitBeforeAdSpend,
         expectedTotalProfitBeforeAdSpend: calculation.expectedTotalProfitBeforeAdSpend,
+        averageProfit: calculation.averageProfit,
+        averageProfitSource: calculation.averageProfitSource,
         revenue: calculation.expectedTotalProfitBeforeAdSpend,
         deliveredSales: calculation.expectedDeliveredSales,
         expectedDeliveredSales: calculation.expectedDeliveredSales,

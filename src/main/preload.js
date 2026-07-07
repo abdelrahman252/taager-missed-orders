@@ -136,6 +136,7 @@ contextBridge.exposeInMainWorld("api", {
   setAutoRunAccounts:  (ids)  => monitoredInvoke("set-auto-run-accounts", ids),
   setLaunchMinimized: (val)  => monitoredInvoke("set-launch-minimized", val),
   setAutoConfirm:     (val)  => monitoredInvoke("set-auto-confirm", val),
+  setMissingOrdersUploadEnabled: (val) => monitoredInvoke("set-missing-orders-upload-enabled", val),
   getAutoRunProgress: ()     => monitoredInvoke("get-auto-run-progress"),
   killBot:            ()     => monitoredInvoke("kill-bot"),
   openFolder:         (folder) => monitoredInvoke("open-folder", folder),

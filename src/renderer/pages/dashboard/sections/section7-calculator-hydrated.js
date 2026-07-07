@@ -179,6 +179,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
   var realAvgCommission = d.averageProfit != null
     ? Number(d.averageProfit)
     : (d.avgCommission != null ? Number(d.avgCommission) : 0);
+  var realAverageProfitSource = d.averageProfitSource || (Number(d.actualDeliveredCount != null ? d.actualDeliveredCount : d.deliveredCount || 0) > 0 ? 'delivered_orders' : (realTotalOrders > 0 && d.netOrderProfitAfterTax != null ? 'net_orders_fallback' : 'unavailable'));
   var realTaagerProfitAfterTax = d.actualEarnedProfitAfterTax != null
     ? Number(d.actualEarnedProfitAfterTax)
     : (d.taagerProfitAfterTax != null ? Number(d.taagerProfitAfterTax) : realAvgCommission);
@@ -3206,16 +3207,16 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         "confirmationRate = confirmedOrders / netOrders * 100",
       ) +
       _kpiMiniTip(
-        s7Txt("Average Profit", "متوسط الربح"),
+        s7Txt("Average Profit", "متوسط الربح") + (realAverageProfitSource === 'net_orders_fallback' ? ' · ' + s7Txt('Estimated from net orders', 'تقديري من صافي الطلبات') : ''),
         '<span id="s7-real-average-profit">' + realAvgCommission.toLocaleString("en-US", { maximumFractionDigits: 2 }) + " " + nativeCurrency + "</span>",
         "#3b82f6",
         S7_ICONS.money,
         s7Txt("Average Profit", "متوسط الربح"),
         s7Txt(
-          "Average profit per delivered order in the selected period.",
-          "متوسط الربح لكل طلب مسلم في الفترة المحددة.",
+          realAverageProfitSource === 'net_orders_fallback' ? "Estimated average profit from net orders because there are no delivered orders in the selected period." : "Average profit per delivered order in the selected period.",
+          realAverageProfitSource === 'net_orders_fallback' ? "متوسط ربح تقديري من صافي الطلبات لعدم وجود طلبات مسلمة في الفترة المحددة." : "متوسط الربح لكل طلب مسلم في الفترة المحددة.",
         ),
-        "averageProfit = earnedProfitAfterTax / deliveredOrders",
+        realAverageProfitSource === 'net_orders_fallback' ? "estimatedAverageProfit = netOrderProfitAfterTax / netOrders" : "averageProfit = earnedProfitAfterTax / deliveredOrders",
       ) +
       "</div>" +
       "</div>" +

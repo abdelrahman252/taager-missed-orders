@@ -28,6 +28,7 @@
     "verify:taager-dates": "node scripts/verify-taager-date-range.js",
     "verify:taager-flow": "node scripts/verify-taager-flow-recovery.js",
     "verify:taager-recovery": "node scripts/verify-taager-recovery.js",
+    "verify:missing-orders": "node tests/missing-orders-feature.test.js",
     "verify:stage1-recovery": "node scripts/verify-stage1-account-recovery.js",
     "verify:stage2-recovery": "node scripts/verify-stage2-zoom-sync-recovery.js",
     "verify:stage3-recovery": "node scripts/verify-stage3-support-recovery.js",

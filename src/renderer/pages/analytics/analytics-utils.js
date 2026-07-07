@@ -92,11 +92,35 @@ function analyticsTaagerProfit(order) {
 }
 
 function analyticsIsDeliveredOrder(order) {
-  const status = order && order.orderStatus;
-  if (window.TaagerStatus && typeof window.TaagerStatus.isDelivered === "function") {
-    return window.TaagerStatus.isDelivered(status);
+  return analyticsStatusBucketFromOrder(order) === "delivered";
+}
+
+function analyticsStatusBucketFromOrder(orderOrStatus) {
+  var explicit = "";
+  var status = orderOrStatus;
+  if (orderOrStatus && typeof orderOrStatus === "object") {
+    explicit = String(orderOrStatus.orderStatusBucket || orderOrStatus.exactStatusBucket || orderOrStatus.statusBucket || "").trim();
+    status = orderOrStatus.orderStatus || orderOrStatus.status || "";
   }
-  return String(status || "").toLowerCase() === "delivered";
+  if (explicit) return explicit;
+  if (window.TaagerStatus) return window.TaagerStatus.normalize(status).bucket;
+  return String(status || "").toLowerCase();
+}
+
+function analyticsIsFailedOrder(orderOrStatus) {
+  var bucket = analyticsStatusBucketFromOrder(orderOrStatus);
+  if (window.TaagerStatus && typeof window.TaagerStatus.statusInfo === "function") {
+    return window.TaagerStatus.statusInfo(bucket).businessGroup === "lost";
+  }
+  return bucket === "failed" ||
+    bucket === "return_verified" ||
+    bucket === "customer_refused_confirmation" ||
+    bucket === "out_of_stock" ||
+    bucket === "after_sales_done";
+}
+
+function analyticsIsNdrEligibleOrder(orderOrStatus) {
+  return analyticsStatusBucketFromOrder(orderOrStatus) !== "canceled_by_you";
 }
 
 function analyticsDashboardRevenueValue(order) {

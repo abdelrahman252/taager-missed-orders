@@ -194,27 +194,27 @@ function _opsGroupBy(arr, key) {
 // Taager dashboard/status/NDR migration: Operations uses the same Taager
 // Arabic status map as Analytics and Dashboard for delivered/failed rates.
 function _opsStatusBucket(orderOrStatus) {
+  if (typeof analyticsStatusBucketFromOrder === "function") return analyticsStatusBucketFromOrder(orderOrStatus);
   const status = orderOrStatus && typeof orderOrStatus === "object"
-    ? orderOrStatus.orderStatus
+    ? (orderOrStatus.orderStatus || orderOrStatus.status)
     : orderOrStatus;
   if (window.TaagerStatus) return window.TaagerStatus.normalize(status).bucket;
   return String(status || "").toLowerCase();
 }
 function _opsIsDelivered(orderOrStatus) {
-  const status = orderOrStatus && typeof orderOrStatus === "object"
-    ? orderOrStatus.orderStatus
-    : orderOrStatus;
-  return window.TaagerStatus ? window.TaagerStatus.isDelivered(status) : _opsStatusBucket(status) === "delivered";
+  return _opsStatusBucket(orderOrStatus) === "delivered";
 }
 function _opsIsFailed(orderOrStatus) {
+  if (typeof analyticsIsFailedOrder === "function") return analyticsIsFailedOrder(orderOrStatus);
   const bucket = _opsStatusBucket(orderOrStatus);
-  return bucket === "failed" || bucket === "return_verified" || bucket === "customer_refused_confirmation";
+  return bucket === "failed" ||
+    bucket === "return_verified" ||
+    bucket === "customer_refused_confirmation" ||
+    bucket === "out_of_stock" ||
+    bucket === "after_sales_done";
 }
 function _opsIsNdrEligible(orderOrStatus) {
-  const status = orderOrStatus && typeof orderOrStatus === "object"
-    ? orderOrStatus.orderStatus
-    : orderOrStatus;
-  return window.TaagerStatus ? window.TaagerStatus.isEligibleForNdr(status) : _opsStatusBucket(status) !== "canceled_by_you";
+  return _opsStatusBucket(orderOrStatus) !== "canceled_by_you";
 }
 function _opsUniqueAccounts(runs) {
     const seen = new Set(), out = [];

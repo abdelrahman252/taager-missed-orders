@@ -219,7 +219,9 @@ function _applyFiltersAndRender(container) {
 
   if (s.statusFilter) {
     results = results.filter(o => {
-      const bucket = window.TaagerStatus ? window.TaagerStatus.normalize(o.orderStatus).bucket : o.orderStatus;
+      const bucket = typeof analyticsStatusBucketFromOrder === "function"
+        ? analyticsStatusBucketFromOrder(o)
+        : (window.TaagerStatus ? window.TaagerStatus.normalize(o.orderStatus).bucket : o.orderStatus);
       return bucket === s.statusFilter;
     });
   }
@@ -284,7 +286,10 @@ function _renderTableBody(container, rows) {
   }
 
   tbody.innerHTML = rows.map((o, idx) => {
-    const statusColor = getStatusColor(o.orderStatus || "");
+    const statusBucket = typeof analyticsStatusBucketFromOrder === "function"
+      ? analyticsStatusBucketFromOrder(o)
+      : (o.orderStatus || "");
+    const statusColor = getStatusColor(statusBucket);
     const date = formatAnalyticsDateTime(o.easyCreatedAt || o.createdAt || o.date);
     const sku   = o.sku || "—";
     const rawPhoneVal = o.phone || o.rawPhone || o.normPhone || "";
@@ -305,8 +310,8 @@ function _renderTableBody(container, rows) {
         <td style="font-variant-numeric:tabular-nums">${o.subtotal > 0 ? formatSAR(o.subtotal) : "—"}</td>
         <td style="font-variant-numeric:tabular-nums;font-weight:var(--weight-semibold);color:var(--success)">${codStr}</td>
         <td>
-          <span class="status-badge" data-status="${o.orderStatus || ""}"
-            style="background:${statusColor.bg};color:${statusColor.text}">${analyticsStatusLabel(o.orderStatus)}</span>
+          <span class="status-badge" data-status="${statusBucket}"
+            style="background:${statusColor.bg};color:${statusColor.text}">${analyticsStatusLabel(statusBucket)}</span>
         </td>
         <td>${o.city || "—"}</td>
         <td>

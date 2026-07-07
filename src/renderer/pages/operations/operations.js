@@ -482,8 +482,9 @@ async function renderOperations(onBack) {
     const firstOrder = orders[_selectedOrderIdx] || orders[0];
     const ts       = run.runTimestamp ? new Date(run.runTimestamp) : null;
     const orderStatus = firstOrder?.orderStatus || "Pending";
-    const sc       = _opsStatusColor(orderStatus);
-    const stLabel  = window.TaagerStatus ? window.TaagerStatus.display(orderStatus) : orderStatus;
+    const orderStatusBucket = typeof _opsStatusBucket === "function" ? _opsStatusBucket(firstOrder) : orderStatus;
+    const sc       = _opsStatusColor(orderStatusBucket);
+    const stLabel  = window.TaagerStatus ? window.TaagerStatus.display(orderStatusBucket) : orderStatus;
     const fmtTs    = d => d ? d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
     const orderCreatedAt = firstOrder?.easyCreatedAt || firstOrder?.createdAt || firstOrder?.date || "";
     const fmtOrderCreatedAt = value => {
@@ -773,9 +774,13 @@ async function renderOperations(onBack) {
     const fmt  = d => d ? d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
     
     const status = order?.orderStatus || "Pending";
-    const meta = window.TaagerStatus ? window.TaagerStatus.normalize(status) : null;
-    const isFail = meta ? (meta.eligible !== false && meta.delivered !== true) : status.toLowerCase() === "failed";
-    const isDone = meta ? meta.delivered === true : (status.toLowerCase() === "delivered" || status.toLowerCase() === "completed");
+    const bucket = typeof _opsStatusBucket === "function" ? _opsStatusBucket(order) : String(status || "").toLowerCase();
+    const isFail = typeof _opsIsFailed === "function"
+      ? _opsIsFailed(order)
+      : bucket === "failed";
+    const isDone = typeof _opsIsDelivered === "function"
+      ? _opsIsDelivered(order)
+      : (bucket === "delivered" || bucket === "completed");
     
     const steps = [
       { label: window.t_ops('orderDetails.timelineSteps.botStarted'), time: date ? fmt(date) : "—", done: true },

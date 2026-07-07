@@ -125,7 +125,6 @@
       var delivered = row.actualDeliveredCount != null
         ? finiteCount(row.actualDeliveredCount)
         : this.deliveredOrders(row);
-      if (!delivered) return 0;
       var earned = row.actualCommission != null
         ? Number(row.actualCommission)
         : (row.earnedProfitAfterTax != null
@@ -133,7 +132,22 @@
           : (row.earnedCommission != null
             ? Number(row.earnedCommission)
             : Number(row.commission)));
-      return isFinite(earned) ? earned / delivered : 0;
+      if (delivered > 0) return isFinite(earned) ? earned / delivered : 0;
+      var netOrders = this.netOrders(row);
+      var netOrderProfit = row.netOrderProfitAfterTax != null
+        ? Number(row.netOrderProfitAfterTax)
+        : Number(row.totalPlacedCommission);
+      return netOrders > 0 && isFinite(netOrderProfit) ? netOrderProfit / netOrders : 0;
+    },
+    averageProfitSource: function (row) {
+      row = row || {};
+      if (row.averageProfitSource) return row.averageProfitSource;
+      var delivered = row.actualDeliveredCount != null
+        ? finiteCount(row.actualDeliveredCount)
+        : this.deliveredOrders(row);
+      if (delivered > 0) return 'delivered_orders';
+      var hasNetOrderProfit = row.netOrderProfitAfterTax != null || row.totalPlacedCommission != null;
+      return this.netOrders(row) > 0 && hasNetOrderProfit ? 'net_orders_fallback' : 'unavailable';
     }
   };
 

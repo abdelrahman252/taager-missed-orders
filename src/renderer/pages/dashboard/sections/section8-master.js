@@ -448,6 +448,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
   // Quick Summary dynamic items
   var ndrPct = cod.ndrPct != null ? num(cod.ndrPct, 0) : (d.roi ? num(d.roi.ndrPct, 0) : 0);
   var avgCommission = num(roiLive.avgCommission, 0);
+  var averageProfitSource = roiLive.averageProfitSource || (num(roiLive.actualDeliveredCount, 0) > 0 ? 'delivered_orders' : (num(roiLive.netOrderCount || roiLive.totalOrders, 0) > 0 && roiLive.netOrderProfitAfterTax != null ? 'net_orders_fallback' : 'unavailable'));
   var accountSpend = Math.max(0, num(roiLive.adSpend, 0));
   var accountOrders = Math.max(0, window.DashboardOrderMetrics
     ? window.DashboardOrderMetrics.netOrders(roiLive)
@@ -821,7 +822,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
   }).join('');
 
   var financialKpiCards = [
-    { label: s8Txt('Average Profit', 'متوسط الربح'), value: avgCommissionInTargetCurrency, decimals: 2, color: 'green', iconType: 'green', tooltip: s8Txt('Average Profit = average profit after tax per delivered order.', 'متوسط الربح = متوسط الربح بعد الضريبة لكل طلب مسلم.') },
+    { label: s8Txt('Average Profit', 'متوسط الربح') + (averageProfitSource === 'net_orders_fallback' ? ' · ' + s8Txt('Estimated from net orders', 'تقديري من صافي الطلبات') : ''), value: avgCommissionInTargetCurrency, decimals: 2, color: 'green', iconType: 'green', tooltip: averageProfitSource === 'net_orders_fallback' ? s8Txt('Estimated average profit from net orders because there are no delivered orders.', 'متوسط ربح تقديري من صافي الطلبات لعدم وجود طلبات مسلمة.') : s8Txt('Average Profit = average profit after tax per delivered order.', 'متوسط الربح = متوسط الربح بعد الضريبة لكل طلب مسلم.') },
     { label: s8Txt('Account CPA', 'تكلفة الطلب للحساب'), value: accountCpa, loading: marketingSpendPending, unavailable: marketingSpendUnavailable, decimals: 2, color: 'purple', iconType: 'purple', tooltip: s8Txt('Account CPA = total spend divided by net total orders.', 'تكلفة الطلب للحساب = إجمالي الإنفاق مقسوما على صافي إجمالي الطلبات.') },
     { label: s8Txt('Account Break-even CPA', 'تكلفة التعادل للحساب'), value: accountBreakEvenCpa, decimals: 2, color: 'orange', iconType: 'orange', tooltip: s8Txt('Account Break-even CPA = average profit after tax per delivered order multiplied by account NDR.', 'تكلفة التعادل للحساب = متوسط الربح بعد الضريبة لكل طلب مسلم مضروبا في نسبة التسليم الصافي للحساب.') },
     { label: s8Txt('Total Spend', 'إجمالي الإنفاق'), value: accountSpend, loading: marketingSpendPending, unavailable: marketingSpendUnavailable, decimals: 0, color: 'blue', iconType: 'blue', tooltip: s8Txt('Total Spend = live connected marketing spend or the current Account Calculator spend.', 'إجمالي الإنفاق = الإنفاق التسويقي المتصل مباشرة أو إنفاق حاسبة الحساب الحالي.') },

@@ -20,6 +20,8 @@ const {
 const { createEasyOrdersExportFlow } = require("./easy-orders-export");
 const { createLightFunnelsFlow } = require("./lightfunnels-flow");
 const { createTaagerOrdersExportFlow } = require("./taager-orders-export-flow");
+const { createMissingOrdersUploadFlow } = require("./missing-orders-upload-flow");
+const { splitOrdersByDestination } = require("./missing-orders");
 const {
   installTaagerInterruptionAutoDismiss,
   clearTaagerInterruption,
@@ -110,6 +112,10 @@ function output() {
 
 function buildOutputExcel(...args) {
   return output().buildOutputExcel(...args);
+}
+
+function buildMissingOrdersExcel(...args) {
+  return output().buildMissingOrdersExcel(...args);
 }
 
 function buildFailedExcel(...args) {
@@ -4166,6 +4172,46 @@ async function phase5_uploadToTaager(page, orders, outputOptions = {}) {
   }
 }
 
+async function phase6_uploadMissingOrders(page, orders, outputOptions = {}) {
+  log("\n========================================");
+  log("  PHASE 6 - Upload to Taager Missing Orders");
+  log(`  Total: ${orders.length} order items`);
+  log("========================================\n");
+  emitStage("taager.missing-orders.upload", "started", `Uploading ${orders.length} missed-source order items`, { total: orders.length });
+
+  const missingOrdersStoreName = String(
+    outputOptions.missingOrdersStoreName ||
+    config.missingOrdersStoreName ||
+    ""
+  ).trim();
+  if (!missingOrdersStoreName) {
+    throw new Error("MISSING_ORDERS_STORE_NAME_REQUIRED: enter the Taager Missing Orders store name in setup");
+  }
+  log(`Taager Missing Orders store name: ${missingOrdersStoreName}`);
+
+  const buffer = buildMissingOrdersExcel(orders, outputOptions);
+  const tempPath = path.join(os.tmpdir(), `taager-missing-orders-${Date.now()}.xlsx`);
+  fs.writeFileSync(tempPath, buffer);
+  const flow = createMissingOrdersUploadFlow({
+    log,
+    stage: emitStage,
+    goto: taagerGoto,
+    clearInterruption: clearTaagerInterruptionBounded,
+  });
+
+  try {
+    page = await flow.openLegacyMissingOrders(page);
+    const result = await flow.uploadFile(page, tempPath, { storeName: missingOrdersStoreName });
+    emitStage("taager.missing-orders.upload", "ok", `Missing Orders upload completed for ${orders.length} order items`, { total: orders.length });
+    return { page, buffer, result };
+  } catch (error) {
+    emitStage("taager.missing-orders.upload", "failed", error.message || String(error), { total: orders.length });
+    throw error;
+  } finally {
+    try { fs.unlinkSync(tempPath); } catch (_) {}
+  }
+}
+
 // MAIN
 // ════════════════════════════════════════
 (async () => {
@@ -4388,8 +4434,17 @@ async function phase5_uploadToTaager(page, orders, outputOptions = {}) {
     const { orders: missedOrders, skippedOrders: phoneFailedOrders } =
       parseMissedOrders(missedBuffer, dateFrom, dateTo);
     const catalog         = buildProductCatalog(realOrders);
-    const { resolved: resolvedMissed, skippedOrders: catalogFailedOrders } =
+    const { resolved: resolvedMissedAll, skippedOrders: catalogFailedOrders } =
       resolveMissedOrders(missedOrders, catalog);
+    const missingOrdersFeatureEnabled = config.missingOrdersUploadEnabled === true && TAAGER_COUNTRY === "sa";
+    if (config.missingOrdersUploadEnabled === true && !missingOrdersFeatureEnabled) {
+      log(`Taager Missing Orders routing is enabled but unavailable for ${TAAGER_COUNTRY.toUpperCase()}; preserving normal cart routing for this account.`);
+    }
+    const resolvedMissed = resolvedMissedAll;
+    log(`Missing Orders audit: parsed=${missedOrders.length}, resolved=${resolvedMissed.length}, phoneSkipped=${phoneFailedOrders.length}, catalogSkipped=${catalogFailedOrders.length}, localRegistrySkipped=0`);
+    if (missingOrdersFeatureEnabled) {
+      log("Missing Orders audit: local machine registry is ignored; routing uses this run's EasyOrders export plus Taager online duplicate checks.");
+    }
 
     const baseSkippedOrders = [...phoneFailedOrders, ...catalogFailedOrders].map(o => ({
       ...o,
@@ -4402,6 +4457,7 @@ async function phase5_uploadToTaager(page, orders, outputOptions = {}) {
     // Saves learned pairs to disk — grows over time, never cleared.
     // If the file doesn't exist yet (first run or deleted) → starts fresh and works normally.
     const { orders, stats } = mergeAndDeduplicate(realOrders, resolvedMissed, taagerOrderKeys);
+    log(`Missing Orders audit after Taager check: new=${stats.missedNew}, alreadyInTaager=${stats.missedInTaager}, duplicateInBatch=${stats.missedDupe}, missingSku=${stats.missedMissingSku}`);
     const uncertainUploadWarnings = orders.filter(o => o.uncertain).map(o => ({
       ...o,
       reason: "phone_uncertain_zero_appended",
@@ -4455,8 +4511,13 @@ async function phase5_uploadToTaager(page, orders, outputOptions = {}) {
     }
 
     // ── Build output Excel (kept for download / reference) ──
-    const outputBuffer = buildOutputExcel(orders, provinceFallbackOptions);
-    log(`✅ Output Excel built: ${outputBuffer.length} bytes`);
+    const destinationSplit = splitOrdersByDestination(orders, missingOrdersFeatureEnabled);
+    const missingOrdersStoreName = String(config.missingOrdersStoreName || "").trim();
+    const outputBuffer = buildOutputExcel(destinationSplit.cartOrders, provinceFallbackOptions);
+    const preparedMissingOrdersBuffer = destinationSplit.missingOrders.length > 0
+      ? buildMissingOrdersExcel(destinationSplit.missingOrders, provinceFallbackOptions)
+      : null;
+    log(`Prepared upload files: cart items=${destinationSplit.cartOrders.length}, missing-order items=${destinationSplit.missingOrders.length}`);
 
     // ── Send preview to dashboard before starting upload ──
     const previewRows = orders.slice(0, 50).map(o => ({
@@ -4473,6 +4534,7 @@ async function phase5_uploadToTaager(page, orders, outputOptions = {}) {
       phone:       formatPhone(o.normPhone, TAAGER_COUNTRY) || "",
       taagerCountry: TAAGER_COUNTRY,
       uncertain:   !!o.uncertain,
+      destination: missingOrdersFeatureEnabled && String(o.source || "") === "missed" ? "missing-orders" : "cart",
     }));
     process.send && process.send({
       type: "preview",
@@ -4482,8 +4544,85 @@ async function phase5_uploadToTaager(page, orders, outputOptions = {}) {
     });
     log(`📋 Preview sent to dashboard (${orders.length} orders)`);
 
-    // Phase 5 - upload orders to Taager cart.
-    const uploadResults = await phase5_uploadToTaager(page, orders, provinceFallbackOptions);
+    // Phase 5/6 - preserve the original all-to-cart path unless the opt-in
+    // Missing Orders feature is active for this Saudi account.
+    let uploadResults;
+    const missingOrdersUpload = {
+      enabled: missingOrdersFeatureEnabled,
+      attempted: 0,
+      success: 0,
+      failed: 0,
+      status: missingOrdersFeatureEnabled ? "pending" : "disabled",
+      error: "",
+      storeName: missingOrdersStoreName,
+      buffer: preparedMissingOrdersBuffer ? Array.from(preparedMissingOrdersBuffer) : null,
+    };
+    if (!missingOrdersFeatureEnabled) {
+      uploadResults = await phase5_uploadToTaager(page, orders, provinceFallbackOptions);
+    } else {
+      const { cartOrders, missingOrders } = destinationSplit;
+      const successful = [];
+      const failures = [];
+      let cartFailureSource = "none";
+
+      log(`Destination split: cart=${cartOrders.length} missing-orders=${missingOrders.length}`);
+      if (missingOrders.length > 0) {
+        log(`Missing Orders modal store name: ${missingOrdersStoreName || "(missing)"}`);
+        if (!missingOrdersStoreName) {
+          throw new Error("MISSING_ORDERS_STORE_NAME_REQUIRED: enter the Taager Missing Orders store name in setup");
+        }
+      }
+      if (cartOrders.length > 0) {
+        try {
+          const cartResult = await phase5_uploadToTaager(page, cartOrders, provinceFallbackOptions);
+          successful.push(...(cartResult.successfulOrders || splitSuccessfulOrders(cartOrders, cartResult.failedOrders || []))
+            .map((order) => ({ ...order, destination: "cart" })));
+          failures.push(...(cartResult.failedOrders || []).map((order) => ({ ...order, destination: "cart" })));
+          cartFailureSource = cartResult.failedSource || "card";
+        } catch (error) {
+          cartFailureSource = "cart-error";
+          log(`Taager cart destination failed; continuing with the separate Missing Orders destination: ${error.message}`);
+          failures.push(...cartOrders.map((order) => ({ ...order, error: error.message || String(error), destination: "cart" })));
+        }
+      } else {
+        log("Taager cart destination skipped: no real-source orders.");
+      }
+
+      missingOrdersUpload.attempted = missingOrders.length;
+      if (missingOrders.length > 0) {
+        try {
+          const missingResult = await phase6_uploadMissingOrders(page, missingOrders, {
+            ...provinceFallbackOptions,
+            missingOrdersStoreName,
+          });
+          page = missingResult.page || page;
+          successful.push(...missingOrders.map((order) => ({ ...order, destination: "missing-orders" })));
+          missingOrdersUpload.success = missingOrders.length;
+          missingOrdersUpload.status = "ok";
+        } catch (error) {
+          missingOrdersUpload.failed = missingOrders.length;
+          missingOrdersUpload.status = "failed";
+          missingOrdersUpload.error = error.message || String(error);
+          failures.push(...missingOrders.map((order) => ({ ...order, error: missingOrdersUpload.error, destination: "missing-orders" })));
+          log(`Taager Missing Orders destination failed without retry: ${missingOrdersUpload.error}`);
+        }
+      } else {
+        missingOrdersUpload.status = "skipped";
+        log("Taager Missing Orders destination skipped: no new missed-source orders.");
+      }
+
+      const hasCartFailures = failures.some((order) => order.destination !== "missing-orders" && String(order.source || "real") !== "missed");
+      const hasMissingFailures = failures.some((order) => order.destination === "missing-orders" || String(order.source || "") === "missed");
+      uploadResults = {
+        success: successful.length,
+        failed: failures.length,
+        successfulOrders: successful,
+        failedOrders: failures,
+        failedSource: hasCartFailures && hasMissingFailures
+          ? "mixed"
+          : (hasMissingFailures ? "legacy-missing-orders" : cartFailureSource),
+      };
+    }
     const successfulOrders = Array.isArray(uploadResults.successfulOrders)
       ? uploadResults.successfulOrders
       : splitSuccessfulOrders(orders, uploadResults.failedOrders || []);
@@ -4507,6 +4646,7 @@ async function phase5_uploadToTaager(page, orders, outputOptions = {}) {
         createdAt:          o.createdAt   || "",
         easyCreatedAt:      o.easyCreatedAt || "",
         source:             o.source      || "real",
+        destination:        o.destination || (missingOrdersFeatureEnabled && String(o.source || "") === "missed" ? "missing-orders" : "cart"),
         address:            o.address     || "",
         orderStatus:        taagerExact?.orderStatus        || o.orderStatus        || "Under processing",
         amountDue:          taagerExact?.amountDue          ?? taagerSku.amountDue    ?? o.amountDue    ?? 0,
@@ -4525,9 +4665,15 @@ async function phase5_uploadToTaager(page, orders, outputOptions = {}) {
     }
 
     // ── Send final result ──
-    const failedBuffer = uploadResults.failedOrders.length > 0
-      ? buildOutputExcel(uploadResults.failedOrders, provinceFallbackOptions)
-      : null;
+    const failedMissedOrders = uploadResults.failedOrders.filter((order) => String(order.source || "") === "missed");
+    const failedCartOrders = uploadResults.failedOrders.filter((order) => String(order.source || "") !== "missed");
+    const failedBuffer = uploadResults.failedOrders.length === 0
+      ? null
+      : (failedMissedOrders.length > 0 && failedCartOrders.length === 0
+        ? buildMissingOrdersExcel(failedMissedOrders, provinceFallbackOptions)
+        : (failedCartOrders.length > 0 && failedMissedOrders.length === 0
+          ? buildOutputExcel(failedCartOrders, provinceFallbackOptions)
+          : buildFailedExcel(uploadResults.failedOrders)));
 
     process.send && process.send({
       type: "result",
@@ -4570,6 +4716,7 @@ async function phase5_uploadToTaager(page, orders, outputOptions = {}) {
         }) } : {}),
         orderRows: successfulOrders.map(buildResultOrderRow),
         attemptedOrderRows: orders.map(buildResultOrderRow),
+        missingOrdersUpload,
         failedOrders: {
           count: uploadResults.failed,
           summary: uploadResults.failedOrders,

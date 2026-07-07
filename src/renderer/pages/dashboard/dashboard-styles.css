@@ -227,20 +227,21 @@ button {
 }
 
 .dash-nav-list {
-  padding: 10px 8px;
+  padding: 12px 10px;
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 5px;
   overflow-y: auto;
   overflow-x: hidden;
 }
 
 .dash-nav-btn {
-  min-height: 42px;
+  min-height: 44px;
+  height: auto;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: flex-start;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
   gap: 10px;
   padding: 9px 12px;
   border-radius: var(--dash-radius-md);
@@ -277,7 +278,11 @@ button {
   flex-shrink: 0;
   color: currentColor;
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   grid-column: 1;
+  width: 18px;
+  min-height: 18px;
 }
 
 .dash-nav-lbl {
@@ -288,7 +293,7 @@ button {
   inline-size: 100%;
   min-width: 0;
   max-width: 100%;
-  line-height: 1.48;
+  line-height: 1.32;
   text-align: start;
   white-space: normal;
   overflow-x: hidden;
@@ -299,7 +304,7 @@ button {
 }
 
 #page-dashboard[dir="rtl"] .dash-nav-lbl {
-  line-height: 1.56;
+  line-height: 1.4;
 }
 
 .dash-online-row {
@@ -4893,4 +4898,98 @@ button {
 
 #dashboard-live-preloader .dashboard-live-progress span {
   transition: width .42s ease !important;
+}
+
+/* Dashboard sidebar nav rhythm. Keep wrapped labels from crowding the next row
+   on every viewport, including laptop widths. */
+#page-dashboard #dash-inner-sidebar .dash-nav-list {
+  gap: 6px !important;
+  padding-block: 12px !important;
+}
+
+#page-dashboard #dash-inner-sidebar .dash-nav-btn {
+  min-height: 46px !important;
+  height: auto !important;
+  align-items: center !important;
+  padding-block: 9px !important;
+}
+
+#page-dashboard #dash-inner-sidebar .dash-nav-lbl {
+  line-height: 1.34 !important;
+}
+
+#page-dashboard[dir="rtl"] #dash-inner-sidebar .dash-nav-lbl {
+  line-height: 1.42 !important;
+}
+
+/* Small-screen dashboard sidebar polish.
+   The app shell and dashboard shell both expose navigation on narrow windows,
+   so give the inner dashboard rail a little air instead of letting the two
+   edges visually merge. */
+#page-dashboard {
+  --dash-sidebar-gutter: 10px;
+  --dash-inner-rail-width: 52px;
+}
+
+@media (min-width: 600px) {
+  #page-dashboard .dashboard-page-main:has(> #db-shell-mount.dash-size-sm),
+  #page-dashboard .dashboard-page-main:has(> #db-shell-mount.dash-size-xs) {
+    padding-inline-start: var(--dash-sidebar-gutter);
+    background: var(--dash-bg);
+  }
+}
+
+#page-dashboard .dash-size-sm#db-shell-mount,
+#page-dashboard .dash-size-xs#db-shell-mount {
+  gap: 8px;
+}
+
+#page-dashboard .dash-size-sm #dash-inner-sidebar {
+  border-radius: 0 var(--dash-radius-md) var(--dash-radius-md) 0;
+}
+
+#page-dashboard[dir="rtl"] .dash-size-sm #dash-inner-sidebar {
+  border-radius: var(--dash-radius-md) 0 0 var(--dash-radius-md);
+}
+
+#page-dashboard .dash-size-sm #dash-inner-sidebar .dash-nav-list {
+  padding-inline: 10px;
+  gap: 4px;
+}
+
+#page-dashboard .dash-size-xs #dash-inner-sidebar {
+  width: var(--dash-inner-rail-width) !important;
+  min-width: var(--dash-inner-rail-width) !important;
+  border-radius: 0 var(--dash-radius-md) var(--dash-radius-md) 0;
+}
+
+#page-dashboard[dir="rtl"] .dash-size-xs #dash-inner-sidebar {
+  border-radius: var(--dash-radius-md) 0 0 var(--dash-radius-md);
+}
+
+#page-dashboard .dash-size-xs #dash-branding-area {
+  padding-inline: 6px !important;
+}
+
+#page-dashboard .dash-size-xs #dash-inner-sidebar .dash-nav-list {
+  padding: 10px 6px !important;
+  gap: 4px;
+}
+
+#page-dashboard .dash-size-xs #dash-inner-sidebar .dash-nav-btn {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 38px !important;
+  padding-inline: 0 !important;
+  border-inline-start-width: 0;
+}
+
+#page-dashboard .dash-size-xs #dash-inner-sidebar .dash-nav-icon {
+  width: 22px;
+  justify-content: center;
+}
+
+#page-dashboard .dash-size-xs .dash-inner-handle {
+  inset-inline-start: var(--dash-inner-rail-width) !important;
+  bottom: 28px !important;
 }
