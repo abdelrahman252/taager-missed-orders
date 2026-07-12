@@ -198,6 +198,28 @@ html.taager-ui-stabilizing #app *::after {
   scroll-behavior: auto !important;
 }
 
+html.taager-ui-stabilizing #app :is(
+  .taager-spinner,
+  .dash-preloader-spinner,
+  .dashboard-marketing-value-spinner,
+  .dp-spinner
+) {
+  animation-delay: 0s !important;
+  animation-duration: .8s !important;
+  animation-iteration-count: infinite !important;
+}
+
+html.taager-ui-stabilizing #app .taager-spinner {
+  animation-duration: .9s !important;
+}
+
+html.taager-ui-stabilizing #app .dashboard-marketing-value-spinner,
+html.taager-ui-stabilizing #app .dp-spinner,
+html.taager-ui-stabilizing #app .dp-panel.is-page-loading .dp-panel-body::before {
+  animation-duration: .75s !important;
+  animation-iteration-count: infinite !important;
+}
+
 #page-dashboard .dash-section-no-entrance .fade-up,
 #page-dashboard .dash-section-refreshing .fade-up {
   animation: none !important;

@@ -21,7 +21,13 @@ const { createEasyOrdersExportFlow } = require("./easy-orders-export");
 const { createLightFunnelsFlow } = require("./lightfunnels-flow");
 const { createTaagerOrdersExportFlow } = require("./taager-orders-export-flow");
 const { createMissingOrdersUploadFlow } = require("./missing-orders-upload-flow");
-const { splitOrdersByDestination } = require("./missing-orders");
+const {
+  DESTINATION_LEGACY_MISSING_ORDERS,
+  DESTINATION_SECOND_TAAGER_CART,
+  normalizeMissedOrdersDestination,
+  splitOrdersByMissedDestination,
+  destinationForOrder,
+} = require("./order-destinations");
 const {
   installTaagerInterruptionAutoDismiss,
   clearTaagerInterruption,
@@ -91,10 +97,19 @@ let activeContext = null;
 let activePage = null;
 let stopRequested = false;
 let taagerIdentityVerified = false;
+let activeSecondTaagerCartChild = null;
 
 function handleStopMessage(message) {
-  if (!message || message.type !== "stop") return;
+  if (!message) return;
+  if ((message.type === "google-login-finished" || message.type === "google-login-failed") && activeSecondTaagerCartChild && activeSecondTaagerCartChild.connected) {
+    try { activeSecondTaagerCartChild.send(message); } catch (_) {}
+    return;
+  }
+  if (message.type !== "stop") return;
   stopRequested = true;
+  if (activeSecondTaagerCartChild && activeSecondTaagerCartChild.connected) {
+    try { activeSecondTaagerCartChild.send({ type: "stop" }); } catch (_) {}
+  }
   closeActiveContextForManualGoogle().catch(() => {});
 }
 
@@ -346,6 +361,15 @@ function findChrome() {
 function parseDate(str) {
   const [y, m, d] = str.split("-").map(Number);
   return new Date(y, m - 1, d);
+}
+
+function parseRunnerDate(value, label = "date") {
+  if (value instanceof Date) return value;
+  const text = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return parseDate(text);
+  const date = new Date(text);
+  if (!Number.isNaN(date.getTime())) return date;
+  throw new Error(`INVALID_DATE: ${label} is required`);
 }
 
 function subtractDay(date) {
@@ -4212,8 +4236,182 @@ async function phase6_uploadMissingOrders(page, orders, outputOptions = {}) {
   }
 }
 
+async function runSecondTaagerCartWorker() {
+  const ordersPath = String(config.ordersJsonPath || "").trim();
+  if (!ordersPath) throw new Error("SECOND_TAAGER_CART_ORDERS_MISSING: ordersJsonPath is required");
+  const orders = JSON.parse(fs.readFileSync(ordersPath, "utf8"));
+  const profilePath = config.profilePath;
+  if (!profilePath) throw new Error("SECOND_TAAGER_CART_PROFILE_MISSING: profilePath is required");
+  if (!fs.existsSync(profilePath)) fs.mkdirSync(profilePath, { recursive: true });
+
+  log("\n========================================");
+  log("  SECOND TAAGER CART - Taager-only Upload");
+  log(`  Total missed-source items: ${Array.isArray(orders) ? orders.length : 0}`);
+  log("========================================\n");
+
+  const { context, page: initialPage } = await launchRunnerContext(profilePath, config.chromePath || findChrome());
+  let page = initialPage;
+  try {
+    emitStage("taager.second-cart.login", "started", "Logging into second Taager cart account", { total: Array.isArray(orders) ? orders.length : 0 });
+    page = await taagerLogin(page);
+    page = activePage || page;
+    emitStage("taager.second-cart.login", "ok", "Second Taager cart account login confirmed", { total: Array.isArray(orders) ? orders.length : 0 });
+    const provinceFallbackOptions = {
+      fallbackProvince: config.fallbackProvince || "",
+      fallbackProvinceBySku: config.fallbackProvinceBySku || {},
+    };
+    const uploadOrders = (Array.isArray(orders) ? orders : []).map((order) => ({
+      ...order,
+      destination: "second-taager-cart",
+      destinationAccount: "second-taager-cart",
+    }));
+    log(`Second Taager cart upload-only: uploading ${uploadOrders.length} missed-source items without second-account export/dedupe.`);
+
+    if (!uploadOrders.length) {
+      process.send && process.send({
+        type: "result",
+        data: {
+          success: 0,
+          failed: 0,
+          successfulOrders: [],
+          failedOrders: [],
+          failedSource: "none",
+        },
+      });
+      return;
+    }
+
+    const uploadResult = await phase5_uploadToTaager(page, uploadOrders, provinceFallbackOptions);
+    process.send && process.send({
+      type: "result",
+      data: {
+        ...uploadResult,
+        successfulOrders: (uploadResult.successfulOrders || splitSuccessfulOrders(uploadOrders, uploadResult.failedOrders || []))
+          .map((order) => ({ ...order, destination: "second-taager-cart", destinationAccount: "second-taager-cart" })),
+        failedOrders: (uploadResult.failedOrders || [])
+          .map((order) => ({ ...order, destination: "second-taager-cart", destinationAccount: "second-taager-cart" })),
+      },
+    });
+  } finally {
+    await (activeContext || context).close().catch(() => {});
+    activeContext = null;
+    activePage = null;
+  }
+}
+
+function secondTaagerCartConfig(ordersPath, exportDateFrom, exportDateTo, options = {}) {
+  return {
+    mode: "second-taager-cart-upload",
+    ordersJsonPath: ordersPath,
+    profilePath: config.secondTaagerProfilePath,
+    chromePath: config.chromePath,
+    launchMinimized: config.launchMinimized,
+    autoConfirm: config.autoConfirm,
+    dateFrom: config.dateFrom,
+    dateTo: config.dateTo,
+    exportDateFrom,
+    exportDateTo,
+    fallbackProvince: options.fallbackProvince || "",
+    fallbackProvinceBySku: options.fallbackProvinceBySku || {},
+    taagerCountry: config.secondTaagerCountry || config.taagerCountry || "sa",
+    taagerLoginMethod: config.secondTaagerLoginMethod || "email",
+    taagerEmail: config.secondTaagerEmail || "",
+    taagerPhone: config.secondTaagerPhone || "",
+    taagerPassword: config.secondTaagerPassword || "",
+    taagerAffiliateCode: config.secondTaagerAffiliateCode || "",
+  };
+}
+
+async function runSecondTaagerCartUpload(orders, exportDateFrom, exportDateTo, outputOptions = {}) {
+  if (!Array.isArray(orders) || orders.length === 0) {
+    return { success: 0, failed: 0, successfulOrders: [], failedOrders: [], failedSource: "none" };
+  }
+  const profilePath = String(config.secondTaagerProfilePath || "").trim();
+  if (!profilePath) throw new Error("SECOND_TAAGER_CART_PROFILE_MISSING: second Taager profile path is not configured");
+  if (!String(config.secondTaagerAffiliateCode || "").trim()) {
+    throw new Error("SECOND_TAAGER_CART_MERCHANT_ID_REQUIRED: configure the second Taager cart merchant ID");
+  }
+
+  const tempPath = path.join(os.tmpdir(), `taager-second-cart-orders-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
+  fs.writeFileSync(tempPath, JSON.stringify(orders));
+  const { fork } = require("child_process");
+  const workerConfig = secondTaagerCartConfig(tempPath, exportDateFrom, exportDateTo, outputOptions);
+  emitStage("taager.second-cart.spawn", "started", `Opening second Taager cart profile for ${orders.length} missed-source items`, { total: orders.length, action: "upload" });
+
+  try {
+    const child = fork(__filename, [], {
+      env: { ...process.env, BOT_CONFIG: JSON.stringify(workerConfig) },
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
+    });
+    activeSecondTaagerCartChild = child;
+    return await new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (fn, value) => {
+        if (settled) return;
+        settled = true;
+        fn(value);
+      };
+      child.stdout.on("data", (d) => {
+        const msg = d.toString().trim();
+        if (msg) log(`[Second Taager Cart] ${msg}`);
+      });
+      child.stderr.on("data", (d) => {
+        const msg = d.toString().trim();
+        if (msg) log(`[Second Taager Cart][ERR] ${msg}`);
+      });
+      child.on("message", (msg) => {
+        if (!msg || typeof msg !== "object") return;
+        if (["stage", "order-progress", "needs-confirm", "google-login-needed", "google-login-complete", "taager-restart", "session-event", "cooldown", "debug-screenshot"].includes(msg.type)) {
+          process.send && process.send({ ...msg, destinationAccount: "second-taager-cart" });
+        }
+        if (msg.type === "result") {
+          emitStage("taager.second-cart.upload", "ok", "Second Taager cart upload finished", {
+            success: msg.data && msg.data.success,
+            failed: msg.data && msg.data.failed,
+          });
+          finish(resolve, msg.data || {});
+        }
+        if (msg.type === "error") {
+          emitStage("taager.second-cart.upload", "failed", msg.error || "Second Taager cart upload failed");
+          finish(reject, new Error(msg.error || "Second Taager cart upload failed"));
+        }
+      });
+      child.on("error", (error) => finish(reject, error));
+      child.on("exit", (code) => {
+        if (settled) return;
+        if (code === 0) {
+          finish(resolve, {
+            success: 0,
+            failed: orders.length,
+            successfulOrders: [],
+            failedOrders: orders.map((order) => ({ ...order, destination: "second-taager-cart", error: "Second Taager cart worker exited without result" })),
+            failedSource: "second-taager-cart-exit",
+          });
+        } else {
+          finish(reject, new Error(`Second Taager cart worker exited with code ${code}`));
+        }
+      });
+    });
+  } finally {
+    activeSecondTaagerCartChild = null;
+    try { fs.unlinkSync(tempPath); } catch (_) {}
+  }
+}
+
 // MAIN
 // ════════════════════════════════════════
+if (config.mode === "second-taager-cart-upload") {
+  runSecondTaagerCartWorker().catch(async (err) => {
+    await closeActiveContextForManualGoogle();
+    if (!stopRequested) {
+      const message = friendlyErrorMessage(err);
+      log(`âŒ SECOND TAAGER CART FATAL: ${message}`);
+      process.send && process.send({ type: "error", error: message });
+    }
+  }).finally(() => {
+    process.removeListener("message", handleStopMessage);
+  });
+} else {
 (async () => {
   const dateFrom       = parseDate(config.dateFrom);
   const dateTo         = parseDate(config.dateTo);
@@ -4436,13 +4634,18 @@ async function phase6_uploadMissingOrders(page, orders, outputOptions = {}) {
     const catalog         = buildProductCatalog(realOrders);
     const { resolved: resolvedMissedAll, skippedOrders: catalogFailedOrders } =
       resolveMissedOrders(missedOrders, catalog);
-    const missingOrdersFeatureEnabled = config.missingOrdersUploadEnabled === true && TAAGER_COUNTRY === "sa";
-    if (config.missingOrdersUploadEnabled === true && !missingOrdersFeatureEnabled) {
+    let missedOrdersDestination = normalizeMissedOrdersDestination(config.missedOrdersDestination, {
+      legacyEnabled: config.missingOrdersUploadEnabled === true,
+    });
+    if (missedOrdersDestination === DESTINATION_LEGACY_MISSING_ORDERS && TAAGER_COUNTRY !== "sa") {
+      missedOrdersDestination = "primary_cart";
       log(`Taager Missing Orders routing is enabled but unavailable for ${TAAGER_COUNTRY.toUpperCase()}; preserving normal cart routing for this account.`);
     }
+    const missingOrdersFeatureEnabled = missedOrdersDestination === DESTINATION_LEGACY_MISSING_ORDERS;
+    const secondTaagerCartEnabled = missedOrdersDestination === DESTINATION_SECOND_TAAGER_CART;
     const resolvedMissed = resolvedMissedAll;
     log(`Missing Orders audit: parsed=${missedOrders.length}, resolved=${resolvedMissed.length}, phoneSkipped=${phoneFailedOrders.length}, catalogSkipped=${catalogFailedOrders.length}, localRegistrySkipped=0`);
-    if (missingOrdersFeatureEnabled) {
+    if (missingOrdersFeatureEnabled || secondTaagerCartEnabled) {
       log("Missing Orders audit: local machine registry is ignored; routing uses this run's EasyOrders export plus Taager online duplicate checks.");
     }
 
@@ -4511,13 +4714,16 @@ async function phase6_uploadMissingOrders(page, orders, outputOptions = {}) {
     }
 
     // ── Build output Excel (kept for download / reference) ──
-    const destinationSplit = splitOrdersByDestination(orders, missingOrdersFeatureEnabled);
+    const destinationSplit = splitOrdersByMissedDestination(orders, missedOrdersDestination);
     const missingOrdersStoreName = String(config.missingOrdersStoreName || "").trim();
-    const outputBuffer = buildOutputExcel(destinationSplit.cartOrders, provinceFallbackOptions);
-    const preparedMissingOrdersBuffer = destinationSplit.missingOrders.length > 0
-      ? buildMissingOrdersExcel(destinationSplit.missingOrders, provinceFallbackOptions)
+    const outputBuffer = buildOutputExcel(destinationSplit.primaryCartOrders, provinceFallbackOptions);
+    const preparedMissingOrdersBuffer = destinationSplit.legacyMissingOrders.length > 0
+      ? buildMissingOrdersExcel(destinationSplit.legacyMissingOrders, provinceFallbackOptions)
       : null;
-    log(`Prepared upload files: cart items=${destinationSplit.cartOrders.length}, missing-order items=${destinationSplit.missingOrders.length}`);
+    log(`Prepared upload files: cart items=${destinationSplit.primaryCartOrders.length}, legacy-missing-order items=${destinationSplit.legacyMissingOrders.length}, second-cart items=${destinationSplit.secondTaagerCartOrders.length}`);
+    if (secondTaagerCartEnabled && destinationSplit.secondTaagerCartOrders.length > 0) {
+      log(`Second Taager cart upload-only: ${destinationSplit.secondTaagerCartOrders.length} missed-source items will go to the second cart without second-account export/check.`);
+    }
 
     // ── Send preview to dashboard before starting upload ──
     const previewRows = orders.slice(0, 50).map(o => ({
@@ -4534,12 +4740,16 @@ async function phase6_uploadMissingOrders(page, orders, outputOptions = {}) {
       phone:       formatPhone(o.normPhone, TAAGER_COUNTRY) || "",
       taagerCountry: TAAGER_COUNTRY,
       uncertain:   !!o.uncertain,
-      destination: missingOrdersFeatureEnabled && String(o.source || "") === "missed" ? "missing-orders" : "cart",
+      destination: destinationForOrder(o, missedOrdersDestination),
     }));
     process.send && process.send({
       type: "preview",
       rows: previewRows,
       total: orders.length,
+      secondTaagerCartUploadOnly: secondTaagerCartEnabled,
+      primaryCartCount: destinationSplit.primaryCartOrders.length,
+      legacyMissingOrdersCount: destinationSplit.legacyMissingOrders.length,
+      secondTaagerCartUploadCount: destinationSplit.secondTaagerCartOrders.length,
       buffer: Array.from(outputBuffer),
     });
     log(`📋 Preview sent to dashboard (${orders.length} orders)`);
@@ -4557,72 +4767,92 @@ async function phase6_uploadMissingOrders(page, orders, outputOptions = {}) {
       storeName: missingOrdersStoreName,
       buffer: preparedMissingOrdersBuffer ? Array.from(preparedMissingOrdersBuffer) : null,
     };
-    if (!missingOrdersFeatureEnabled) {
-      uploadResults = await phase5_uploadToTaager(page, orders, provinceFallbackOptions);
-    } else {
-      const { cartOrders, missingOrders } = destinationSplit;
-      const successful = [];
-      const failures = [];
-      let cartFailureSource = "none";
+    const { primaryCartOrders, legacyMissingOrders, secondTaagerCartOrders } = destinationSplit;
+    const successful = [];
+    const failures = [];
+    let cartFailureSource = "none";
+    let secondCartResult = null;
 
-      log(`Destination split: cart=${cartOrders.length} missing-orders=${missingOrders.length}`);
-      if (missingOrders.length > 0) {
-        log(`Missing Orders modal store name: ${missingOrdersStoreName || "(missing)"}`);
-        if (!missingOrdersStoreName) {
-          throw new Error("MISSING_ORDERS_STORE_NAME_REQUIRED: enter the Taager Missing Orders store name in setup");
-        }
+    log(`Destination split: cart=${primaryCartOrders.length} legacy-missing-orders=${legacyMissingOrders.length} second-taager-cart=${secondTaagerCartOrders.length}`);
+    if (legacyMissingOrders.length > 0) {
+      log(`Missing Orders modal store name: ${missingOrdersStoreName || "(missing)"}`);
+      if (!missingOrdersStoreName) {
+        throw new Error("MISSING_ORDERS_STORE_NAME_REQUIRED: enter the Taager Missing Orders store name in setup");
       }
-      if (cartOrders.length > 0) {
-        try {
-          const cartResult = await phase5_uploadToTaager(page, cartOrders, provinceFallbackOptions);
-          successful.push(...(cartResult.successfulOrders || splitSuccessfulOrders(cartOrders, cartResult.failedOrders || []))
-            .map((order) => ({ ...order, destination: "cart" })));
-          failures.push(...(cartResult.failedOrders || []).map((order) => ({ ...order, destination: "cart" })));
-          cartFailureSource = cartResult.failedSource || "card";
-        } catch (error) {
-          cartFailureSource = "cart-error";
-          log(`Taager cart destination failed; continuing with the separate Missing Orders destination: ${error.message}`);
-          failures.push(...cartOrders.map((order) => ({ ...order, error: error.message || String(error), destination: "cart" })));
-        }
-      } else {
-        log("Taager cart destination skipped: no real-source orders.");
-      }
-
-      missingOrdersUpload.attempted = missingOrders.length;
-      if (missingOrders.length > 0) {
-        try {
-          const missingResult = await phase6_uploadMissingOrders(page, missingOrders, {
-            ...provinceFallbackOptions,
-            missingOrdersStoreName,
-          });
-          page = missingResult.page || page;
-          successful.push(...missingOrders.map((order) => ({ ...order, destination: "missing-orders" })));
-          missingOrdersUpload.success = missingOrders.length;
-          missingOrdersUpload.status = "ok";
-        } catch (error) {
-          missingOrdersUpload.failed = missingOrders.length;
-          missingOrdersUpload.status = "failed";
-          missingOrdersUpload.error = error.message || String(error);
-          failures.push(...missingOrders.map((order) => ({ ...order, error: missingOrdersUpload.error, destination: "missing-orders" })));
-          log(`Taager Missing Orders destination failed without retry: ${missingOrdersUpload.error}`);
-        }
-      } else {
-        missingOrdersUpload.status = "skipped";
-        log("Taager Missing Orders destination skipped: no new missed-source orders.");
-      }
-
-      const hasCartFailures = failures.some((order) => order.destination !== "missing-orders" && String(order.source || "real") !== "missed");
-      const hasMissingFailures = failures.some((order) => order.destination === "missing-orders" || String(order.source || "") === "missed");
-      uploadResults = {
-        success: successful.length,
-        failed: failures.length,
-        successfulOrders: successful,
-        failedOrders: failures,
-        failedSource: hasCartFailures && hasMissingFailures
-          ? "mixed"
-          : (hasMissingFailures ? "legacy-missing-orders" : cartFailureSource),
-      };
     }
+    if (primaryCartOrders.length > 0) {
+      try {
+        const cartResult = await phase5_uploadToTaager(page, primaryCartOrders, provinceFallbackOptions);
+        successful.push(...(cartResult.successfulOrders || splitSuccessfulOrders(primaryCartOrders, cartResult.failedOrders || []))
+          .map((order) => ({ ...order, destination: "cart" })));
+        failures.push(...(cartResult.failedOrders || []).map((order) => ({ ...order, destination: "cart" })));
+        cartFailureSource = cartResult.failedSource || "card";
+      } catch (error) {
+        cartFailureSource = "cart-error";
+        log(`Taager cart destination failed; continuing with separate missed-source destination if configured: ${error.message}`);
+        failures.push(...primaryCartOrders.map((order) => ({ ...order, error: error.message || String(error), destination: "cart" })));
+      }
+    } else {
+      log("Taager cart destination skipped: no primary cart orders.");
+    }
+
+    missingOrdersUpload.attempted = legacyMissingOrders.length;
+    if (legacyMissingOrders.length > 0) {
+      try {
+        const missingResult = await phase6_uploadMissingOrders(page, legacyMissingOrders, {
+          ...provinceFallbackOptions,
+          missingOrdersStoreName,
+        });
+        page = missingResult.page || page;
+        successful.push(...legacyMissingOrders.map((order) => ({ ...order, destination: "missing-orders" })));
+        missingOrdersUpload.success = legacyMissingOrders.length;
+        missingOrdersUpload.status = "ok";
+      } catch (error) {
+        missingOrdersUpload.failed = legacyMissingOrders.length;
+        missingOrdersUpload.status = "failed";
+        missingOrdersUpload.error = error.message || String(error);
+        failures.push(...legacyMissingOrders.map((order) => ({ ...order, error: missingOrdersUpload.error, destination: "missing-orders" })));
+        log(`Taager Missing Orders destination failed without retry: ${missingOrdersUpload.error}`);
+      }
+    } else {
+      missingOrdersUpload.status = missingOrdersFeatureEnabled ? "skipped" : "disabled";
+      if (missingOrdersFeatureEnabled) log("Taager Missing Orders destination skipped: no new missed-source orders.");
+    }
+
+    if (secondTaagerCartOrders.length > 0) {
+      try {
+        secondCartResult = await runSecondTaagerCartUpload(secondTaagerCartOrders, formatDataDay(taagerStartDate), formatDataDay(taagerEndDate), provinceFallbackOptions);
+        successful.push(...(secondCartResult.successfulOrders || []));
+        failures.push(...(secondCartResult.failedOrders || []));
+      } catch (error) {
+        const secondError = error.message || String(error);
+        failures.push(...secondTaagerCartOrders.map((order) => ({ ...order, error: secondError, destination: "second-taager-cart", destinationAccount: "second-taager-cart" })));
+        log(`Second Taager cart destination failed without retry: ${secondError}`);
+      }
+    }
+
+    const hasCartFailures = failures.some((order) => order.destination === "cart");
+    const hasLegacyFailures = failures.some((order) => order.destination === "missing-orders");
+    const hasSecondFailures = failures.some((order) => order.destination === "second-taager-cart");
+    uploadResults = {
+      success: successful.length,
+      failed: failures.length,
+      successfulOrders: successful,
+      failedOrders: failures,
+      secondTaagerCartUpload: secondCartResult ? {
+        attempted: secondTaagerCartOrders.length,
+        success: secondCartResult.success || 0,
+        failed: secondCartResult.failed || 0,
+        status: (secondCartResult.failed || 0) > 0 ? "warning" : "ok",
+      } : {
+        attempted: secondTaagerCartOrders.length,
+        success: 0,
+        failed: hasSecondFailures ? secondTaagerCartOrders.length : 0,
+        status: secondTaagerCartOrders.length ? (hasSecondFailures ? "failed" : "pending") : "skipped",
+      },
+      failedSource: [hasCartFailures ? cartFailureSource : "", hasLegacyFailures ? "legacy-missing-orders" : "", hasSecondFailures ? "second-taager-cart" : ""]
+        .filter(Boolean).join("+") || "none",
+    };
     const successfulOrders = Array.isArray(uploadResults.successfulOrders)
       ? uploadResults.successfulOrders
       : splitSuccessfulOrders(orders, uploadResults.failedOrders || []);
@@ -4631,11 +4861,15 @@ async function phase6_uploadMissingOrders(page, orders, outputOptions = {}) {
       const taagerKey = `${o.normPhone}|${o.sku}`;
       const taagerExact = taagerAnalyticsMap.byPhoneSku.get(taagerKey);
       const taagerSku = taagerAnalyticsMap.skuDefaults[o.sku] || {};
+      const destination = o.destination || destinationForOrder(o, missedOrdersDestination);
+      const rowCountry = destination === "second-taager-cart"
+        ? normalizeTaagerCountry(config.secondTaagerCountry || config.taagerCountry || "sa")
+        : TAAGER_COUNTRY;
 
       return {
         name:               o.name        || "",
-        phone:              formatPhone(o.normPhone, TAAGER_COUNTRY) || "",
-        taagerCountry:      TAAGER_COUNTRY,
+        phone:              formatPhone(o.normPhone, rowCountry) || "",
+        taagerCountry:      rowCountry,
         productName:        o.productName || "",
         sku:                o.sku         || "",
         qty:                o.qty         || 1,
@@ -4646,7 +4880,8 @@ async function phase6_uploadMissingOrders(page, orders, outputOptions = {}) {
         createdAt:          o.createdAt   || "",
         easyCreatedAt:      o.easyCreatedAt || "",
         source:             o.source      || "real",
-        destination:        o.destination || (missingOrdersFeatureEnabled && String(o.source || "") === "missed" ? "missing-orders" : "cart"),
+        destination,
+        destinationAccount:  o.destinationAccount || (destination === "second-taager-cart" ? "second-taager-cart" : "primary"),
         address:            o.address     || "",
         orderStatus:        taagerExact?.orderStatus        || o.orderStatus        || "Under processing",
         amountDue:          taagerExact?.amountDue          ?? taagerSku.amountDue    ?? o.amountDue    ?? 0,
@@ -4667,13 +4902,17 @@ async function phase6_uploadMissingOrders(page, orders, outputOptions = {}) {
     // ── Send final result ──
     const failedMissedOrders = uploadResults.failedOrders.filter((order) => String(order.source || "") === "missed");
     const failedCartOrders = uploadResults.failedOrders.filter((order) => String(order.source || "") !== "missed");
+    const failedLegacyMissingOrders = uploadResults.failedOrders.filter((order) => order.destination === "missing-orders");
+    const failedSecondCartOrders = uploadResults.failedOrders.filter((order) => order.destination === "second-taager-cart");
     const failedBuffer = uploadResults.failedOrders.length === 0
       ? null
-      : (failedMissedOrders.length > 0 && failedCartOrders.length === 0
-        ? buildMissingOrdersExcel(failedMissedOrders, provinceFallbackOptions)
+      : (failedLegacyMissingOrders.length > 0 && failedLegacyMissingOrders.length === uploadResults.failedOrders.length
+        ? buildMissingOrdersExcel(failedLegacyMissingOrders, provinceFallbackOptions)
+        : (failedSecondCartOrders.length > 0 && failedSecondCartOrders.length === uploadResults.failedOrders.length
+          ? buildOutputExcel(failedSecondCartOrders, provinceFallbackOptions)
         : (failedCartOrders.length > 0 && failedMissedOrders.length === 0
           ? buildOutputExcel(failedCartOrders, provinceFallbackOptions)
-          : buildFailedExcel(uploadResults.failedOrders)));
+          : buildFailedExcel(uploadResults.failedOrders))));
 
     process.send && process.send({
       type: "result",
@@ -4717,6 +4956,7 @@ async function phase6_uploadMissingOrders(page, orders, outputOptions = {}) {
         orderRows: successfulOrders.map(buildResultOrderRow),
         attemptedOrderRows: orders.map(buildResultOrderRow),
         missingOrdersUpload,
+        secondTaagerCartUpload: uploadResults.secondTaagerCartUpload || null,
         failedOrders: {
           count: uploadResults.failed,
           summary: uploadResults.failedOrders,
@@ -4764,3 +5004,4 @@ async function phase6_uploadMissingOrders(page, orders, outputOptions = {}) {
 }).finally(() => {
   process.removeListener("message", handleStopMessage);
 });
+}

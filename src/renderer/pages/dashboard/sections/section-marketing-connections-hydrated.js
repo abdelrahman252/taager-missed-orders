@@ -680,7 +680,11 @@
       var canConnect = shownAccounts.length > 0 && !current.loading;
       var connectedAccounts = allMode
         ? (Array.isArray(current.availableAccounts) ? current.availableAccounts : [])
-        : (Array.isArray(current.mappedAccounts) && current.mappedAccounts.length ? current.mappedAccounts : current.linkedAccounts || []);
+        : mergeMappingSources(
+          Array.isArray(current.mappedAccounts) ? current.mappedAccounts : [],
+          Array.isArray(current.linkedAccounts) ? current.linkedAccounts : [],
+          Array.isArray(current.availableAccounts) ? current.availableAccounts : []
+        );
       var connectLabel = current.reconnectRequired
         ? tr('marketing.reconnectAccount', 'Reconnect account')
         : current.status === 'pending'
@@ -906,6 +910,26 @@
       );
     }
 
+    function connectionSourceSignature(result) {
+      var seen = {};
+      var ids = [];
+      [
+        result && result.linkedAccounts,
+        result && result.mappedAccounts,
+        result && result.availableAccounts,
+        result && result.selectedSourceAccounts,
+        result && result.claimableAccounts
+      ].forEach(function (list) {
+        (Array.isArray(list) ? list : []).forEach(function (source) {
+          var id = String(source && source.id || '').trim();
+          if (!id || seen[id]) return;
+          seen[id] = true;
+          ids.push(id);
+        });
+      });
+      return ids.sort().join('|');
+    }
+
     function discoveredAccountCount(result) {
       return Number(
         result && result.diagnostics && (
@@ -927,6 +951,9 @@
     function usableConnectionForFlow(platform, result) {
       if (!hasUsableConnection(result)) return false;
       if (requiresSessionAddedAccount(platform) && !discoveredAccountCount(result)) {
+        if (connectionSourceSignature(result) !== connectionSourceSignature(authorizationSnapshot[platform])) {
+          return true;
+        }
         log('connect:old_connection_ignored', {
           platform: platform,
           linkedAccountCount: result && result.linkedAccountCount || 0,

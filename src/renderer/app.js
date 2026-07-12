@@ -413,6 +413,7 @@ const _STRINGS = {
     "results.destination_col":     "Destination",
     "results.destination_cart":    "Cart",
     "results.destination_missing": "Missing Orders",
+    "results.destination_second":  "Second Cart",
     "results.row_col":            "Row",
     "results.error_col":          "Error",
     "results.ok_status":          "OK",

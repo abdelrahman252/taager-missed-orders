@@ -1594,16 +1594,17 @@
     (credList || []).forEach(function (acc) {
       if (acc && acc.id && ids.indexOf(acc.id) === -1) ids.push(acc.id);
     });
-    if (!ids.length) {
-      Object.keys(accounts || {}).forEach(function (id) {
-        if (ids.indexOf(id) === -1) ids.push(id);
-      });
-    }
+    Object.keys(accounts || {}).forEach(function (id) {
+      var snap = accounts[id] || {};
+      var rows = Array.isArray(snap.snapshot) ? snap.snapshot : [];
+      if (rows.length && ids.indexOf(id) === -1) ids.push(id);
+    });
 
     return ids.map(function (id) {
       var snap = accounts[id] || {};
       var sourceAccount = byId[id] || {};
-      var label = accountLabel(sourceAccount, id);
+      var identity = snap.accountIdentity || {};
+      var label = accountLabel(sourceAccount, snap.accountLabel || identity.label || id);
       var email = sourceAccount.taagerEmail || sourceAccount.easyEmail || sourceAccount.email || '';
       var snapshot = Array.isArray(snap.snapshot) ? snap.snapshot : [];
       var periodRows = period && period.dateFrom && period.dateTo
@@ -1617,7 +1618,7 @@
         label: label,
         name: label,
         memberName: sourceAccount.memberName || '',
-        taagerCountry: sourceAccount.taagerCountry || 'sa',
+        taagerCountry: sourceAccount.taagerCountry || identity.taagerCountry || 'sa',
         email: email,
         hasSnapshot: snapshot.length > 0,
         orderCount: netPeriodRows.length,

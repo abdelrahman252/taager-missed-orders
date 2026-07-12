@@ -549,7 +549,9 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       window._previewBuffer = data.buffer;
       const cols = t("run.preview_cols");
       const headerFn = t("run.preview_header");
-      const headerLabel = typeof headerFn === "function" ? headerFn(data.total) : headerFn;
+      const headerLabel = data.secondTaagerCartUploadOnly
+        ? `${data.total} orders ready - primary cart ${data.primaryCartCount || 0}, second cart missed ${data.secondTaagerCartUploadCount || 0}`
+        : (typeof headerFn === "function" ? headerFn(data.total) : headerFn);
       if (headerLbl) headerLbl.textContent = headerLabel;
 
       // Build selectable, copyable table
@@ -559,9 +561,10 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
 
       function buildPreviewTableHTML(rows) {
         return `
-          <table class="orders-preview-table run-orders-preview-table" style="width:100%;min-width:1310px;table-layout:fixed;border-collapse:collapse">
+          <table class="orders-preview-table run-orders-preview-table" style="width:100%;min-width:1450px;table-layout:fixed;border-collapse:collapse">
             <colgroup>
               <col style="width:46px">
+              <col style="width:140px">
               <col style="width:420px">
               <col style="width:64px">
               <col style="width:90px">
@@ -571,12 +574,13 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
               <col style="width:160px">
             </colgroup>
             <thead>
-              <tr><th>#</th>${cols.map(c => `<th>${c}</th>`).join("")}</tr>
+              <tr><th>#</th><th>Destination</th>${cols.map(c => `<th>${c}</th>`).join("")}</tr>
             </thead>
             <tbody>
               ${rows.map((r, i) => `
                 <tr>
                   <td class="preview-index" style="color:var(--text2)">${i + 1}</td>
+                  <td style="font-weight:var(--weight-semibold);color:${r.destination === "second-taager-cart" ? "var(--accent)" : "var(--text2)"}">${r.destination === "second-taager-cart" ? "Second cart" : "Primary cart"}</td>
                   <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.productName||"").replace(/"/g,"")}">${r.productName || "—"}</td>
                   <td class="preview-qty" style="font-weight:var(--weight-bold)">${r.qty}</td>
                   <td style="color:var(--success);font-weight:var(--weight-semibold)">${r.subtotal || "—"}</td>

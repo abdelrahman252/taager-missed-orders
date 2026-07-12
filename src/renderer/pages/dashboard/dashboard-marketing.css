@@ -481,31 +481,72 @@
 .marketing-account-map select,
 .marketing-account-map input {
   width: 100%;
-  padding: 10px 12px;
+  min-height: 36px;
+  padding: 8px 11px;
   border: 1px solid var(--dash-border-soft);
   border-radius: var(--dash-radius-sm);
   background: var(--dash-surface);
   color: var(--dash-text);
   font-family: inherit;
   font-size:var(--type-label);
+  line-height: 1.25;
+  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+
+.marketing-account-map select {
+  appearance: none;
+  padding-inline-end: 32px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--dash-text-muted) 50%),
+    linear-gradient(135deg, var(--dash-text-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 13px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+[dir="rtl"] .marketing-account-map select,
+.rtl .marketing-account-map select {
+  background-position:
+    13px 50%,
+    18px 50%;
+}
+
+.marketing-account-map select:hover:not(:disabled),
+.marketing-account-map input:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--dash-accent) 34%, var(--dash-border-soft));
+  background-color: color-mix(in srgb, var(--dash-surface) 90%, var(--dash-accent) 4%);
+}
+
+.marketing-account-map select option {
+  color: var(--dash-text);
+  background: var(--dash-surface);
+  font-size:var(--type-caption);
+  font-weight:var(--weight-semibold);
+}
+
+.marketing-account-map select option:checked {
+  color: #fff;
+  background: color-mix(in srgb, var(--dash-accent) 58%, var(--dash-surface));
 }
 
 .marketing-claim-source .marketing-account-map {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(128px, auto);
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: end;
-  gap: 12px;
+  gap: 9px;
   margin-bottom: 0;
 }
 
 .marketing-claim-tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0;
-  padding: 3px;
+  gap: 4px;
+  padding: 4px;
   border: 1px solid var(--dash-border-soft);
   border-radius: var(--dash-radius-md);
-  background: color-mix(in srgb, var(--dash-surface) 82%, var(--dash-bg));
+  background: color-mix(in srgb, var(--dash-surface) 72%, var(--dash-bg));
 }
 
 .marketing-claim-tabs > input {
@@ -516,6 +557,7 @@
 
 .marketing-claim-tabs > label {
   margin: 0;
+  min-height: 34px;
   padding: 8px 12px;
   border: 1px solid transparent;
   border-radius: var(--dash-radius-sm);
@@ -528,20 +570,21 @@
 }
 
 .marketing-claim-tabs > input:checked + label {
-  border-color: color-mix(in srgb, var(--dash-accent) 48%, var(--dash-border-soft));
+  border-color: color-mix(in srgb, var(--dash-accent) 34%, var(--dash-border-soft));
   color: var(--dash-text);
-  background: var(--dash-surface);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--dash-accent) 12%, var(--dash-surface)), var(--dash-surface));
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
 }
 
 .marketing-claim-panel {
   display: none;
   grid-column: 1 / -1;
-  margin-top: 12px;
-  padding: 12px;
+  margin-top: 10px;
+  padding: 13px;
   border: 1px solid var(--dash-border-soft);
   border-radius: var(--dash-radius-md);
-  background: var(--dash-surface);
+  background: color-mix(in srgb, var(--dash-surface) 94%, var(--dash-bg));
 }
 
 .marketing-claim-panel > p {
@@ -557,20 +600,76 @@
 }
 
 .marketing-claim-source .marketing-account-map label {
+  min-width: 0;
   margin-bottom: 0;
 }
 
+.marketing-claim-source .marketing-account-map label span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--dash-text-faint);
+  font-size:var(--type-micro);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.marketing-claim-source .marketing-account-map input,
 .marketing-claim-source select {
   width: 100%;
-  min-height: 36px;
-  padding: 7px 9px;
+  min-height: 34px;
+  padding-block: 7px;
+  border-color: color-mix(in srgb, var(--dash-border-soft) 76%, var(--dash-accent) 24%);
+  background-color: color-mix(in srgb, var(--dash-surface) 92%, var(--dash-bg));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 4%, transparent);
+}
+
+.marketing-claim-source select {
+  color-scheme: dark;
+  font-size:var(--type-caption);
+  font-weight:var(--weight-semibold);
+  text-overflow: ellipsis;
+}
+
+.marketing-claim-source .marketing-account-map input:focus-visible,
+.marketing-claim-source select:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--dash-accent) 54%, var(--dash-border-soft));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--dash-accent) 18%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 4%, transparent);
+}
+
+.marketing-claim-action,
+.marketing-secondary.is-danger {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 7px 11px;
   border: 1px solid var(--dash-border-soft);
   border-radius: var(--dash-radius-sm);
-  background: var(--dash-surface);
-  color: var(--dash-text);
+  white-space: nowrap;
   font-family: inherit;
-  font-size:var(--type-label);
+  font-size:var(--type-caption);
   font-weight:var(--weight-semibold);
+  line-height: 1.2;
+  transition: transform .16s ease, border-color .16s ease, background .16s ease, color .16s ease, box-shadow .16s ease;
+}
+
+.marketing-claim-source .marketing-claim-action {
+  color: var(--dash-accent);
+  border-color: color-mix(in srgb, var(--dash-accent) 38%, var(--dash-border-soft));
+  background: color-mix(in srgb, var(--dash-accent) 9%, var(--dash-surface));
+  box-shadow: none;
+}
+
+.marketing-claim-source .marketing-claim-action:hover:not(:disabled) {
+  color: #fff;
+  border-color: color-mix(in srgb, var(--dash-accent) 82%, #fff);
+  background: color-mix(in srgb, var(--dash-accent) 86%, #fff);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
 }
 
 .marketing-secondary.is-danger {
@@ -580,14 +679,23 @@
 }
 
 .marketing-secondary.is-danger:hover {
+  color: var(--dash-danger);
   border-color: color-mix(in srgb, var(--dash-danger) 64%, var(--dash-border-soft));
   background: color-mix(in srgb, var(--dash-danger) 12%, var(--dash-surface));
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--dash-danger) 14%, transparent);
 }
 
 @media (max-width: 680px) {
   .marketing-claim-source .marketing-account-map {
     grid-template-columns: 1fr;
-  }}
+  }
+
+  .marketing-claim-action,
+  .marketing-secondary.is-danger {
+    width: 100%;
+  }
+}
 
 .marketing-account-map p {
   margin: 10px 0 0;

@@ -7,6 +7,8 @@ const MISSING_ORDERS_MODAL_STORE_SELECTOR = "#file-input";
 const MISSING_ORDERS_MODAL_PLATFORM_SELECTOR = "#store-platform-input";
 const MISSING_ORDERS_MODAL_FILE_SELECTOR = "#upload-missed-orders-button";
 const MISSING_ORDERS_MODAL_SUBMIT_SELECTOR = "#upload-missing-orders-submit-button";
+const MISSING_ORDERS_ERROR_NOTICE_RE = /\u0641\u0634\u0644|\u062e\u0637\u0623|\u063a\u064a\u0631\s+\u0635\u0627\u0644\u062d|invalid|failed|error/i;
+const MISSING_ORDERS_SUCCESS_NOTICE_RE = /\u062a\u0645\u062a?.*(?:\u0631\u0641\u0639|\u062a\u062d\u0645\u064a\u0644|\u0625\u0636\u0627\u0641\u0629|\u0645\u0639\u0627\u0644\u062c\u0629)|\u0628\u0646\u062c\u0627\u062d|success|uploaded|added/i;
 
 function visibleNoticeText() {
   return Array.from(document.querySelectorAll("[role='alert'], [class*='toast'], [class*='Toast'], [class*='notification']"))
@@ -157,7 +159,7 @@ function createMissingOrdersUploadFlow(options = {}) {
 
     // This legacy tool creates leads on submit. Do not retry an uncertain
     // submission: repeating it could create duplicate missing orders.
-    const result = await page.waitForFunction((previousNotice) => {
+    const result = await page.waitForFunction((noticeConfig) => {
       const visibleText = Array.from(document.querySelectorAll("[role='alert'], [class*='toast'], [class*='Toast'], [class*='notification']"))
         .filter((el) => {
           const style = window.getComputedStyle(el);
@@ -167,11 +169,15 @@ function createMissingOrdersUploadFlow(options = {}) {
         .map((el) => String(el.innerText || el.textContent || "").replace(/\s+/g, " ").trim())
         .join(" | ");
       const modalGone = !document.querySelector("#upload-missing-orders-submit-button");
-      if (!visibleText || visibleText === previousNotice) return modalGone ? { status: "unverified", text: "Missing Orders modal closed without a Taager success message" } : null;
-      if (/فشل|خطأ|غير صالح|invalid|failed|error/i.test(visibleText)) return { status: "error", text: visibleText };
-      if (/تمت?.*(?:رفع|تحميل|إضافة|معالجة)|بنجاح|success|uploaded|added/i.test(visibleText)) return { status: "ok", text: visibleText };
+      if (!visibleText || visibleText === noticeConfig.previousNotice) return modalGone ? { status: "unverified", text: "Missing Orders modal closed without a Taager success message" } : null;
+      if (new RegExp(noticeConfig.errorPattern, "i").test(visibleText)) return { status: "error", text: visibleText };
+      if (new RegExp(noticeConfig.successPattern, "i").test(visibleText)) return { status: "ok", text: visibleText };
       return modalGone ? { status: "unverified", text: visibleText || "Missing Orders modal closed without a Taager success message" } : null;
-    }, baselineNotice, { timeout: 120000 }).then((handle) => handle.jsonValue()).catch(() => null);
+    }, {
+      previousNotice: baselineNotice,
+      errorPattern: MISSING_ORDERS_ERROR_NOTICE_RE.source,
+      successPattern: MISSING_ORDERS_SUCCESS_NOTICE_RE.source,
+    }, { timeout: 120000 }).then((handle) => handle.jsonValue()).catch(() => null);
 
     if (!result) throw new Error("MISSING_ORDERS_UPLOAD_UNVERIFIED: the modal was submitted, but Taager did not show a success or failure message. It was not retried to avoid duplicates.");
     if (result.status === "error") throw new Error(`MISSING_ORDERS_UPLOAD_REJECTED: ${result.text || "Taager rejected the workbook"}`);
@@ -192,4 +198,6 @@ module.exports = {
   MISSING_ORDERS_MODAL_PLATFORM_SELECTOR,
   MISSING_ORDERS_MODAL_FILE_SELECTOR,
   MISSING_ORDERS_MODAL_SUBMIT_SELECTOR,
+  MISSING_ORDERS_ERROR_NOTICE_RE,
+  MISSING_ORDERS_SUCCESS_NOTICE_RE,
 };

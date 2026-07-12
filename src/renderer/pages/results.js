@@ -467,7 +467,9 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
     function renderOrderRow(o, i, attrs) {
       const createdAt = orderCreatedAtText(o);
-      const destination = o.destination === "missing-orders" ? t("results.destination_missing") : t("results.destination_cart");
+      const destination = o.destination === "second-taager-cart"
+        ? (t("results.destination_second") || "Second Cart")
+        : (o.destination === "missing-orders" ? t("results.destination_missing") : t("results.destination_cart"));
       return `<tr ${attrs || ""}>
         <td class="res-index">${i + 1}</td>
         <td class="res-name" title="${String(o.name || "").replace(/"/g,"")}">${o.name || "—"}</td>
@@ -745,6 +747,10 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const totalDupes   = (stats.realDupe||0) + (stats.missedDupe||0);
       const totalAttempt = totalNew + failedOrders.count;
       const successRate  = totalAttempt > 0 ? Math.round(totalNew / totalAttempt * 100) : 100;
+      const attemptedRows = accData.attemptedOrderRows || accData.orderRows || [];
+      const primaryDestinationCount = attemptedRows.filter(o => (o.destination || "cart") !== "second-taager-cart" && (o.destination || "cart") !== "missing-orders").length;
+      const secondDestinationCount = attemptedRows.filter(o => o.destination === "second-taager-cart").length;
+      const legacyMissingDestinationCount = attemptedRows.filter(o => o.destination === "missing-orders").length;
       const pagedUploadedProducts = buildPagedItems(products, (p, i, attrs) => `<tr ${attrs}>
         <td style="font-weight:var(--weight-semibold)">${p.productName||"—"}</td>
         <td style="text-align:right"><span class="badge badge-success">${p.count}</span></td>
@@ -855,6 +861,17 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
                     <div style="font-size:var(--type-caption);color:var(--text2);margin-top:2px">${t("results.new_unique")}</div>
                   </div>
                 </div>
+                ${(secondDestinationCount || legacyMissingDestinationCount) ? `
+                <div style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+                  <div style="background:rgba(20,184,166,0.08);border:1px solid rgba(20,184,166,0.22);border-radius:var(--radius-sm);padding:12px;text-align:center">
+                    <div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:#2dd4bf;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">${t("results.destination_cart")}</div>
+                    <div style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:var(--text)">${primaryDestinationCount}</div>
+                  </div>
+                  <div style="background:rgba(124,106,247,0.08);border:1px solid rgba(124,106,247,0.24);border-radius:var(--radius-sm);padding:12px;text-align:center">
+                    <div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:#a89cf7;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">${secondDestinationCount ? (t("results.destination_second") || "Second Cart") : t("results.destination_missing")}</div>
+                    <div style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:var(--text)">${secondDestinationCount || legacyMissingDestinationCount}</div>
+                  </div>
+                </div>` : ""}
               </div>
             </div>
 
@@ -1071,6 +1088,10 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   const hasSkipped     = skippedOrders.count > 0;
   const totalUploaded  = totalNew + failedOrders.count;
   const successRate    = totalUploaded > 0 ? Math.round(totalNew / totalUploaded * 100) : 100;
+  const attemptedRows = data.attemptedOrderRows || data.orderRows || [];
+  const primaryDestinationCount = attemptedRows.filter(o => (o.destination || "cart") !== "second-taager-cart" && (o.destination || "cart") !== "missing-orders").length;
+  const secondDestinationCount = attemptedRows.filter(o => o.destination === "second-taager-cart").length;
+  const legacyMissingDestinationCount = attemptedRows.filter(o => o.destination === "missing-orders").length;
 
   const titleFn = t("results.title");
   const title   = typeof titleFn === "function" ? titleFn(dateDisplay) : titleFn;
@@ -1212,6 +1233,17 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
                   <div style="font-size:var(--type-caption);color:var(--text2);margin-top:2px">${t("results.new_unique")}</div>
                 </div>
               </div>
+              ${(secondDestinationCount || legacyMissingDestinationCount) ? `
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+                <div style="background:rgba(20,184,166,0.08);border:1px solid rgba(20,184,166,0.22);border-radius:var(--radius-sm);padding:12px;text-align:center">
+                  <div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:#2dd4bf;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">${t("results.destination_cart")}</div>
+                  <div style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:var(--text)">${primaryDestinationCount}</div>
+                </div>
+                <div style="background:rgba(124,106,247,0.08);border:1px solid rgba(124,106,247,0.24);border-radius:var(--radius-sm);padding:12px;text-align:center">
+                  <div style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:#a89cf7;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">${secondDestinationCount ? (t("results.destination_second") || "Second Cart") : t("results.destination_missing")}</div>
+                  <div style="font-size:var(--type-section-title);font-weight:var(--weight-bold);color:var(--text)">${secondDestinationCount || legacyMissingDestinationCount}</div>
+                </div>
+              </div>` : ""}
             </div>
           </div>
 

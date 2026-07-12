@@ -44,12 +44,21 @@ function parseEasyOrdersIdentityFromDocument() {
   };
 
   const text = (element) => String(element && (element.innerText || element.textContent) || "").trim();
+  const ownText = (element) => Array.from(element && element.childNodes || [])
+    .filter((node) => node.nodeType === Node.TEXT_NODE)
+    .map((node) => String(node.textContent || "").trim())
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  const labelText = (element) => ownText(element) || text(element);
   const normalizedText = (element) => normalize(text(element));
+  const normalizedLabelText = (element) => normalize(labelText(element));
   const isEmail = (value) => emailPattern.test(normalize(value));
   const sectionLabel = (element) => normalizedText(element).replace(/:$/, "");
 
   const isLeafTextElement = (element) => {
     if (!visible(element) || !normalizedText(element)) return false;
+    if (normalizedLabelText(element)) return true;
     return !Array.from(element.children).some((child) => visible(child) && normalizedText(child));
   };
 
@@ -87,8 +96,9 @@ function parseEasyOrdersIdentityFromDocument() {
           for (const index of [emailIndex - distance, emailIndex + distance]) {
             const candidate = items[index];
             if (!candidate) continue;
-            const label = normalizedText(candidate);
+            const label = normalizedLabelText(candidate);
             if (!label || isEmail(label) || ignoredSectionLabels.has(label.replace(/:$/, ""))) continue;
+            if (!/[\p{L}\p{N}]/u.test(label)) continue;
             if (ignoredActionLabels.has(label) || isIgnoredAction(candidate)) continue;
             return label;
           }
@@ -100,7 +110,7 @@ function parseEasyOrdersIdentityFromDocument() {
   };
 
   const identitySurfaces = Array.from(document.querySelectorAll(
-    "[role='menu'], [role='dialog'], [class~='MuiPopover-paper']"
+    "[role='menu'], [role='dialog'], [role='presentation'], [class*='MuiPopover-paper'], [class*='MuiMenu-paper']"
   )).filter(visible);
   const surfaces = identitySurfaces.length ? identitySurfaces : [document.body];
 
@@ -114,7 +124,7 @@ function parseEasyOrdersIdentityFromDocument() {
       const store = findAdjacentLabel(emailElement, surface);
       if (store) {
         return {
-          email: normalize(text(emailElement)),
+          email: normalize(labelText(emailElement)),
           store,
           source: "account-popover-header",
         };
@@ -178,6 +188,82 @@ function createEasyOrdersExportFlow(options = {}) {
     return identityCache.verified &&
       identityCache.email === normalizeEmail(config.easyEmail) &&
       identityCache.store === normalizeIdentityText(config.easyStore);
+  }
+
+  async function collectIdentityEvidence(page) {
+    return page.evaluate(() => {
+      const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig;
+      const hits = [];
+      const seen = new Set();
+
+      function add(source, text) {
+        if (text === undefined || text === null) return;
+        const value = String(text);
+        const decoded = (() => {
+          try { return decodeURIComponent(value); } catch (_) { return ""; }
+        })();
+        const matches = `${value} ${decoded}`.match(EMAIL_RE) || [];
+        for (const raw of matches) {
+          const email = raw.trim().toLowerCase();
+          const key = `${source}|${email}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            hits.push({ source, email });
+          }
+        }
+      }
+
+      function decodeBase64Url(value) {
+        try {
+          const padded = String(value || "").replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(String(value || "").length / 4) * 4, "=");
+          return decodeURIComponent(
+            Array.from(atob(padded), (c) => `%${c.charCodeAt(0).toString(16).padStart(2, "0")}`).join("")
+          );
+        } catch (_) {
+          try {
+            const padded = String(value || "").replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(String(value || "").length / 4) * 4, "=");
+            return atob(padded);
+          } catch (__) {
+            return "";
+          }
+        }
+      }
+
+      function scanJwt(source, text) {
+        const tokens = String(text || "").match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g) || [];
+        for (const token of tokens) {
+          const parts = token.split(".");
+          if (parts.length >= 2) add(`${source}:jwt`, decodeBase64Url(parts[1]));
+        }
+      }
+
+      add("document", document.body ? document.body.innerText : "");
+      add("title", document.title || "");
+      for (const el of Array.from(document.querySelectorAll("[title], [aria-label], [alt], [data-user], [data-email], [href]"))) {
+        add("dom-attr", [
+          el.getAttribute("title"),
+          el.getAttribute("aria-label"),
+          el.getAttribute("alt"),
+          el.getAttribute("data-user"),
+          el.getAttribute("data-email"),
+          el.getAttribute("href"),
+        ].filter(Boolean).join(" "));
+      }
+
+      for (const storage of [localStorage, sessionStorage]) {
+        const storageName = storage === localStorage ? "localStorage" : "sessionStorage";
+        for (let i = 0; i < storage.length; i++) {
+          const key = storage.key(i);
+          const value = storage.getItem(key);
+          add(storageName, `${key || ""} ${value || ""}`);
+          scanJwt(storageName, `${key || ""} ${value || ""}`);
+        }
+      }
+
+      add("cookie", document.cookie || "");
+      scanJwt("cookie", document.cookie || "");
+      return hits;
+    }).catch(() => []);
   }
 
   function formatDataDay(date) {
@@ -445,6 +531,25 @@ function createEasyOrdersExportFlow(options = {}) {
       currentStore = await readCurrentStore(page, activeIdentity).catch(() => "");
       if (!selected && currentStore === expectedStore) {
         log(`EasyOrders store selection completed after the navigation timeout at ${where}; recovery verified it.`);
+      }
+      if (selected && !currentStore) {
+        const evidence = await collectIdentityEvidence(page);
+        const evidenceEmails = [...new Set(evidence.map((item) => normalizeEmail(item.email)).filter(Boolean))];
+        const expectedEmailVisible = evidenceEmails.includes(expectedEmail);
+        const onAuthenticatedPage = await authenticatedLanding(page).catch(() => false);
+        if (expectedEmailVisible && onAuthenticatedPage && !page.url().includes("login") && !page.url().includes("store-selection")) {
+          activeIdentity = {
+            email: expectedEmail,
+            store: expectedStore,
+            source: "explicit-store-selection-with-email-evidence",
+          };
+          currentStore = expectedStore;
+          const sources = [...new Set(evidence
+            .filter((item) => normalizeEmail(item.email) === expectedEmail)
+            .map((item) => item.source)
+          )].join(", ") || "page";
+          log(`EasyOrders selected "${config.easyStore}" but the identity header stayed unreadable at ${where}; accepting verified email evidence from ${sources}.`);
+        }
       }
     }
     if (activeIdentity && normalizeEmail(activeIdentity.email) !== expectedEmail) {

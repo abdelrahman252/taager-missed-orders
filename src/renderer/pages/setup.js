@@ -20,6 +20,7 @@ window.renderSetup = function (onComplete, initialStep) {
   let remoteAccountSlots = null;
   let credentialBackupPrompt = null;
   let editingId   = null;
+  const accountFormDrafts = {};
 
   // Step state: "accounts" | "run"
   // initialStep lets the caller decide the landing step (e.g. skip to "run" if accounts exist)
@@ -3513,6 +3514,7 @@ window.renderSetup = function (onComplete, initialStep) {
       }
       updateRunCards();
       sv3RenderMissingOrdersStoreInputs();
+      if (typeof sv3UpdateMissingOrdersUI === "function") sv3UpdateMissingOrdersUI();
       if (typeof sv3AutoRunEnabled !== "undefined" && sv3AutoRunEnabled) {
         window.api.setAutoRunAccounts(selectedIds).catch(() => {});
       }
@@ -3530,6 +3532,7 @@ window.renderSetup = function (onComplete, initialStep) {
         }
         updateRunCards();
         sv3RenderMissingOrdersStoreInputs();
+        if (typeof sv3UpdateMissingOrdersUI === "function") sv3UpdateMissingOrdersUI();
         if (typeof sv3AutoRunEnabled !== "undefined" && sv3AutoRunEnabled) {
           window.api.setAutoRunAccounts(selectedIds).catch(() => {});
         }
@@ -3691,11 +3694,27 @@ window.renderSetup = function (onComplete, initialStep) {
       const knob = document.getElementById("sv3-missing-orders-knob");
       const label = document.getElementById("sv3-missing-orders-label");
       if (!btn) return;
+      const selectedHasSecondTaagerCart = accounts.some(a => (
+        a.accountType !== "static" &&
+        selectedIds.includes(a.id) &&
+        (a.missedOrdersDestination === "second_taager_cart" || a.secondTaagerCartEnabled === true)
+      ));
+      if (selectedHasSecondTaagerCart) {
+        sv3MissingOrdersEnabled = false;
+        btn.disabled = true;
+        btn.style.opacity = "0.5";
+        btn.title = setupText("setup.missing_orders_disabled_second_cart", "Legacy Missing Orders is disabled because a selected account routes missed orders to a second Taager cart.");
+      } else {
+        btn.disabled = false;
+        btn.style.opacity = "";
+        btn.title = "";
+      }
       sv3SetSettingToggleVisual(btn, knob, label, sv3MissingOrdersEnabled, "accent");
       sv3RenderMissingOrdersStoreInputs();
     }
 
     document.getElementById("sv3-btn-missing-orders")?.addEventListener("click", async () => {
+      if (document.getElementById("sv3-btn-missing-orders")?.disabled) return;
       sv3MissingOrdersEnabled = !sv3MissingOrdersEnabled;
       await window.api.setMissingOrdersUploadEnabled(sv3MissingOrdersEnabled);
       sv3UpdateMissingOrdersUI();
@@ -4103,15 +4122,26 @@ window.renderSetup = function (onComplete, initialStep) {
     const acc    = isEdit ? accounts.find(a => a.id === editId) : null;
     if (isEdit && (!acc || acc.locked)) return;
     const isLockedEdit = isEdit && !!acc?.locked;
-    const selectedTaagerMethod = acc?.taagerLoginMethod || "email";
-    const selectedTaagerCountry = (acc?.taagerCountry || "sa").toLowerCase();
-    const selectedTaagerMerchantId = acc?.taagerAffiliateCode || "";
-    const selectedCmsProvider = acc?.cmsProvider === "lightfunnels" ? "lightfunnels" : "easyorders";
-    const selectedLightfunnelsMethod = acc?.lightfunnelsLoginMethod === "google" ? "google" : "email";
-    const selectedDashboardProvider = acc?.dashboardEnrichmentProvider === "none" || acc?.dashboardEnrichmentProvider === selectedCmsProvider
+    const draftKey = isEdit ? `edit:${editId}` : "new";
+    const formDraft = accountFormDrafts[draftKey] || {};
+    const draftValue = (key, fallback = "") => (
+      Object.prototype.hasOwnProperty.call(formDraft, key) ? formDraft[key] : fallback
+    );
+    const selectedTaagerMethod = draftValue("taagerLoginMethod", acc?.taagerLoginMethod || "email");
+    const selectedTaagerCountry = String(draftValue("taagerCountry", acc?.taagerCountry || "sa")).toLowerCase();
+    const selectedTaagerMerchantId = draftValue("taagerAffiliateCode", acc?.taagerAffiliateCode || "");
+    const selectedMissedOrdersDestination = draftValue("missedOrdersDestination", acc?.missedOrdersDestination === "second_taager_cart" || acc?.secondTaagerCartEnabled === true
+      ? "second_taager_cart"
+      : "primary_cart");
+    const selectedSecondTaagerMethod = draftValue("secondTaagerLoginMethod", acc?.secondTaagerLoginMethod || "email");
+    const selectedSecondTaagerMerchantId = draftValue("secondTaagerAffiliateCode", acc?.secondTaagerAffiliateCode || "");
+    const selectedCmsProvider = draftValue("cmsProvider", acc?.cmsProvider === "lightfunnels" ? "lightfunnels" : "easyorders");
+    const selectedLightfunnelsMethod = draftValue("lightfunnelsLoginMethod", acc?.lightfunnelsLoginMethod === "google" ? "google" : "email");
+    const selectedDashboardProvider = draftValue("dashboardEnrichmentProvider", acc?.dashboardEnrichmentProvider === "none" || acc?.dashboardEnrichmentProvider === selectedCmsProvider
       ? acc.dashboardEnrichmentProvider
-      : selectedCmsProvider;
-    const selectedAccountType = acc?.accountType === "static" ? "static" : "live";
+      : selectedCmsProvider);
+    const selectedAccountType = draftValue("accountType", acc?.accountType === "static" ? "static" : "live");
+    const selectedTaagerStep = draftValue("taagerAccountStep", "primary") === "second" ? "second" : "primary";
     const isTeamLeaderMode = window._teamLeaderEnabled === true;
     const cmsRequiredMark = '<span data-cms-required-mark style="color:var(--danger)">*</span>';
     const taagerMethodOptions = [
@@ -4129,7 +4159,6 @@ window.renderSetup = function (onComplete, initialStep) {
         <span class="sv3-country-name">${esc(opt.label)}</span>
       </button>
     `).join("");
-
     const overlay = document.createElement("div");
     overlay.className = "sv3-form-overlay";
     overlay.innerHTML = `
@@ -4159,7 +4188,7 @@ window.renderSetup = function (onComplete, initialStep) {
           <div class="form-section-title">${esc(setupText("setup.static_account", "Static Account"))}</div>
           <div class="form-group">
             <label>${esc(setupText("setup.static_name", "Account name"))} <span style="color:var(--danger)">*</span></label>
-            <input type="text" id="sv3-static-name" value="${esc(acc?.label || acc?.memberName || "")}" placeholder="${esc(setupText("setup.static_name_placeholder", "Example: Jake"))}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
+            <input type="text" id="sv3-static-name" value="${esc(draftValue("staticName", acc?.label || acc?.memberName || ""))}" placeholder="${esc(setupText("setup.static_name_placeholder", "Example: Jake"))}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
             <div class="sv3-field-hint">${esc(setupText("setup.static_hint", "This account uses Excel Static Update and does not connect to Taager or EasyOrders."))}</div>
           </div>
         </div>
@@ -4195,21 +4224,17 @@ window.renderSetup = function (onComplete, initialStep) {
         </div>
         <div class="form-group" data-cms-field="easyorders">
           <label>${t("setup.store_label")} ${cmsRequiredMark}</label>
-          <input type="text" id="sv3-easy-store" placeholder="${t("setup.store_ph")}" value="${esc(acc?.easyStore||"")}" ${isLockedEdit ? "disabled" : ""} />
+          <input type="text" id="sv3-easy-store" placeholder="${t("setup.store_ph")}" value="${esc(draftValue("easyStore", acc?.easyStore||""))}" ${isLockedEdit ? "disabled" : ""} />
         </div>
-        <div class="form-group" data-cms-field="easyorders">
-          <label>${esc(setupText("setup.missing_orders_store_label", "Missing Orders Store Name"))}</label>
-          <input type="text" id="sv3-missing-orders-store" placeholder="${esc(setupText("setup.missing_orders_store_ph", "Enter the Taager Missing Orders store name"))}" value="${esc(acc?.missingOrdersStoreName || "")}" ${isLockedEdit ? "disabled" : ""} />
-          <div class="sv3-field-hint">${esc(setupText("setup.missing_orders_store_hint", "Used in Taager's Missing Orders upload modal. Required when Route Missed Orders is ON."))}</div>
-        </div>
+        <input type="hidden" id="sv3-missing-orders-store" value="${esc(draftValue("missingOrdersStoreName", acc?.missingOrdersStoreName || ""))}" />
         <div class="form-group" data-cms-field="easyorders">
           <label>${t("setup.email_label")} ${cmsRequiredMark}</label>
-          <input type="email" id="sv3-easy-email" placeholder="${t("setup.email_ph")}" value="${esc(acc?.easyEmail||"")}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
+          <input type="email" id="sv3-easy-email" placeholder="${t("setup.email_ph")}" value="${esc(draftValue("easyEmail", acc?.easyEmail||""))}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
         </div>
         <div class="form-group" data-cms-field="easyorders">
           <label>${t("setup.pass_label")} ${cmsRequiredMark}</label>
           <div style="position:relative;display:flex;align-items:center">
-            <input type="password" id="sv3-easy-pass" placeholder="••••••••" autocomplete="new-password" required ${isLockedEdit ? "disabled" : ""} style="padding-right:42px;width:100%" />
+            <input type="password" id="sv3-easy-pass" placeholder="********" value="${esc(draftValue("easyPassword", ""))}" autocomplete="new-password" required ${isLockedEdit ? "disabled" : ""} style="padding-right:42px;width:100%" />
             <button type="button" class="password-toggle-btn" data-target="sv3-easy-pass" style="position:absolute;right:10px;background:none;border:none;cursor:pointer;color:var(--text3);padding:4px;display:flex;align-items:center;justify-content:center;transition:color 0.2s;outline:none" tabindex="-1">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
             </button>
@@ -4220,7 +4245,7 @@ window.renderSetup = function (onComplete, initialStep) {
 
         <div class="form-group" data-cms-field="lightfunnels">
           <label>${setupText("setup.lightfunnels_account_label", "Account Name")} ${cmsRequiredMark}</label>
-          <input type="text" id="sv3-lightfunnels-account" placeholder="${setupText("setup.lightfunnels_account_ph", "e.g. trendatsaudi")}" value="${esc(acc?.lightfunnelsAccountName||"")}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
+          <input type="text" id="sv3-lightfunnels-account" placeholder="${setupText("setup.lightfunnels_account_ph", "e.g. trendatsaudi")}" value="${esc(draftValue("lightfunnelsAccountName", acc?.lightfunnelsAccountName||""))}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
         </div>
         <div class="form-group" data-cms-field="lightfunnels">
           <label>${setupText("setup.lightfunnels_login_method", "LightFunnels Login Method")}</label>
@@ -4233,12 +4258,12 @@ window.renderSetup = function (onComplete, initialStep) {
         </div>
         <div class="form-group" data-cms-field="lightfunnels">
           <label>${t("setup.email_label")} ${cmsRequiredMark}</label>
-          <input type="email" id="sv3-lightfunnels-email" placeholder="${t("setup.email_ph")}" value="${esc(acc?.lightfunnelsEmail||"")}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
+          <input type="email" id="sv3-lightfunnels-email" placeholder="${t("setup.email_ph")}" value="${esc(draftValue("lightfunnelsEmail", acc?.lightfunnelsEmail||""))}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
         </div>
         <div class="form-group" data-cms-field="lightfunnels" id="sv3-lightfunnels-pass-group">
           <label>${t("setup.pass_label")} <span data-lightfunnels-pass-required style="color:var(--danger)">*</span></label>
           <div style="position:relative;display:flex;align-items:center">
-            <input type="password" id="sv3-lightfunnels-pass" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" autocomplete="new-password" ${isLockedEdit ? "disabled" : ""} style="padding-right:42px;width:100%" />
+            <input type="password" id="sv3-lightfunnels-pass" placeholder="********" value="${esc(draftValue("lightfunnelsPassword", ""))}" autocomplete="new-password" ${isLockedEdit ? "disabled" : ""} style="padding-right:42px;width:100%" />
             <button type="button" class="password-toggle-btn" data-target="sv3-lightfunnels-pass" style="position:absolute;right:10px;background:none;border:none;cursor:pointer;color:var(--text3);padding:4px;display:flex;align-items:center;justify-content:center;transition:color 0.2s;outline:none" tabindex="-1">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
             </button>
@@ -4252,6 +4277,23 @@ window.renderSetup = function (onComplete, initialStep) {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
           ${t("setup.taager_section")}
         </div>
+        <div class="form-group">
+          <label>${esc(setupText("setup.taager_account_mode_label", "Taager mode"))}</label>
+          <input type="hidden" id="sv3-missed-orders-destination" value="${esc(selectedMissedOrdersDestination)}" />
+          <input type="hidden" id="sv3-taager-account-step" value="${esc(selectedTaagerStep)}" />
+          <div class="sv3-tab-control">
+            <button type="button" class="sv3-tab-btn ${selectedMissedOrdersDestination === "primary_cart" ? "is-active" : ""}" data-missed-destination="primary_cart" ${isLockedEdit ? "disabled" : ""}>${esc(setupText("setup.taager_mode_normal", "Normal"))}</button>
+            <button type="button" class="sv3-tab-btn ${selectedMissedOrdersDestination === "second_taager_cart" ? "is-active" : ""}" data-missed-destination="second_taager_cart" ${isLockedEdit ? "disabled" : ""}>${esc(setupText("setup.taager_mode_two_accounts", "Two Taager Accounts"))}</button>
+          </div>
+          <div class="sv3-field-hint" id="sv3-missed-destination-hint"></div>
+        </div>
+        <div id="sv3-taager-step-indicator" class="form-group" style="${selectedMissedOrdersDestination === "second_taager_cart" ? "" : "display:none;"}">
+          <div class="sv3-tab-control">
+            <button type="button" class="sv3-tab-btn ${selectedTaagerStep === "primary" ? "is-active" : ""}" data-taager-account-step="primary">${esc(setupText("setup.taager_step_primary", "Step 1 - Main Account"))}</button>
+            <button type="button" class="sv3-tab-btn ${selectedTaagerStep === "second" ? "is-active" : ""}" data-taager-account-step="second">${esc(setupText("setup.taager_step_second", "Step 2 - Missed Cart Account"))}</button>
+          </div>
+        </div>
+        <div id="sv3-taager-primary-step" style="${selectedMissedOrdersDestination === "second_taager_cart" && selectedTaagerStep === "second" ? "display:none;" : ""}">
         <div class="form-group">
           <label>${t("setup.country_label")}</label>
           <input type="hidden" id="sv3-taager-country" value="${esc(selectedTaagerCountry)}" />
@@ -4271,21 +4313,65 @@ window.renderSetup = function (onComplete, initialStep) {
         </div>
         <div class="form-group" id="sv3-taager-email-group">
           <label>${t("setup.email_label")} <span style="color:var(--danger)">*</span></label>
-          <input type="email" id="sv3-taager-email" placeholder="${t("setup.taager_email_ph")}" value="${esc(acc?.taagerEmail||acc?.taagerEmail||"")}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
+          <input type="email" id="sv3-taager-email" placeholder="${t("setup.taager_email_ph")}" value="${esc(draftValue("taagerEmail", acc?.taagerEmail||""))}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
         </div>
         <div class="form-group" id="sv3-taager-phone-group">
           <label>${t("setup.taager_phone_label")} <span style="color:var(--danger)">*</span></label>
-          <input type="tel" id="sv3-taager-phone" placeholder="${t("setup.taager_phone_ph")}" value="${esc(acc?.taagerPhone||"")}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
+          <input type="tel" id="sv3-taager-phone" placeholder="${t("setup.taager_phone_ph")}" value="${esc(draftValue("taagerPhone", acc?.taagerPhone||""))}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
         </div>
         <div class="form-group" id="sv3-taager-pass-group">
           <label>${t("setup.pass_label")} <span style="color:var(--danger)">*</span></label>
           <div style="position:relative;display:flex;align-items:center">
-            <input type="password" id="sv3-taager-pass" placeholder="••••••••" autocomplete="new-password" ${isLockedEdit ? "disabled" : ""} style="padding-right:42px;width:100%" />
+            <input type="password" id="sv3-taager-pass" placeholder="********" value="${esc(draftValue("taagerPassword", ""))}" autocomplete="new-password" ${isLockedEdit ? "disabled" : ""} style="padding-right:42px;width:100%" />
             <button type="button" class="password-toggle-btn" data-target="sv3-taager-pass" style="position:absolute;right:10px;background:none;border:none;cursor:pointer;color:var(--text3);padding:4px;display:flex;align-items:center;justify-content:center;transition:color 0.2s;outline:none" tabindex="-1">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
             </button>
           </div>
           ${isEdit ? `<div class="sv3-field-hint">${t("setup.taager_pass_hint")}</div>` : ""}
+        </div>
+        <div id="sv3-second-taager-summary" class="form-group" style="${selectedMissedOrdersDestination === "second_taager_cart" && selectedTaagerStep === "primary" ? "" : "display:none;"}">
+          <button type="button" id="sv3-configure-second-taager" class="btn btn-ghost" style="justify-content:center" ${isLockedEdit ? "disabled" : ""}>${esc(setupText("setup.next_second_taager", "Next: Missed Cart Account"))}</button>
+        </div>
+        </div>
+        <div id="sv3-second-taager-panel" style="${selectedMissedOrdersDestination === "second_taager_cart" && selectedTaagerStep === "second" ? "" : "display:none;"}">
+          <div class="form-group">
+            <label>${esc(setupText("setup.second_taager_cart_title", "Missed Cart Taager Account"))}</label>
+            <div class="sv3-field-hint">${esc(setupText("setup.second_taager_cart_hint", "Missed-source orders go to this separate Taager cart/profile. Dashboard stays connected to the main Taager account."))}</div>
+          </div>
+          <div class="form-group">
+            <label>${setupText("setup.taager_merchant_id_label", "Taager merchant ID")} <span style="color:var(--danger)">*</span></label>
+            <input type="text" id="sv3-second-taager-merchant-id" value="${esc(selectedSecondTaagerMerchantId)}" placeholder="${setupText("setup.taager_merchant_id_ph", "Example: 1944783")}" autocomplete="off" inputmode="numeric" ${isLockedEdit ? "disabled" : ""} />
+          </div>
+          <div class="form-group">
+            <label>${t("setup.taager_login_method")}</label>
+            <input type="hidden" id="sv3-second-taager-login-method" value="${esc(selectedSecondTaagerMethod)}" />
+            <div class="sv3-tab-control">
+              <button type="button" class="sv3-tab-btn ${selectedSecondTaagerMethod === "email" ? "is-active" : ""}" data-second-taager-method="email" ${isLockedEdit ? "disabled" : ""}>${t("setup.taager_login_email")}</button>
+              <button type="button" class="sv3-tab-btn ${selectedSecondTaagerMethod === "phone" ? "is-active" : ""}" data-second-taager-method="phone" ${isLockedEdit ? "disabled" : ""}>${t("setup.taager_login_phone")}</button>
+              <button type="button" class="sv3-tab-btn ${selectedSecondTaagerMethod === "google" ? "is-active" : ""}" data-second-taager-method="google" ${isLockedEdit ? "disabled" : ""}>${t("setup.taager_login_google")}</button>
+            </div>
+          </div>
+          <div class="form-group" id="sv3-second-taager-email-group">
+            <label>${t("setup.email_label")} <span style="color:var(--danger)">*</span></label>
+            <input type="email" id="sv3-second-taager-email" value="${esc(draftValue("secondTaagerEmail", acc?.secondTaagerEmail || ""))}" placeholder="${t("setup.taager_email_ph")}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
+          </div>
+          <div class="form-group" id="sv3-second-taager-phone-group">
+            <label>${t("setup.taager_phone_label")} <span style="color:var(--danger)">*</span></label>
+            <input type="tel" id="sv3-second-taager-phone" value="${esc(draftValue("secondTaagerPhone", acc?.secondTaagerPhone || ""))}" placeholder="${t("setup.taager_phone_ph")}" autocomplete="off" ${isLockedEdit ? "disabled" : ""} />
+          </div>
+          <div class="form-group" id="sv3-second-taager-pass-group">
+            <label>${t("setup.pass_label")} <span style="color:var(--danger)">*</span></label>
+            <div style="position:relative;display:flex;align-items:center">
+              <input type="password" id="sv3-second-taager-pass" placeholder="********" value="${esc(draftValue("secondTaagerPassword", ""))}" autocomplete="new-password" ${isLockedEdit ? "disabled" : ""} style="padding-right:42px;width:100%" />
+              <button type="button" class="password-toggle-btn" data-target="sv3-second-taager-pass" style="position:absolute;right:10px;background:none;border:none;cursor:pointer;color:var(--text3);padding:4px;display:flex;align-items:center;justify-content:center;transition:color 0.2s;outline:none" tabindex="-1">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              </button>
+            </div>
+            ${isEdit ? `<div class="sv3-field-hint">${t("setup.taager_pass_hint")}</div>` : ""}
+          </div>
+          <div class="form-group" style="display:flex;gap:10px">
+            <button type="button" id="sv3-back-primary-taager" class="btn btn-ghost" style="flex:1;justify-content:center">${esc(setupText("setup.back_main_taager", "Back to Main Taager"))}</button>
+          </div>
         </div>
           </div>
         </div>
@@ -4303,6 +4389,14 @@ window.renderSetup = function (onComplete, initialStep) {
     `;
 
     document.body.appendChild(overlay);
+    ["sv3-easy-pass", "sv3-lightfunnels-pass", "sv3-taager-pass", "sv3-second-taager-pass"].forEach((id) => {
+      const input = document.getElementById(id);
+      if (input) input.placeholder = "********";
+    });
+    const closeBtn = document.getElementById("sv3-form-back");
+    if (closeBtn) closeBtn.innerHTML = "&times;";
+    const noticeIcon = document.querySelector("#sv3-form-err .notice-icon");
+    if (noticeIcon) noticeIcon.textContent = "!";
 
     const syncAccountTypeFields = () => {
       const type = document.getElementById("sv3-account-type")?.value === "static" ? "static" : "live";
@@ -4346,6 +4440,62 @@ window.renderSetup = function (onComplete, initialStep) {
       if (passInput) {
         passInput.required = usesPassword;
         if (!isLockedEdit) passInput.disabled = !usesPassword;
+      }
+    };
+    const syncSecondTaagerFields = () => {
+      const destination = document.getElementById("sv3-missed-orders-destination")?.value || "primary_cart";
+      const enabled = destination === "second_taager_cart";
+      const stepInput = document.getElementById("sv3-taager-account-step");
+      const step = enabled ? (stepInput?.value === "second" ? "second" : "primary") : "primary";
+      const method = document.getElementById("sv3-second-taager-login-method")?.value || "email";
+      const summary = document.getElementById("sv3-second-taager-summary");
+      const panel = document.getElementById("sv3-second-taager-panel");
+      const primaryPanel = document.getElementById("sv3-taager-primary-step");
+      const stepIndicator = document.getElementById("sv3-taager-step-indicator");
+      const hint = document.getElementById("sv3-missed-destination-hint");
+      const emailGroup = document.getElementById("sv3-second-taager-email-group");
+      const phoneGroup = document.getElementById("sv3-second-taager-phone-group");
+      const passGroup = document.getElementById("sv3-second-taager-pass-group");
+      const merchantInput = document.getElementById("sv3-second-taager-merchant-id");
+      const emailInput = document.getElementById("sv3-second-taager-email");
+      const phoneInput = document.getElementById("sv3-second-taager-phone");
+      const passInput = document.getElementById("sv3-second-taager-pass");
+      const usesEmail = method === "email" || method === "google";
+      const usesPhone = method === "phone";
+      const usesPassword = method !== "google";
+      if (stepInput) stepInput.value = step;
+      if (stepIndicator) stepIndicator.style.display = enabled ? "" : "none";
+      if (primaryPanel) primaryPanel.style.display = !enabled || step === "primary" ? "" : "none";
+      if (summary) summary.style.display = enabled && step === "primary" ? "" : "none";
+      if (panel) panel.style.display = enabled && step === "second" ? "" : "none";
+      overlay.querySelectorAll("[data-taager-account-step]").forEach(tab => {
+        const tabStep = tab.dataset.taagerAccountStep || "primary";
+        tab.classList.toggle("is-active", tabStep === step);
+        tab.disabled = !enabled || isLockedEdit;
+      });
+      if (hint) {
+        hint.textContent = enabled
+          ? setupText("setup.missed_destination_second_hint", "Normal orders use the main Taager cart. Missed-source orders use a second Taager cart account.")
+          : setupText("setup.missed_destination_primary_hint", "Use one Taager account. All uploads keep the existing normal cart behavior.");
+      }
+      if (merchantInput) {
+        merchantInput.required = enabled;
+        if (!isLockedEdit) merchantInput.disabled = !enabled;
+      }
+      if (emailGroup) emailGroup.style.display = enabled && usesEmail ? "" : "none";
+      if (phoneGroup) phoneGroup.style.display = enabled && usesPhone ? "" : "none";
+      if (passGroup) passGroup.style.display = enabled && usesPassword ? "" : "none";
+      if (emailInput) {
+        emailInput.required = enabled && usesEmail;
+        if (!isLockedEdit) emailInput.disabled = !enabled || !usesEmail;
+      }
+      if (phoneInput) {
+        phoneInput.required = enabled && usesPhone;
+        if (!isLockedEdit) phoneInput.disabled = !enabled || !usesPhone;
+      }
+      if (passInput) {
+        passInput.required = enabled && usesPassword && !isEdit;
+        if (!isLockedEdit) passInput.disabled = !enabled || !usesPassword;
       }
     };
     const selectedCmsProviderValue = () => document.getElementById("sv3-cms-provider")?.value === "lightfunnels" ? "lightfunnels" : "easyorders";
@@ -4459,6 +4609,48 @@ window.renderSetup = function (onComplete, initialStep) {
         });
       });
     });
+    overlay.querySelectorAll("[data-missed-destination]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (isLockedEdit) return;
+        const input = document.getElementById("sv3-missed-orders-destination");
+        if (input) input.value = btn.dataset.missedDestination || "primary_cart";
+        const stepInput = document.getElementById("sv3-taager-account-step");
+        if (stepInput) stepInput.value = "primary";
+        overlay.querySelectorAll("[data-missed-destination]").forEach(tab => {
+          tab.classList.toggle("is-active", tab === btn);
+        });
+        syncSecondTaagerFields();
+      });
+    });
+    overlay.querySelectorAll("[data-taager-account-step]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (isLockedEdit) return;
+        const input = document.getElementById("sv3-taager-account-step");
+        if (input) input.value = btn.dataset.taagerAccountStep || "primary";
+        syncSecondTaagerFields();
+      });
+    });
+    overlay.querySelectorAll("[data-second-taager-method]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (isLockedEdit) return;
+        const input = document.getElementById("sv3-second-taager-login-method");
+        if (input) input.value = btn.dataset.secondTaagerMethod || "email";
+        overlay.querySelectorAll("[data-second-taager-method]").forEach(tab => {
+          tab.classList.toggle("is-active", tab === btn);
+        });
+        syncSecondTaagerFields();
+      });
+    });
+    document.getElementById("sv3-configure-second-taager")?.addEventListener("click", () => {
+      const input = document.getElementById("sv3-taager-account-step");
+      if (input) input.value = "second";
+      syncSecondTaagerFields();
+    });
+    document.getElementById("sv3-back-primary-taager")?.addEventListener("click", () => {
+      const input = document.getElementById("sv3-taager-account-step");
+      if (input) input.value = "primary";
+      syncSecondTaagerFields();
+    });
     overlay.querySelectorAll("[data-dashboard-enrichment-provider]").forEach(btn => {
       btn.addEventListener("click", () => {
         if (isLockedEdit) return;
@@ -4499,6 +4691,7 @@ window.renderSetup = function (onComplete, initialStep) {
       });
     });
     syncTaagerLoginFields();
+    syncSecondTaagerFields();
     syncCmsFields();
 
     overlay.querySelectorAll(".password-toggle-btn").forEach(btn => {
@@ -4523,7 +4716,42 @@ window.renderSetup = function (onComplete, initialStep) {
       });
     });
 
-    const close = () => overlay.remove();
+    const readFormValue = (id) => document.getElementById(id)?.value || "";
+    const captureAccountFormDraft = () => {
+      const cmsProvider = readFormValue("sv3-cms-provider") === "lightfunnels" ? "lightfunnels" : "easyorders";
+      const dashboardProvider = readFormValue("sv3-dashboard-enrichment-provider") || cmsProvider;
+      accountFormDrafts[draftKey] = {
+        accountType: readFormValue("sv3-account-type") === "static" ? "static" : "live",
+        staticName: readFormValue("sv3-static-name").trim(),
+        cmsProvider,
+        dashboardEnrichmentProvider: dashboardProvider === "none" || dashboardProvider === cmsProvider ? dashboardProvider : cmsProvider,
+        easyStore: readFormValue("sv3-easy-store").trim(),
+        missingOrdersStoreName: readFormValue("sv3-missing-orders-store").trim(),
+        easyEmail: readFormValue("sv3-easy-email").trim(),
+        easyPassword: readFormValue("sv3-easy-pass"),
+        lightfunnelsAccountName: readFormValue("sv3-lightfunnels-account").trim(),
+        lightfunnelsLoginMethod: readFormValue("sv3-lightfunnels-login-method") === "google" ? "google" : "email",
+        lightfunnelsEmail: readFormValue("sv3-lightfunnels-email").trim(),
+        lightfunnelsPassword: readFormValue("sv3-lightfunnels-pass"),
+        taagerLoginMethod: readFormValue("sv3-taager-login-method") || "email",
+        taagerCountry: (readFormValue("sv3-taager-country") || "sa").toLowerCase(),
+        taagerAffiliateCode: readFormValue("sv3-taager-merchant-id").trim(),
+        taagerEmail: readFormValue("sv3-taager-email").trim(),
+        taagerPhone: readFormValue("sv3-taager-phone").trim(),
+        taagerPassword: readFormValue("sv3-taager-pass"),
+        missedOrdersDestination: readFormValue("sv3-missed-orders-destination") || "primary_cart",
+        taagerAccountStep: readFormValue("sv3-taager-account-step") === "second" ? "second" : "primary",
+        secondTaagerLoginMethod: readFormValue("sv3-second-taager-login-method") || "email",
+        secondTaagerAffiliateCode: readFormValue("sv3-second-taager-merchant-id").trim(),
+        secondTaagerEmail: readFormValue("sv3-second-taager-email").trim(),
+        secondTaagerPhone: readFormValue("sv3-second-taager-phone").trim(),
+        secondTaagerPassword: readFormValue("sv3-second-taager-pass"),
+      };
+    };
+    const close = () => {
+      captureAccountFormDraft();
+      overlay.remove();
+    };
     overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
     document.getElementById("sv3-form-back")?.addEventListener("click", close);
     document.getElementById("sv3-form-cancel")?.addEventListener("click", close);
@@ -4546,6 +4774,13 @@ window.renderSetup = function (onComplete, initialStep) {
       const taagerPassword = document.getElementById("sv3-taager-pass").value;
       const taagerCountry  = (document.getElementById("sv3-taager-country")?.value || "sa").toLowerCase();
       const taagerMerchantId = (document.getElementById("sv3-taager-merchant-id")?.value || "").trim();
+      const missedOrdersDestination = document.getElementById("sv3-missed-orders-destination")?.value || "primary_cart";
+      const secondTaagerLoginMethod = document.getElementById("sv3-second-taager-login-method")?.value || "email";
+      const secondTaagerEmail = (document.getElementById("sv3-second-taager-email")?.value || "").trim();
+      const secondTaagerPhone = (document.getElementById("sv3-second-taager-phone")?.value || "").trim();
+      const secondTaagerPassword = document.getElementById("sv3-second-taager-pass")?.value || "";
+      const secondTaagerCountry = taagerCountry;
+      const secondTaagerAffiliateCode = (document.getElementById("sv3-second-taager-merchant-id")?.value || "").trim();
       const rawDashboardProvider = document.getElementById("sv3-dashboard-enrichment-provider")?.value || cmsProvider;
       const dashboardEnrichmentProvider = ["easyorders", "lightfunnels"].includes(rawDashboardProvider) ? rawDashboardProvider : "none";
       const errEl        = document.getElementById("sv3-form-err");
@@ -4561,6 +4796,9 @@ window.renderSetup = function (onComplete, initialStep) {
       const nextTaagerEmail = isEdit ? (taagerEmail || currentAccount?.taagerEmail || "") : taagerEmail;
       const nextTaagerPhone = isEdit ? (taagerPhone || currentAccount?.taagerPhone || "") : taagerPhone;
       const nextTaagerMerchantId = isEdit ? (taagerMerchantId || currentAccount?.taagerAffiliateCode || "") : taagerMerchantId;
+      const nextSecondTaagerEmail = isEdit ? (secondTaagerEmail || currentAccount?.secondTaagerEmail || "") : secondTaagerEmail;
+      const nextSecondTaagerPhone = isEdit ? (secondTaagerPhone || currentAccount?.secondTaagerPhone || "") : secondTaagerPhone;
+      const nextSecondTaagerMerchantId = isEdit ? (secondTaagerAffiliateCode || currentAccount?.secondTaagerAffiliateCode || "") : secondTaagerAffiliateCode;
 
       if (accountType === "static" && !staticName) {
         errText.innerHTML = setupText("setup.static_name_required", "Account name is required.");
@@ -4574,7 +4812,18 @@ window.renderSetup = function (onComplete, initialStep) {
       const needsCmsCredentials = !isTeamLeaderMode || dashboardEnrichmentProvider === cmsProvider;
       const missingEasyOrders = cmsProvider === "easyorders" && needsCmsCredentials && (!nextEasyStore || !nextEasyEmail || (!isEdit && !easyPassword));
       const missingLightFunnels = cmsProvider === "lightfunnels" && needsCmsCredentials && (!nextLightfunnelsAccountName || !nextLightfunnelsEmail || (lightfunnelsLoginMethod === "email" && !isEdit && !lightfunnelsPassword));
-      if (accountType !== "static" && (!nextTaagerMerchantId || missingEasyOrders || missingLightFunnels || (!isEdit && (!hasTaagerLoginIdentity || (needsPassword && !taagerPassword))))) {
+      const secondEnabled = missedOrdersDestination === "second_taager_cart";
+      const secondNeedsPhone = secondTaagerLoginMethod === "phone";
+      const secondNeedsPassword = secondTaagerLoginMethod !== "google";
+      const hasSecondTaagerLoginIdentity = secondNeedsPhone ? !!nextSecondTaagerPhone : !!nextSecondTaagerEmail;
+      const missingSecondTaager = secondEnabled && (!nextSecondTaagerMerchantId || !hasSecondTaagerLoginIdentity || (!isEdit && secondNeedsPassword && !secondTaagerPassword));
+      const missingMainTaager = !nextTaagerMerchantId || (!isEdit && (!hasTaagerLoginIdentity || (needsPassword && !taagerPassword)));
+      if (accountType !== "static" && (!nextTaagerMerchantId || missingEasyOrders || missingLightFunnels || missingSecondTaager || (!isEdit && (!hasTaagerLoginIdentity || (needsPassword && !taagerPassword))))) {
+        if (secondEnabled) {
+          const stepInput = document.getElementById("sv3-taager-account-step");
+          if (stepInput) stepInput.value = missingSecondTaager && !missingMainTaager ? "second" : "primary";
+          syncSecondTaagerFields();
+        }
         errText.innerHTML = t("setup.err_missing");
         errEl.style.display = "flex";
         return;
@@ -4604,10 +4853,18 @@ window.renderSetup = function (onComplete, initialStep) {
           taagerPhone: nextTaagerPhone,
           taagerCountry,
           taagerAffiliateCode: nextTaagerMerchantId,
+          missedOrdersDestination,
+          secondTaagerCartEnabled: missedOrdersDestination === "second_taager_cart",
+          secondTaagerLoginMethod,
+          secondTaagerEmail: nextSecondTaagerEmail,
+          secondTaagerPhone: nextSecondTaagerPhone,
+          secondTaagerCountry,
+          secondTaagerAffiliateCode: nextSecondTaagerMerchantId,
           dashboardEnrichmentProvider,
           ...(easyPassword ? { easyPassword } : {}),
           ...(lightfunnelsPassword ? { lightfunnelsPassword } : {}),
           ...(taagerPassword ? { taagerPassword } : {}),
+          ...(secondTaagerPassword ? { secondTaagerPassword } : {}),
         };
         const idx = nextAccounts.findIndex(a => a.id === editId);
         if (idx !== -1) {
@@ -4647,6 +4904,14 @@ window.renderSetup = function (onComplete, initialStep) {
           taagerPassword,
           taagerCountry,
           taagerAffiliateCode: nextTaagerMerchantId,
+          missedOrdersDestination,
+          secondTaagerCartEnabled: missedOrdersDestination === "second_taager_cart",
+          secondTaagerLoginMethod,
+          secondTaagerEmail,
+          secondTaagerPhone,
+          secondTaagerPassword,
+          secondTaagerCountry,
+          secondTaagerAffiliateCode: nextSecondTaagerMerchantId,
           dashboardEnrichmentProvider,
         });
       }
@@ -4660,14 +4925,20 @@ window.renderSetup = function (onComplete, initialStep) {
         saveBtn.disabled = false;
         errText.innerHTML = result.reason === "account_locked"
           ? t("setup.err_locked")
-          : result.reason === "easy_store_required" || result.reason === "easy_credentials_required" || result.reason === "lightfunnels_credentials_required" || result.reason === "taager_email_required" || result.reason === "taager_phone_required" || result.reason === "taager_password_required"
+          : result.reason === "easy_store_required" || result.reason === "easy_credentials_required" || result.reason === "lightfunnels_credentials_required" || result.reason === "taager_email_required" || result.reason === "taager_phone_required" || result.reason === "taager_password_required" || result.reason === "second_taager_email_required" || result.reason === "second_taager_phone_required" || result.reason === "second_taager_password_required"
           ? t("setup.err_missing")
           : result.reason === "taager_merchant_id_required"
           ? setupText("setup.taager_merchant_id_required", "Taager merchant ID is required.")
+          : result.reason === "second_taager_merchant_id_required"
+          ? setupText("setup.second_taager_merchant_id_required", "Second Taager cart merchant ID is required.")
+          : result.reason === "second_taager_same_as_primary"
+          ? setupText("setup.second_taager_same_as_primary", "Second Taager cart must use a different merchant ID than the primary Taager account.")
           : result.reason === "remote_slots_full"
           ? setupText("setup.remote_slots_full", "This license already has account slots on the server. Re-add the same Taager merchant/account details to re-link them, or ask admin to clear stale slots.")
           : result.reason === "limit_reached"
           ? t("setup.limit_reached")
+          : result.reason === "license_account_sync_failed"
+          ? setupText("setup.license_account_sync_failed", "Could not sync this account with the license server. Check the license account slots or try again.")
           : (result.reason || t("setup.save_failed"));
         errEl.style.display = "flex";
         return;
@@ -4678,7 +4949,8 @@ window.renderSetup = function (onComplete, initialStep) {
         await window.api.relockAccount({ accountId: editId });
       }
 
-      close();
+      delete accountFormDrafts[draftKey];
+      overlay.remove();
       if (newAccountId && accountType !== "static" && !selectedIds.includes(newAccountId)) selectedIds.push(newAccountId);
       await refreshAccountStateAfterMutation("accounts-updated");
       renderStep();

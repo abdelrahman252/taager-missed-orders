@@ -723,6 +723,24 @@ function taagerLoginMethodOf(acc) {
   return ["email", "phone", "google"].includes(method) ? method : "email";
 }
 
+function secondTaagerLoginMethodOf(acc) {
+  const method = String(acc && acc.secondTaagerLoginMethod || "email").toLowerCase().trim();
+  return ["email", "phone", "google"].includes(method) ? method : "email";
+}
+
+function missedOrdersDestinationOf(acc, legacyEnabled = false) {
+  const clean = String(acc && acc.missedOrdersDestination || "").trim().toLowerCase();
+  if (clean === "legacy_missing_orders" || clean === "missing-orders" || clean === "legacy") return "legacy_missing_orders";
+  if (clean === "second_taager_cart" || clean === "second-taager-cart" || clean === "second_cart") return "second_taager_cart";
+  if (clean === "primary_cart" || clean === "cart" || clean === "normal") return "primary_cart";
+  if (acc && acc.secondTaagerCartEnabled === true) return "second_taager_cart";
+  return legacyEnabled === true ? "legacy_missing_orders" : "primary_cart";
+}
+
+function secondTaagerCartEnabledOf(acc) {
+  return missedOrdersDestinationOf(acc) === "second_taager_cart" || !!(acc && acc.secondTaagerCartEnabled === true);
+}
+
 function isStaticAccount(acc) {
   return !!acc && acc.accountType === "static";
 }
@@ -804,6 +822,23 @@ function taagerLoginIdentityOf(acc) {
   return (acc && (acc.taagerEmail || acc.taagerEmail) || "").toLowerCase().trim();
 }
 
+function secondTaagerMerchantIdentityOf(acc) {
+  const merchantId = String(acc && acc.secondTaagerAffiliateCode || "").trim().toLowerCase();
+  const country = String(acc && acc.secondTaagerCountry || acc && acc.taagerCountry || "sa").trim().toLowerCase();
+  if (merchantId) return `${country}:${merchantId}`;
+  return "";
+}
+
+function secondTaagerLoginIdentityOf(acc) {
+  if (!secondTaagerCartEnabledOf(acc)) return "";
+  const merchantIdentity = secondTaagerMerchantIdentityOf(acc);
+  if (merchantIdentity) return merchantIdentity;
+  const method = secondTaagerLoginMethodOf(acc);
+  const country = String(acc && acc.secondTaagerCountry || acc && acc.taagerCountry || "sa").trim().toLowerCase();
+  if (method === "phone") return normalizePhone(acc && acc.secondTaagerPhone || "", country);
+  return String(acc && acc.secondTaagerEmail || "").toLowerCase().trim();
+}
+
 function taagerMarketingKeyOf(acc) {
   const merchantId = String(acc && acc.taagerAffiliateCode || "").trim().toLowerCase();
   const country = String(acc && acc.taagerCountry || "sa").trim().toLowerCase();
@@ -877,6 +912,66 @@ function summarizeRemoteLicenseAccounts(rows) {
   };
 }
 
+function licenseAccountRpcFields(account) {
+  const dest = missedOrdersDestinationOf(account);
+  const secondEnabled = dest === "second_taager_cart";
+  const secondMethod = secondTaagerLoginMethodOf(account);
+  const secondCountry = String(account && account.secondTaagerCountry || account && account.taagerCountry || "sa").trim().toLowerCase();
+  return {
+    p_easy_email: cmsEmailOf(account) || null,
+    p_easy_store: licenseEasyStoreOf(account) || null,
+    p_taager_email: taagerLoginIdentityOf(account) || null,
+    p_taager_login_method: taagerLoginMethodOf(account),
+    p_missed_orders_destination: dest,
+    p_second_taager_email: secondEnabled && secondMethod !== "phone"
+      ? String(account && account.secondTaagerEmail || "").toLowerCase().trim() || null
+      : null,
+    p_second_taager_phone: secondEnabled && secondMethod === "phone"
+      ? normalizePhone(account && account.secondTaagerPhone || "", secondCountry) || null
+      : null,
+    p_second_taager_login_method: secondEnabled ? secondMethod : null,
+    p_second_taager_country: secondEnabled ? secondCountry : null,
+    p_second_taager_merchant_id: secondEnabled ? secondTaagerMerchantIdentityOf(account) || null : null,
+  };
+}
+
+
+function isSupabaseRpcSignatureMismatch(error) {
+  const message = String(error && error.message || error || "").toLowerCase();
+  return message.includes("pgrst202") ||
+    message.includes("could not find the function") ||
+    message.includes("schema cache") ||
+    message.includes("no function matches") ||
+    message.includes("function") && message.includes("not found");
+}
+
+function legacyLicenseAccountRpcBody(body) {
+  const src = body && typeof body === "object" ? body : {};
+  const keep = [
+    "p_license_key", "p_account_hash", "p_old_account_hash", "p_new_account_hash",
+    "p_easy_email", "p_easy_store", "p_taager_email", "p_taager_login_method", "p_unlocked",
+  ];
+  return keep.reduce((next, key) => {
+    if (Object.prototype.hasOwnProperty.call(src, key)) next[key] = src[key];
+    return next;
+  }, {});
+}
+
+async function supabaseLicenseAccountRpc(fn, body, legacyBody) {
+  try {
+    return await supabaseRpc(fn, body);
+  } catch (error) {
+    const fallbackBody = legacyBody || legacyLicenseAccountRpcBody(body);
+    if (!fallbackBody || !Object.keys(fallbackBody).length || !isSupabaseRpcSignatureMismatch(error)) throw error;
+    log.warn(`[Accounts] ${fn} rejected extended license payload, retrying legacy payload:`, error && error.message ? error.message : error);
+    return supabaseRpc(fn, fallbackBody);
+  }
+}
+
+function licenseAccountSyncSignature(account) {
+  return JSON.stringify(licenseAccountRpcFields(account));
+}
+
 function _buildAccountIdents() {
   try {
     const accounts = store.get("accounts", []);
@@ -889,6 +984,12 @@ function _buildAccountIdents() {
       taager_merchant_id: String(a.taagerAffiliateCode || "").trim().toLowerCase(),
       taager_country: String(a.taagerCountry || "sa").trim().toLowerCase(),
       taager_login_method: taagerLoginMethodOf(a),
+      missed_orders_destination: missedOrdersDestinationOf(a, store.get("missingOrdersUploadEnabled", false) === true),
+      second_taager_email: String(a.secondTaagerEmail || "").toLowerCase().trim(),
+      second_taager_phone: normalizePhone(a.secondTaagerPhone || "", a.secondTaagerCountry || a.taagerCountry || "sa"),
+      second_taager_merchant_id: String(a.secondTaagerAffiliateCode || "").trim().toLowerCase(),
+      second_taager_country: String(a.secondTaagerCountry || a.taagerCountry || "sa").trim().toLowerCase(),
+      second_taager_login_method: secondTaagerLoginMethodOf(a),
     })).filter(x => x.easy_email || x.easy_store || x.taager_email || x.taager_phone || x.taager_merchant_id);
   } catch { return []; }
 }
@@ -971,6 +1072,14 @@ function accountForCredentialBackup(account) {
     taagerPassword: id ? store.get(`pwd_taager_${id}`, "") : "",
     taagerCountry: backupString(account && account.taagerCountry || "sa", 12).toLowerCase() || "sa",
     taagerAffiliateCode: backupString(account && account.taagerAffiliateCode, 80),
+    missedOrdersDestination: missedOrdersDestinationOf(account),
+    secondTaagerCartEnabled: secondTaagerCartEnabledOf(account),
+    secondTaagerLoginMethod: secondTaagerLoginMethodOf(account),
+    secondTaagerEmail: backupString(account && account.secondTaagerEmail, 320),
+    secondTaagerPhone: backupString(account && account.secondTaagerPhone, 80),
+    secondTaagerPassword: id ? store.get(`pwd_second_taager_${id}`, "") : "",
+    secondTaagerCountry: backupString(account && (account.secondTaagerCountry || account.taagerCountry) || "sa", 12).toLowerCase() || "sa",
+    secondTaagerAffiliateCode: backupString(account && account.secondTaagerAffiliateCode, 80),
   };
 }
 
@@ -1043,6 +1152,14 @@ function normalizeRestoredCredentialAccount(raw, index) {
     taagerPassword: String(src.taagerPassword || ""),
     taagerCountry: backupString(src.taagerCountry || "sa", 12).toLowerCase() || "sa",
     taagerAffiliateCode: backupString(src.taagerAffiliateCode, 80),
+    missedOrdersDestination: missedOrdersDestinationOf(src),
+    secondTaagerCartEnabled: missedOrdersDestinationOf(src) === "second_taager_cart" || src.secondTaagerCartEnabled === true,
+    secondTaagerLoginMethod: secondTaagerLoginMethodOf(src),
+    secondTaagerEmail: backupString(src.secondTaagerEmail, 320),
+    secondTaagerPhone: backupString(src.secondTaagerPhone, 80),
+    secondTaagerPassword: String(src.secondTaagerPassword || ""),
+    secondTaagerCountry: backupString(src.secondTaagerCountry || src.taagerCountry || "sa", 12).toLowerCase() || "sa",
+    secondTaagerAffiliateCode: backupString(src.secondTaagerAffiliateCode, 80),
   };
   const identityKey = accountIdentityKey(restored);
   if (src.licenseAccountHash && src.licenseIdentityKey === identityKey) {
@@ -1602,6 +1719,123 @@ function normalizeDashboardAccountsSnapshot(accounts) {
   return normalized;
 }
 
+function dashboardAccountIdentityMeta(account, fallbackId = "") {
+  if (!account || typeof account !== "object") return null;
+  const id = String(account.id || fallbackId || "").trim();
+  return {
+    id,
+    identityKey: accountIdentityKey(account),
+    marketingKey: taagerMarketingKeyOf(account),
+    taagerMerchantIdentity: taagerMerchantIdentityOf(account),
+    taagerLoginIdentity: taagerLoginIdentityOf(account),
+    cmsProvider: cmsProviderOf(account),
+    cmsEmail: cmsEmailOf(account),
+    cmsAccount: cmsLicenseStoreOf(account),
+    taagerCountry: String(account.taagerCountry || "sa").trim().toLowerCase(),
+    label: accountDisplayName(account, id || "Account"),
+  };
+}
+
+function dashboardIdentityMatchScore(left, right) {
+  if (!left || !right) return 0;
+  let score = 0;
+  if (left.identityKey && right.identityKey && left.identityKey === right.identityKey) score += 100;
+  if (left.marketingKey && right.marketingKey && left.marketingKey === right.marketingKey) score += 80;
+  if (left.taagerMerchantIdentity && right.taagerMerchantIdentity && left.taagerMerchantIdentity === right.taagerMerchantIdentity) score += 70;
+  if (left.taagerLoginIdentity && right.taagerLoginIdentity && left.taagerLoginIdentity === right.taagerLoginIdentity) score += 40;
+  if (left.cmsEmail && right.cmsEmail && left.cmsEmail === right.cmsEmail) score += 15;
+  if (left.cmsAccount && right.cmsAccount && left.cmsAccount === right.cmsAccount) score += 15;
+  if (left.taagerCountry && right.taagerCountry && left.taagerCountry === right.taagerCountry) score += 5;
+  return score;
+}
+
+function latestDashboardTimestamp(...values) {
+  return values.map((value) => Number(value || 0)).filter(Number.isFinite).reduce((max, value) => Math.max(max, value), 0) || null;
+}
+
+function mergeDashboardSnapshotRows(primaryRows, secondaryRows) {
+  const merged = [];
+  const seen = new Set();
+  for (const row of [...(Array.isArray(primaryRows) ? primaryRows : []), ...(Array.isArray(secondaryRows) ? secondaryRows : [])]) {
+    const key = dashboardRowKey(row) || `idx:${merged.length}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(row);
+  }
+  return merged;
+}
+
+function mergeDashboardAccountSnapshots(primary, secondary, identityMeta) {
+  const base = primary && typeof primary === "object" ? primary : {};
+  const extra = secondary && typeof secondary === "object" ? secondary : {};
+  return {
+    ...extra,
+    ...base,
+    snapshot: mergeDashboardSnapshotRows(base.snapshot, extra.snapshot),
+    snapshotMonth: base.snapshotMonth || extra.snapshotMonth || "",
+    accountIdentity: identityMeta || base.accountIdentity || extra.accountIdentity || null,
+    accountLabel: (identityMeta && identityMeta.label) || base.accountLabel || extra.accountLabel || "",
+    autoFetchTimestamp: latestDashboardTimestamp(base.autoFetchTimestamp, extra.autoFetchTimestamp),
+    manualFetchTimestamp: latestDashboardTimestamp(base.manualFetchTimestamp, extra.manualFetchTimestamp),
+    staticUploadTimestamp: latestDashboardTimestamp(base.staticUploadTimestamp, extra.staticUploadTimestamp),
+    botSnapshotTimestamp: latestDashboardTimestamp(base.botSnapshotTimestamp, extra.botSnapshotTimestamp),
+  };
+}
+
+function reconcileDashboardSnapshotsWithAccounts() {
+  const accounts = dashboardStore.get("accounts", {});
+  if (!accounts || typeof accounts !== "object") return accounts || {};
+  const storedAccounts = store.get("accounts", []) || [];
+  if (!Array.isArray(storedAccounts) || !storedAccounts.length) return accounts;
+
+  const currentById = new Map(storedAccounts.filter(Boolean).map((account) => [String(account.id || ""), account]));
+  const currentIdentityById = new Map();
+  storedAccounts.forEach((account) => {
+    const id = String(account && account.id || "");
+    if (id) currentIdentityById.set(id, dashboardAccountIdentityMeta(account, id));
+  });
+
+  let changed = false;
+  const next = { ...accounts };
+
+  for (const [snapshotId, snapshot] of Object.entries(accounts)) {
+    if (!snapshot || typeof snapshot !== "object") continue;
+    const currentAccount = currentById.get(snapshotId);
+    if (currentAccount) {
+      if (!snapshot.accountIdentity) {
+        next[snapshotId] = {
+          ...snapshot,
+          accountIdentity: currentIdentityById.get(snapshotId),
+          accountLabel: snapshot.accountLabel || accountDisplayName(currentAccount, snapshotId),
+        };
+        changed = true;
+      }
+      continue;
+    }
+
+    const snapshotIdentity = snapshot.accountIdentity || null;
+    if (!snapshotIdentity) continue;
+
+    let best = null;
+    for (const [accountId, identity] of currentIdentityById.entries()) {
+      const score = dashboardIdentityMatchScore(snapshotIdentity, identity);
+      if (score >= 70 && (!best || score > best.score)) best = { accountId, identity, score };
+    }
+    if (!best || best.accountId === snapshotId) continue;
+
+    next[best.accountId] = mergeDashboardAccountSnapshots(next[best.accountId], snapshot, best.identity);
+    delete next[snapshotId];
+    changed = true;
+    log.info(`[Dashboard] Migrated snapshot from stale account id ${snapshotId} to ${best.accountId}.`);
+  }
+
+  if (changed) {
+    dashboardStore.set("accounts", next);
+    bumpDashboardSnapshotRevision();
+  }
+  return next;
+}
+
 function dashboardDebugSummaryForRange(rows, dateFrom, dateTo, diagnostics) {
   const base = dashboardSummaryForRange(rows, dateFrom, dateTo);
   const from = normalizeDashboardDateKey(dateFrom);
@@ -1840,6 +2074,8 @@ function persistDashboardSnapshot(accountId, data, options = {}) {
   if (!accountId || !data || !Array.isArray(data.snapshot)) throw new Error("Dashboard snapshot data is invalid.");
   const rows = normalizeDashboardProfitRows(data.snapshot || []);
   const accounts = dashboardStore.get("accounts", {});
+  const storedAccount = getStoredAccountById(accountId) || staticDashboardAccount(accountId);
+  const identityMeta = dashboardAccountIdentityMeta(storedAccount, accountId);
   if (!accounts[accountId]) accounts[accountId] = {};
   const rangeFrom = data.dateFrom || "";
   const rangeTo = data.dateTo || "";
@@ -1852,6 +2088,8 @@ function persistDashboardSnapshot(accountId, data, options = {}) {
   const mergedRows = replaceDashboardRowsInRange(accounts[accountId].snapshot, rows, rangeFrom, rangeTo);
   accounts[accountId].snapshot = mergedRows;
   accounts[accountId].snapshotMonth = data.snapshotMonth || "";
+  accounts[accountId].accountIdentity = identityMeta;
+  accounts[accountId].accountLabel = identityMeta && identityMeta.label || accounts[accountId].accountLabel || "";
   accounts[accountId].enrichmentDiagnostics = data.enrichmentDiagnostics || data.parseDiagnostics?.enrichment || null;
   accounts[accountId].lastFetchRange = {
     dateFrom: rangeFrom,
@@ -3059,6 +3297,24 @@ function validateAccountCredentialsForSave(a) {
   if (method !== "google" && !taagerPassword) {
     return { success: false, reason: "taager_password_required" };
   }
+  if (missedOrdersDestinationOf(a) === "second_taager_cart") {
+    const secondMethod = secondTaagerLoginMethodOf(a);
+    const secondPassword = a.secondTaagerPassword || (a.id ? store.get(`pwd_second_taager_${a.id}`, "") : "");
+    const primaryMerchant = taagerMerchantIdentityOf(a);
+    const secondMerchant = secondTaagerMerchantIdentityOf(a);
+    if (!(a.secondTaagerAffiliateCode || "").trim()) {
+      return { success: false, reason: "second_taager_merchant_id_required" };
+    }
+    if (primaryMerchant && secondMerchant && primaryMerchant === secondMerchant) {
+      return { success: false, reason: "second_taager_same_as_primary" };
+    }
+    if (secondMethod === "phone" ? !(a.secondTaagerPhone || "").trim() : !(a.secondTaagerEmail || "").trim()) {
+      return { success: false, reason: secondMethod === "phone" ? "second_taager_phone_required" : "second_taager_email_required" };
+    }
+    if (secondMethod !== "google" && !secondPassword) {
+      return { success: false, reason: "second_taager_password_required" };
+    }
+  }
   return { success: true };
 }
 
@@ -3088,6 +3344,13 @@ function safeAccountForStorage(a) {
     taagerEmail: a.taagerEmail || a.taagerEmail || "",
     taagerPhone: a.taagerPhone || "",
     taagerCountry: a.taagerCountry || a.taagerCountry || "sa",
+    missedOrdersDestination: missedOrdersDestinationOf(a),
+    secondTaagerCartEnabled: missedOrdersDestinationOf(a) === "second_taager_cart",
+    secondTaagerLoginMethod: secondTaagerLoginMethodOf(a),
+    secondTaagerEmail: a.secondTaagerEmail || "",
+    secondTaagerPhone: a.secondTaagerPhone || "",
+    secondTaagerCountry: a.taagerCountry || "sa",
+    secondTaagerAffiliateCode: a.secondTaagerAffiliateCode || "",
   };
 }
 
@@ -3108,6 +3371,7 @@ function persistAccountsWithoutDeleting(accounts, maxAccounts) {
     if (a.lightfunnelsPassword) store.set(`pwd_lightfunnels_${a.id}`, a.lightfunnelsPassword);
     if (a.taagerPassword) store.set(`pwd_taager_${a.id}`, a.taagerPassword);
     if (a.taagerPassword || a.taagerPassword) store.set(`pwd_taager_${a.id}`, a.taagerPassword || a.taagerPassword);
+    if (a.secondTaagerPassword) store.set(`pwd_second_taager_${a.id}`, a.secondTaagerPassword);
   }
 
   if (accounts[0]) {
@@ -3169,13 +3433,10 @@ async function syncRestoredAccountLicenseSlots(accounts, maxAccounts) {
 
   for (const account of missingAccounts) {
     const hash = accountHash(account);
-    const insertRes = await supabaseRpc("taager_insert_license_account", {
+    const insertRes = await supabaseLicenseAccountRpc("taager_insert_license_account", {
       p_license_key: licKey,
       p_account_hash: hash,
-      p_easy_email: cmsEmailOf(account) || null,
-      p_easy_store: licenseEasyStoreOf(account) || null,
-      p_taager_email: taagerLoginIdentityOf(account) || null,
-      p_taager_login_method: taagerLoginMethodOf(account),
+      ...licenseAccountRpcFields(account),
       p_unlocked: false,
     });
     if (insertRes && insertRes.success === false) {
@@ -3272,22 +3533,15 @@ async function syncSingleEditedAccountLicenseSlot(oldAccount, newAccount, maxAcc
     const newH = accountHash(newAccount);
 
     if (newH === oldH && dbHashes.includes(newH)) {
-      const oldStore = licenseEasyStoreOf(oldAccount);
-      const newStore = licenseEasyStoreOf(newAccount);
-      if (oldStore !== newStore) {
-        const currentRow = dbRows.find(row => row.account_hash === newH);
-        const syncRes = await supabaseRpc("taager_insert_license_account", {
-          p_license_key: licKey,
-          p_account_hash: newH,
-          p_easy_email: cmsEmailOf(newAccount) || null,
-          p_easy_store: newStore || null,
-          p_taager_email: taagerLoginIdentityOf(newAccount) || null,
-          p_taager_login_method: taagerLoginMethodOf(newAccount),
-          p_unlocked: !!currentRow?.unlocked,
-        });
-        if (syncRes && syncRes.success === false) {
-          return { success: false, reason: syncRes.reason || "license_account_sync_failed" };
-        }
+      const currentRow = dbRows.find(row => row.account_hash === newH);
+      const syncRes = await supabaseLicenseAccountRpc("taager_insert_license_account", {
+        p_license_key: licKey,
+        p_account_hash: newH,
+        ...licenseAccountRpcFields(newAccount),
+        p_unlocked: !!currentRow?.unlocked,
+      });
+      if (syncRes && syncRes.success === false) {
+        return { success: false, reason: syncRes.reason || "license_account_sync_failed" };
       }
       return { success: true };
     }
@@ -3296,15 +3550,11 @@ async function syncSingleEditedAccountLicenseSlot(oldAccount, newAccount, maxAcc
       const oldRow = dbRows.find(r => r.account_hash === oldH);
       const wasUnlocked = oldRow ? !!oldRow.unlocked : false;
       if (!wasUnlocked) return { success: false, reason: "account_locked" };
-      const newTaagerIdentity = taagerLoginIdentityOf(newAccount);
-      const replaceRes = await supabaseRpc("taager_replace_license_account", {
+      const replaceRes = await supabaseLicenseAccountRpc("taager_replace_license_account", {
         p_license_key: licKey,
         p_old_account_hash: oldH,
         p_new_account_hash: newH,
-        p_easy_email: cmsEmailOf(newAccount) || null,
-        p_easy_store: licenseEasyStoreOf(newAccount) || null,
-        p_taager_email: newTaagerIdentity || null,
-        p_taager_login_method: taagerLoginMethodOf(newAccount),
+        ...licenseAccountRpcFields(newAccount),
       });
       if (replaceRes && replaceRes.success === false) {
         return { success: false, reason: replaceRes.reason || "license_account_sync_failed" };
@@ -3316,13 +3566,10 @@ async function syncSingleEditedAccountLicenseSlot(oldAccount, newAccount, maxAcc
       if (dbHashes.length + 1 > maxAccounts) {
         return { success: false, reason: "limit_reached", remoteAccountSlots: summarizeRemoteLicenseAccounts(dbRows) };
       }
-      const insertRes = await supabaseRpc("taager_insert_license_account", {
+      const insertRes = await supabaseLicenseAccountRpc("taager_insert_license_account", {
         p_license_key: licKey,
         p_account_hash: newH,
-        p_easy_email: cmsEmailOf(newAccount) || null,
-        p_easy_store: licenseEasyStoreOf(newAccount) || null,
-        p_taager_email: taagerLoginIdentityOf(newAccount) || null,
-        p_taager_login_method: taagerLoginMethodOf(newAccount),
+        ...licenseAccountRpcFields(newAccount),
         p_unlocked: false,
       });
       if (insertRes && insertRes.success === false) {
@@ -3344,13 +3591,16 @@ function buildAccountPatchForUpdate(patch) {
     "lightfunnelsAccountName", "lightfunnelsLoginMethod", "lightfunnelsEmail",
     "dashboardEnrichmentProvider",
     "easyOrdersLookbackDays", "taagerLoginMethod", "taagerEmail", "taagerPhone",
-    "taagerCountry", "taagerAffiliateCode"
+    "taagerCountry", "taagerAffiliateCode", "missedOrdersDestination",
+    "secondTaagerCartEnabled", "secondTaagerLoginMethod", "secondTaagerEmail",
+    "secondTaagerPhone", "secondTaagerCountry", "secondTaagerAffiliateCode"
   ].forEach((key) => {
     if (Object.prototype.hasOwnProperty.call(src, key)) next[key] = src[key];
   });
   if (src.easyPassword) next.easyPassword = src.easyPassword;
   if (src.lightfunnelsPassword) next.lightfunnelsPassword = src.lightfunnelsPassword;
   if (src.taagerPassword) next.taagerPassword = src.taagerPassword;
+  if (src.secondTaagerPassword) next.secondTaagerPassword = src.secondTaagerPassword;
   return next;
 }
 
@@ -3425,7 +3675,11 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
       // Build a map of accountId → old hash using the CURRENTLY stored accounts
       // (before we overwrite them). This lets us detect when an edit changed emails.
       const oldHashById = {};
-      for (const a of storedAccountsBeforeSave) oldHashById[a.id] = accountHash(a);
+      const oldAccountById = {};
+      for (const a of storedAccountsBeforeSave) {
+        oldAccountById[a.id] = a;
+        oldHashById[a.id] = accountHash(a);
+      }
 
       for (const a of accounts) {
         if (a.licenseAccountHash && dbHashes.includes(a.licenseAccountHash)) continue;
@@ -3441,26 +3695,25 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
       for (const a of accounts) {
         const newH = accountHash(a);
         const oldH = oldHashById[a.id]; // undefined for brand-new accounts
+        const oldAccount = oldAccountById[a.id] || null;
+        const licenseFieldsChanged = oldAccount
+          ? licenseAccountSyncSignature(oldAccount) !== licenseAccountSyncSignature(a)
+          : false;
+        const shouldSyncAccount = !oldAccount || newH !== oldH || licenseFieldsChanged;
 
-        // Case 1: hash unchanged — already in DB, nothing to do
+        if (!shouldSyncAccount) continue;
+
+        // Case 1: hash unchanged, but license fields changed - update the DB row
         if (newH === oldH && dbHashes.includes(newH)) {
-          const oldAccount = storedAccountsBeforeSave.find(item => item.id === a.id);
-          const oldStore = licenseEasyStoreOf(oldAccount);
-          const newStore = licenseEasyStoreOf(a);
-          if (oldStore !== newStore) {
-            const currentRow = dbRows.find(row => row.account_hash === newH);
-            const syncRes = await supabaseRpc("taager_insert_license_account", {
-              p_license_key: licKey,
-              p_account_hash: newH,
-              p_easy_email: cmsEmailOf(a) || null,
-              p_easy_store: newStore || null,
-              p_taager_email: taagerLoginIdentityOf(a) || null,
-              p_taager_login_method: taagerLoginMethodOf(a),
-              p_unlocked: !!currentRow?.unlocked,
-            });
-            if (syncRes && syncRes.success === false) {
-              return { success: false, reason: syncRes.reason || "license_account_sync_failed" };
-            }
+          const currentRow = dbRows.find(row => row.account_hash === newH);
+          const syncRes = await supabaseLicenseAccountRpc("taager_insert_license_account", {
+            p_license_key: licKey,
+            p_account_hash: newH,
+            ...licenseAccountRpcFields(a),
+            p_unlocked: !!currentRow?.unlocked,
+          });
+          if (syncRes && syncRes.success === false) {
+            return { success: false, reason: syncRes.reason || "license_account_sync_failed" };
           }
           continue;
         }
@@ -3474,16 +3727,11 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
           if (!wasUnlocked) return { success: false, reason: "account_locked" };
           // Replace atomically so a duplicate rejection cannot remove the old slot.
           const newAccObj = accounts.find(a => accountHash(a) === newH);
-          const newTaagerIdentity = taagerLoginIdentityOf(newAccObj);
-          const replaceRes = await supabaseRpc("taager_replace_license_account", {
+          const replaceRes = await supabaseLicenseAccountRpc("taager_replace_license_account", {
             p_license_key:  licKey,
             p_old_account_hash: oldH,
             p_new_account_hash: newH,
-            p_easy_email:   cmsEmailOf(newAccObj) || null,
-            p_easy_store:   licenseEasyStoreOf(newAccObj) || null,
-            // RPC/column name is legacy; value is the Taager lock identity.
-            p_taager_email:   newTaagerIdentity || null,
-            p_taager_login_method: taagerLoginMethodOf(newAccObj),
+            ...licenseAccountRpcFields(newAccObj),
           });
           if (replaceRes && replaceRes.success === false) {
             return { success: false, reason: replaceRes.reason || "license_account_sync_failed" };
@@ -3493,12 +3741,21 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
 
         // Case 3: genuinely new account — check slot limit then register
         if (!dbHashes.includes(newH)) {
-          // Count how many truly new hashes (not in DB and not an edit swap) we're adding
-          const alreadyKnownOrSwapped = accounts
-            .filter(b => { const bOld = oldHashById[b.id]; return bOld && dbHashes.includes(bOld); })
-            .map(b => accountHash(b));
-          const genuinelyNew = newHashes.filter(h => !dbHashes.includes(h) && !alreadyKnownOrSwapped.includes(h));
-          if (dbHashes.length + genuinelyNew.length > maxAccounts) {
+          const hashesNeedingInsert = new Set();
+          for (const b of accounts) {
+            const bNewH = accountHash(b);
+            if (dbHashes.includes(bNewH)) continue;
+            const bOldAccount = oldAccountById[b.id] || null;
+            const bOldH = oldHashById[b.id];
+            const bLicenseFieldsChanged = bOldAccount
+              ? licenseAccountSyncSignature(bOldAccount) !== licenseAccountSyncSignature(b)
+              : false;
+            const bShouldSyncAccount = !bOldAccount || bNewH !== bOldH || bLicenseFieldsChanged;
+            if (!bShouldSyncAccount) continue;
+            if (bOldH && dbHashes.includes(bOldH)) continue;
+            hashesNeedingInsert.add(bNewH);
+          }
+          if (dbHashes.length + hashesNeedingInsert.size > maxAccounts) {
             return {
               success: false,
               reason: storedAccountsBeforeSave.length === 0 && dbHashes.length > 0 ? "remote_slots_full" : "limit_reached",
@@ -3506,15 +3763,10 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
             };
           }
           const newAccForInsert = accounts.find(a => accountHash(a) === newH);
-          const newTaagerIdentity = taagerLoginIdentityOf(newAccForInsert);
-          const insertRes = await supabaseRpc("taager_insert_license_account", {
+          const insertRes = await supabaseLicenseAccountRpc("taager_insert_license_account", {
             p_license_key:  licKey,
             p_account_hash: newH,
-            p_easy_email:   cmsEmailOf(newAccForInsert) || null,
-            p_easy_store:   licenseEasyStoreOf(newAccForInsert) || null,
-            // RPC/column name is legacy; value is the Taager lock identity.
-            p_taager_email:   newTaagerIdentity || null,
-            p_taager_login_method: taagerLoginMethodOf(newAccForInsert),
+            ...licenseAccountRpcFields(newAccForInsert),
             p_unlocked:     false,
           });
           if (insertRes && insertRes.success === false) {
@@ -4473,11 +4725,11 @@ ipcMain.handle("save-dashboard-snapshot", async (_, accountId, data) => {
 function getDashboardSnapshotResult(accountId, knownRevision) {
   try {
     const allowedIds = (store.get("accounts", []) || []).map((account) => account && account.id).filter(Boolean);
+    const accounts = reconcileDashboardSnapshotsWithAccounts();
     const revision = String(Number(dashboardStore.get("snapshotRevision", 0) || 0)) + "|" + allowedIds.join(",");
     if (knownRevision != null && String(knownRevision) === revision) {
       return { ok: true, unchanged: true, revision, data: null };
     }
-    const accounts = dashboardStore.get("accounts", {});
     if (accountId && accountId !== "__all__") {
       return { ok: true, revision, data: normalizeDashboardAccountSnapshot(accounts[accountId]) };
     }
@@ -4485,6 +4737,11 @@ function getDashboardSnapshotResult(accountId, knownRevision) {
       const filtered = {};
       allowedIds.forEach((id) => {
         if (accounts[id]) filtered[id] = normalizeDashboardAccountSnapshot(accounts[id]);
+      });
+      Object.keys(accounts || {}).forEach((id) => {
+        if (filtered[id]) return;
+        const snapshot = accounts[id] && accounts[id].snapshot;
+        if (Array.isArray(snapshot) && snapshot.length) filtered[id] = normalizeDashboardAccountSnapshot(accounts[id]);
       });
       return { ok: true, revision, data: filtered };
     }
@@ -5971,6 +6228,18 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
   lastExportTimestamp = 0;
   const autoConfirm = store.get("autoConfirm", false);
   const missingOrdersUploadEnabled = store.get("missingOrdersUploadEnabled", false) === true;
+  const secondTaagerProfilePathFor = (accountId) => path.join(app.getPath("userData"), `bot-profile-${accountId}-second-taager-cart`);
+  const accountRunConfig = (acc) => {
+    const missedOrdersDestination = missedOrdersDestinationOf(acc, missingOrdersUploadEnabled);
+    return {
+      ...acc,
+      missedOrdersDestination,
+      missingOrdersUploadEnabled: missedOrdersDestination === "legacy_missing_orders",
+      secondTaagerCartEnabled: missedOrdersDestination === "second_taager_cart",
+      secondTaagerPassword: acc.secondTaagerPassword || (acc.id ? store.get(`pwd_second_taager_${acc.id}`, "") : ""),
+      secondTaagerProfilePath: acc.id ? secondTaagerProfilePathFor(acc.id) : "",
+    };
+  };
 
   // ── Build account list to run ──
   const allAccounts = store.get("accounts", null);
@@ -5988,8 +6257,8 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
         taagerPassword: store.get(`pwd_taager_${a.id}`, ""),
         taagerPassword: store.get(`pwd_taager_${a.id}`, store.get(`pwd_taager_${a.id}`, "")),
         autoConfirm,
-        missingOrdersUploadEnabled,
-      }));
+      }))
+      .map(accountRunConfig);
   }
 
   // Fallback to legacy single-account
@@ -6010,8 +6279,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
       taagerCountry: store.get("taagerCountry", store.get("taagerCountry", "sa")),
       taagerAffiliateCode: store.get("taagerAffiliateCode", ""),
       autoConfirm,
-      missingOrdersUploadEnabled,
-    }];
+    }].map(accountRunConfig);
   }
 
   if (accountsToRun.length === 0) {
@@ -6030,12 +6298,21 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
     const label = accountDisplayName(acc, acc.id || "Account");
     return `Taager merchant ID missing for ${label}. Re-save this account and add the merchant ID from Taager profile.`;
   };
-  const missingMerchantAccounts = accountsToRun.filter((acc) => !String(acc.taagerAffiliateCode || "").trim());
+  const secondMerchantIdMissingMessage = (acc) => {
+    const label = accountDisplayName(acc, acc.id || "Account");
+    return `Second Taager cart merchant ID missing for ${label}. Re-save this account and configure the second Taager cart merchant ID.`;
+  };
+  const missingMerchantAccounts = accountsToRun.filter((acc) =>
+    !String(acc.taagerAffiliateCode || "").trim() ||
+    (missedOrdersDestinationOf(acc) === "second_taager_cart" && !String(acc.secondTaagerAffiliateCode || "").trim())
+  );
   const preflightFailures = [];
 
   if (missingMerchantAccounts.length && accountsToRun.length > 1) {
     for (const acc of missingMerchantAccounts) {
-      const message = merchantIdMissingMessage(acc);
+      const message = !String(acc.taagerAffiliateCode || "").trim()
+        ? merchantIdMissingMessage(acc)
+        : secondMerchantIdMissingMessage(acc);
       notifyAdminErrorAlert({
         flow: "runner",
         operation: "preflight",
@@ -6057,10 +6334,16 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
         runtimeMs: 0,
       });
     }
-    accountsToRun = accountsToRun.filter((acc) => String(acc.taagerAffiliateCode || "").trim());
+    accountsToRun = accountsToRun.filter((acc) =>
+      String(acc.taagerAffiliateCode || "").trim() &&
+      !(missedOrdersDestinationOf(acc) === "second_taager_cart" && !String(acc.secondTaagerAffiliateCode || "").trim())
+    );
   }
 
   const missingMerchant = accountsToRun.find((acc) => !String(acc.taagerAffiliateCode || "").trim());
+  const missingSecondMerchant = accountsToRun.find((acc) =>
+    missedOrdersDestinationOf(acc) === "second_taager_cart" && !String(acc.secondTaagerAffiliateCode || "").trim()
+  );
   if (missingMerchant) {
     const message = merchantIdMissingMessage(missingMerchant);
     notifyAdminErrorAlert({
@@ -6068,6 +6351,19 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
       operation: "preflight",
       account: missingMerchant,
       accountId: missingMerchant.id || "__single__",
+      error: message,
+      dateFrom,
+      dateTo,
+    });
+    return { success: false, error: message };
+  }
+  if (missingSecondMerchant) {
+    const message = secondMerchantIdMissingMessage(missingSecondMerchant);
+    notifyAdminErrorAlert({
+      flow: "runner",
+      operation: "preflight",
+      account: missingSecondMerchant,
+      accountId: missingSecondMerchant.id || "__single__",
       error: message,
       dateFrom,
       dateTo,
