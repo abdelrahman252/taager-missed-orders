@@ -7,11 +7,15 @@
 
   window.renderSectionOrderSources = function (mountEl, data, ctx) {
     var fullData = (ctx && ctx.data) || data || {};
-    var model = fullData.orderSources || (fullData.roi && fullData.roi.orderSources) || { summary: {}, sources: [], minSample: 30 };
+    var taagerModel = fullData.orderSources || (fullData.roi && fullData.roi.orderSources) || { summary: {}, sources: [], minSample: 30 };
+    var platformModel = fullData.platformSources || (fullData.roi && fullData.roi.platformSources) || { summary: {}, sources: [], minSample: 30, type: 'platform' };
+    var activeMode = mountEl._orderSourcesMode === 'platform' ? 'platform' : 'taager';
+    var model = activeMode === 'platform' ? platformModel : taagerModel;
     var sources = Array.isArray(model.sources) ? model.sources : [];
     var summary = model.summary || {};
     var minSample = Number(model.minSample || 30);
     var activeCurrency = (fullData.meta && fullData.meta.activeCurrency) || window.dashboardActiveCurrency || 'SAR';
+    var isPlatformMode = activeMode === 'platform';
 
     function isRtl() {
       return window.dashboardI18n ? window.dashboardI18n.isRtl() : false;
@@ -61,6 +65,13 @@
       var label = String(source && source.label || '').trim();
       if (label) return label;
       return pick('Unknown source', '\u0645\u0635\u062f\u0631 \u063a\u064a\u0631 \u0645\u0639\u0631\u0648\u0641');
+    }
+
+    function modeTab(mode, label, sub) {
+      var active = activeMode === mode;
+      return '<button type="button" class="os-mode-tab' + (active ? ' is-active' : '') + '" data-os-mode="' + esc(mode) + '" aria-pressed="' + (active ? 'true' : 'false') + '">' +
+        '<span>' + esc(label) + '</span><small>' + esc(sub || '') + '</small>' +
+      '</button>';
     }
 
     function confidenceInfo(source) {
@@ -273,6 +284,7 @@
         { key: 'delivered', label: pick('Delivered', '\u0645\u0633\u0644\u0645'), value: Number(source.delivered || 0), tone: 'good' },
         { key: 'shipping', label: pick('Shipping', '\u0634\u062d\u0646'), value: Number(source.shipping || 0), tone: 'info' },
         { key: 'confirmed', label: pick('Confirmed', '\u0645\u0624\u0643\u062f'), value: Number(source.confirmed || 0), tone: 'blue' },
+        { key: 'cancel', label: pick('Canceled', '\u0645\u0644\u063a\u064a'), value: Number(source.cancel || 0), tone: 'neutral' },
         { key: 'pending', label: pick('Pending', '\u0645\u0639\u0644\u0642'), value: Number(source.pending || 0), tone: 'warn' },
         { key: 'failed', label: pick('Failed', '\u0641\u0634\u0644'), value: Number(source.failed || 0), tone: 'danger' }
       ];
@@ -315,13 +327,15 @@
         '<tr class="os-source-row" data-source-toggle="' + index + '">' +
           '<td><button type="button" class="os-expand-btn" aria-expanded="false">' + icon('chevronDown') + '</button><span class="os-source-mark">' + esc(sourceInitial(source)) + '</span><bdi dir="auto">' + esc(sourceLabel(source)) + '</bdi>' + (low ? '<span class="os-low-badge">' + esc(pick('Low sample', '\u0639\u064a\u0646\u0629 \u0642\u0644\u064a\u0644\u0629')) + '</span>' : '') + '</td>' +
           '<td>' + num(source.netOrders || 0) + '</td>' +
+          '<td><strong class="os-cr">' + pct(source.confirmationRate) + '</strong></td>' +
           '<td>' + num(source.confirmationCount || 0) + '</td>' +
           '<td>' + num(source.delivered || 0) + '</td>' +
           '<td><strong class="os-ndr">' + pct(source.ndr) + '</strong></td>' +
+          '<td><strong class="os-dr">' + pct(source.dr) + '</strong></td>' +
           '<td>' + money(source.deliveredProfit || 0) + '</td>' +
           '<td>' + money(source.avgProfit || 0) + '</td>' +
         '</tr>' +
-        '<tr class="os-detail-row" hidden><td colspan="7">' +
+        '<tr class="os-detail-row" hidden><td colspan="9">' +
           '<div class="os-source-panel os-panel-' + esc(health.tone) + '">' +
             '<div class="os-verdict-row">' +
               '<div class="os-verdict-main">' +
@@ -340,6 +354,7 @@
               detailMetric(pick('Raw and excluded', '\u0627\u0644\u062e\u0627\u0645 \u0648\u0627\u0644\u0645\u0633\u062a\u0628\u0639\u062f'), num(source.rawOrders || 0) + ' / ' + num(source.canceledByYou || 0), pick('Raw orders / Canceled by you', '\u0627\u0644\u0637\u0644\u0628\u0627\u062a \u0627\u0644\u062e\u0627\u0645 / \u0645\u0644\u063a\u064a \u0628\u0648\u0627\u0633\u0637\u062a\u0643'), 'neutral') +
               detailMetric(pick('Confirmation rate', '\u0646\u0633\u0628\u0629 \u0627\u0644\u062a\u0623\u0643\u064a\u062f'), pct(source.confirmationRate), num(source.confirmationCount || 0) + ' ' + pick('confirmed-base orders', '\u0637\u0644\u0628 \u062f\u0627\u062e\u0644 \u0642\u0627\u0639\u062f\u0629 \u0627\u0644\u062a\u0623\u0643\u064a\u062f'), 'info') +
               detailMetric('NDR', pct(source.ndr) + ' <small class="os-inline-delta">' + (health.ndrDelta >= 0 ? '+' : '') + num(health.ndrDelta, 2) + 'pp</small>', pick('Compared with account overall NDR', '\u0645\u0642\u0627\u0631\u0646\u0629 \u0628\u0625\u062c\u0645\u0627\u0644\u064a NDR \u0644\u0644\u062d\u0633\u0627\u0628'), health.tone) +
+              detailMetric('DR', pct(source.dr), pick('Delivered / confirmed orders', '\u0627\u0644\u0645\u0633\u0644\u0645 / \u0627\u0644\u0637\u0644\u0628\u0627\u062a \u0627\u0644\u0645\u0624\u0643\u062f\u0629'), 'info') +
               detailMetric(pick('Delivered money', '\u0623\u0631\u0642\u0627\u0645 \u0627\u0644\u062a\u0633\u0644\u064a\u0645'), money(source.deliveredSales || 0), money(source.deliveredAov || 0) + ' ' + pick('delivered AOV', '\u0645\u062a\u0648\u0633\u0637 \u0627\u0644\u0637\u0644\u0628 \u0627\u0644\u0645\u0633\u0644\u0645'), 'good') +
               detailMetric(pick('Failed pressure', '\u0636\u063a\u0637 \u0627\u0644\u0641\u0634\u0644'), pct(health.failedShare), num(source.failed || 0) + ' ' + pick('failed orders', '\u0637\u0644\u0628 \u0641\u0627\u0634\u0644'), health.failedShare > 10 ? 'danger' : 'neutral') +
             '</div>' +
@@ -354,33 +369,49 @@
 
     mountEl.innerHTML = '<section class="order-sources-section" dir="' + (isRtl() ? 'rtl' : 'ltr') + '">' +
       '<div class="os-header">' +
-        '<div><p>' + esc(t('nav.orderSources', pick('Order Sources', '\u0645\u0635\u0627\u062f\u0631 \u0627\u0644\u0637\u0644\u0628\u0627\u062a'))) + '</p><h2>' + esc(pick('Source-level delivery performance', '\u0623\u062f\u0627\u0621 \u0627\u0644\u062a\u0633\u0644\u064a\u0645 \u062d\u0633\u0628 \u0645\u0635\u062f\u0631 \u0627\u0644\u0637\u0644\u0628')) + '</h2></div>' +
+        '<div><p>' + esc(t('nav.orderSources', pick('Order Sources', '\u0645\u0635\u0627\u062f\u0631 \u0627\u0644\u0637\u0644\u0628\u0627\u062a'))) + '</p><h2>' + esc(isPlatformMode ? pick('Platform delivery performance', '\u0623\u062f\u0627\u0621 \u0627\u0644\u062a\u0633\u0644\u064a\u0645 \u062d\u0633\u0628 \u0627\u0644\u0645\u0646\u0635\u0629') : pick('Source-level delivery performance', '\u0623\u062f\u0627\u0621 \u0627\u0644\u062a\u0633\u0644\u064a\u0645 \u062d\u0633\u0628 \u0645\u0635\u062f\u0631 \u0627\u0644\u0637\u0644\u0628')) + '</h2></div>' +
         '<span class="os-sample-note">' + esc(pick('Best source requires at least ' + minSample + ' net orders.', '\u062a\u062d\u062f\u064a\u062f \u0623\u0641\u0636\u0644 \u0645\u0635\u062f\u0631 \u064a\u062d\u062a\u0627\u062c \u0625\u0644\u0649 ' + minSample + ' \u0637\u0644\u0628 \u0635\u0627\u0641\u064a \u0639\u0644\u0649 \u0627\u0644\u0623\u0642\u0644.')) + '</span>' +
       '</div>' +
+      '<div class="os-mode-tabs" role="tablist" aria-label="' + esc(pick('Order source mode', '\u0648\u0636\u0639 \u0645\u0635\u0627\u062f\u0631 \u0627\u0644\u0637\u0644\u0628')) + '">' +
+        modeTab('taager', pick('Taager Source', '\u0645\u0635\u062f\u0631 \u062a\u0627\u062c\u0631'), pick('Order received by', '\u0627\u0644\u0637\u0644\u0628 \u0627\u0644\u0645\u0633\u062a\u0644\u0645 \u0628\u0648\u0627\u0633\u0637\u0629')) +
+        modeTab('platform', pick('Ad Platform', '\u0645\u0646\u0635\u0629 \u0627\u0644\u0625\u0639\u0644\u0627\u0646'), pick('EasyOrders UTM source', '\u0645\u0635\u062f\u0631 UTM \u0645\u0646 EasyOrders')) +
+      '</div>' +
       '<div class="os-summary-grid">' +
-        summaryCard(pick('Sources used', '\u0627\u0644\u0645\u0635\u0627\u062f\u0631 \u0627\u0644\u0645\u0633\u062a\u062e\u062f\u0645\u0629'), num(summary.sourceCount || sources.length), pick('Distinct raw source values', '\u0642\u064a\u0645 \u0645\u0635\u062f\u0631 \u062e\u0627\u0645 \u0645\u062e\u062a\u0644\u0641\u0629'), 'info') +
+        summaryCard(isPlatformMode ? pick('Platforms used', '\u0627\u0644\u0645\u0646\u0635\u0627\u062a \u0627\u0644\u0645\u0633\u062a\u062e\u062f\u0645\u0629') : pick('Sources used', '\u0627\u0644\u0645\u0635\u0627\u062f\u0631 \u0627\u0644\u0645\u0633\u062a\u062e\u062f\u0645\u0629'), num(summary.sourceCount || sources.length), isPlatformMode ? pick('Matched platform values', '\u0642\u064a\u0645 \u0645\u0646\u0635\u0629 \u0645\u0637\u0627\u0628\u0642\u0629') : pick('Distinct raw source values', '\u0642\u064a\u0645 \u0645\u0635\u062f\u0631 \u062e\u0627\u0645 \u0645\u062e\u062a\u0644\u0641\u0629'), 'info') +
         summaryCard(pick('Total net orders', '\u0625\u062c\u0645\u0627\u0644\u064a \u0635\u0627\u0641\u064a \u0627\u0644\u0637\u0644\u0628\u0627\u062a'), num(summary.netOrders || 0), pick('Raw minus Canceled by you', '\u0627\u0644\u062e\u0627\u0645 \u0646\u0627\u0642\u0635 \u0645\u0644\u063a\u064a \u0628\u0648\u0627\u0633\u0637\u062a\u0643'), 'neutral') +
-        summaryCard(pick('Confirmed orders', '\u0627\u0644\u0637\u0644\u0628\u0627\u062a \u0627\u0644\u0645\u0624\u0643\u062f\u0629'), num(summary.confirmedOrders || 0), pick('Confirmed or progressed', '\u0645\u0624\u0643\u062f\u0629 \u0623\u0648 \u062a\u0642\u062f\u0645\u062a \u0641\u064a \u0627\u0644\u062a\u0646\u0641\u064a\u0630'), 'info') +
-        summaryCard(pick('Delivered orders', '\u0627\u0644\u0637\u0644\u0628\u0627\u062a \u0627\u0644\u0645\u0633\u0644\u0645\u0629'), num(summary.delivered || 0), money(summary.deliveredProfit || 0), 'good') +
-        summaryCard(pick('Overall NDR', '\u0625\u062c\u0645\u0627\u0644\u064a NDR'), pct(summary.ndr || 0), pick('Delivered / Net orders', '\u0627\u0644\u0645\u0633\u0644\u0645 / \u0635\u0627\u0641\u064a \u0627\u0644\u0637\u0644\u0628\u0627\u062a'), 'warn') +
+        summaryCard('CR', pct(summary.confirmationRate || 0), num(summary.confirmedOrders || 0) + ' ' + pick('confirmed', '\u0645\u0624\u0643\u062f'), 'info') +
+        summaryCard('NDR', pct(summary.ndr || 0), pick('Delivered / Net orders', '\u0627\u0644\u0645\u0633\u0644\u0645 / \u0635\u0627\u0641\u064a \u0627\u0644\u0637\u0644\u0628\u0627\u062a'), 'warn') +
+        summaryCard('DR', pct(summary.dr || 0), pick('Delivered / confirmed', '\u0627\u0644\u0645\u0633\u0644\u0645 / \u0627\u0644\u0645\u0624\u0643\u062f'), 'good') +
+        summaryCard(pick('Delivered profit', '\u0631\u0628\u062d \u0627\u0644\u0645\u0633\u0644\u0645'), money(summary.deliveredProfit || 0), num(summary.delivered || 0) + ' ' + pick('delivered orders', '\u0637\u0644\u0628 \u0645\u0633\u0644\u0645'), 'good') +
       '</div>' +
       '<div class="os-table-wrap">' +
         '<table class="os-table"><thead><tr>' +
-          '<th>' + esc(pick('Source', '\u0627\u0644\u0645\u0635\u062f\u0631')) + '</th>' +
+          '<th>' + esc(isPlatformMode ? pick('Platform', '\u0627\u0644\u0645\u0646\u0635\u0629') : pick('Source', '\u0627\u0644\u0645\u0635\u062f\u0631')) + '</th>' +
           '<th>' + esc(pick('Net Orders', '\u0635\u0627\u0641\u064a \u0627\u0644\u0637\u0644\u0628\u0627\u062a')) + '</th>' +
+          '<th>CR</th>' +
           '<th>' + esc(pick('Confirmed Orders', '\u0627\u0644\u0637\u0644\u0628\u0627\u062a \u0627\u0644\u0645\u0624\u0643\u062f\u0629')) + '</th>' +
           '<th>' + esc(pick('Delivered', '\u0627\u0644\u0645\u0633\u0644\u0645')) + '</th>' +
           '<th>NDR</th>' +
+          '<th>DR</th>' +
           '<th>' + esc(pick('Delivered Profit', '\u0631\u0628\u062d \u0627\u0644\u0645\u0633\u0644\u0645')) + '</th>' +
           '<th>' + esc(pick('Avg. Profit', '\u0645\u062a\u0648\u0633\u0637 \u0627\u0644\u0631\u0628\u062d')) + '</th>' +
         '</tr></thead>' +
-        (sources.length ? sources.map(sourceRow).join('') : '<tbody><tr><td colspan="7" class="os-empty">' + esc(pick('No order source values found for this period.', '\u0644\u0627 \u062a\u0648\u062c\u062f \u0642\u064a\u0645 \u0645\u0635\u062f\u0631 \u0637\u0644\u0628 \u0644\u0647\u0630\u0647 \u0627\u0644\u0641\u062a\u0631\u0629.')) + '</td></tr></tbody>') +
+        (sources.length ? sources.map(sourceRow).join('') : '<tbody><tr><td colspan="9" class="os-empty">' + esc(isPlatformMode ? pick('No matched EasyOrders platform values found for this period.', '\u0644\u0627 \u062a\u0648\u062c\u062f \u0642\u064a\u0645 \u0645\u0646\u0635\u0629 \u0645\u0637\u0627\u0628\u0642\u0629 \u0645\u0646 EasyOrders \u0644\u0647\u0630\u0647 \u0627\u0644\u0641\u062a\u0631\u0629.') : pick('No order source values found for this period.', '\u0644\u0627 \u062a\u0648\u062c\u062f \u0642\u064a\u0645 \u0645\u0635\u062f\u0631 \u0637\u0644\u0628 \u0644\u0647\u0630\u0647 \u0627\u0644\u0641\u062a\u0631\u0629.')) + '</td></tr></tbody>') +
         '</table>' +
       '</div>' +
       '<div class="os-insights"><h3>' + esc(pick('Insights', '\u0627\u0644\u0631\u0624\u0649')) + '</h3><div class="os-insight-grid">' +
         (insightItems().length ? insightItems().map(insightCardHtml).join('') : '<p class="os-empty-insight">' + esc(pick('Add more orders with source values to generate reliable comparisons.', '\u0623\u0636\u0641 \u0637\u0644\u0628\u0627\u062a \u0623\u0643\u062b\u0631 \u0628\u0642\u064a\u0645 \u0645\u0635\u062f\u0631 \u0644\u0625\u0646\u0634\u0627\u0621 \u0645\u0642\u0627\u0631\u0646\u0627\u062a \u0645\u0648\u062b\u0648\u0642\u0629.')) + '</p>') +
       '</div></div>' +
     '</section>';
+
+    mountEl.querySelectorAll('[data-os-mode]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var mode = button.getAttribute('data-os-mode') === 'platform' ? 'platform' : 'taager';
+        if (mode === activeMode) return;
+        mountEl._orderSourcesMode = mode;
+        window.renderSectionOrderSources(mountEl, data, ctx);
+      });
+    });
 
     mountEl.querySelectorAll('[data-source-toggle]').forEach(function (row) {
       row.addEventListener('click', function (event) {

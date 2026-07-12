@@ -4884,6 +4884,24 @@ button {
   transform: none !important;
 }
 
+/* Keep only explicit loading indicators moving inside the static dashboard UI. */
+#page-dashboard .taager-spinner {
+  animation: taager-spin .9s linear infinite !important;
+}
+
+#page-dashboard .dash-preloader-spinner {
+  animation: dashSpin .8s linear infinite !important;
+}
+
+#page-dashboard .dashboard-marketing-value-spinner {
+  animation: dashboard-marketing-value-spin .75s linear infinite !important;
+}
+
+#page-dashboard .dp-spinner,
+#page-dashboard .dp-panel.is-page-loading .dp-panel-body::before {
+  animation: dp-spin .75s linear infinite !important;
+}
+
 #dashboard-live-preloader .dashboard-live-ring {
   transition: --dashboard-loader-progress 280ms linear !important;
 }

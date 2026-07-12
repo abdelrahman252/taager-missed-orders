@@ -120,6 +120,19 @@ function paymentClassification(method) {
   return isPrepaid(method) ? "prepaid" : "cod";
 }
 
+function platformSourceLabel(value) {
+  const raw = String(value || "").trim().replace(/\s+/g, " ");
+  if (!raw) return "";
+  const text = raw.toLowerCase().replace(/[_-]+/g, " ");
+  if (/tik\s*tok|tiktok/.test(text)) return "TikTok";
+  if (/snap\s*chat|snapchat/.test(text)) return "Snapchat";
+  if (/facebook|\bfb\b/.test(text)) return "Facebook";
+  if (/instagram|\big\b/.test(text)) return "Instagram";
+  if (/google/.test(text)) return "Google";
+  if (/youtube/.test(text)) return "YouTube";
+  return raw;
+}
+
 function dateKeyFromValue(value) {
   const parsed = parseExcelDate(value);
   return parsed ? dateKey(parsed) : "";
@@ -169,6 +182,8 @@ function parseEasyOrdersEnrichment(buffer, nameDateFrom, nameDateTo, paymentDate
     paymentMethod: findHeader(header, ["Payment Method", "Payment"]),
     orderId: findHeader(header, ["Order ID"]),
     externalOrderId: findHeader(header, ["External Order ID", "Order ID on your store"]),
+    utmSource: findHeader(header, ["Utm Source", "UTM Source", "Source"]),
+    utmCampaign: findHeader(header, ["Utm Campaign", "UTM Campaign", "Campaign"]),
   };
   if (idx.sku < 0 || idx.productName < 0) {
     throw new Error("This does not look like an Easy Orders export. SKU and Product Name columns are required.");
@@ -188,6 +203,9 @@ function parseEasyOrdersEnrichment(buffer, nameDateFrom, nameDateTo, paymentDate
     paymentRows: 0,
     paymentTargets: 0,
     prepaidTargetItemRows: 0,
+    platformRowsScanned: 0,
+    platformTargets: 0,
+    platformSourceRows: 0,
     headerMap: idx,
   };
   const skuNameFreq = {};
@@ -195,6 +213,8 @@ function parseEasyOrdersEnrichment(buffer, nameDateFrom, nameDateTo, paymentDate
   const paymentByOrderId = new Map();
   const paymentMethodsByPhoneSku = new Map();
   const paymentTargets = [];
+  const platformTargets = [];
+  const hasPlatformSourceColumn = idx.utmSource >= 0;
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i] || [];
@@ -218,12 +238,29 @@ function parseEasyOrdersEnrichment(buffer, nameDateFrom, nameDateTo, paymentDate
 
     if (inPaymentRange) {
       diagnostics.paymentRowsScanned++;
+      diagnostics.platformRowsScanned++;
       const method = paymentMethod(idx.paymentMethod >= 0 ? row[idx.paymentMethod] : "");
+      const rawPlatformSource = idx.utmSource >= 0 ? String(row[idx.utmSource] || "").trim() : "";
+      const platformSource = platformSourceLabel(rawPlatformSource);
+      const platformCampaign = idx.utmCampaign >= 0 ? String(row[idx.utmCampaign] || "").trim().replace(/\s+/g, " ") : "";
       const phone = idx.phone >= 0 ? normalizePhone(row[idx.phone], country) : "";
       const createdKey = idx.created >= 0 ? dateKeyFromValue(row[idx.created]) : "";
       const orderIds = [idx.orderId >= 0 ? row[idx.orderId] : "", idx.externalOrderId >= 0 ? row[idx.externalOrderId] : ""]
         .map((value) => String(value || "").trim()).filter(Boolean);
       skus.forEach((sku) => {
+        if (hasPlatformSourceColumn) {
+          diagnostics.platformTargets++;
+          if (platformSource) diagnostics.platformSourceRows++;
+          platformTargets.push({
+            platformSource,
+            rawPlatformSource,
+            platformCampaign,
+            phone,
+            sku,
+            createdKey,
+            orderIds,
+          });
+        }
         if (method) {
           diagnostics.paymentRows++;
           diagnostics.paymentTargets++;
@@ -263,7 +300,7 @@ function parseEasyOrdersEnrichment(buffer, nameDateFrom, nameDateTo, paymentDate
   });
   diagnostics.uniquePaymentPhoneSku = paymentByPhoneSku.size;
   diagnostics.uniquePaymentOrderIds = paymentByOrderId.size;
-  return { skuNameMap, learnedSkuNameMap, paymentByOrderId, paymentByPhoneSku, paymentTargets, diagnostics };
+  return { skuNameMap, learnedSkuNameMap, paymentByOrderId, paymentByPhoneSku, paymentTargets, platformTargets, diagnostics };
 }
 
 function hasKnownStructuredPayment(row) {
@@ -297,17 +334,7 @@ function uniqueIndexes(indexes) {
   return Array.from(new Set((indexes || []).filter((value) => value != null)));
 }
 
-function buildEasyOrdersPaymentAssignments(rows, enrichment, country = "sa") {
-  const targets = Array.isArray(enrichment.paymentTargets) ? enrichment.paymentTargets : [];
-  const diagnostics = {
-    paymentMatchSources: {},
-    paymentMatchConflicts: 0,
-    prepaidTargetMatchedItemRows: 0,
-    prepaidTargetMatchedRows: 0,
-    prepaidTargetUnmatchedRows: 0,
-  };
-  if (!targets.length) return { assignments: new Map(), diagnostics };
-
+function buildEasyOrdersMatchIndexes(rows, country = "sa") {
   const exact = new Map();
   const phoneSku = new Map();
   const phoneSkuDate = new Map();
@@ -332,46 +359,63 @@ function buildEasyOrdersPaymentAssignments(rows, enrichment, country = "sa") {
       if (createdKey) pushIndex(phoneSkuDate, `${baseKey}|${createdKey}`, index);
     }
   });
+  return { exact, phoneSku, phoneSkuDate };
+}
 
-  function resolveTarget(target) {
-    const sku = String(target.sku || "").trim();
-    if (!sku || !target.method) return null;
+function resolveEasyOrdersTarget(rows, indexes, target, sourcePrefix) {
+  const sku = String(target && target.sku || "").trim();
+  if (!sku) return null;
+  sourcePrefix = sourcePrefix || "easyorders";
 
-    const resolvedFromCandidates = (candidates, source, priority) => {
-      candidates = uniqueIndexes(candidates);
-      if (candidates.length === 1) return { indexes: candidates, source, priority };
-      if (candidates.length > 1) {
-        const businessKeys = Array.from(new Set(candidates.map((index) => rowPaymentBusinessKey(rows[index])).filter(Boolean)));
-        if (businessKeys.length === 1) return { indexes: candidates, source, priority };
-      }
-      return null;
-    };
-
-    for (const id of target.orderIds || []) {
-      const exactMatch = resolvedFromCandidates(exact.get(`${id}|${sku}`), "easyorders-id", 100);
-      if (exactMatch) return exactMatch;
+  const resolvedFromCandidates = (candidates, source, priority) => {
+    candidates = uniqueIndexes(candidates);
+    if (candidates.length === 1) return { indexes: candidates, source, priority };
+    if (candidates.length > 1) {
+      const businessKeys = Array.from(new Set(candidates.map((index) => rowPaymentBusinessKey(rows[index])).filter(Boolean)));
+      if (businessKeys.length === 1) return { indexes: candidates, source, priority };
     }
-
-    const phone = String(target.phone || "").trim();
-    if (phone) {
-      const baseKey = `${phone}|${sku}`;
-      if (target.createdKey) {
-        const datedMatch = resolvedFromCandidates(phoneSkuDate.get(`${baseKey}|${target.createdKey}`), "easyorders-phone-sku-date", 70);
-        if (datedMatch) return datedMatch;
-      }
-      const uniqueMatch = resolvedFromCandidates(phoneSku.get(baseKey), "easyorders-phone-sku-unique", 60);
-      if (uniqueMatch && uniqueIndexes(phoneSku.get(baseKey)).length === uniqueMatch.indexes.length) return uniqueMatch;
-    }
-
     return null;
+  };
+
+  for (const id of target.orderIds || []) {
+    const exactMatch = resolvedFromCandidates(indexes.exact.get(`${id}|${sku}`), `${sourcePrefix}-id`, 100);
+    if (exactMatch) return exactMatch;
   }
+
+  const phone = String(target.phone || "").trim();
+  if (phone) {
+    const baseKey = `${phone}|${sku}`;
+    if (target.createdKey) {
+      const datedMatch = resolvedFromCandidates(indexes.phoneSkuDate.get(`${baseKey}|${target.createdKey}`), `${sourcePrefix}-phone-sku-date`, 70);
+      if (datedMatch) return datedMatch;
+    }
+    const uniqueMatch = resolvedFromCandidates(indexes.phoneSku.get(baseKey), `${sourcePrefix}-phone-sku-unique`, 60);
+    if (uniqueMatch && uniqueIndexes(indexes.phoneSku.get(baseKey)).length === uniqueMatch.indexes.length) return uniqueMatch;
+  }
+
+  return null;
+}
+
+function buildEasyOrdersPaymentAssignments(rows, enrichment, country = "sa") {
+  const targets = Array.isArray(enrichment.paymentTargets) ? enrichment.paymentTargets : [];
+  const diagnostics = {
+    paymentMatchSources: {},
+    paymentMatchConflicts: 0,
+    prepaidTargetMatchedItemRows: 0,
+    prepaidTargetMatchedRows: 0,
+    prepaidTargetUnmatchedRows: 0,
+  };
+  if (!targets.length) return { assignments: new Map(), diagnostics };
+
+  const indexes = buildEasyOrdersMatchIndexes(rows, country);
 
   const rowCandidates = new Map();
   let prepaidTargetCount = 0;
   const assignedPrepaidTargets = new Set();
   targets.forEach((target, targetIndex) => {
+    if (!target.method) return;
     if (target.classification === "prepaid") prepaidTargetCount++;
-    const resolved = resolveTarget(target);
+    const resolved = resolveEasyOrdersTarget(rows, indexes, target, "easyorders");
     if (!resolved) return;
     resolved.indexes.forEach((index) => {
       if (!rowCandidates.has(index)) rowCandidates.set(index, []);
@@ -410,10 +454,70 @@ function buildEasyOrdersPaymentAssignments(rows, enrichment, country = "sa") {
   return { assignments, diagnostics };
 }
 
+function buildEasyOrdersPlatformAssignments(rows, enrichment, country = "sa") {
+  const targets = Array.isArray(enrichment.platformTargets) ? enrichment.platformTargets : [];
+  const diagnostics = {
+    platformMatchSources: {},
+    platformMatchConflicts: 0,
+    platformMatchedRows: 0,
+    platformSourceMatches: 0,
+    platformUnknownMatches: 0,
+  };
+  if (!targets.length) return { assignments: new Map(), diagnostics };
+
+  const indexes = buildEasyOrdersMatchIndexes(rows, country);
+  const rowCandidates = new Map();
+  targets.forEach((target, targetIndex) => {
+    const resolved = resolveEasyOrdersTarget(rows, indexes, target, "easyorders-platform");
+    if (!resolved) return;
+    resolved.indexes.forEach((index) => {
+      if (!rowCandidates.has(index)) rowCandidates.set(index, []);
+      rowCandidates.get(index).push({
+        targetIndex,
+        platformSource: target.platformSource || "",
+        rawPlatformSource: target.rawPlatformSource || "",
+        platformCampaign: target.platformCampaign || "",
+        source: resolved.source,
+        priority: resolved.priority,
+      });
+    });
+  });
+
+  const assignments = new Map();
+  rowCandidates.forEach((candidates, index) => {
+    const maxPriority = Math.max(...candidates.map((item) => item.priority));
+    const best = candidates.filter((item) => item.priority === maxPriority);
+    const platformSources = Array.from(new Set(best.map((item) => item.platformSource || "")));
+    if (platformSources.length !== 1) {
+      diagnostics.platformMatchConflicts++;
+      return;
+    }
+    const campaigns = Array.from(new Set(best.map((item) => item.platformCampaign || "").filter(Boolean)));
+    const assignment = Object.assign({}, best[0], {
+      platformSource: platformSources[0] || "",
+      platformCampaign: campaigns.length === 1 ? campaigns[0] : "",
+    });
+    assignments.set(rowPaymentAssignmentKey(rows[index], index), assignment);
+    diagnostics.platformMatchedRows++;
+    if (assignment.platformSource) diagnostics.platformSourceMatches++;
+    else diagnostics.platformUnknownMatches++;
+    diagnostics.platformMatchSources[assignment.source] = (diagnostics.platformMatchSources[assignment.source] || 0) + 1;
+  });
+
+  return { assignments, diagnostics };
+}
+
 function enrichRowsFromEasyOrders(rows, enrichment, country = "sa") {
-  const diagnostics = Object.assign({ productNameMatches: 0, paymentMatches: 0, unmatchedPaymentRows: 0 }, enrichment.diagnostics || {});
+  const diagnostics = Object.assign({
+    productNameMatches: 0,
+    paymentMatches: 0,
+    unmatchedPaymentRows: 0,
+    platformMatches: 0,
+  }, enrichment.diagnostics || {});
   const paymentAssignments = buildEasyOrdersPaymentAssignments(rows, enrichment, country);
+  const platformAssignments = buildEasyOrdersPlatformAssignments(rows, enrichment, country);
   Object.assign(diagnostics, paymentAssignments.diagnostics);
+  Object.assign(diagnostics, platformAssignments.diagnostics);
   const enrichedRows = rows.map((row, index) => {
     const next = { ...row };
     const sku = String(next.sku || next.products || "").trim();
@@ -450,6 +554,17 @@ function enrichRowsFromEasyOrders(rows, enrichment, country = "sa") {
       next.paymentEvidenceSource = next.paymentEvidenceSource || "";
       if (!preservesStructuredPayment) diagnostics.unmatchedPaymentRows++;
     }
+
+    const platformAssignment = platformAssignments.assignments.get(rowPaymentAssignmentKey(next, index));
+    if (platformAssignment) {
+      next.easyOrdersPlatformMatched = true;
+      next.easyOrdersPlatformSource = platformAssignment.platformSource || "";
+      next.easyOrdersUtmSource = platformAssignment.rawPlatformSource || platformAssignment.platformSource || "";
+      next.easyOrdersUtmCampaign = platformAssignment.platformCampaign || "";
+      next.easyOrdersPlatformMatchSource = platformAssignment.source || "easyorders-platform";
+      diagnostics.platformMatches++;
+    }
+
     next.effectivePaymentClassification = next.paymentClassification === "prepaid" ? "prepaid" : "cod";
     next.isEffectiveCod = next.paymentClassification !== "prepaid";
     next.isPrepaid = next.paymentClassification === "prepaid";

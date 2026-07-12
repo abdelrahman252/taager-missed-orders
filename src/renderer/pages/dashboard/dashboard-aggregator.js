@@ -730,29 +730,39 @@
     return String(value == null ? '' : value).trim();
   }
 
-  function orderSourceDisplayValue(rawValue) {
+  function platformSourceRawValue(row) {
+    if (!row || !row.easyOrdersPlatformMatched) return null;
+    var value = row.easyOrdersPlatformSource != null ? row.easyOrdersPlatformSource : row.easyOrdersUtmSource;
+    return String(value == null ? '' : value).trim();
+  }
+
+  function orderSourceDisplayValue(rawValue, fallback) {
     rawValue = String(rawValue == null ? '' : rawValue).trim();
     if (rawValue) return rawValue;
+    if (fallback) return fallback;
     return window.dashboardI18n && window.dashboardI18n.isRtl && window.dashboardI18n.isRtl()
       ? '\u0645\u0635\u062f\u0631 \u063a\u064a\u0631 \u0645\u0639\u0631\u0648\u0641'
       : 'Unknown source';
   }
 
-  function emptyOrderSourceBucket(rawValue) {
+  function emptyOrderSourceBucket(rawValue, options) {
+    options = options || {};
     return {
       key: rawValue || '__unknown__',
       rawSource: rawValue,
-      label: orderSourceDisplayValue(rawValue),
+      label: orderSourceDisplayValue(rawValue, options.unknownLabel),
       rawOrders: 0,
       canceledByYou: 0,
       netOrders: 0,
       delivered: 0,
       confirmed: 0,
+      cancel: 0,
       pending: 0,
       shipping: 0,
       failed: 0,
       confirmationCount: 0,
       confirmationRate: 0,
+      dr: 0,
       ndr: 0,
       deliveredProfit: 0,
       deliveredSales: 0,
@@ -767,9 +777,10 @@
     };
   }
 
-  function buildOrderSourceBreakdown(rows, meta, minSample) {
+  function buildOrderSourceBreakdown(rows, meta, minSample, options) {
     rows = Array.isArray(rows) ? rows : [];
     meta = meta || {};
+    options = options || {};
     minSample = minSample || 30;
     var period = meta.period || activePeriod();
     var mode = meta.deliveredDateMode || 'actual';
@@ -780,7 +791,7 @@
     function bucketFor(rawSource) {
       rawSource = String(rawSource || '').trim();
       var key = rawSource || '__unknown__';
-      if (!buckets[key]) buckets[key] = emptyOrderSourceBucket(rawSource);
+      if (!buckets[key]) buckets[key] = emptyOrderSourceBucket(rawSource, options);
       return buckets[key];
     }
 
@@ -793,7 +804,8 @@
 
     rows.forEach(function (row, rowIndex) {
       if (!row) return;
-      var rawSource = orderSourceRawValue(row);
+      var rawSource = typeof options.sourceValue === 'function' ? options.sourceValue(row) : orderSourceRawValue(row);
+      if (rawSource == null && options.skipMissing) return;
       var bucket = bucketFor(rawSource);
       var orderKey = row.__dashboardOrderKey || orderOnlyKey(row, rowIndex);
       var lineKey = row.__dashboardFinancialLineKey || financialLineKey(row, rowIndex);
@@ -817,6 +829,7 @@
         if (rowIsNetOrder) {
           addMetricOnce(bucket, 'net', sourceOrderKey, function () { bucket.netOrders++; });
           if (statusGroup === 'confirmation') addMetricOnce(bucket, 'confirmation', sourceOrderKey, function () { bucket.confirmationCount++; });
+          else if (statusGroup === 'cancel') addMetricOnce(bucket, 'cancel', sourceOrderKey, function () { bucket.cancel++; });
           else if (exactBucket === 'received' || exactBucket === 'pending') addMetricOnce(bucket, 'pending', sourceOrderKey, function () { bucket.pending++; });
           if (exactBucket === 'confirmed') addMetricOnce(bucket, 'confirmed', sourceOrderKey, function () { bucket.confirmed++; });
           if (exactBucket === 'shipping' || exactBucket === 'delivery_suspended' || exactBucket === 'after_sales_progress') {
@@ -876,6 +889,7 @@
       var bucket = buckets[key];
       bucket.ndr = bucket.netOrders > 0 ? parseFloat(((bucket.delivered / bucket.netOrders) * 100).toFixed(2)) : 0;
       bucket.confirmationRate = bucket.netOrders > 0 ? parseFloat(((bucket.confirmationCount / bucket.netOrders) * 100).toFixed(1)) : 0;
+      bucket.dr = bucket.confirmationCount > 0 ? parseFloat(((bucket.delivered / bucket.confirmationCount) * 100).toFixed(1)) : 0;
       bucket.deliveredSales = roundMoney(bucket.deliveredSales);
       bucket.deliveredProfit = roundMoney(bucket.deliveredProfit);
       bucket.deliveredAov = bucket.delivered > 0 ? roundMoney(bucket.deliveredSales / bucket.delivered) : 0;
@@ -902,12 +916,15 @@
       acc.canceledByYou += item.canceledByYou;
       acc.netOrders += item.netOrders;
       acc.confirmedOrders += item.confirmationCount;
+      acc.cancel += item.cancel;
       acc.delivered += item.delivered;
       acc.deliveredProfit += item.deliveredProfit;
       acc.deliveredSales += item.deliveredSales;
       return acc;
-    }, { sourceCount: sources.length, rawOrders: 0, canceledByYou: 0, netOrders: 0, confirmedOrders: 0, delivered: 0, deliveredProfit: 0, deliveredSales: 0 });
+    }, { sourceCount: sources.length, rawOrders: 0, canceledByYou: 0, netOrders: 0, confirmedOrders: 0, cancel: 0, delivered: 0, deliveredProfit: 0, deliveredSales: 0 });
     summary.ndr = summary.netOrders > 0 ? parseFloat(((summary.delivered / summary.netOrders) * 100).toFixed(2)) : 0;
+    summary.confirmationRate = summary.netOrders > 0 ? parseFloat(((summary.confirmedOrders / summary.netOrders) * 100).toFixed(1)) : 0;
+    summary.dr = summary.confirmedOrders > 0 ? parseFloat(((summary.delivered / summary.confirmedOrders) * 100).toFixed(1)) : 0;
     summary.deliveredProfit = roundMoney(summary.deliveredProfit);
     summary.deliveredSales = roundMoney(summary.deliveredSales);
     summary.deliveredAov = summary.delivered > 0 ? roundMoney(summary.deliveredSales / summary.delivered) : 0;
@@ -916,6 +933,7 @@
     var reliableSources = sources.filter(function (item) { return item.netOrders >= minSample; })
       .slice().sort(function (a, b) { return b.ndr - a.ndr || b.netOrders - a.netOrders; });
     return {
+      type: options.type || 'orderSource',
       minSample: minSample,
       summary: summary,
       sources: sources,
@@ -4281,7 +4299,13 @@
       }
       return outcomeOrders;
     }
-    var orderSources = buildOrderSourceBreakdown(displayRows, meta, 30);
+    var orderSources = buildOrderSourceBreakdown(displayRows, meta, 30, { type: 'taager' });
+    var platformSources = buildOrderSourceBreakdown(displayRows, meta, 30, {
+      type: 'platform',
+      skipMissing: true,
+      sourceValue: platformSourceRawValue,
+      unknownLabel: raw('Unknown platform')
+    });
 
     var pmTotalCount = totalPrepaidCount + totalCodCount;
     var codVal = pmTotalCount > 0 ? parseFloat(((totalCodCount / pmTotalCount) * 100).toFixed(1)) : 0;
@@ -4375,6 +4399,7 @@
       getOutcomeOrders: getOutcomeOrders,
       get outcomeOrders() { return getOutcomeOrders(); },
       orderSources: orderSources,
+      platformSources: platformSources,
       cod: {
         netOrderCount: placedCount,
         totalOrderCount: rawTotalOrders,
@@ -4452,6 +4477,7 @@
         totalOrders: placedCount, netOrderCount: placedCount, totalOrderCount: rawTotalOrders,
         ndrPct: ndrPct, ndrPctExact: ndrPctExact,
         orderSources: orderSources,
+        platformSources: platformSources,
         ndrBaseOrders: ndrBaseOrders, ndrDeliveredOrders: ndrDeliveredOrders,
         confirmationRate: confirmationPct, drPct: drPct,
         averageProfit: avgCommission, avgCommission: avgCommission,
