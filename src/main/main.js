@@ -734,7 +734,7 @@ function missedOrdersDestinationOf(acc, legacyEnabled = false) {
   if (clean === "second_taager_cart" || clean === "second-taager-cart" || clean === "second_cart") return "second_taager_cart";
   if (clean === "primary_cart" || clean === "cart" || clean === "normal") return "primary_cart";
   if (acc && acc.secondTaagerCartEnabled === true) return "second_taager_cart";
-  return legacyEnabled === true ? "legacy_missing_orders" : "primary_cart";
+  return "primary_cart";
 }
 
 function secondTaagerCartEnabledOf(acc) {

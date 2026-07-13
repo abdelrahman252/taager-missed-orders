@@ -15,7 +15,7 @@ function normalizeMissedOrdersDestination(value, options = {}) {
   if (clean === DESTINATION_PRIMARY_CART || clean === "cart" || clean === "normal") {
     return DESTINATION_PRIMARY_CART;
   }
-  return options.legacyEnabled === true ? DESTINATION_LEGACY_MISSING_ORDERS : DESTINATION_PRIMARY_CART;
+  return DESTINATION_PRIMARY_CART;
 }
 
 function isMissedSource(order) {

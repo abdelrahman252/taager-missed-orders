@@ -8,7 +8,7 @@ const XLSX = require("xlsx");
 process.env.BOT_CONFIG = JSON.stringify({ taagerCountry: "sa" });
 delete require.cache[require.resolve("../src/bot/output")];
 
-const { buildMissingOrdersExcel } = require("../src/bot/output");
+const { buildMissingOrdersExcel, buildSkippedExcel } = require("../src/bot/output");
 const {
   splitOrdersByDestination,
   groupMissingOrders,
@@ -26,6 +26,10 @@ const {
   splitOrdersByMissedDestination,
   destinationForOrder,
 } = require("../src/bot/order-destinations");
+const {
+  buildTaagerProductCatalog,
+  resolveMissedOrders,
+} = require("../src/bot/parser");
 
 const real = { source: "real", normPhone: "966500000001", sku: "REAL-1" };
 const missedA = {
@@ -53,7 +57,7 @@ assert.strictEqual(groupMissingOrders([missedA, missedB]).length, 1);
 assert.notStrictEqual(missingOrderUploadIdentity(missedA), missingOrderUploadIdentity(missedB));
 
 assert.strictEqual(normalizeMissedOrdersDestination(""), "primary_cart");
-assert.strictEqual(normalizeMissedOrdersDestination("", { legacyEnabled: true }), "legacy_missing_orders");
+assert.strictEqual(normalizeMissedOrdersDestination("", { legacyEnabled: true }), "primary_cart");
 assert.strictEqual(normalizeMissedOrdersDestination("second-taager-cart"), "second_taager_cart");
 const primaryRoute = splitOrdersByMissedDestination([real, missedA], "primary_cart");
 assert.deepStrictEqual(primaryRoute.primaryCartOrders, [real, missedA]);
@@ -68,6 +72,34 @@ assert.deepStrictEqual(secondRoute.primaryCartOrders, [real]);
 assert.deepStrictEqual(secondRoute.legacyMissingOrders, []);
 assert.deepStrictEqual(secondRoute.secondTaagerCartOrders, [missedA]);
 assert.strictEqual(destinationForOrder(missedA, "second_taager_cart"), "second-taager-cart");
+
+const taagerCatalogHeader = Array(19).fill("");
+taagerCatalogHeader[16] = "Products";
+taagerCatalogHeader[17] = "Quantity";
+taagerCatalogHeader[18] = "Prices";
+const taagerCatalogSheet = XLSX.utils.aoa_to_sheet([
+  taagerCatalogHeader,
+  [...Array(16).fill(""), "TAAGER-SKU-1", "2", "150"],
+]);
+const taagerCatalogBook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(taagerCatalogBook, taagerCatalogSheet, "Orders");
+const taagerCatalog = buildTaagerProductCatalog(XLSX.write(taagerCatalogBook, { type: "buffer", bookType: "xlsx" }));
+const taagerFallbackResult = resolveMissedOrders([
+  { ...missedA, sku: null, qty: null, productName: "TAAGER-SKU-1" },
+], {}, taagerCatalog);
+assert.strictEqual(taagerFallbackResult.resolved.length, 1, "missed product should resolve from Taager fallback catalog");
+assert.strictEqual(taagerFallbackResult.resolved[0].sku, "TAAGER-SKU-1");
+assert.strictEqual(taagerFallbackResult.resolved[0].qty, 2);
+assert.strictEqual(taagerFallbackResult.resolved[0].subtotal, 300);
+assert.strictEqual(taagerFallbackResult.resolved[0].catalogSource, "taager");
+const missingEverywhereResult = resolveMissedOrders([
+  { ...missedA, sku: null, qty: null, productName: "Unknown Product" },
+], {}, taagerCatalog);
+assert.strictEqual(missingEverywhereResult.skippedOrders[0].reason, "product_not_in_easyorders_or_taager");
+const skippedWorkbook = XLSX.read(buildSkippedExcel(missingEverywhereResult.skippedOrders), { type: "buffer" });
+const skippedRows = XLSX.utils.sheet_to_json(skippedWorkbook.Sheets["Warnings & Skipped"], { header: 1, defval: "" });
+assert.strictEqual(skippedRows[1][10], "product_not_in_easyorders_or_taager");
+assert.strictEqual(skippedRows[1][11], "المنتج غير موجود في شيت EasyOrders أو شيت Taager");
 
 const workbook = XLSX.read(buildMissingOrdersExcel([missedA, missedB]), { type: "buffer" });
 assert.deepStrictEqual(workbook.SheetNames, ["Missing Orders"]);
@@ -107,6 +139,7 @@ assert(setupSource.includes('id="sv3-btn-missing-orders"'), "setup must render t
 assert(setupSource.includes('id="sv3-missed-orders-destination"'), "account form must render the missed destination selector");
 assert(setupSource.includes('id="sv3-second-taager-panel"'), "account form must render the second Taager cart configuration");
 assert(runnerSource.includes("splitOrdersByMissedDestination"), "runner must use the enum-based destination split");
+assert(runnerSource.includes('legacyEnabled: config.missingOrdersUploadEnabled === true'), "runner may receive the legacy toggle but blank destinations must still normalize to cart");
 assert(runnerSource.includes("runSecondTaagerCartUpload"), "runner must support a second Taager cart destination");
 assert(runnerSource.includes('mode: "second-taager-cart-upload"'), "runner must launch a Taager-only worker for second cart uploads");
 

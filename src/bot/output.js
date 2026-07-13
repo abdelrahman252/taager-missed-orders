@@ -479,6 +479,8 @@ function buildSkippedExcel(skippedOrders) {
     phone_uncertain_zero_appended: "رقم الهاتف ناقص رقم - تم إضافة 0 (تخمين)",
     product_not_in_catalog: "المنتج غير موجود في الكتالوج",
   };
+  reasonLabels.product_not_in_catalog = "المنتج غير موجود في شيت EasyOrders أو شيت Taager";
+  reasonLabels.product_not_in_easyorders_or_taager = "المنتج غير موجود في شيت EasyOrders أو شيت Taager";
 
   const headers = [
     "Outcome / الحالة",

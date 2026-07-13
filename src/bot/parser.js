@@ -400,7 +400,7 @@ function buildProductCatalog(realOrders) {
   for (const order of realOrders) {
     if (!order.sku || !order.productName) continue;
     const key = normalizeProductName(order.productName);
-    if (!catalog[key]) catalog[key] = { sku: order.sku, productName: key, prices: {}, qtyCounts: {} };
+    if (!catalog[key]) catalog[key] = { sku: order.sku, productName: key, prices: {}, qtyCounts: {}, source: "easyorders" };
     const entry = catalog[key];
     const qty = order.qty || 1;
     const price = Math.round(order.subtotal || 0);
@@ -422,11 +422,74 @@ function buildProductCatalog(realOrders) {
       const entries = Object.entries(freq).sort((a, b) => b[1] - a[1]);
       prices[qty] = entries.length ? Number(entries[0][0]) : 0;
     }
-    result[name] = { sku: entry.sku, productName: name, minQty: qtys[0] || 1, prices };
+    result[name] = { sku: entry.sku, productName: name, minQty: qtys[0] || 1, prices, source: entry.source || "easyorders" };
   }
 
-  console.log(`Product catalog: ${Object.keys(result).length} products`);
+  console.log(`EasyOrders product catalog: ${Object.keys(result).length} products`);
   return result;
+}
+
+function buildTaagerProductCatalog(buffer, country = COUNTRY) {
+  try {
+    const wb = XLSX.read(buffer, { type: "buffer" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    if (!rows || rows.length < 2) {
+      console.log("Taager product catalog: 0 products");
+      return {};
+    }
+
+    const header = rows[0] || [];
+    const productsIdx = findHeaderIndex(header, ["Ø§Ù„Ù…Ù†ØªØ¬Ø§Øª", "Products", "SKU"], 16);
+    const qtyIdx = findHeaderIndex(header, ["Ø§Ù„ÙƒÙ…ÙŠØ§Øª", "Quantity", "Qty"], 17);
+    const priceIdx = findHeaderIndex(header, ["Ø§Ù„Ø£Ø³Ø¹Ø§Ø±", "Prices", "Price"], 18);
+    const catalog = {};
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      const products = splitTaagerProducts(row[productsIdx]);
+      const qtys = splitTaagerProducts(row[qtyIdx]);
+      const prices = splitTaagerProducts(row[priceIdx]);
+
+      products.forEach((skuOrName, idx) => {
+        const productToken = String(skuOrName || "").trim();
+        const key = normalizeProductName(productToken);
+        if (!key) return;
+        if (!catalog[key]) {
+          catalog[key] = { sku: productToken, productName: key, prices: {}, qtyCounts: {}, source: "taager" };
+        }
+        const entry = catalog[key];
+        const qty = parseQty(qtys[idx] || qtys[0]);
+        const unitPrice = parseMoney(prices[idx] || prices[0]);
+        const subtotal = unitPrice > 0 ? unitPrice * qty : 0;
+        entry.qtyCounts[qty] = (entry.qtyCounts[qty] || 0) + 1;
+        if (!entry.prices[qty]) entry.prices[qty] = [];
+        entry.prices[qty].push(Math.round(subtotal));
+      });
+    }
+
+    const result = {};
+    for (const [name, entry] of Object.entries(catalog)) {
+      const qtys = Object.keys(entry.qtyCounts).map(Number).sort((a, b) => a - b);
+      const prices = {};
+      for (const [qty, samples] of Object.entries(entry.prices)) {
+        const freq = {};
+        for (const sample of Array.isArray(samples) ? samples : []) {
+          if (!Number.isFinite(Number(sample))) continue;
+          freq[sample] = (freq[sample] || 0) + 1;
+        }
+        const entries = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+        prices[qty] = entries.length ? Number(entries[0][0]) : 0;
+      }
+      result[name] = { sku: entry.sku, productName: name, minQty: qtys[0] || 1, prices, source: "taager" };
+    }
+
+    console.log(`Taager product catalog: ${Object.keys(result).length} products`);
+    return result;
+  } catch (err) {
+    console.error("[Parser] buildTaagerProductCatalog error:", err.message);
+    return {};
+  }
 }
 
 function findProductInCatalog(productName, catalog) {
@@ -440,13 +503,15 @@ function findProductInCatalog(productName, catalog) {
   return null;
 }
 
-function resolveMissedOrders(missedOrders, catalog) {
+function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}) {
   const resolved = [];
   const skippedOrders = [];
   const skippedNames = [];
+  const sourceStats = { easyorders: 0, taager: 0 };
 
   for (const order of missedOrders) {
-    const match = findProductInCatalog(order.productName, catalog);
+    const match = findProductInCatalog(order.productName, catalog)
+      || findProductInCatalog(order.productName, taagerCatalog);
     if (!match) {
       skippedNames.push(order.productName);
       skippedOrders.push({
@@ -455,7 +520,7 @@ function resolveMissedOrders(missedOrders, catalog) {
         productName: order.productName,
         city: order.city,
         address: order.address,
-        reason: "product_not_in_catalog",
+        reason: "product_not_in_easyorders_or_taager",
         uncertain: !!order.uncertain,
       });
       continue;
@@ -470,13 +535,16 @@ function resolveMissedOrders(missedOrders, catalog) {
       qty,
       subtotal,
       unitPrice: Math.round(subtotal / qty),
+      catalogSource: match.source || "easyorders",
     });
+    if (match.source === "taager") sourceStats.taager++;
+    else sourceStats.easyorders++;
   }
 
   if (skippedNames.length > 0) {
-    console.log(`Missed orders skipped (no live catalog match): ${[...new Set(skippedNames)].join(", ")}`);
+    console.log(`Missed orders skipped (not found in EasyOrders sheet or Taager sheet): ${[...new Set(skippedNames)].join(", ")}`);
   }
-  console.log(`Missed orders resolved: ${resolved.length} SKU-backed items`);
+  console.log(`Missed orders resolved: ${resolved.length} SKU-backed items (EasyOrders:${sourceStats.easyorders}, Taager:${sourceStats.taager})`);
   return { resolved, skippedOrders };
 }
 
@@ -975,6 +1043,7 @@ module.exports = {
   parseRealOrders,
   parseMissedOrders,
   buildProductCatalog,
+  buildTaagerProductCatalog,
   resolveMissedOrders,
   mergeAndDeduplicate,
   normalizeProductName,

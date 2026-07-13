@@ -686,8 +686,20 @@ function createEasyOrdersExportFlow(options = {}) {
 
   async function findExportLink(page, keyword) {
     return page.evaluate(({ keyword }) => {
+      const visible = (element) => {
+        if (!element || !element.isConnected) return false;
+        const style = window.getComputedStyle(element);
+        if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
+        return !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length);
+      };
+      const normalize = (value) => String(value || "")
+        .replace(/[\u200E\u200F\u061C]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
       const kind = (text) => {
-        const value = String(text || "").toLowerCase();
+        const value = normalize(text).toLowerCase();
+        if (value.includes("الطلبات الفائتة") || value.includes("تقرير الطلبات الفائتة")) return "missed-orders";
+        if (value.includes("تم انشاء ملف اكسل للطلبات") || value.includes("تم إنشاء ملف إكسل للطلبات")) return "orders";
         if (value.includes("missed orders report") || value.includes("missed order report") || value.includes("الطلبات الفائتة")) return "missed-orders";
         if (value.includes("orders exported") ||
             value.includes("orders export") ||
@@ -698,11 +710,39 @@ function createEasyOrdersExportFlow(options = {}) {
             value.includes("إنشاء ملف إكسل")) return "orders";
         return "";
       };
-      for (const row of Array.from(document.querySelectorAll("tr, [role='row'], li, .MuiCard-root"))) {
-        const text = (row.innerText || row.textContent || "").replace(/\s+/g, " ").trim();
+      const hrefOf = (element) => {
+        const link = element && (element.matches?.("a[href]") ? element : element.querySelector?.("a[href]"));
+        if (!link) return "";
+        try {
+          return new URL(String(link.getAttribute("href") || link.href || ""), window.location.href).href;
+        } catch (_) {
+          return String(link.href || link.getAttribute("href") || "");
+        }
+      };
+      const candidateSet = new Set(Array.from(document.querySelectorAll(
+        "tr, [role='row'], li, .MuiCard-root, .MuiPaper-root, [class*='notification'], [class*='Notification']"
+      )));
+      for (const action of Array.from(document.querySelectorAll("a[href], button, [role='button']"))) {
+        let node = action;
+        for (let depth = 0; node && node !== document.body && depth < 8; depth++, node = node.parentElement) {
+          candidateSet.add(node);
+        }
+      }
+      const candidates = Array.from(candidateSet)
+        .filter((element) => visible(element))
+        .map((element) => {
+          const text = normalize(element.innerText || element.textContent || "");
+          const rect = element.getBoundingClientRect();
+          return { element, text, top: rect.top, length: text.length };
+        })
+        .filter((item) => item.text && item.length >= 8 && item.length <= 2000)
+        .sort((a, b) => a.top - b.top || a.length - b.length);
+
+      for (const row of candidates) {
+        const text = row.text;
         if (kind(text) !== keyword) continue;
-        const link = Array.from(row.querySelectorAll("a[href]")).find((item) => String(item.href || "").startsWith("https://"));
-        if (link) return { href: link.href, text };
+        const href = hrefOf(row.element);
+        if (href) return { href, text };
       }
       return null;
     }, { keyword });
@@ -710,26 +750,53 @@ function createEasyOrdersExportFlow(options = {}) {
 
   async function summarizeNotifications(page, keyword) {
     return page.evaluate(({ keyword }) => {
-      const normalize = (value) => String(value || "").replace(/\s+/g, " ").trim();
+      const visible = (element) => {
+        if (!element || !element.isConnected) return false;
+        const style = window.getComputedStyle(element);
+        if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
+        return !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length);
+      };
+      const normalize = (value) => String(value || "")
+        .replace(/[\u200E\u200F\u061C]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
       const lower = (value) => normalize(value).toLowerCase();
-      const rows = Array.from(document.querySelectorAll("tr, [role='row'], li, .MuiCard-root"))
+      const candidateSet = new Set(Array.from(document.querySelectorAll(
+        "tr, [role='row'], li, .MuiCard-root, .MuiPaper-root, [class*='notification'], [class*='Notification']"
+      )));
+      for (const action of Array.from(document.querySelectorAll("a[href], button, [role='button']"))) {
+        let node = action;
+        for (let depth = 0; node && node !== document.body && depth < 8; depth++, node = node.parentElement) {
+          candidateSet.add(node);
+        }
+      }
+      const rows = Array.from(candidateSet)
+        .filter((row) => visible(row))
         .map((row) => {
           const text = normalize(row.innerText || row.textContent || "");
           const links = Array.from(row.querySelectorAll("a[href]"))
             .map((link) => String(link.href || ""))
             .filter(Boolean);
-          return { text, links };
+          const rect = row.getBoundingClientRect();
+          return { text, links, top: rect.top, length: text.length };
         })
         .filter((row) => row.text)
+        .filter((row) => row.length >= 8 && row.length <= 2000)
+        .sort((a, b) => a.top - b.top || a.length - b.length)
         .slice(0, 8);
       const matchingRows = rows.filter((row) => {
         const text = lower(row.text);
         if (keyword === "missed-orders") {
-          return text.includes("missed orders") || text.includes("missed order");
+          return text.includes("missed orders") ||
+            text.includes("missed order") ||
+            text.includes("الطلبات الفائتة") ||
+            text.includes("تقرير الطلبات الفائتة");
         }
         return text.includes("orders exported") ||
           text.includes("orders export") ||
           text.includes("created orders excel") ||
+          text.includes("تم انشاء ملف اكسل للطلبات") ||
+          text.includes("تم إنشاء ملف إكسل للطلبات") ||
           text.includes("excel") ||
           text.includes("orders");
       });
@@ -767,6 +834,8 @@ function createEasyOrdersExportFlow(options = {}) {
         `rows=${lastSummary && lastSummary.rowCount != null ? lastSummary.rowCount : "?"}, url=${page.url()}`);
       if (lastSummary && Array.isArray(lastSummary.firstMatchingRows) && lastSummary.firstMatchingRows.length) {
         log(`EasyOrders notification candidates: ${lastSummary.firstMatchingRows.join(" | ")}`);
+      } else if (lastSummary && Array.isArray(lastSummary.firstRows) && lastSummary.firstRows.length) {
+        log(`EasyOrders notification visible rows: ${lastSummary.firstRows.join(" | ")}`);
       }
       if (result && result.href) {
         stage("easyorders.notifications", "ok", "Export notification link found", {

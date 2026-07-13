@@ -21,6 +21,29 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     return (stats?.realInTaager || 0) + (stats?.missedInTaager || 0);
   }
 
+  function orderDestination(order) {
+    return String(order?.destination || "cart").trim() || "cart";
+  }
+
+  function isLegacyMissingOrder(order) {
+    return orderDestination(order) === "missing-orders";
+  }
+
+  function countLegacyMissingOrders(rows) {
+    return (Array.isArray(rows) ? rows : []).filter(isLegacyMissingOrder).length;
+  }
+
+  function translated(key, fallback) {
+    const value = t(key);
+    return value === key ? fallback : value;
+  }
+
+  function callTranslation(key, fallback, ...args) {
+    const value = t(key);
+    if (typeof value === "function") return value(...args);
+    return value === key ? fallback(...args) : value;
+  }
+
   const RESULTS_PAGE_SIZE = 10;
   let resultsPagerSeq = 0;
 
@@ -89,6 +112,58 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       }
       .orders-preview-table tbody tr:hover { background: rgba(79,142,247,0.05); }
       .orders-preview-table tbody tr:last-child td { border-bottom: none; }
+      .orders-preview-table.skipped-orders-table {
+        min-width: 1120px;
+        table-layout: fixed;
+      }
+      .skipped-orders-table th,
+      .skipped-orders-table td {
+        padding: 7px 9px;
+        vertical-align: middle;
+      }
+      .skipped-orders-table .skip-index {
+        text-align: center;
+        color: var(--text2);
+        font-size:var(--type-caption);
+        font-variant-numeric: tabular-nums;
+      }
+      .skipped-orders-table .skip-outcome {
+        font-family:var(--font-mono);
+        font-size:var(--type-caption);
+        font-weight:var(--weight-bold);
+      }
+      .skipped-orders-table .skip-name,
+      .skipped-orders-table .skip-product {
+        direction: rtl;
+        text-align: right;
+        font-weight:var(--weight-semibold);
+      }
+      .skipped-orders-table .skip-phone {
+        direction: ltr;
+        font-family:var(--font-mono);
+        font-size:var(--type-caption);
+        font-variant-numeric: tabular-nums;
+      }
+      .skipped-orders-table .skip-reason {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        line-height: 1.35;
+        font-size:var(--type-label);
+        color: var(--text);
+      }
+      .skipped-orders-table .skip-alert {
+        text-align: center;
+        font-size:var(--type-body);
+      }
+      .skipped-orders-table col.skip-col-index { width: 36px; }
+      .skipped-orders-table col.skip-col-outcome { width: 112px; }
+      .skipped-orders-table col.skip-col-name { width: 15%; }
+      .skipped-orders-table col.skip-col-raw { width: 12%; }
+      .skipped-orders-table col.skip-col-normalized { width: 13%; }
+      .skipped-orders-table col.skip-col-product { width: 25%; }
+      .skipped-orders-table col.skip-col-reason { width: 27%; }
+      .skipped-orders-table col.skip-col-alert { width: 44px; }
       .orders-preview-table.results-orders-table {
         width: 100%;
         min-width: 1360px;
@@ -301,22 +376,28 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
   function buildSkippedOrdersHtml(skippedOrders) {
     if (!skippedOrders || !skippedOrders.count) return "";
+    const rows = skippedOrders.rows || [];
+    const showAlertColumn = rows.some((row) => row && row.uncertain);
     const reasonLabels = {
       phone_parse_failed: t("results.reason_phone_parse_failed"),
       phone_uncertain_zero_appended: t("results.reason_phone_uncertain_zero_appended"),
       product_not_in_catalog: t("results.reason_product_not_in_catalog"),
+      product_not_in_easyorders_or_taager: t("results.reason_product_not_in_easyorders_or_taager"),
     };
-    const paged = buildPagedItems(skippedOrders.rows || [], (row, i, attrs) => {
+    const paged = buildPagedItems(rows, (row, i, attrs) => {
       const reasonKey = row.uncertain && row.reason === "phone_parse_failed" ? "phone_uncertain_zero_appended" : row.reason;
+      const reasonText = reasonLabels[reasonKey] || reasonKey || "—";
+      const outcomeText = row.uploadedWithWarning ? t("results.warning_uploaded") : t("results.warning_skipped");
+      const outcomeColor = row.uploadedWithWarning ? "var(--warning)" : "var(--danger)";
       return `<tr ${attrs} style="${row.uncertain ? "background:rgba(255,170,0,0.05)" : ""}">
-        <td style="color:var(--text2)">${i + 1}</td>
-        <td style="font-weight:var(--weight-bold);color:${row.uploadedWithWarning ? "var(--warning)" : "var(--danger)"}">${row.uploadedWithWarning ? t("results.warning_uploaded") : t("results.warning_skipped")}</td>
-        <td style="direction:rtl">${row.name || "—"}</td>
-        <td style="font-family:var(--font-mono);color:${row.uploadedWithWarning ? "var(--warning)" : "var(--danger)"};direction:ltr">${row.rawPhone || "—"}</td>
-        <td style="font-family:var(--font-mono);color:var(--text);direction:ltr">${row.normalizedPhone || "—"}</td>
-        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl" title="${(row.productName || "").replace(/"/g,"")}">${row.productName || "—"}</td>
-        <td style="font-size:var(--type-caption)">${reasonLabels[reasonKey] || reasonKey || "—"}</td>
-        <td style="text-align:center">${row.uncertain ? `<span title="${t("results.phone_rescued_verify")}" style="color:var(--warning)">⚠️</span>` : ""}</td>
+        <td class="skip-index">${i + 1}</td>
+        <td class="skip-outcome" style="color:${outcomeColor}" title="${outcomeText}">${outcomeText}</td>
+        <td class="skip-name" title="${String(row.name || "").replace(/"/g,"")}">${row.name || "—"}</td>
+        <td class="skip-phone" style="color:${outcomeColor}" title="${String(row.rawPhone || "").replace(/"/g,"")}">${row.rawPhone || "—"}</td>
+        <td class="skip-phone" style="color:var(--text)" title="${String(row.normalizedPhone || "").replace(/"/g,"")}">${row.normalizedPhone || "—"}</td>
+        <td class="skip-product" title="${String(row.productName || "").replace(/"/g,"")}">${row.productName || "—"}</td>
+        <td class="skip-reason" title="${String(reasonText).replace(/"/g,"")}">${reasonText}</td>
+        ${showAlertColumn ? `<td class="skip-alert">${row.uncertain ? `<span title="${t("results.phone_rescued_verify")}" style="color:var(--warning)">⚠️</span>` : ""}</td>` : ""}
       </tr>`;
     }, "skipped");
     return `
@@ -328,7 +409,17 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <div style="font-size:var(--type-caption);color:var(--text2)">${t("results.skipped_followup")}</div>
         </div>
         <div class="dash-section-body no-pad" style="overflow-x:auto">
-          <table class="orders-preview-table" style="font-size:var(--type-label)">
+          <table class="orders-preview-table skipped-orders-table">
+            <colgroup>
+              <col class="skip-col-index">
+              <col class="skip-col-outcome">
+              <col class="skip-col-name">
+              <col class="skip-col-raw">
+              <col class="skip-col-normalized">
+              <col class="skip-col-product">
+              <col class="skip-col-reason">
+              ${showAlertColumn ? `<col class="skip-col-alert">` : ""}
+            </colgroup>
             <thead><tr>
               <th>#</th>
               <th>${t("results.warning_status_col")}</th>
@@ -337,7 +428,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
               <th>${t("results.normalized_phone_col")}</th>
               <th>${t("results.product_col")}</th>
               <th>${t("results.reason_col")}</th>
-              <th>⚠️</th>
+              ${showAlertColumn ? `<th>⚠️</th>` : ""}
             </tr></thead>
             <tbody>${paged.itemsHtml}</tbody>
           </table>
@@ -469,7 +560,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const createdAt = orderCreatedAtText(o);
       const destination = o.destination === "second-taager-cart"
         ? (t("results.destination_second") || "Second Cart")
-        : (o.destination === "missing-orders" ? t("results.destination_missing") : t("results.destination_cart"));
+        : (isLegacyMissingOrder(o) ? t("results.destination_missing") : t("results.destination_cart"));
       return `<tr ${attrs || ""}>
         <td class="res-index">${i + 1}</td>
         <td class="res-name" title="${String(o.name || "").replace(/"/g,"")}">${o.name || "—"}</td>
@@ -748,9 +839,29 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const totalAttempt = totalNew + failedOrders.count;
       const successRate  = totalAttempt > 0 ? Math.round(totalNew / totalAttempt * 100) : 100;
       const attemptedRows = accData.attemptedOrderRows || accData.orderRows || [];
-      const primaryDestinationCount = attemptedRows.filter(o => (o.destination || "cart") !== "second-taager-cart" && (o.destination || "cart") !== "missing-orders").length;
-      const secondDestinationCount = attemptedRows.filter(o => o.destination === "second-taager-cart").length;
-      const legacyMissingDestinationCount = attemptedRows.filter(o => o.destination === "missing-orders").length;
+      const successfulRows = accData.orderRows || [];
+      const legacyMissingSubmittedCount = countLegacyMissingOrders(successfulRows);
+      const confirmedUploadedCount = Math.max(0, totalNew - legacyMissingSubmittedCount);
+      const successSubtext = legacyMissingSubmittedCount > 0
+        ? callTranslation(
+          "results.confirmed_plus_missing",
+          (confirmed, missing) => `${confirmed} cart confirmed + ${missing} Missing Orders submitted`,
+          confirmedUploadedCount,
+          legacyMissingSubmittedCount
+        )
+        : translated("results.confirmed_in_taager_cart", "Confirmed in Taager cart");
+      const successRateTitle = legacyMissingSubmittedCount > 0
+        ? translated("results.submission_success_rate", "Submission Success Rate")
+        : t("results.upload_success_rate");
+      const successCountText = legacyMissingSubmittedCount > 0
+        ? successSubtext
+        : callTranslation("results.succeeded", (n) => `OK ${n} succeeded`, totalNew);
+      const uploadedOrdersTitle = legacyMissingSubmittedCount > 0
+        ? translated("results.uploaded_or_submitted_orders_title", "Uploaded / Submitted Orders")
+        : t("results.uploaded_orders_title");
+      const primaryDestinationCount = attemptedRows.filter(o => orderDestination(o) !== "second-taager-cart" && !isLegacyMissingOrder(o)).length;
+      const secondDestinationCount = attemptedRows.filter(o => orderDestination(o) === "second-taager-cart").length;
+      const legacyMissingDestinationCount = countLegacyMissingOrders(attemptedRows);
       const pagedUploadedProducts = buildPagedItems(products, (p, i, attrs) => `<tr ${attrs}>
         <td style="font-weight:var(--weight-semibold)">${p.productName||"—"}</td>
         <td style="text-align:right"><span class="badge badge-success">${p.count}</span></td>
@@ -786,8 +897,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <div class="dash-stat-card success">
             <div class="ds-icon">✅</div>
             <div class="ds-value">${totalNew}</div>
-            <div class="ds-label">${t("results.new_orders")}</div>
-            <div class="ds-sub">${t("results.sent_to_easy")}</div>
+            <div class="ds-label">${legacyMissingSubmittedCount > 0 ? translated("results.new_or_submitted_orders", "New / Submitted Orders") : t("results.new_orders")}</div>
+            <div class="ds-sub">${successSubtext}</div>
           </div>
           <div class="dash-stat-card ${hasFailed ? "danger" : ""}">
             <div class="ds-icon">${hasFailed ? "❌" : "🎯"}</div>
@@ -809,11 +920,20 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           </div>
         </div>
 
+        ${legacyMissingSubmittedCount > 0 ? `
+        <div class="notice-box info">
+          <span class="notice-icon">i</span>
+          <div class="notice-text">
+            <strong>${translated("results.missing_orders_pending_title", "Missing Orders are submitted, not confirmed cart orders")}</strong>
+            <div style="font-size:var(--type-label);color:var(--text2);margin-top:3px">${translated("results.missing_orders_pending_body", "Taager accepted the Missing Orders workbook, but those rows may not appear immediately in the normal Taager orders list. Check the Missing Orders tab, or route missed orders to Cart/Second Cart when you need confirmed normal orders.")}</div>
+          </div>
+        </div>` : ""}
+
         <!-- Success rate bar -->
         ${totalAttempt > 0 ? `
         <div class="dash-section">
           <div class="dash-section-header">
-            <div class="dash-section-title"><span style="color:var(--success)">📊</span> ${t("results.upload_success_rate")}</div>
+            <div class="dash-section-title"><span style="color:var(--success)">📊</span> ${successRateTitle}</div>
             <div style="font-size:var(--type-metric-sm);font-weight:var(--weight-bold);color:${successRate===100?"var(--success)":successRate>=70?"var(--warning)":"var(--danger)"}">${successRate}%</div>
           </div>
           <div class="dash-section-body">
@@ -821,7 +941,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
               <div style="height:100%;width:${successRate}%;background:${successRate===100?"var(--success)":successRate>=70?"var(--warning)":"var(--danger)"};border-radius:var(--radius-xs);transition:width 0.8s ease"></div>
             </div>
             <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:var(--type-label);color:var(--text2)">
-              <span>${(()=>{const fn=t("results.succeeded");return typeof fn==="function"?fn(totalNew):fn;})()}</span>
+              <span>${successCountText}</span>
               <span>${(()=>{const fn=t("results.total_attempted");return typeof fn==="function"?fn(totalAttempt):fn;})()}</span>
               ${hasFailed ? `<span style="color:var(--danger)">❌ ${failedOrders.count} ${t("results.failed")}</span>` : ""}
             </div>
@@ -885,7 +1005,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
             </div>` : `
             <div class="dash-section">
               <div class="dash-section-header">
-                <div class="dash-section-title"><span style="color:var(--success)">✅</span> ${t("results.uploaded_orders_title")}</div>
+                <div class="dash-section-title"><span style="color:var(--success)">✅</span> ${uploadedOrdersTitle}</div>
                 <div style="font-size:var(--type-caption);color:var(--text2)">${t("run.click_to_copy")}</div>
               </div>
               <div class="dash-section-body no-pad" style="overflow-x:auto">
@@ -1089,9 +1209,29 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   const totalUploaded  = totalNew + failedOrders.count;
   const successRate    = totalUploaded > 0 ? Math.round(totalNew / totalUploaded * 100) : 100;
   const attemptedRows = data.attemptedOrderRows || data.orderRows || [];
-  const primaryDestinationCount = attemptedRows.filter(o => (o.destination || "cart") !== "second-taager-cart" && (o.destination || "cart") !== "missing-orders").length;
-  const secondDestinationCount = attemptedRows.filter(o => o.destination === "second-taager-cart").length;
-  const legacyMissingDestinationCount = attemptedRows.filter(o => o.destination === "missing-orders").length;
+  const successfulRows = data.orderRows || [];
+  const legacyMissingSubmittedCount = countLegacyMissingOrders(successfulRows);
+  const confirmedUploadedCount = Math.max(0, totalNew - legacyMissingSubmittedCount);
+  const successSubtext = legacyMissingSubmittedCount > 0
+    ? callTranslation(
+      "results.confirmed_plus_missing",
+      (confirmed, missing) => `${confirmed} cart confirmed + ${missing} Missing Orders submitted`,
+      confirmedUploadedCount,
+      legacyMissingSubmittedCount
+    )
+    : translated("results.confirmed_in_taager_cart", "Confirmed in Taager cart");
+  const successRateTitle = legacyMissingSubmittedCount > 0
+    ? translated("results.submission_success_rate", "Submission Success Rate")
+    : t("results.upload_success_rate");
+  const successCountText = legacyMissingSubmittedCount > 0
+    ? successSubtext
+    : callTranslation("results.succeeded", (n) => `OK ${n} succeeded`, totalNew);
+  const uploadedOrdersTitle = legacyMissingSubmittedCount > 0
+    ? translated("results.uploaded_or_submitted_orders_title", "Uploaded / Submitted Orders")
+    : t("results.uploaded_orders_title");
+  const primaryDestinationCount = attemptedRows.filter(o => orderDestination(o) !== "second-taager-cart" && !isLegacyMissingOrder(o)).length;
+  const secondDestinationCount = attemptedRows.filter(o => orderDestination(o) === "second-taager-cart").length;
+  const legacyMissingDestinationCount = countLegacyMissingOrders(attemptedRows);
 
   const titleFn = t("results.title");
   const title   = typeof titleFn === "function" ? titleFn(dateDisplay) : titleFn;
@@ -1158,8 +1298,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         <div class="dash-stat-card success">
           <div class="ds-icon">✅</div>
           <div class="ds-value">${totalNew}</div>
-          <div class="ds-label">${t("results.new_orders")}</div>
-          <div class="ds-sub">${t("results.sent_to_easy")}</div>
+          <div class="ds-label">${legacyMissingSubmittedCount > 0 ? translated("results.new_or_submitted_orders", "New / Submitted Orders") : t("results.new_orders")}</div>
+          <div class="ds-sub">${successSubtext}</div>
         </div>
         <div class="dash-stat-card ${hasFailed ? "danger" : ""}">
           <div class="ds-icon">${hasFailed ? "❌" : "🎯"}</div>
@@ -1181,11 +1321,20 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         </div>
       </div>
 
+      ${legacyMissingSubmittedCount > 0 ? `
+      <div class="notice-box info">
+        <span class="notice-icon">i</span>
+        <div class="notice-text">
+          <strong>${translated("results.missing_orders_pending_title", "Missing Orders are submitted, not confirmed cart orders")}</strong>
+          <div style="font-size:var(--type-label);color:var(--text2);margin-top:3px">${translated("results.missing_orders_pending_body", "Taager accepted the Missing Orders workbook, but those rows may not appear immediately in the normal Taager orders list. Check the Missing Orders tab, or route missed orders to Cart/Second Cart when you need confirmed normal orders.")}</div>
+        </div>
+      </div>` : ""}
+
       <!-- SUCCESS RATE BAR -->
       ${totalUploaded > 0 ? `
       <div class="dash-section">
         <div class="dash-section-header">
-          <div class="dash-section-title"><span style="color:var(--success)">📊</span> ${t("results.upload_success_rate")}</div>
+          <div class="dash-section-title"><span style="color:var(--success)">📊</span> ${successRateTitle}</div>
           <div style="font-size:var(--type-metric-sm);font-weight:var(--weight-bold);color:${successRate === 100 ? "var(--success)" : successRate >= 70 ? "var(--warning)" : "var(--danger)"}">${successRate}%</div>
         </div>
         <div class="dash-section-body">
@@ -1193,7 +1342,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
             <div style="height:100%;width:${successRate}%;background:${successRate === 100 ? "var(--success)" : successRate >= 70 ? "var(--warning)" : "var(--danger)"};border-radius:var(--radius-xs);transition:width 0.8s ease"></div>
           </div>
           <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:var(--type-label);color:var(--text2)">
-            <span>${(()=>{const fn=t("results.succeeded");return typeof fn==="function"?fn(totalNew):fn;})()}</span>
+            <span>${successCountText}</span>
             <span>${(()=>{const fn=t("results.total_attempted");return typeof fn==="function"?fn(totalUploaded):fn;})()}</span>
             ${hasFailed ? `<span style="color:var(--danger)">❌ ${failedOrders.count} ${t("results.failed")}</span>` : ""}
           </div>
@@ -1257,7 +1406,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           </div>` : `
           <div class="dash-section">
             <div class="dash-section-header">
-              <div class="dash-section-title"><span style="color:var(--success)">✅</span> ${t("results.uploaded_orders_title")}</div>
+              <div class="dash-section-title"><span style="color:var(--success)">✅</span> ${uploadedOrdersTitle}</div>
               <div style="font-size:var(--type-caption);color:var(--text2)">${t("run.click_cells_copy")}</div>
             </div>
             <div class="dash-section-body no-pad" style="overflow-x:auto">

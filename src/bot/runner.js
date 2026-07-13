@@ -9,7 +9,7 @@ const {
   installUnexpectedBlankPageGuard,
   launchPersistentChromeContext,
 } = require("./chrome-launch");
-const { formatPhone } = require("./phone");
+const { formatPhone, normalizePhone } = require("./phone");
 const { resolveSafeTaagerExportRange } = require("./taager-date-range");
 const {
   normalizeTaagerCountry,
@@ -4196,6 +4196,224 @@ async function phase5_uploadToTaager(page, orders, outputOptions = {}) {
   }
 }
 
+function cartVerificationKey(order) {
+  const phone = normalizePhone(order?.normPhone || order?.phone || "", TAAGER_COUNTRY);
+  const sku = String(order?.sku || "").trim();
+  return phone && sku ? `${phone}|${sku}` : "";
+}
+
+function taagerSnapshotCountsFromBuffer(buffer, dateFrom, dateTo) {
+  const rows = parser().parseFullMonthSnapshot(buffer, {
+    dateFrom: formatDataDay(dateFrom),
+    dateTo: formatDataDay(dateTo),
+    taagerCountry: TAAGER_COUNTRY,
+  });
+  const counts = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const phone = normalizePhone(row.phone1 || row.phone || "", TAAGER_COUNTRY);
+    const sku = String(row.sku || row.products || "").trim();
+    if (!phone || !sku) continue;
+    const key = `${phone}|${sku}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return counts;
+}
+
+function splitOrdersByVerificationDelta(orders, beforeCounts, afterCounts) {
+  const available = new Map();
+  for (const [key, afterCount] of afterCounts.entries()) {
+    const delta = Number(afterCount || 0) - Number(beforeCounts.get(key) || 0);
+    if (delta > 0) available.set(key, delta);
+  }
+
+  const confirmed = [];
+  const unconfirmed = [];
+  for (const order of Array.isArray(orders) ? orders : []) {
+    const key = cartVerificationKey(order);
+    const remaining = key ? Number(available.get(key) || 0) : 0;
+    if (remaining > 0) {
+      confirmed.push(order);
+      available.set(key, remaining - 1);
+    } else {
+      unconfirmed.push(order);
+    }
+  }
+  return { confirmed, unconfirmed };
+}
+
+async function exportTaagerCartVerificationSnapshot(page, exportFromDate, exportToDate, cycle, label) {
+  const dateLabel = `${formatDataDay(exportFromDate)} -> ${formatDataDay(exportToDate)}`;
+  const maxAttempts = Math.max(1, Number(config.cartVerificationExportAttempts || 3) || 3);
+  let lastError = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      log(`Taager cart verification ${label}: exporting orders (${dateLabel}) after cycle ${cycle} (attempt ${attempt}/${maxAttempts})`);
+      emitStage("taager.cart.verify.export", "started", `Exporting Taager orders to verify cycle ${cycle} (${attempt}/${maxAttempts})`, {
+        cycle,
+        attempt,
+        maxAttempts,
+        dateFrom: formatDataDay(exportFromDate),
+        dateTo: formatDataDay(exportToDate),
+      });
+      const buffer = await createRunnerTaagerOrdersExportFlow().exportOrders(page, exportFromDate, exportToDate);
+      const counts = taagerSnapshotCountsFromBuffer(buffer, exportFromDate, exportToDate);
+      log(`Taager cart verification ${label}: export has ${counts.size} phone+SKU keys`);
+      emitStage("taager.cart.verify.export", "ok", `Verification export downloaded ${buffer.length} bytes`, {
+        cycle,
+        attempt,
+        bytes: buffer.length,
+        keys: counts.size,
+      });
+      return { buffer, counts };
+    } catch (error) {
+      lastError = error;
+      const message = error && error.message ? error.message : String(error || "unknown export error");
+      log(`Taager cart verification ${label}: export attempt ${attempt}/${maxAttempts} failed: ${message}`);
+      emitStage("taager.cart.verify.export", attempt >= maxAttempts ? "failed" : "retry", message, {
+        cycle,
+        attempt,
+        maxAttempts,
+      });
+      if (attempt < maxAttempts) await page.waitForTimeout(8000).catch(() => {});
+    }
+  }
+  throw new Error(`Taager cart verification export failed after ${maxAttempts} attempts: ${lastError ? lastError.message : "unknown error"}`);
+}
+
+async function phase5_uploadToTaagerVerified(page, orders, outputOptions = {}, verifyOptions = {}) {
+  const list = Array.isArray(orders) ? orders : [];
+  if (list.length === 0) {
+    return { success: 0, failed: 0, successfulOrders: [], failedOrders: [], failedSource: "none", verification: { cycles: [] } };
+  }
+
+  const exportFromDate = verifyOptions.exportFromDate;
+  const exportToDate = verifyOptions.exportToDate;
+  if (!(exportFromDate instanceof Date) || !(exportToDate instanceof Date)) {
+    log("Taager cart verification skipped: export date range is unavailable; falling back to upload result only.");
+    return phase5_uploadToTaager(page, list, outputOptions);
+  }
+
+  const maxCycles = Math.max(1, Number(config.cartVerificationMaxCycles || verifyOptions.maxCycles || 3) || 3);
+  const label = verifyOptions.label || "cart";
+  let baselineCounts = verifyOptions.baselineBuffer
+    ? taagerSnapshotCountsFromBuffer(verifyOptions.baselineBuffer, exportFromDate, exportToDate)
+    : null;
+  if (!baselineCounts) {
+    const baseline = await exportTaagerCartVerificationSnapshot(page, exportFromDate, exportToDate, 0, `${label} baseline`);
+    baselineCounts = baseline.counts;
+  }
+
+  const confirmedAll = [];
+  const failedAll = [];
+  const cycles = [];
+  let pending = list.slice();
+
+  log("\n========================================");
+  log(`  VERIFIED TAAGER CART UPLOAD - ${label}`);
+  log(`  Target: ${list.length} orders | max cycles: ${maxCycles}`);
+  log("========================================\n");
+
+  for (let cycle = 1; cycle <= maxCycles && pending.length > 0; cycle++) {
+    log(`Taager cart verified cycle ${cycle}/${maxCycles}: submitting ${pending.length} unconfirmed orders`);
+    emitStage("taager.cart.verify.cycle", "started", `Cycle ${cycle}/${maxCycles}: submitting ${pending.length} unconfirmed orders`, {
+      cycle,
+      maxCycles,
+      pending: pending.length,
+      confirmed: confirmedAll.length,
+      failed: failedAll.length,
+    });
+
+    const uploadResult = await phase5_uploadToTaager(page, pending, outputOptions);
+    const knownFailures = (uploadResult.failedOrders || []).map((order) => ({
+      ...order,
+      error: order.error || "Taager cart upload failed",
+      verificationCycle: cycle,
+    }));
+    failedAll.push(...knownFailures);
+    const candidates = splitSuccessfulOrders(pending, knownFailures);
+    const settleMs = Math.max(0, Number(config.cartVerificationSettleMs || verifyOptions.settleMs || 10000) || 0);
+    if (settleMs > 0 && candidates.length > 0) {
+      log(`Taager cart verification ${label}: waiting ${Math.round(settleMs / 1000)}s before export so new orders can appear in Taager.`);
+      emitStage("taager.cart.verify.settle", "started", `Waiting ${Math.round(settleMs / 1000)}s before verification export`, {
+        cycle,
+        pending: candidates.length,
+      });
+      await page.waitForTimeout(settleMs);
+      emitStage("taager.cart.verify.settle", "ok", "Verification wait complete", { cycle });
+    }
+
+    const snapshot = await exportTaagerCartVerificationSnapshot(page, exportFromDate, exportToDate, cycle, label);
+    const { confirmed, unconfirmed } = splitOrdersByVerificationDelta(candidates, baselineCounts, snapshot.counts);
+    confirmedAll.push(...confirmed.map((order) => ({ ...order, verificationCycle: cycle, verifiedInTaager: true })));
+
+    cycles.push({
+      cycle,
+      submitted: pending.length,
+      knownFailed: knownFailures.length,
+      confirmed: confirmed.length,
+      unconfirmed: unconfirmed.length,
+    });
+
+    log(`Taager cart verified cycle ${cycle}/${maxCycles}: confirmed=${confirmed.length}, knownFailed=${knownFailures.length}, stillMissing=${unconfirmed.length}`);
+    emitStage(
+      "taager.cart.verify.cycle",
+      unconfirmed.length > 0 && cycle < maxCycles ? "retry" : (unconfirmed.length > 0 ? "warning" : "ok"),
+      `Cycle ${cycle}: confirmed ${confirmed.length}, failed ${knownFailures.length}, still missing ${unconfirmed.length}`,
+      {
+        cycle,
+        maxCycles,
+        submitted: pending.length,
+        confirmed: confirmed.length,
+        knownFailed: knownFailures.length,
+        unconfirmed: unconfirmed.length,
+        totalConfirmed: confirmedAll.length,
+        totalFailed: failedAll.length,
+      }
+    );
+
+    baselineCounts = snapshot.counts;
+    pending = unconfirmed;
+    if (pending.length > 0 && cycle < maxCycles) {
+      log(`Taager cart verified retry: ${pending.length} orders were not confirmed in export; retrying only those.`);
+    } else if (pending.length === 0) {
+      log(`Taager cart verified cycle ${cycle}/${maxCycles}: all submitted candidates are confirmed; no retry needed.`);
+    }
+  }
+
+  if (pending.length > 0) {
+    failedAll.push(...pending.map((order) => ({
+      ...order,
+      error: `Not confirmed in Taager export after ${maxCycles} verified upload cycle${maxCycles === 1 ? "" : "s"}`,
+      verificationUnconfirmed: true,
+    })));
+    log(`Taager cart verification stopped: ${pending.length} orders still not confirmed after ${maxCycles} cycles.`);
+  }
+
+  const failed = failedAll.length;
+  const success = confirmedAll.length;
+  log(`Taager verified cart upload final - confirmed:${success} failed:${failed} submitted:${list.length}`);
+  emitStage("taager.cart.verify.complete", failed > 0 ? "warning" : "ok", `Verified cart upload complete: ${success} confirmed, ${failed} failed/unconfirmed`, {
+    submitted: list.length,
+    success,
+    failed,
+    cycles,
+  });
+
+  return {
+    success,
+    failed,
+    successfulOrders: confirmedAll,
+    failedOrders: failedAll,
+    failedSource: failed > 0 ? "verified-export" : "verified-export",
+    verification: {
+      submitted: list.length,
+      confirmed: success,
+      failed,
+      cycles,
+    },
+  };
+}
+
 async function phase6_uploadMissingOrders(page, orders, outputOptions = {}) {
   log("\n========================================");
   log("  PHASE 6 - Upload to Taager Missing Orders");
@@ -4265,7 +4483,7 @@ async function runSecondTaagerCartWorker() {
       destination: "second-taager-cart",
       destinationAccount: "second-taager-cart",
     }));
-    log(`Second Taager cart upload-only: uploading ${uploadOrders.length} missed-source items without second-account export/dedupe.`);
+    log(`Second Taager cart verified upload: uploading ${uploadOrders.length} missed-source items with post-upload Taager export confirmation.`);
 
     if (!uploadOrders.length) {
       process.send && process.send({
@@ -4281,7 +4499,15 @@ async function runSecondTaagerCartWorker() {
       return;
     }
 
-    const uploadResult = await phase5_uploadToTaager(page, uploadOrders, provinceFallbackOptions);
+    const verifyFromDate = parseRunnerDate(config.exportDateFrom || config.dateFrom, "second cart verification from date");
+    const verifyToDate = parseRunnerDate(config.exportDateTo || config.dateTo, "second cart verification to date");
+    const baseline = await exportTaagerCartVerificationSnapshot(page, verifyFromDate, verifyToDate, 0, "second cart baseline");
+    const uploadResult = await phase5_uploadToTaagerVerified(page, uploadOrders, provinceFallbackOptions, {
+      exportFromDate: verifyFromDate,
+      exportToDate: verifyToDate,
+      baselineBuffer: baseline.buffer,
+      label: "second cart",
+    });
     process.send && process.send({
       type: "result",
       data: {
@@ -4618,6 +4844,7 @@ if (config.mode === "second-taager-cart-upload") {
       parseRealOrders,
       parseMissedOrders,
       buildProductCatalog,
+      buildTaagerProductCatalog,
       resolveMissedOrders,
       mergeAndDeduplicate,
     } = parser();
@@ -4632,8 +4859,9 @@ if (config.mode === "second-taager-cart-upload") {
     const { orders: missedOrders, skippedOrders: phoneFailedOrders } =
       parseMissedOrders(missedBuffer, dateFrom, dateTo);
     const catalog         = buildProductCatalog(realOrders);
+    const taagerCatalog   = buildTaagerProductCatalog(taagerBuffer);
     const { resolved: resolvedMissedAll, skippedOrders: catalogFailedOrders } =
-      resolveMissedOrders(missedOrders, catalog);
+      resolveMissedOrders(missedOrders, catalog, taagerCatalog);
     let missedOrdersDestination = normalizeMissedOrdersDestination(config.missedOrdersDestination, {
       legacyEnabled: config.missingOrdersUploadEnabled === true,
     });
@@ -4720,9 +4948,12 @@ if (config.mode === "second-taager-cart-upload") {
     const preparedMissingOrdersBuffer = destinationSplit.legacyMissingOrders.length > 0
       ? buildMissingOrdersExcel(destinationSplit.legacyMissingOrders, provinceFallbackOptions)
       : null;
+    const todayForCartVerification = parseDate(formatDataDay(new Date()));
+    const cartVerificationEndDate = todayForCartVerification > taagerEndDate ? todayForCartVerification : taagerEndDate;
+    const cartVerificationBaselineBuffer = cartVerificationEndDate > taagerEndDate ? null : taagerBuffer;
     log(`Prepared upload files: cart items=${destinationSplit.primaryCartOrders.length}, legacy-missing-order items=${destinationSplit.legacyMissingOrders.length}, second-cart items=${destinationSplit.secondTaagerCartOrders.length}`);
     if (secondTaagerCartEnabled && destinationSplit.secondTaagerCartOrders.length > 0) {
-      log(`Second Taager cart upload-only: ${destinationSplit.secondTaagerCartOrders.length} missed-source items will go to the second cart without second-account export/check.`);
+      log(`Second Taager cart verified upload: ${destinationSplit.secondTaagerCartOrders.length} missed-source items will go to the second cart and be confirmed by export after upload.`);
     }
 
     // ── Send preview to dashboard before starting upload ──
@@ -4771,6 +5002,7 @@ if (config.mode === "second-taager-cart-upload") {
     const successful = [];
     const failures = [];
     let cartFailureSource = "none";
+    let primaryCartVerification = null;
     let secondCartResult = null;
 
     log(`Destination split: cart=${primaryCartOrders.length} legacy-missing-orders=${legacyMissingOrders.length} second-taager-cart=${secondTaagerCartOrders.length}`);
@@ -4782,7 +5014,13 @@ if (config.mode === "second-taager-cart-upload") {
     }
     if (primaryCartOrders.length > 0) {
       try {
-        const cartResult = await phase5_uploadToTaager(page, primaryCartOrders, provinceFallbackOptions);
+        const cartResult = await phase5_uploadToTaagerVerified(page, primaryCartOrders, provinceFallbackOptions, {
+          exportFromDate: taagerStartDate,
+          exportToDate: cartVerificationEndDate,
+          baselineBuffer: cartVerificationBaselineBuffer,
+          label: "primary cart",
+        });
+        primaryCartVerification = cartResult.verification || null;
         successful.push(...(cartResult.successfulOrders || splitSuccessfulOrders(primaryCartOrders, cartResult.failedOrders || []))
           .map((order) => ({ ...order, destination: "cart" })));
         failures.push(...(cartResult.failedOrders || []).map((order) => ({ ...order, destination: "cart" })));
@@ -4821,7 +5059,7 @@ if (config.mode === "second-taager-cart-upload") {
 
     if (secondTaagerCartOrders.length > 0) {
       try {
-        secondCartResult = await runSecondTaagerCartUpload(secondTaagerCartOrders, formatDataDay(taagerStartDate), formatDataDay(taagerEndDate), provinceFallbackOptions);
+        secondCartResult = await runSecondTaagerCartUpload(secondTaagerCartOrders, formatDataDay(taagerStartDate), formatDataDay(cartVerificationEndDate), provinceFallbackOptions);
         successful.push(...(secondCartResult.successfulOrders || []));
         failures.push(...(secondCartResult.failedOrders || []));
       } catch (error) {
@@ -4839,11 +5077,13 @@ if (config.mode === "second-taager-cart-upload") {
       failed: failures.length,
       successfulOrders: successful,
       failedOrders: failures,
+      cartVerification: primaryCartVerification,
       secondTaagerCartUpload: secondCartResult ? {
         attempted: secondTaagerCartOrders.length,
         success: secondCartResult.success || 0,
         failed: secondCartResult.failed || 0,
         status: (secondCartResult.failed || 0) > 0 ? "warning" : "ok",
+        verification: secondCartResult.verification || null,
       } : {
         attempted: secondTaagerCartOrders.length,
         success: 0,
@@ -4956,6 +5196,7 @@ if (config.mode === "second-taager-cart-upload") {
         orderRows: successfulOrders.map(buildResultOrderRow),
         attemptedOrderRows: orders.map(buildResultOrderRow),
         missingOrdersUpload,
+        cartVerification: uploadResults.cartVerification || null,
         secondTaagerCartUpload: uploadResults.secondTaagerCartUpload || null,
         failedOrders: {
           count: uploadResults.failed,
