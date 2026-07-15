@@ -286,7 +286,7 @@ function buildProducts(orderRows, reportingCurrency, egpRate, orderCurrency, rat
     delete clean.seen;
     clean.ndrPct = clean.orders ? round(clean.delivered / clean.orders * 100, 1) : 0;
     clean.cancelPct = clean.statusTotalCount ? round(clean.cancelStatusCount / clean.statusTotalCount * 100, 1) : 0;
-    clean.avgDeliveredProfit = clean.delivered ? round(clean.profit / clean.delivered) : 0;
+    clean.avgDeliveredProfit = clean.delivered ? round(clean.profit / clean.delivered, 2) : 0;
     clean.breakEvenCpa = round(clean.avgDeliveredProfit * clean.ndrPct / 100);
     clean.topCities = Object.values(clean.cities).map((city) => ({
       ...city,
@@ -301,15 +301,22 @@ function normalizeProducts(productRows, reportingCurrency, egpRate, orderCurrenc
   return (Array.isArray(productRows) ? productRows : []).map((row) => {
     const sourceCurrency = currency(row.currency || orderCurrency || reportingCurrency);
     const profit = round(convert(row.commission ?? row.taagerProfit ?? row.profit ?? 0, sourceCurrency, reportingCurrency, egpRate, ratesOverride));
+    const actualProfit = round(convert(row.actualCommission ?? row.actualEarnedProfitAfterTax ?? row.earnedProfitAfterTax ?? row.earnedCommission ?? row.commission ?? row.taagerProfit ?? row.profit ?? 0, sourceCurrency, reportingCurrency, egpRate, ratesOverride));
     const deliveredSales = round(convert(row.deliveredSales ?? row.sales ?? 0, sourceCurrency, reportingCurrency, egpRate, ratesOverride));
     const totalSales = round(convert(row.totalSales ?? row.revenue ?? row.sales ?? row.deliveredSales ?? 0, sourceCurrency, reportingCurrency, egpRate, ratesOverride));
     const orders = number(row.netOrderCount ?? row.orders ?? row.placedCount);
     const totalOrderCount = number(row.totalOrderCount ?? row.rawTotalOrders ?? orders);
     const delivered = number(row.deliveredCount ?? row.units ?? row.delivered);
+    const actualDelivered = number(row.actualDeliveredCount ?? row.actualDeliveredOrders ?? delivered);
     const ndrPct = number(row.ndrPct ?? row.deliveryRate ?? row.deliveryPct);
     const netOrderProfit = round(convert(row.netOrderProfitAfterTax ?? row.totalPlacedCommission ?? 0, sourceCurrency, reportingCurrency, egpRate, ratesOverride));
-    const averageProfitSource = delivered > 0 ? "delivered_orders" : (orders > 0 ? "net_orders_fallback" : "unavailable");
-    const avgDeliveredProfit = delivered ? round(profit / delivered) : (orders ? round(netOrderProfit / orders) : 0);
+    const averageProfitSource = row.averageProfitSource || (actualDelivered > 0 ? "delivered_orders" : (orders > 0 && (row.netOrderProfitAfterTax != null || row.totalPlacedCommission != null) ? "net_orders_fallback" : "unavailable"));
+    const explicitAverageProfit = row.averageProfit != null
+      ? round(convert(row.averageProfit, sourceCurrency, reportingCurrency, egpRate, ratesOverride), 2)
+      : null;
+    const avgDeliveredProfit = explicitAverageProfit != null
+      ? explicitAverageProfit
+      : (actualDelivered > 0 ? round(actualProfit / actualDelivered, 2) : (averageProfitSource === "net_orders_fallback" ? round(netOrderProfit / orders, 2) : 0));
     return {
       id: text(row.key || row.id || productKey(row, row.accountId || row.dashboardAccountId)).toLowerCase(),
       accountId: text(row.accountId || row.dashboardAccountId),
@@ -320,8 +327,10 @@ function normalizeProducts(productRows, reportingCurrency, egpRate, orderCurrenc
       netOrderCount: orders,
       totalOrderCount,
       delivered,
+      actualDeliveredCount: actualDelivered,
       canceled: number(row.canceledCount || row.canceled),
       profit,
+      actualCommission: actualProfit,
       netOrderProfitAfterTax: netOrderProfit,
       averageProfitSource,
       totalSales,
@@ -450,8 +459,10 @@ function buildCampaignIntelligence(input) {
         id: product.id, accountId: product.accountId, country: product.country, currency: reportingCurrency,
         product: product.product, sku: product.sku, spend: 0, campaignCount: 0, impressions: 0, clicks: 0, landingPageViews: 0, contentViews: 0, trafficViews: 0, trafficViewAvailable: false,
         taagerOrders: product.orders, taagerDelivered: product.delivered, taagerNdrPct: product.ndrPct,
+        actualDeliveredCount: product.actualDeliveredCount,
         netOrderCount: product.netOrderCount, totalOrderCount: product.totalOrderCount,
         cancelPct: product.cancelPct, taagerProfit: product.profit,
+        actualCommission: product.actualCommission,
         netOrderProfitAfterTax: product.netOrderProfitAfterTax,
         averageProfitSource: product.averageProfitSource,
         totalSales: product.totalSales,
@@ -475,8 +486,8 @@ function buildCampaignIntelligence(input) {
     const financials = financialApi.calculate({
       mode: "actual",
       netOrders: group.taagerOrders,
-      actualDeliveredOrders: group.taagerDelivered,
-      actualEarnedProfitAfterTax: group.taagerProfit,
+      actualDeliveredOrders: group.actualDeliveredCount,
+      actualEarnedProfitAfterTax: group.actualCommission,
       netOrderProfitAfterTax: group.netOrderProfitAfterTax,
       actualDeliveredSales: group.deliveredSales,
       currentTotalSales: group.totalSales,
@@ -499,7 +510,7 @@ function buildCampaignIntelligence(input) {
       spend: round(group.spend),
       taagerCpa: round(taagerCpa),
       deliveredCpa: round(deliveredCpa),
-      avgDeliveredProfit: round(avgDeliveredProfit),
+      avgDeliveredProfit: round(avgDeliveredProfit, 2),
       averageProfitSource: financials.averageProfitSource,
       trafficViews: round(trafficViews, 0),
       conversionRateAvailable: trafficViews > 0,

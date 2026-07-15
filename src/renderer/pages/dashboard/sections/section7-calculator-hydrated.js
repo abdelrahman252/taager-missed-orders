@@ -186,10 +186,13 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
   var isExpectedRateMode = window.isExpectedNdrMode && window.isExpectedNdrMode();
 
   if (isExpectedRateMode) {
-    var globalExpectedNdrRate = Number.isFinite(Number(d.ndrPctExact))
+    var hasExplicitExpectedNdrRate = d.expectedNdrRate != null && Number.isFinite(Number(d.expectedNdrRate));
+    var globalExpectedNdrRate = hasExplicitExpectedNdrRate
+      ? Number(d.expectedNdrRate) * 100
+      : Number.isFinite(Number(d.ndrPctExact))
       ? Number(d.ndrPctExact)
       : 35;
-    if (!Number.isFinite(Number(d.ndrPctExact)) && ctx && ctx.data && ctx.data.overview) {
+    if (!hasExplicitExpectedNdrRate && !Number.isFinite(Number(d.ndrPctExact)) && ctx && ctx.data && ctx.data.overview) {
       if (ctx.data.overview.deliveryRate != null) {
         globalExpectedNdrRate = Number(ctx.data.overview.deliveryRate);
       } else if (ctx.data.overview.ndrRate && ctx.data.overview.ndrRate.value != null) {
@@ -200,7 +203,9 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
   }
 
   var realExpectedDvl =
-    !isExpectedRateMode &&
+    isExpectedRateMode && d.expectedDeliveriesDisplay != null
+      ? Number(d.expectedDeliveriesDisplay || 0)
+      : !isExpectedRateMode &&
     (d.actualDeliveredCount != null || d.deliveredCount != null)
       ? Number(d.actualDeliveredCount != null ? d.actualDeliveredCount : d.deliveredCount || 0)
       : Math.round((realNdrPct / 100) * realTotalOrders);
@@ -1895,7 +1900,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     if (c.commRequired !== null) {
       rows += _beRow(
         s7Txt("Average Profit", "متوسط الربح"),
-        sfeFmt(s.avgCommission),
+        sfeFmt(s.avgCommission, 2),
         sfeFmt(Math.ceil(c.commRequired)),
         "+" + sfeFmt(Math.ceil(c.commRequired - s.avgCommission)),
       );
@@ -2594,6 +2599,13 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       ".s7-input-num::-webkit-inner-spin-button,.s7-input-num::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}" +
       ".s7-input-num{-moz-appearance:textfield}" +
       ".s7-input-num::placeholder{color:rgba(255,255,255,0.25);font-weight:var(--weight-medium);font-style:italic;font-size:var(--type-component-title);font-family:var(--font-ui)}" +
+      '[data-theme="light"] .s7-input-wrap{background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%) !important;border-color:#cbd5e1 !important;box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 10px 24px rgba(15,23,42,.07) !important}' +
+      '[data-theme="light"] .s7-input-wrap:hover{border-color:#93c5fd !important;box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 12px 28px rgba(59,130,246,.1) !important}' +
+      '[data-theme="light"] .s7-input-wrap:focus-within{background:#ffffff !important;border-color:#3b82f6 !important;box-shadow:0 0 0 3px rgba(59,130,246,.14),0 12px 28px rgba(59,130,246,.12) !important}' +
+      '[data-theme="light"] .s7-lbl{color:#64748b !important}' +
+      '[data-theme="light"] .s7-input-wrap:focus-within .s7-lbl{color:#2563eb !important}' +
+      '[data-theme="light"] .s7-input-num{color:#0f172a !important}' +
+      '[data-theme="light"] .s7-input-num::placeholder{color:#64748b !important;opacity:1 !important}' +
       ".s7-rate-note,.sfe-global-rate-note{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.18);border-radius:var(--dash-radius-md);padding:11px 13px;display:flex;flex-direction:column;gap:4px;color:rgba(255,255,255,.68);font-size:var(--type-caption);font-weight:var(--weight-semibold);line-height:1.55}" +
       ".s7-rate-note strong,.sfe-global-rate-note strong{color:#93c5fd;font-size:var(--type-label);font-weight:var(--weight-semibold)}" +
       ".s7-currency-badge{display:inline-flex;align-items:center;justify-content:center;padding:6px 12px;border-radius:var(--radius-pill);font-size:var(--type-label);font-weight:var(--weight-semibold);letter-spacing:0.05em;text-transform:uppercase;transition:all 0.4s cubic-bezier(0.34,1.56,0.64,1);border:1px solid rgba(255,255,255,0.1);box-shadow:0 4px 12px rgba(0,0,0,0.3),inset 0 1px 1px rgba(255,255,255,0.1);white-space:nowrap;cursor:default;user-select:none}" +

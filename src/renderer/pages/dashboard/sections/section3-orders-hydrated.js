@@ -1345,7 +1345,11 @@ window.renderSection3HydratedEntry = function (mountEl, data, ctx) {
       .replace(/stroke="currentColor"/g, 'stroke="' + activeStage.color + '"')
       .replace(/fill="currentColor"/g, 'fill="' + activeStage.color + '"');
 
-    var dlSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+    var isLightTheme = document.documentElement.getAttribute('data-theme') === 'light';
+    var exportBtnBorder = isLightTheme ? 'rgba(100,116,139,0.24)' : 'rgba(255,255,255,0.10)';
+    var exportBtnBg = isLightTheme ? '#f8fafc' : 'rgba(255,255,255,0.05)';
+    var exportBtnColor = isLightTheme ? '#334155' : 'rgba(255,255,255,0.8)';
+    var dlSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
 
     container.innerHTML = '<div class="fade-up s3-details-panel" style="animation-delay:100ms;background:var(--dash-surface);border:1px solid ' + activeStage.color + '55;border-radius:var(--dash-radius-xl);padding:28px;margin-bottom:24px;display:flex;flex-direction:' + rowDir + ';gap:28px;align-items:center;box-shadow:0 0 28px ' + activeStage.color + '1c,inset 0 0 40px ' + activeStage.color + '06;">' +
       /* Left: icon + title */
@@ -1362,7 +1366,7 @@ window.renderSection3HydratedEntry = function (mountEl, data, ctx) {
             '<span style="padding:4px 12px;border-radius:var(--radius-pill);font-size:var(--type-caption);font-weight:var(--weight-semibold);background:' + activeStage.color + '22;border:1px solid ' + activeStage.color + '66;color:' + activeStage.color + ';font-variant-numeric:tabular-nums;">' + formatReadableNumber(stageOrders.length, 0) + ' ' + orderUnitLabel(stageOrders.length) + '</span>' +
           '</div>' +
           '<div style="font-size:var(--type-label);color:var(--dash-text-faint);margin-bottom:10px;line-height:1.5;">' + stageDescription(activeStageId) + '</div>' +
-          '<button id="s3-export-btn" style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:var(--dash-radius-sm);border:1px solid rgba(255,255,255,0.10);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.8);font-size:var(--type-label);font-weight:var(--weight-semibold);cursor:pointer;font-family:inherit;flex-direction:' + rowDir + ';margin-' + (isRtl ? 'right' : 'left') + ':auto;">' +
+          '<button id="s3-export-btn" style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:var(--dash-radius-sm);border:1px solid ' + exportBtnBorder + ';background:' + exportBtnBg + ';color:' + exportBtnColor + ';font-size:var(--type-label);font-weight:var(--weight-semibold);cursor:pointer;font-family:inherit;flex-direction:' + rowDir + ';margin-' + (isRtl ? 'right' : 'left') + ':auto;">' +
             dlSvg + '<span>' + tx('تصدير البيانات') + '</span>' +
           '</button>' +
         '</div>' +

@@ -996,6 +996,7 @@ function createDashboardQueryService(options) {
             key, legacyKey: sku || name, sku, name, country,
             totalOrderCount: 0, netOrderCount: 0, deliveredCount: 0, totalPieces: 0, commission: 0, revenue: 0,
             netOrderProfitAfterTax: 0,
+            firstOrderCreatedAt: "",
             calculatorDeliveredCount: 0, calculatorEarnedProfitAfterTax: 0,
             statusTotalCount: 0, confirmationStatusCount: 0, cancelStatusCount: 0, pendingStatusCount: 0,
             failedCount: 0, canceledCount: 0, confirmedCount: 0, shippingCount: 0,
@@ -1026,6 +1027,10 @@ function createDashboardQueryService(options) {
           if (bucket !== "canceled_by_you") {
             product.netOrderCount += 1;
             product.netOrderProfitAfterTax += rowProfit(row);
+            const createdKey = dateKey(row.createdAt || row.date || row.dashboardDate);
+            if (createdKey && (!product.firstOrderCreatedAt || createdKey < product.firstOrderCreatedAt)) {
+              product.firstOrderCreatedAt = createdKey;
+            }
             product.statusTotalCount += 1;
             const group = productStatusGroup(bucket);
             if (group === "confirmation") product.confirmationStatusCount += 1;
@@ -1099,11 +1104,22 @@ function createDashboardQueryService(options) {
       let globalNdrDelivered = 0;
       let globalNdrBase = 0;
       let globalDrBase = 0;
+      let expectedNdrRateSource = isExpected ? "selected_cohort" : "actual";
+      let expectedNdrFallbackUsed = false;
       if (isExpected) {
         const hasNdrPeriod = !!(ndrFrom && ndrTo);
         globalNdrDelivered = hasNdrPeriod ? globalNdrDeliveredOrderKeys.size : globalDeliveredOrderKeys.size;
         globalNdrBase = hasNdrPeriod ? globalNdrOrderKeys.size : globalNetOrderKeys.size;
         globalDrBase = hasNdrPeriod ? globalNdrConfirmedOrderKeys.size : globalConfirmedOrderKeys.size;
+        if (hasNdrPeriod && globalNdrBase <= 0 && globalNetOrderKeys.size > 0 && globalDeliveredOrderKeys.size > 0) {
+          expectedNdrFallbackUsed = true;
+          expectedNdrRateSource = "actual_period_fallback";
+          globalNdrDelivered = globalDeliveredOrderKeys.size;
+          globalNdrBase = globalNetOrderKeys.size;
+          globalDrBase = globalConfirmedOrderKeys.size;
+        } else if (globalNdrBase <= 0) {
+          expectedNdrRateSource = "insufficient_history";
+        }
         if (globalNdrBase > 0) {
           globalExpectedNdrRate = globalNdrDelivered / globalNdrBase;
         }
@@ -1132,9 +1148,10 @@ function createDashboardQueryService(options) {
         // Bug B fix: use ndr-cohort counts when an ndrPeriod was provided,
         // otherwise fall back to totalOrders (matching original behaviour).
         const hasNdrPeriod = !!(ndrFrom && ndrTo);
-        const productNdrBase = isExpected && hasNdrPeriod ? product.ndrBaseCount : product.netOrderCount;
-        const productDrBase = isExpected && hasNdrPeriod ? product.ndrConfirmedCount : confirmationBase;
-        const productNdrDelivered = isExpected && hasNdrPeriod ? product.ndrDeliveredCount : product.deliveredCount;
+        const useSelectedCohort = isExpected && hasNdrPeriod && !expectedNdrFallbackUsed;
+        const productNdrBase = useSelectedCohort ? product.ndrBaseCount : product.netOrderCount;
+        const productDrBase = useSelectedCohort ? product.ndrConfirmedCount : confirmationBase;
+        const productNdrDelivered = useSelectedCohort ? product.ndrDeliveredCount : product.deliveredCount;
         const usesGlobalNdrFallback = isExpected && productNdrBase <= 0;
         const usesGlobalDrFallback = isExpected && productDrBase <= 0;
         const ndrBase = usesGlobalNdrFallback ? globalNdrBase : productNdrBase;
@@ -1196,7 +1213,9 @@ function createDashboardQueryService(options) {
           drBaseOrders: drBase,
           drDeliveredOrders: drDelivered,
           rateMode: isExpected ? "historical_cohort" : "actual",
-          rateSource: productNdrBase <= 0 && globalNdrBase <= 0 ? "insufficient_history" : (usesGlobalNdrFallback || usesGlobalDrFallback ? "global_fallback" : "product"),
+          rateSource: productNdrBase <= 0 && globalNdrBase <= 0 ? "insufficient_history" : (expectedNdrFallbackUsed ? expectedNdrRateSource : (usesGlobalNdrFallback || usesGlobalDrFallback ? "global_fallback" : "product")),
+          expectedNdrRateSource,
+          expectedNdrFallbackUsed,
           insufficientHistory: isExpected && productNdrBase <= 0 && globalNdrBase <= 0,
           netOrderCount: product.netOrderCount,
           confirmationPct: statusRates.confirmationPct,
@@ -1936,17 +1955,34 @@ function createDashboardQueryService(options) {
 
       const visibleGlobalCityNdrBase = Object.values(cityStats).reduce((sum, stat) => sum + number(stat.ndrBaseOrders), 0);
       const visibleGlobalCityNdrDelivered = Object.values(cityStats).reduce((sum, stat) => sum + number(stat.ndrDeliveredOrders), 0);
-      const globalCityNdrBase = ndrRows.length ? globalCityNdrOrderKeys.size : visibleGlobalCityNdrBase;
-      const globalCityNdrDelivered = ndrRows.length ? globalCityNdrDeliveredOrderKeys.size : visibleGlobalCityNdrDelivered;
+      const visibleGlobalCityOrderBase = Object.values(cityStats).reduce((sum, stat) => sum + number(stat.count), 0);
+      const visibleGlobalCityDeliveredActual = Object.values(cityStats).reduce((sum, stat) => sum + number(stat.deliveredOrders), 0);
+      let globalCityNdrBase = ndrRows.length ? globalCityNdrOrderKeys.size : visibleGlobalCityNdrBase;
+      let globalCityNdrDelivered = ndrRows.length ? globalCityNdrDeliveredOrderKeys.size : visibleGlobalCityNdrDelivered;
+      let cityExpectedNdrFallbackUsed = false;
+      let cityExpectedNdrRateSource = citiesExpectedMode ? "selected_cohort" : "actual";
+      if (citiesExpectedMode && globalCityNdrBase <= 0 && visibleGlobalCityOrderBase > 0 && visibleGlobalCityDeliveredActual > 0) {
+        cityExpectedNdrFallbackUsed = true;
+        cityExpectedNdrRateSource = "actual_period_fallback";
+        globalCityNdrBase = visibleGlobalCityOrderBase;
+        globalCityNdrDelivered = visibleGlobalCityDeliveredActual;
+      } else if (citiesExpectedMode && globalCityNdrBase <= 0) {
+        cityExpectedNdrRateSource = "insufficient_history";
+      }
       const sortedCities = Object.keys(cityStats).map((keyName) => {
         const stat = cityStats[keyName];
         delete stat._seenKeys;
 
         const rateResolution = citiesExpectedMode
-          ? financialCore.resolveExpectedRate(stat.ndrDeliveredOrders, stat.ndrBaseOrders, globalCityNdrDelivered, globalCityNdrBase)
+          ? financialCore.resolveExpectedRate(
+            cityExpectedNdrFallbackUsed ? stat.deliveredOrders : stat.ndrDeliveredOrders,
+            cityExpectedNdrFallbackUsed ? stat.count : stat.ndrBaseOrders,
+            globalCityNdrDelivered,
+            globalCityNdrBase
+          )
           : { rate: stat.count > 0 ? stat.deliveredOrders / stat.count : 0, source: "actual", insufficientHistory: false };
-        const cityNdrBase = citiesExpectedMode ? stat.ndrBaseOrders : stat.count;
-        const cityNdrDelivered = citiesExpectedMode ? stat.ndrDeliveredOrders : stat.deliveredOrders;
+        const cityNdrBase = citiesExpectedMode && !cityExpectedNdrFallbackUsed ? stat.ndrBaseOrders : stat.count;
+        const cityNdrDelivered = citiesExpectedMode && !cityExpectedNdrFallbackUsed ? stat.ndrDeliveredOrders : stat.deliveredOrders;
         const drPctCity = stat.drBaseOrders > 0
           ? (stat.drDeliveredOrders / stat.drBaseOrders * 100)
           : 0;
@@ -2025,7 +2061,9 @@ function createDashboardQueryService(options) {
           processingCount: stat.processingCount,
           ndrPct: ndrPctCity,
           expectedNdrRate: rateResolution.rate,
-          rateSource: rateResolution.source,
+          expectedNdrRateSource: cityExpectedNdrFallbackUsed ? cityExpectedNdrRateSource : rateResolution.source,
+          expectedNdrFallbackUsed: cityExpectedNdrFallbackUsed,
+          rateSource: cityExpectedNdrFallbackUsed ? cityExpectedNdrRateSource : rateResolution.source,
           insufficientHistory: rateResolution.insufficientHistory,
           drPct: drPctCity,
           avgDeliveryDays,

@@ -211,7 +211,11 @@
     var delivered = Number(p.deliveredCount || p.units || 0);
     var actualDelivered = Number(p.actualDeliveredCount != null ? p.actualDeliveredCount : delivered);
     var ndrPct = num(p.ndrPct || p.deliveryRate || 0, 1);
-    var avgCommissionSar = actualDelivered > 0 ? actualCommission / actualDelivered : 0;
+    var avgCommissionSar = window.DashboardOrderMetrics
+      ? window.DashboardOrderMetrics.averageProfit(p)
+      : (actualDelivered > 0
+        ? actualCommission / actualDelivered
+        : (placed > 0 ? Number(p.netOrderProfitAfterTax != null ? p.netOrderProfitAfterTax : p.totalPlacedCommission || 0) / placed : 0));
     var breakEvenSar = breakEvenCpaSar(avgCommissionSar, ndrPct);
     var breakEvenInCurrency = convertCommissionFromSar(breakEvenSar, financials);
     return {

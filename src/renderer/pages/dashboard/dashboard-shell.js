@@ -28,6 +28,7 @@
     { id: 'gmvTarget',  key: 'nav.gmvTarget',  iconName: 'target'     },
     { id: 'productForecast', key: 'nav.productForecast', iconName: 'activity' },
     { id: 'prepaid',    key: 'nav.prepaid',    iconName: 'wallet'     },
+    { id: 'notifications', key: 'nav.notifications', iconName: 'bell' },
     { id: 'staticUpdate', key: 'nav.staticUpdate', iconName: 'upload' },
     { id: 'taagerAi',     key: 'nav.taagerAi',     iconName: 'diamond'    },
   ];
@@ -49,6 +50,7 @@
     gmvTarget: 'renderSectionGmvTarget',
     productForecast: 'renderSectionProductForecast',
     prepaid:    'renderSectionPrepaid',
+    notifications: 'renderSectionNotifications',
     staticUpdate: 'renderSectionStaticUpdate',
     taagerAi:     'renderSectionTaagerAi'
   };
@@ -78,6 +80,7 @@
     gmvTarget: true,
     productForecast: true,
     prepaid: true,
+    notifications: true,
     staticUpdate: true
   };
 
@@ -1577,11 +1580,17 @@
     if (handle) {
       handle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       handle.setAttribute('aria-label', tr(collapsed ? 'shell.expand' : 'shell.collapse'));
-      handle.style.left = '';
-      handle.style.right = '';
+      handle.style.insetInlineStart = '';
+      handle.style.insetInlineEnd = '';
       handle.style.top = 'auto';
       handle.style.bottom = '32px';
-      handle.style.insetInlineStart = w + 'px';
+      if (rtl) {
+        handle.style.left = 'auto';
+        handle.style.right = w + 'px';
+      } else {
+        handle.style.left = w + 'px';
+        handle.style.right = 'auto';
+      }
       handle.style.transform = 'translateX(' + (rtl ? '50%' : '-50%') + ')' +
         (collapsed ? ' rotate(180deg)' : '');
     }
@@ -2037,6 +2046,10 @@
     };
     mountEl._dashboardCurrentData = data;
     mountEl._dashboardCurrentCtx = ctx;
+    mountEl._dashboardNavigateSection = function (sectionId) {
+      var currentCtx = mountEl._dashboardCurrentCtx || ctx;
+      switchSection(mountEl, sectionId, mountEl._dashboardCurrentData || data, currentCtx);
+    };
     mountEl._dashboardPaneDataVersion = getDataVersion(data);
     mountEl._dashboardPaneScopeKey = getDashboardScopeKey(data);
 
@@ -2084,9 +2097,15 @@
       handle.setAttribute('aria-label', tr('shell.collapse'));
       handle.setAttribute('aria-expanded', 'true');
       handle.innerHTML = rtl ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>';
-      handle.style.insetInlineStart = '210px';
       handle.style.top = 'auto';
       handle.style.bottom = '32px';
+      if (rtl) {
+        handle.style.left = 'auto';
+        handle.style.right = '210px';
+      } else {
+        handle.style.left = '210px';
+        handle.style.right = 'auto';
+      }
       handle.style.transform = 'translateX(' + (rtl ? '50%' : '-50%') + ')';
       mountEl.appendChild(handle);
       handle.addEventListener('click', function () {
@@ -2107,6 +2126,11 @@
         }
       });
     }
+    window.navigateDashboardSection = function (sectionId) {
+      if (!document.body.contains(mountEl)) return false;
+      mountEl._dashboardNavigateSection(sectionId);
+      return true;
+    };
 
     var _resizeTimer;
     var _resizeObserver = window.ResizeObserver ? new ResizeObserver(_debouncedResize) : null;
@@ -2140,6 +2164,7 @@
       destroyDashboardPaneCache(mountEl);
       disconnectPaneThemeObservers(mountEl.querySelector('#dash-section-pane'));
       if (window.triggerDashboardUpdate) window.triggerDashboardUpdate = null;
+      if (window.navigateDashboardSection) window.navigateDashboardSection = null;
       closeBestNdrPanel(mountEl);
       window.removeEventListener('resize', _debouncedResize);
       clearTimeout(_resizeTimer);
@@ -2200,6 +2225,10 @@
     };
     mountEl._dashboardCurrentData = data;
     mountEl._dashboardCurrentCtx = ctx;
+    mountEl._dashboardNavigateSection = function (sectionId) {
+      var currentCtx = mountEl._dashboardCurrentCtx || ctx;
+      switchSection(mountEl, sectionId, mountEl._dashboardCurrentData || data, currentCtx);
+    };
     switchSection(mountEl, active, data, ctx);
     bindDashboardTour(mountEl, data, ctx);
     updateFirstRunGuidance(mountEl, data);

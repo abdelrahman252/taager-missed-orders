@@ -2589,6 +2589,65 @@ window.renderSetup = function (onComplete, initialStep) {
           background: var(--bg3);
           border-color: var(--accent);
         }
+        [data-theme="light"] .sv3-users-panel .sv3-settings-dock {
+          background: rgba(15, 23, 42, .06);
+          border-color: rgba(15, 23, 42, .1);
+        }
+        [data-theme="light"] .sv3-users-panel .sv3-setting-card {
+          background: linear-gradient(180deg, #ffffff, #f8fafc);
+          border-color: rgba(148, 163, 184, .42);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 8px 18px rgba(15,23,42,.05);
+        }
+        [data-theme="light"] .sv3-users-panel .sv3-setting-card::before {
+          background: linear-gradient(180deg, rgba(255,255,255,.82), transparent 56%);
+          opacity: .72;
+        }
+        [data-theme="light"] .sv3-users-panel .sv3-setting-card.is-on {
+          border-color: rgba(0, 166, 116, .42);
+          background:
+            radial-gradient(circle at 88% 0%, rgba(0, 214, 143, .14), transparent 42%),
+            linear-gradient(180deg, #ffffff, #f2fdfa);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 10px 24px rgba(0, 166, 116, .08);
+        }
+        [data-theme="light"] .sv3-users-panel .sv3-setting-card.is-on.is-accent {
+          border-color: rgba(124, 106, 247, .42);
+          background:
+            radial-gradient(circle at 88% 0%, rgba(124, 106, 247, .14), transparent 42%),
+            linear-gradient(180deg, #ffffff, #f7f6ff);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 10px 24px rgba(124, 106, 247, .08);
+        }
+        [data-theme="light"] .sv3-users-panel .sv3-setting-card.is-on.is-success {
+          border-color: rgba(0, 166, 116, .42);
+        }
+        [data-theme="light"] .sv3-users-panel .sv3-setting-card.is-on.is-warning {
+          border-color: rgba(217, 119, 6, .4);
+          background:
+            radial-gradient(circle at 88% 0%, rgba(245, 158, 11, .16), transparent 42%),
+            linear-gradient(180deg, #ffffff, #fff9ed);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 10px 24px rgba(217, 119, 6, .08);
+        }
+        [data-theme="light"] .sv3-users-panel .sv3-setting-control {
+          border-top-color: rgba(15, 23, 42, .08);
+        }
+        [data-theme="light"] .sv3-users-panel .sv3-toggle-btn:not(.is-on) {
+          background: #cbd5e1 !important;
+          border-color: rgba(100, 116, 139, .28);
+        }
+        [data-theme="light"] .sv3-users-panel .sv3-toggle-label {
+          color: #475569;
+          background: rgba(100, 116, 139, .12);
+        }
+        [data-theme="light"] .sv3-setting-help-btn {
+          color: #7c6af7;
+          background: rgba(124,106,247,.1);
+          border-color: rgba(124,106,247,.24);
+        }
+        [data-theme="light"] .sv3-setting-help-btn:hover,
+        [data-theme="light"] .sv3-setting-help-btn:focus-visible {
+          color: #4c1d95;
+          background: rgba(124,106,247,.16);
+          border-color: rgba(124,106,247,.42);
+        }
         [data-theme="light"] .sv3-run-accounts .sv3-acc-card {
           background: var(--bg);
           border-color: var(--border);

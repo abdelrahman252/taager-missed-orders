@@ -407,15 +407,27 @@
       ? product.totalOrderCount
       : (product.rawTotalOrders != null ? product.rawTotalOrders : orders)));
     var delivered = num(product && (product.deliveredCount || product.units || product.delivered));
+    var actualDelivered = num(product && (product.actualDeliveredCount != null
+      ? product.actualDeliveredCount
+      : (product.actualDeliveredOrders != null ? product.actualDeliveredOrders : delivered)));
     var sourceCurrency = String(product && product.currency || window.dashboardActiveCurrency || "SAR").toUpperCase();
     var targetCurrency = String(reportingCurrency || sourceCurrency || "SAR").toUpperCase();
     var commissionNative = num(product && product.commission, 2);
     var commission = num(convertReportingMoney(commissionNative, sourceCurrency, targetCurrency, egpRate), 2);
+    var actualCommissionNative = num(product && (product.actualCommission != null
+      ? product.actualCommission
+      : (product.actualEarnedProfitAfterTax != null ? product.actualEarnedProfitAfterTax : product.commission)), 2);
+    var actualCommission = num(convertReportingMoney(actualCommissionNative, sourceCurrency, targetCurrency, egpRate), 2);
     var netOrderProfitNative = num(product && (product.netOrderProfitAfterTax != null ? product.netOrderProfitAfterTax : product.totalPlacedCommission), 2);
     var netOrderProfit = num(convertReportingMoney(netOrderProfitNative, sourceCurrency, targetCurrency, egpRate), 2);
-    var averageProfitSource = delivered > 0 ? 'delivered_orders' : (orders > 0 ? 'net_orders_fallback' : 'unavailable');
-    var avgCommissionNative = delivered > 0 ? commissionNative / delivered : (orders > 0 ? netOrderProfitNative / orders : 0);
-    var avgCommission = delivered > 0 ? commission / delivered : (orders > 0 ? netOrderProfit / orders : 0);
+    var averageProfitSource = product && product.averageProfitSource
+      ? product.averageProfitSource
+      : (actualDelivered > 0 ? 'delivered_orders' : (orders > 0 && (product && (product.netOrderProfitAfterTax != null || product.totalPlacedCommission != null)) ? 'net_orders_fallback' : 'unavailable'));
+    var explicitAvgCommissionNative = product && product.averageProfit != null ? num(product.averageProfit, 2) : null;
+    var avgCommissionNative = explicitAvgCommissionNative != null
+      ? explicitAvgCommissionNative
+      : (actualDelivered > 0 ? actualCommissionNative / actualDelivered : (averageProfitSource === 'net_orders_fallback' ? netOrderProfitNative / orders : 0));
+    var avgCommission = num(convertReportingMoney(avgCommissionNative, sourceCurrency, targetCurrency, egpRate), 2);
     var ndr = num(product && (product.ndrPct || product.deliveryRate || product.deliveryPct));
     var dr = num(product && (product.drRate || product.deliveryPct));
     var breakEvenNative = avgCommissionNative * (ndr / 100);
@@ -436,6 +448,7 @@
       netOrderCount: orders,
       totalOrderCount: totalOrderCount,
       delivered: delivered,
+      actualDelivered: actualDelivered,
       ndrPct: num(ndr, 1),
       drPct: num(dr, 1),
       cancelPct: num(product && product.cancelPct, 1),
@@ -445,8 +458,11 @@
       totalSalesNative: totalSalesNative,
       commission: commission,
       commissionNative: commissionNative,
+      actualCommission: actualCommission,
+      actualCommissionNative: actualCommissionNative,
       netOrderProfitAfterTax: netOrderProfit,
       averageProfitSource: averageProfitSource,
+      avgDeliveredProfit: num(avgCommission, 2),
       deliveredAov: delivered > 0 ? num(deliveredSales / delivered, 2) : 0,
       breakEvenCpaSar: num(convertReportingMoney(breakEvenNative, sourceCurrency, "SAR", egpRate), 2),
       breakEvenCpaNative: num(breakEvenNative, 2),
@@ -762,6 +778,7 @@
             campaignCount: 0,
             taagerOrders: matchedProduct.orders,
             taagerDelivered: matchedProduct.delivered,
+            actualDeliveredCount: matchedProduct.actualDelivered,
             taagerNdrPct: matchedProduct.ndrPct,
             taagerDrPct: matchedProduct.drPct,
             cancelPct: matchedProduct.cancelPct,
@@ -769,6 +786,9 @@
             totalSales: matchedProduct.totalSales,
             deliveredAov: matchedProduct.deliveredAov,
             taagerProfit: matchedProduct.commission,
+            actualCommission: matchedProduct.actualCommission,
+            avgDeliveredProfit: matchedProduct.avgDeliveredProfit,
+            averageProfitSource: matchedProduct.averageProfitSource,
             breakEvenCpa: matchedProduct.breakEvenCpa,
             impressions: 0,
             clicks: 0,
@@ -796,9 +816,13 @@
     var allProductGroups = Object.keys(productGroups).map(function (key) {
       var group = productGroups[key];
       var cpa = group.taagerOrders > 0 ? group.spend / group.taagerOrders : 0;
-      var deliveredCpa = group.taagerDelivered > 0 ? group.spend / group.taagerDelivered : 0;
+      var actualDelivered = group.actualDeliveredCount != null ? group.actualDeliveredCount : group.taagerDelivered;
+      var actualCommission = group.actualCommission != null ? group.actualCommission : group.taagerProfit;
+      var deliveredCpa = actualDelivered > 0 ? group.spend / actualDelivered : 0;
       var breakEven = group.breakEvenCpa || 0;
-      var avgDeliveredProfit = group.taagerDelivered > 0 ? group.taagerProfit / group.taagerDelivered : 0;
+      var avgDeliveredProfit = group.avgDeliveredProfit != null
+        ? group.avgDeliveredProfit
+        : (actualDelivered > 0 ? actualCommission / actualDelivered : 0);
       var trafficViews = group.trafficViews;
       var netProfit = group.taagerProfit - group.spend;
       var cpaUnsafe = breakEven > 0 && cpa > breakEven;
@@ -806,7 +830,7 @@
       var decisionMetadata = window.TaagerCampaignDecision && typeof window.TaagerCampaignDecision.evaluate === "function"
         ? window.TaagerCampaignDecision.evaluate({
           orders: group.taagerOrders,
-          delivered: group.taagerDelivered,
+          delivered: actualDelivered,
           ndrPct: group.taagerNdrPct,
           cancelPct: group.cancelPct,
           cpa: cpa,

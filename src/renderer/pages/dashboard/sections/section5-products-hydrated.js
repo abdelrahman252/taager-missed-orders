@@ -876,6 +876,10 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     var value = product[field];
     if (value == null && field === 'commission') value = product.revenue;
     if (value == null && field === 'deliveredCount') value = product.deliveries;
+    if (field === 'firstOrderCreatedAt') {
+      var time = Date.parse(String(value || '').slice(0, 10));
+      return isFinite(time) ? time : 0;
+    }
     var numeric = Number(value);
     return isFinite(numeric) ? numeric : 0;
   }
@@ -1017,6 +1021,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       deliveries: deliveriesVal,
       placedCount: placedCountVal,
       totalOrderCount: totalOrderCountVal,
+      firstOrderCreatedAt: row.firstOrderCreatedAt || '',
       pieces: Number(row.totalPieces || 0),
       sharePct: 0,
       revenue: commissionVal,
@@ -1764,6 +1769,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     const displayOrderCount = p.totalOrderCount || p.statusTotalCount || p.placedCount || 0;
     const displayNetOrderCount = p.netOrderCount || p.placedCount || 0;
     const displayConfirmedCount = p.confirmationStatusCount || p.confirmedCount || 0;
+    const firstOrderCreatedAt = String(p.firstOrderCreatedAt || '').slice(0, 10);
+    const firstOrderCreatedAtText = firstOrderCreatedAt || '-';
     const placedText = productCompactNumber(displayOrderCount, 0, 10000);
     const netOrderText = productCompactNumber(displayNetOrderCount, 0, 10000);
     const confirmedText = productCompactNumber(displayConfirmedCount, 0, 10000);
@@ -1800,6 +1807,12 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       <!-- Col 2b: Net Orders (excludes canceled-by-you) -->
       <div class="s5-cell s5-cell-net-orders" style="flex:0 0 64px;min-width:64px;text-align:center;padding:0 5px">
         <div class="s5-number-fit" title="${attr(productNumber(displayNetOrderCount, 0))}" style="font-size:${compact?'15px':'17px'};font-weight:var(--weight-bold);color:#38bdf8">${netOrderText}</div>
+      </div>
+      ${DIV}
+
+      <!-- Col 2c: First net order created date -->
+      <div class="s5-cell s5-cell-first-order" title="${attr(firstOrderCreatedAt ? s5Txt('First net order created at', 'First net order created at') + ': ' + firstOrderCreatedAt : s5Txt('No net order creation date', 'No net order creation date'))}" style="flex:0 0 96px;min-width:96px;text-align:center;padding:0 5px">
+        <div class="s5-number-fit" style="font-size:${compact?'11px':'12px'};font-weight:var(--weight-bold);color:#fbbf24">${firstOrderCreatedAtText}</div>
       </div>
       ${DIV}
 
@@ -2121,6 +2134,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     { value: 'cancelPct',       label: s5Txt('Cancellation Rate', 'نسبة الإلغاء'),   icon: '❌' },
     { value: 'pendingPct',      label: s5Txt('Pending Rate', 'نسبة قيد الانتظار'), icon: '...' },
     { value: 'netOrderCount', label: s5Txt('Net Orders', 'صافي الطلبات'), icon: '📋' },
+    { value: 'firstOrderCreatedAt', label: s5Txt('First Net Order', 'First Net Order'), icon: '1st' },
     { value: 'totalPieces',     label: s5Txt('Quantity', 'القطع'), icon: 'BOX' },
     { value: 'confirmationPct', label: s5Txt('Confirmation Rate', 'نسبة التأكيد'),   icon: '☑️' },
     { value: 'failedCount',     label: p5Txt('failedOrders'), icon: '!' },
@@ -2304,6 +2318,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       <div style="width:1px"></div>
       ${colHeaderBtn(s5Txt('Net Orders', 'الطلبات الصافية'),'netOrderCount','flex:0 0 64px')}
       <div style="width:1px"></div>
+      ${colHeaderBtn(s5Txt('First Order', 'First Order'),'firstOrderCreatedAt','flex:0 0 96px')}
+      <div style="width:1px"></div>
       ${colHeaderBtn(s5Txt('Quantity', 'القطع'),'totalPieces','flex:0 0 68px')}
       <div style="width:1px"></div>
       ${colHeaderBtn(s5Txt('Confirmed', 'مؤكد'),'confirmationStatusCount','flex:0 0 64px')}
@@ -2348,7 +2364,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
   mountEl.innerHTML = `
     <style>
       .s5-root {
-        --s5-track-width: 2100px;
+        --s5-track-width: 2200px;
         --s5-row-num-size: 13px;
         --s5-row-num-size-strong: 16px;
         --s5-name-size: 13px;
@@ -2388,10 +2404,12 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       .s5-cell-identity { flex-basis:260px !important; min-width:260px !important; padding-inline:14px !important; }
       .s5-cell-orders,
       .s5-cell-net-orders,
+      .s5-cell-first-order,
       .s5-cell-confirmed-count,
       .s5-cell-shipping,
       .s5-cell-delivered-count,
       .s5-cell-failed { flex-basis:78px !important; min-width:78px !important; }
+      .s5-cell-first-order { flex-basis:96px !important; min-width:96px !important; }
       .s5-cell-pieces { flex-basis:82px !important; min-width:82px !important; }
       .s5-cell-canceled-raw { flex-basis:82px !important; min-width:82px !important; }
       .s5-cell-confirmation,
@@ -2408,10 +2426,12 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       .s5-header-cols > .s5-header-product { flex-basis:260px !important; min-width:260px !important; }
       .s5-header-cols .s5-sort-col[data-field="totalOrderCount"],
       .s5-header-cols .s5-sort-col[data-field="netOrderCount"],
+      .s5-header-cols .s5-sort-col[data-field="firstOrderCreatedAt"],
       .s5-header-cols .s5-sort-col[data-field="confirmationStatusCount"],
       .s5-header-cols .s5-sort-col[data-field="shippingCount"],
       .s5-header-cols .s5-sort-col[data-field="deliveredCount"],
       .s5-header-cols .s5-sort-col[data-field="failedCount"] { flex-basis:78px !important; min-width:78px !important; }
+      .s5-header-cols .s5-sort-col[data-field="firstOrderCreatedAt"] { flex-basis:96px !important; min-width:96px !important; }
       .s5-header-cols .s5-sort-col[data-field="totalPieces"] { flex-basis:82px !important; min-width:82px !important; }
       .s5-header-cols .s5-sort-col[data-field="canceledCount"] { flex-basis:82px !important; min-width:82px !important; }
       .s5-header-cols .s5-sort-col[data-field="confirmationPct"],

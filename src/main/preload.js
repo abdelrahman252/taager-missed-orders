@@ -129,6 +129,7 @@ contextBridge.exposeInMainWorld("api", {
   relockAccount:       (data) => monitoredInvoke("relock-account", data),
   clearAllData:        () => monitoredInvoke("clear-all-data"),
   clearResetFlag:      () => monitoredInvoke("clear-reset-flag"),
+  copyText:            (value) => monitoredInvoke("copy-text", value),
 
   // Settings
   setAutoRun:         (val)  => monitoredInvoke("set-auto-run", val),
@@ -185,6 +186,13 @@ contextBridge.exposeInMainWorld("api", {
   getDashboardSnapshotGzip: (accountId, knownRevision) => monitoredInvoke("get-dashboard-snapshot-gzip", accountId, knownRevision),
   getDashboardQueryFlags:( )                => monitoredInvoke("get-dashboard-query-flags"),
   queryDashboardData:    (payload)          => monitoredInvoke("query-dashboard-data", payload),
+  getProductAlertSettings: ()               => monitoredInvoke("get-product-alert-settings"),
+  saveProductAlertSettings: (payload)       => monitoredInvoke("save-product-alert-settings", payload),
+  previewProductAlerts: (payload)           => monitoredInvoke("preview-product-alerts", payload),
+  testProductAlertTelegram: (payload)       => monitoredInvoke("test-product-alert-telegram", payload),
+  createProductAlertTelegramConnection: ()  => monitoredInvoke("create-product-alert-telegram-connection"),
+  getProductAlertTelegramConnectionStatus: () => monitoredInvoke("get-product-alert-telegram-connection-status"),
+  runProductAlertsNow: (payload)            => monitoredInvoke("run-product-alerts-now", payload),
   exportDashboardOrdersQuery: (payload)     => monitoredInvoke("export-dashboard-orders-query", payload),
   getDashboardAutoTs:    (accountId)       => monitoredInvoke("get-dashboard-auto-ts",   accountId),
   setDashboardAutoTs:    (accountId, ts)   => monitoredInvoke("set-dashboard-auto-ts",   accountId, ts),

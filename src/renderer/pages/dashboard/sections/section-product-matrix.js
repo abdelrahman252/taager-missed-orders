@@ -182,8 +182,15 @@
       var drColor = window.dashboardRateColor ? window.dashboardRateColor(overallDr) : (overallDr >= 40 ? '#22d3ee' : overallDr >= 30 ? '#00e676' : overallDr >= 20 ? '#f59e0b' : '#ef4444');
       var activeDr = p.drRate || 0;
       var activeDrColor = window.dashboardRateColor ? window.dashboardRateColor(activeDr) : (activeDr >= 40 ? '#22d3ee' : activeDr >= 30 ? '#00e676' : activeDr >= 20 ? '#f59e0b' : '#ef4444');
-      // Taager dashboard/status/NDR migration: p.commission is Taager profit.
-      var productAvgCommission = (p.deliveredCount || 0) > 0 ? ((Number(p.commission) || 0) / p.deliveredCount) : 0;
+      var productAvgCommission = window.DashboardOrderMetrics
+        ? window.DashboardOrderMetrics.averageProfit(p)
+        : (function () {
+            var actualDelivered = Number(p.actualDeliveredCount != null ? p.actualDeliveredCount : p.deliveredCount || 0);
+            var actualCommission = Number(p.actualCommission != null ? p.actualCommission : p.commission || 0);
+            var netOrders = Number(p.netOrderCount != null ? p.netOrderCount : p.placedCount || 0);
+            var netOrderProfit = Number(p.netOrderProfitAfterTax != null ? p.netOrderProfitAfterTax : p.totalPlacedCommission || 0);
+            return actualDelivered > 0 ? actualCommission / actualDelivered : (netOrders > 0 ? netOrderProfit / netOrders : 0);
+          })();
       var productBreakEvenCpa = productAvgCommission * ((Number(p.ndrPct || p.deliveryRate || 0)) / 100);
       var drBadge = '<div style="display:flex;flex-direction:column;gap:4px;align-items:center">' +
           '<div style="font-size:var(--type-micro);font-weight:var(--weight-semibold);color:' + drColor + ';background:' + drColor + '18;padding:2px 6px;border-radius:var(--dash-radius-md);border:1px solid ' + drColor + '44">' + pctValue(overallDr) + '% <span style="opacity:0.5;font-size:var(--type-micro)">NDR</span></div>' +

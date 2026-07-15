@@ -64,6 +64,7 @@
       'nav.calculator': 'حاسبة الربح',
       'nav.gmvTarget': 'هدف المبيعات GMV',
       'nav.productForecast': 'توقع المنتجات',
+      'nav.notifications': 'التنبيهات',
       'products.failedOrders': 'طلبات فاشلة',
       'products.canceledOrders': 'ملغي بواسطتك',
       'products.failedShort': 'فاشلة',

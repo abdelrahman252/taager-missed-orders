@@ -3522,6 +3522,95 @@ button {
   fill: var(--dash-text-faint) !important;
 }
 
+/* Light-mode hardening for reused dashboard insight/recommendation card renderers. */
+[data-theme="light"] #page-dashboard .sp-rec-card,
+[data-theme="light"] #page-dashboard .sc-ins-card,
+[data-theme="light"] #page-dashboard .sfe-insight,
+[data-theme="light"] #page-dashboard .s5-insights-row > div {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.96), rgba(248,250,252,.96)) !important;
+  border-color: rgba(148,163,184,.34) !important;
+  box-shadow: 0 10px 24px rgba(15,23,42,.06), inset 0 1px 0 rgba(255,255,255,.9) !important;
+  color: var(--dash-text) !important;
+}
+
+[data-theme="light"] #page-dashboard .sfe-insight--positive {
+  background: linear-gradient(180deg, rgba(236,253,245,.96), rgba(255,255,255,.96)) !important;
+  border-color: rgba(16,185,129,.24) !important;
+}
+
+[data-theme="light"] #page-dashboard .sfe-insight--negative,
+[data-theme="light"] #page-dashboard .sfe-insight--critical {
+  background: linear-gradient(180deg, rgba(254,242,242,.96), rgba(255,255,255,.96)) !important;
+  border-color: rgba(239,68,68,.24) !important;
+}
+
+[data-theme="light"] #page-dashboard .sfe-insight--warning {
+  background: linear-gradient(180deg, rgba(255,251,235,.96), rgba(255,255,255,.96)) !important;
+  border-color: rgba(245,158,11,.26) !important;
+}
+
+[data-theme="light"] #page-dashboard .sfe-insight--info {
+  background: linear-gradient(180deg, rgba(239,246,255,.96), rgba(255,255,255,.96)) !important;
+  border-color: rgba(59,130,246,.22) !important;
+}
+
+[data-theme="light"] #page-dashboard .sp-rec-card [style*="color:rgba(255,255,255"],
+[data-theme="light"] #page-dashboard .sp-rec-card [style*="color: rgba(255,255,255"],
+[data-theme="light"] #page-dashboard .sc-ins-card [style*="color:rgba(255,255,255"],
+[data-theme="light"] #page-dashboard .sc-ins-card [style*="color: rgba(255,255,255"],
+[data-theme="light"] #page-dashboard .s5-insights-row [style*="color:#fff"],
+[data-theme="light"] #page-dashboard .s5-insights-row [style*="color: #fff"] {
+  color: var(--dash-text-muted) !important;
+}
+
+[data-theme="light"] #page-dashboard .sp-rec-card [style*="font-weight:var(--weight-bold)"][style*="color:rgba(255,255,255"],
+[data-theme="light"] #page-dashboard .sc-ins-card [style*="font-weight:var(--weight-bold)"][style*="color:rgba(255,255,255"],
+[data-theme="light"] #page-dashboard .s5-insights-row [data-insight-value] {
+  color: var(--dash-text) !important;
+}
+
+[data-theme="light"] #page-dashboard .sp-rec-card [style*="background:rgba(255,255,255"],
+[data-theme="light"] #page-dashboard .sc-ins-card [style*="background:rgba(255,255,255"] {
+  background: rgba(241,245,249,.9) !important;
+  border-color: rgba(148,163,184,.24) !important;
+  color: var(--dash-text-muted) !important;
+}
+
+[data-theme="light"] #page-dashboard .sp-rec-cta,
+[data-theme="light"] #page-dashboard .sc-ins-cta {
+  background: #f8fafc !important;
+  border-color: rgba(148,163,184,.28) !important;
+  color: var(--dash-text-muted) !important;
+}
+
+[data-theme="light"] #page-dashboard #sp-recs-tabs,
+[data-theme="light"] #page-dashboard #sc-ins-tabs {
+  background: rgba(241,245,249,.8) !important;
+  border-color: rgba(148,163,184,.28) !important;
+}
+
+[data-theme="light"] #page-dashboard .sp-rec-tab-btn,
+[data-theme="light"] #page-dashboard .sc-ins-tab-btn {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--dash-text-muted) !important;
+}
+
+[data-theme="light"] #page-dashboard .sp-rec-tab-btn[style*="background:rgba(255,255,255,0.06)"],
+[data-theme="light"] #page-dashboard .sp-rec-tab-btn[style*="background: rgba(255, 255, 255, 0.06)"],
+[data-theme="light"] #page-dashboard .sc-ins-tab-btn[style*="background:rgba(255,255,255,0.06)"],
+[data-theme="light"] #page-dashboard .sc-ins-tab-btn[style*="background: rgba(255, 255, 255, 0.06)"] {
+  background: #ffffff !important;
+  border-color: rgba(148,163,184,.34) !important;
+  box-shadow: 0 2px 8px rgba(15,23,42,.08) !important;
+}
+
+[data-theme="light"] #page-dashboard .sp-rec-tab-count,
+[data-theme="light"] #page-dashboard .sc-ins-tab-count {
+  background: rgba(100,116,139,.1) !important;
+}
+
 #page-dashboard .dash-content input,
 #page-dashboard .dash-content select,
 #page-dashboard .dash-content textarea,

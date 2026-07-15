@@ -33,6 +33,7 @@
       'nav.calculator': 'Account Calculator',
       'nav.gmvTarget': 'GMV Target Planner',
       'nav.productForecast': 'Product Calculator',
+      'nav.notifications': 'Notifications',
       'products.failedOrders': 'Failed Orders',
       'products.canceledOrders': 'Canceled by you',
       'products.failedShort': 'Failed',

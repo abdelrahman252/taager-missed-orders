@@ -116,6 +116,13 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
       target[field] = (Number(target[field]) || 0) + (Number(source && source[field]) || 0);
     });
   }
+  function finiteNumber(value, fallback) {
+    var parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : (fallback == null ? 0 : fallback);
+  }
+  function displayDecimal(value, decimals) {
+    return p9PctValue(value, decimals == null ? 2 : decimals);
+  }
   function aggregateProductGroup(group, members) {
     var primaryKey = skuKey(group.primarySku);
     var primary = members.find(function (product) { return skuKey(product && product.sku) === primaryKey; }) || members[0] || {};
@@ -130,7 +137,8 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
       'drBaseOrders', 'drDeliveredOrders', 'totalPieces', 'canceledCount', 'canceledByYouCount',
       'failedCount', 'confirmedCount', 'shippingCount', 'processingCount', 'waitingCount',
       'outForDeliveryCount', 'deliverySuspendedCount', 'awaitingShipmentCount', 'pendingCount',
-      'confirmationStatusCount', 'cancelStatusCount', 'pendingStatusCount'
+      'confirmationStatusCount', 'cancelStatusCount', 'pendingStatusCount',
+      'netOrderProfitAfterTax', 'totalPlacedCommission'
     ];
     additiveFields.forEach(function (field) { combined[field] = 0; });
     members.forEach(function (member) { sumFields(combined, member, additiveFields); });
@@ -207,10 +215,21 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
     var delivered = expectedRateMode ? displayedDelivered : actDelivered;
     var realNdr   = orders > 0 ? (delivered / orders) : 0;
     var expectedDeliveriesExact = p.expectedDeliveriesExact != null ? Number(p.expectedDeliveriesExact || 0) : null;
-    var actCommission = p.actualCommission !== undefined ? p.actualCommission : (p.commission || 0);
-    var realComm = window.DashboardOrderMetrics
-      ? window.DashboardOrderMetrics.averageProfit(p)
-      : (actDelivered > 0 ? (actCommission / actDelivered) : (orders > 0 ? Number(p.netOrderProfitAfterTax || p.totalPlacedCommission || 0) / orders : 0));
+    var actCommission = finiteNumber(p.actualCommission !== undefined ? p.actualCommission : (p.commission || 0));
+    var explicitAvgProfit = p.averageProfit != null ? Number(p.averageProfit) : NaN;
+    var expectedAvgProfit = (p.expectedTotalProfitBeforeAdSpend != null && expectedDeliveriesExact > 0)
+      ? Number(p.expectedTotalProfitBeforeAdSpend) / expectedDeliveriesExact
+      : NaN;
+    var fallbackProfit = p.netOrderProfitAfterTax != null ? p.netOrderProfitAfterTax : p.totalPlacedCommission;
+    var realComm = actDelivered > 0
+      ? actCommission / actDelivered
+      : (Number.isFinite(expectedAvgProfit)
+        ? expectedAvgProfit
+        : (Number.isFinite(explicitAvgProfit)
+          ? explicitAvgProfit
+          : (window.DashboardOrderMetrics
+            ? window.DashboardOrderMetrics.averageProfit(p)
+            : (orders > 0 ? finiteNumber(fallbackProfit) / orders : 0))));
     var averageProfitSource = window.DashboardOrderMetrics
       ? window.DashboardOrderMetrics.averageProfitSource(p)
       : (actDelivered > 0 ? 'delivered_orders' : (orders > 0 ? 'net_orders_fallback' : 'unavailable'));
@@ -240,7 +259,6 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
         ? Math.min(orders, Math.max(0, expectedDeliveriesExact))
         : Math.min(orders, Math.max(0, orders * expectedNdrRate));
       delivered = Math.min(orders, Math.max(0, Math.round(expectedDeliveriesExact)));
-      if (delivered === 0) realNdr = 0;
       realTaagerProfitAfterTax = expectedDeliveriesExact * realComm;
       
       if (p.expectedDeliveredSales != null) {
@@ -573,9 +591,7 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
     var totalOrders     = Math.max(0, Math.round(Number(s.totalOrders) || 0));
     var deliveredOrders = Math.max(0, Math.round(Number(s.deliveredOrders) || 0));
     if (deliveredOrders > totalOrders && totalOrders > 0) deliveredOrders = totalOrders;
-    var ndr             = deliveredOrders > 0
-      ? (Number(s.ndr) || (totalOrders > 0 ? deliveredOrders / totalOrders : 0))
-      : 0;
+    var ndr = Math.max(0, Math.min(1, finiteNumber(s.ndr, totalOrders > 0 ? deliveredOrders / totalOrders : 0)));
     var calculation     = window.TaagerDashboardFinancialCore.calculate({
       mode: 'expected',
       netOrders: totalOrders,
@@ -621,9 +637,7 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
     s.totalOrders = Math.max(0, Math.round(Number(s.realOrders) || 0));
     s.deliveredOrders = Math.max(0, Math.round(Number(s.realDelivered) || 0));
     s.expectedDeliveriesExact = Math.max(0, Number(s.realExpectedDeliveriesExact != null ? s.realExpectedDeliveriesExact : s.realDelivered) || 0);
-    s.ndr = s.deliveredOrders > 0
-      ? (Number(s.realNdr) || (s.totalOrders > 0 ? (s.deliveredOrders / s.totalOrders) : 0))
-      : 0;
+    s.ndr = Math.max(0, Math.min(1, finiteNumber(s.realNdr, s.totalOrders > 0 ? (s.deliveredOrders / s.totalOrders) : 0)));
     s.avgCommission = Math.max(0, Number(s.realCommission) || 0);
     s.isModified = false;
   }
@@ -631,7 +645,6 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
   function setSimTotalOrders(s, orders) {
     s.totalOrders = Math.max(0, Math.round(Number(orders) || 0));
     s.deliveredOrders = Math.round(s.totalOrders * s.ndr);
-    if (s.deliveredOrders === 0) s.ndr = 0;
     s.expectedDeliveriesExact = s.totalOrders * s.ndr;
     s.isModified = true;
   }
@@ -649,7 +662,6 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
     var pct = Math.min(100, Math.max(0, Number(ndrPct) || 0));
     s.ndr = pct / 100;
     s.deliveredOrders = Math.round((Number(s.totalOrders) || 0) * s.ndr);
-    if (s.deliveredOrders === 0) s.ndr = 0;
     s.expectedDeliveriesExact = (Number(s.totalOrders) || 0) * s.ndr;
     s.isModified = true;
   }
@@ -914,7 +926,10 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
 
   // ── 8. Table builder ────────────────────────────────────────────────────────
   function realProfit(sim) {
-    return (Math.max(0, Math.round(Number(sim.realDelivered) || 0)) * sim.realCommission) - sim.realAdSpend;
+    var deliveredExact = sim && sim.realExpectedDeliveriesExact != null
+      ? Number(sim.realExpectedDeliveriesExact)
+      : Number(sim && sim.realDelivered);
+    return (Math.max(0, finiteNumber(deliveredExact)) * finiteNumber(sim && sim.realCommission)) - finiteNumber(sim && sim.realAdSpend);
   }
 
   function invalidateSimulationRowsCache() {
@@ -1181,7 +1196,7 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
       '<div class="s9-kpi-grid s9-kpi-grid--details">' +
         _kpiMiniTip(
           p9Txt('Average Profit', 'متوسط الربح') + (s.averageProfitSource === 'net_orders_fallback' ? ' · ' + p9Txt('Estimated from net orders', 'تقديري من صافي الطلبات') : ''),
-          valueStack(formatMoney(s.realCommission, true), 'profit', 's9-card-value-stack'), '#3b82f6', '💵',
+          valueStack(formatMoney(s.realCommission, true, 2), 'profit', 's9-card-value-stack'), '#3b82f6', '💵',
           p9Txt('Average Profit', 'متوسط الربح'),
           s.averageProfitSource === 'net_orders_fallback'
             ? p9Txt('Estimated average profit from net orders because this product has no delivered orders.', 'متوسط ربح تقديري من صافي الطلبات لأن هذا المنتج لا يحتوي على طلبات مسلمة.')
@@ -1276,10 +1291,10 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
               p9Txt('Editable average profit assumption used for forecast math. The real KPI above is average profit from the sheet.', 'افتراض متوسط الربح المستخدم في المحاكاة. المؤشر الحقيقي أعلاه هو متوسط الربح من الشيت.'),
               'totalProfitBeforeAdSpend = expectedDeliveriesExact * averageProfitPerDeliveredOrder') +
           '</label>' +
-          '<span style="font-size:var(--type-caption);color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + toDisplay(s.realCommission).toFixed(2) + ' ' + viewCurrency + '</span>' +
+          '<span style="font-size:var(--type-caption);color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + displayDecimal(toDisplay(s.realCommission), 2) + ' ' + viewCurrency + '</span>' +
         '</div>' +
         '<div class="sfe-input-wrap2">' +
-          '<input type="number" class="s9-comm-input sfe-input2" min="1" step="0.5" value="' + toDisplay(s.avgCommission).toFixed(2) + '" placeholder="32.79" style="direction:ltr;">' +
+          '<input type="number" class="s9-comm-input sfe-input2" min="1" step="any" value="' + displayDecimal(toDisplay(s.avgCommission), 2) + '" placeholder="32.79" style="direction:ltr;">' +
           '<span class="sfe-input-unit2 s9-comm-unit">' + viewCurrency + '</span>' +
         '</div>' +
       '</div>';
@@ -1863,7 +1878,7 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
       if (!row) return;
       var idx = parseInt(row.getAttribute('data-idx'));
       var rs  = simulations[idx];
-      var realNetProfit = (Math.max(0, Math.round(Number(rs.realDelivered) || 0)) * rs.realCommission) - rs.realAdSpend;
+      var realNetProfit = realProfit(rs);
       applyProfitColor(cell, realNetProfit);
     });
 
@@ -1976,7 +1991,7 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
       if (metricVals[1]) metricVals[1].textContent = p9Num(s.realConfirmed);
       if (metricVals[2]) metricVals[2].innerHTML = valueStack(p9Num(Math.round(c.deliveredOrders)), 'delivered', 's9-card-value-stack');
       if (metricVals[3]) metricVals[3].innerHTML = valueStack(formatPct(s.ndr), 'dr', 's9-card-value-stack');
-      if (metricVals[4]) metricVals[4].innerHTML = valueStack(toDisplay(s.avgCommission).toFixed(2) + ' ' + viewCurrency, 'profit', 's9-card-value-stack');
+      if (metricVals[4]) metricVals[4].innerHTML = valueStack(displayDecimal(toDisplay(s.avgCommission), 2) + ' ' + viewCurrency, 'profit', 's9-card-value-stack');
       if (metricVals[5]) metricVals[5].textContent = formatPct(s.realConfirmationRate);
       if (metricVals[6]) metricVals[6].textContent = formatPct(s.realDr);
     }
@@ -2000,7 +2015,7 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
       var idx = parseInt(row.getAttribute('data-idx'));
       var rs  = simulations[idx];
       row.style.background = idx === selectedIdx ? 'rgba(59,130,246,0.1)' : 'transparent';
-      var realNetProfit = (Math.max(0, Math.round(Number(rs.realDelivered) || 0)) * rs.realCommission) - rs.realAdSpend;
+      var realNetProfit = realProfit(rs);
       var profitCell = row.querySelector('.s9-profit-cell');
       if (profitCell) {
         var profitValue = profitCell.querySelector('.s9-profit-value');

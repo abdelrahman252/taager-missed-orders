@@ -183,28 +183,11 @@
         body
       ].join('|'));
       if (existing && existing.parentNode === pane &&
-          existing.getAttribute('data-dashboard-marketing-overlay-key') === overlay.getAttribute('data-dashboard-marketing-overlay-key')) {
+          existing.getAttribute('data-dashboard-marketing-overlay-key') === overlay.getAttribute('data-dashboard-marketing-overlay-key') &&
+          !existing.classList.contains('dashboard-marketing-progress-overlay')) {
         return;
       }
       if (existing) existing.remove();
-      if (pending && typeof window.dashboardProgressLoaderHTML === 'function') {
-        overlay.classList.add('dashboard-marketing-progress-overlay');
-        overlay.style.cssText = 'position:absolute;inset:0;z-index:40;display:flex;background:var(--dash-bg);border-radius:var(--dash-radius-xl);';
-        overlay.innerHTML = window.dashboardProgressLoaderHTML(sectionId);
-        pane.appendChild(overlay);
-        if (window.TaagerPreloader && typeof window.TaagerPreloader.dashboardRefresh === 'function') {
-          window.TaagerPreloader.dashboardRefresh({
-            smooth: true,
-            activity: 'Syncing connected marketing spend'
-          });
-        }
-        if (window.TaagerPreloader && typeof window.TaagerPreloader.dashboardStage === 'function') {
-          window.TaagerPreloader.dashboardStage('marketing', {
-            activity: 'Syncing connected marketing spend'
-          });
-        }
-        return;
-      }
       overlay.innerHTML = '<div style="width:min(440px,100%);padding:24px;border-radius:var(--dash-radius-xl);border:1px solid rgba(96,165,250,.25);background:var(--dash-surface);box-shadow:0 18px 60px rgba(0,0,0,.4);text-align:center;">' +
         (pending && window.dashboardMarketingLoadingHtml ? window.dashboardMarketingLoadingHtml() : '') +
         '<div style="margin-top:12px;font-size:var(--type-component-title);font-weight:var(--weight-semibold);color:#f8fafc;">' + title + '</div>' +

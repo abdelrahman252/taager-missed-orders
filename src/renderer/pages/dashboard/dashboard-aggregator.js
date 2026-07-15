@@ -2782,6 +2782,7 @@
             deliveredCount: 0, calculatorDeliveredCount: 0, calculatorEarnedProfitAfterTax: 0,
             ndrDeliveredCount: 0, placedCount: 0, totalOrderCount: 0,
             ndrBaseCount: 0,
+            firstOrderCreatedAt: '',
             statusTotalCount: 0, confirmationStatusCount: 0, cancelStatusCount: 0, pendingStatusCount: 0,
             canceledCount: 0, canceledByYouCount: 0, failedCount: 0, confirmedCount: 0, ndrConfirmedCount: 0,
             shippingCount: 0, processingCount: 0,
@@ -2827,6 +2828,10 @@
 
         if (inCreatedPeriod && rowIsNetOrder && addOnce(productOrderSet, 'placed:' + productOrderKey)) {
           productStats[productKey].placedCount++;
+          var productCreatedKey = createdDashboardDate(row);
+          if (productCreatedKey && (!productStats[productKey].firstOrderCreatedAt || productCreatedKey < productStats[productKey].firstOrderCreatedAt)) {
+            productStats[productKey].firstOrderCreatedAt = productCreatedKey;
+          }
           if (rowInBusinessConfirmedBase) {
             productStats[productKey].confirmedCount++;
           }
@@ -3211,8 +3216,20 @@
     var actualEarnedCommission = calculatorEarnedProfitAfterTax;
     var actualTotalDeliveredSales = totalDeliveredSales;
     var accountFinancials = null;
+    var expectedNdrRateSource = meta.deliveredDateMode === 'expected' ? 'selected_cohort' : 'actual';
+    var expectedNdrSelectedBaseOrders = ndrBaseOrders;
+    var expectedNdrSelectedDeliveredOrders = ndrDeliveredOrders;
+    var expectedNdrFallbackUsed = false;
 
     if (meta.deliveredDateMode === 'expected') {
+      if (ndrBaseOrders <= 0 && placedCount > 0 && actualDeliveredCount > 0) {
+        expectedNdrFallbackUsed = true;
+        expectedNdrRateSource = 'actual_period_fallback';
+        ndrBaseOrders = placedCount;
+        ndrDeliveredOrders = actualDeliveredCount;
+      } else if (ndrBaseOrders <= 0) {
+        expectedNdrRateSource = 'insufficient_history';
+      }
       var globalExpectedNdrRate = ndrBaseOrders > 0 ? (ndrDeliveredOrders / ndrBaseOrders) : 0;
       var globalExpectedDrRate = drBaseOrders > 0 ? (drDeliveredOrders / drBaseOrders) : 0;
       var financialCore = { calculate: dashboardFinancials };
@@ -3227,6 +3244,8 @@
         expectedNdrRate: globalExpectedNdrRate,
         adSpend: roiAdSpend
       });
+      accountFinancials.expectedNdrRateSource = expectedNdrRateSource;
+      accountFinancials.expectedNdrFallbackUsed = expectedNdrFallbackUsed;
       
       deliveredCount = accountFinancials.expectedDeliveriesDisplay;
       earnedCommission = accountFinancials.expectedTotalProfitBeforeAdSpend;
@@ -3850,6 +3869,7 @@
         placedCount: p.placedCount,
         netOrderCount: p.placedCount,
         totalOrderCount: p.totalOrderCount || p.placedCount,
+        firstOrderCreatedAt: p.firstOrderCreatedAt || '',
         statusTotalCount: p.statusTotalCount !== undefined ? p.statusTotalCount : p.placedCount,
         qty: p.qty,
         revenue: p.revenue,
@@ -4316,6 +4336,10 @@
     ] : [];
     meta.processPhaseTimings = processPhaseTimings;
     meta.lazyHeavyModels = !buildHeavyStatsInMainLoop;
+    meta.expectedNdrRateSource = expectedNdrRateSource;
+    meta.expectedNdrFallbackUsed = expectedNdrFallbackUsed;
+    meta.expectedNdrSelectedBaseOrders = expectedNdrSelectedBaseOrders;
+    meta.expectedNdrSelectedDeliveredOrders = expectedNdrSelectedDeliveredOrders;
 
     return runProcessPhase('process:return-shape', null, function () {
     return {
@@ -4476,6 +4500,11 @@
         adSpend: roiAdSpend, currency: roiCurrency, egpRate: roiEgpRate, sarRate: 3.75,
         totalOrders: placedCount, netOrderCount: placedCount, totalOrderCount: rawTotalOrders,
         ndrPct: ndrPct, ndrPctExact: ndrPctExact,
+        expectedNdrRate: accountFinancials.expectedNdrRate,
+        expectedNdrRateSource: expectedNdrRateSource,
+        expectedNdrFallbackUsed: expectedNdrFallbackUsed,
+        expectedNdrSelectedBaseOrders: expectedNdrSelectedBaseOrders,
+        expectedNdrSelectedDeliveredOrders: expectedNdrSelectedDeliveredOrders,
         orderSources: orderSources,
         platformSources: platformSources,
         ndrBaseOrders: ndrBaseOrders, ndrDeliveredOrders: ndrDeliveredOrders,

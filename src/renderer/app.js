@@ -17,6 +17,7 @@ const _STRINGS = {
     "topbar.analytics":   "Analytics",
     "topbar.operations":  "Operations",
     "topbar.dashboard":   "Dashboard",
+    "topbar.notifications": "Notifications",
     "titlebar.sync":      "Sync",
     "titlebar.sync_tooltip": "Refresh the whole app.",
     "titlebar.lang_tooltip": "Switch between English and Arabic.",
@@ -230,6 +231,7 @@ const _STRINGS = {
     "setup.nav_accounts":       "Accounts",
     "setup.nav_analytics":      "Analytics",
     "setup.nav_operations":     "Operations",
+    "setup.nav_notifications":  "Notifications",
     "setup.nav_run":            "Run",
     "setup.sub_title":          "Setup",
     "setup.reset_creds_btn":    "Reset Credentials",
@@ -594,6 +596,7 @@ const _STRINGS = {
     "topbar.analytics":  "التحليلات",
     "topbar.operations": "العمليات",
     "topbar.dashboard":  "لوحة التحكم",
+    "topbar.notifications": "التنبيهات",
     "titlebar.sync":     "مزامنة",
     "titlebar.sync_tooltip": "تحديث التطبيق بالكامل.",
     "titlebar.lang_tooltip": "التبديل بين العربية والإنجليزية.",
@@ -793,6 +796,7 @@ const _STRINGS = {
     "setup.nav_accounts":       "الحسابات",
     "setup.nav_analytics":      "التحليلات",
     "setup.nav_operations":     "العمليات",
+    "setup.nav_notifications":  "التنبيهات",
     "setup.nav_run":            "التشغيل",
     "setup.sub_title":          "الإعداد",
     "setup.reset_creds_btn":    "إعادة تعيين بيانات الدخول",
@@ -2316,7 +2320,7 @@ function installAppZoomShortcuts() {
 }
 
 // ── Top bar visibility ──
-const PAGES_WITH_TOPBAR = new Set(["page-setup", "page-run", "page-results", "page-license", "page-analytics", "page-operations", "page-dashboard", "page-ai-intelligence"]);
+const PAGES_WITH_TOPBAR = new Set(["page-setup", "page-run", "page-results", "page-license", "page-analytics", "page-operations", "page-dashboard", "page-notifications", "page-ai-intelligence"]);
 
 const FEATURE_SCRIPT_GROUPS = {
   analytics: [
@@ -2482,6 +2486,7 @@ const FEATURE_SCRIPT_GROUPS = {
   dashboardPrepaidHydrated: ["pages/smart-insights-core.js", "pages/dashboard/sections/section-prepaid-hydrated.js"],
   dashboardForecast: ["pages/dashboard/sections/section9-product-forecast.js"],
   dashboardForecastHydrated: ["pages/smart-insights-core.js", "pages/dashboard/dashboard-financial-core.js", "pages/dashboard/sections/section9-product-forecast-hydrated.js"],
+  dashboardNotifications: ["pages/notifications.js"],
   dashboardStaticUpdate: [
     "../../node_modules/xlsx/dist/xlsx.full.min.js",
     "pages/dashboard/sections/section-static-update.js",
@@ -2669,6 +2674,7 @@ const DASHBOARD_SECTION_FEATURES = {
   gmvTarget: "dashboardGmvTarget",
   productForecast: "dashboardForecast",
   prepaid: "dashboardPrepaid",
+  notifications: "dashboardNotifications",
   staticUpdate: "dashboardStaticUpdate",
   taagerAi: "dashboardAi",
 };
@@ -2930,6 +2936,11 @@ function routeAfterCredentialsReady(creds, restoreState) {
 
   if (restorePage === "page-operations" && hasAccounts && window._operationsEnabled && !window._teamLeaderEnabled) {
     goToOperations();
+    return;
+  }
+
+  if (restorePage === "page-notifications" && hasAccounts) {
+    goToNotifications();
     return;
   }
 
@@ -3732,7 +3743,7 @@ function dismissPreloaderWhenReady(pageId) {
     return;
   }
 
-  if (["page-analytics", "page-operations", "page-ai-intelligence"].includes(pageId) && !pageLifecycle(pageId).mounted) {
+  if (["page-analytics", "page-operations", "page-notifications", "page-ai-intelligence"].includes(pageId) && !pageLifecycle(pageId).mounted) {
     taagerDebugLog("preloader", "dismissWhenReady:feature-not-mounted-yet", { pageId });
     return;
   }
@@ -4576,6 +4587,15 @@ async function goToOperations() {
   }
 }
 
+async function goToNotifications() {
+  window._dashboardInitialSection = "notifications";
+  if (typeof window.navigateDashboardSection === "function" && window.navigateDashboardSection("notifications")) {
+    showPage("page-dashboard");
+    return;
+  }
+  return goToDashboard();
+}
+
 async function goToDashboard() {
   const token = nextFeatureRouteToken("dashboard");
   perfMark("route:page-dashboard:click");
@@ -5374,6 +5394,9 @@ async function reRenderCurrentPage() {
   } else if (id === "page-ai-intelligence") {
     await ensureFeatureScripts("dashboard");
     if (typeof renderAiIntelligence === "function") await renderAiIntelligence();
+  } else if (id === "page-notifications") {
+    if (typeof renderNotifications === "function") await renderNotifications();
+    markPageMounted("page-notifications");
   } else if (id === "page-analytics") {
     invalidatePage("page-analytics", "language");
     await ensureFeatureScripts("analytics");

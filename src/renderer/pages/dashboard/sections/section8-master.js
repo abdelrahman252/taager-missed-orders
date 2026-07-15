@@ -1235,17 +1235,19 @@ window.renderSection8 = function (mountEl, data, ctx) {
   }
   var gmvPreviewIsLight = document.documentElement.getAttribute('data-theme') === 'light';
   var gmvPreviewBg = gmvPreviewIsLight ? 'var(--dash-surface,#ffffff)' : '#0a0f18';
-  var gmvPreviewBorder = gmvPreviewIsLight ? 'rgba(124,58,237,0.18)' : 'rgba(255,255,255,0.06)';
+  var gmvPreviewBorder = gmvPreviewIsLight ? 'rgba(124,58,237,0.26)' : 'rgba(255,255,255,0.06)';
   var gmvPreviewDashBorder = gmvPreviewIsLight ? 'rgba(168,85,247,0.38)' : 'rgba(168,85,247,0.42)';
   var gmvPreviewText = gmvPreviewIsLight ? 'var(--dash-text,#0f172a)' : '#fff';
   var gmvPreviewMuted = gmvPreviewIsLight ? 'var(--dash-text-muted,#334155)' : 'rgba(255,255,255,0.56)';
-  var gmvPreviewFaint = gmvPreviewIsLight ? 'var(--dash-text-faint,#64748b)' : 'rgba(255,255,255,0.42)';
-  var gmvPreviewFaint2 = gmvPreviewIsLight ? 'var(--dash-text-faint,#64748b)' : 'rgba(255,255,255,0.48)';
-  var gmvPreviewTrack = gmvPreviewIsLight ? 'rgba(15,23,42,0.1)' : 'rgba(255,255,255,0.07)';
-  var gmvPreviewTrackBg = 'linear-gradient(90deg,rgba(239,68,68,' + (gmvPreviewIsLight ? '0.14' : '0.2') + ') 0%,rgba(245,158,11,' + (gmvPreviewIsLight ? '0.14' : '0.2') + ') 50%,rgba(59,130,246,' + (gmvPreviewIsLight ? '0.14' : '0.2') + ') 75%,rgba(168,85,247,' + (gmvPreviewIsLight ? '0.14' : '0.2') + ') 100%),' + gmvPreviewTrack;
+  var gmvPreviewFaint = gmvPreviewIsLight ? '#475569' : 'rgba(255,255,255,0.42)';
+  var gmvPreviewFaint2 = gmvPreviewIsLight ? '#475569' : 'rgba(255,255,255,0.48)';
+  var gmvPreviewTrack = gmvPreviewIsLight ? '#e2e8f0' : 'rgba(255,255,255,0.07)';
+  var gmvPreviewTrackBg = gmvPreviewIsLight
+    ? 'linear-gradient(90deg,rgba(239,68,68,0.2) 0%,rgba(245,158,11,0.2) 50%,rgba(59,130,246,0.2) 75%,rgba(168,85,247,0.22) 100%),' + gmvPreviewTrack
+    : 'linear-gradient(90deg,rgba(239,68,68,0.2) 0%,rgba(245,158,11,0.2) 50%,rgba(59,130,246,0.2) 75%,rgba(168,85,247,0.2) 100%),' + gmvPreviewTrack;
   var gmvPreviewFillBg = 'linear-gradient(90deg,#ef4444 0%,#f59e0b 50%,#3b82f6 75%,#a855f7 100%)';
-  var gmvPreviewTick = gmvPreviewIsLight ? 'rgba(15,23,42,0.26)' : 'rgba(255,255,255,0.38)';
-  var gmvPreviewShadow = gmvPreviewIsLight ? '0 12px 28px rgba(15,23,42,0.08)' : 'inset 0 0 32px rgba(0,0,0,0.45)';
+  var gmvPreviewTick = gmvPreviewIsLight ? 'rgba(15,23,42,0.34)' : 'rgba(255,255,255,0.38)';
+  var gmvPreviewShadow = gmvPreviewIsLight ? '0 12px 30px rgba(15,23,42,0.09), inset 0 1px 0 rgba(255,255,255,0.9)' : 'inset 0 0 32px rgba(0,0,0,0.45)';
   var gmvOpenPlannerColor = gmvPreviewIsLight ? '#7c3aed' : '#e9d5ff';
   var gmvPreviewHtml = '';
   if (gmvSnapshot && gmvSnapshot.hasTarget) {

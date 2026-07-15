@@ -13,7 +13,7 @@
   if (fs.existsSync(devLocalPath)) dotenv.config({ path: devLocalPath, override: true });
 })();
 
-const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage, clipboard } = require("electron");
 app.setAppUserModelId("com.taagerbot.orders");
 const path = require("path");
 const Store = require("electron-store");
@@ -31,6 +31,22 @@ const { createDashboardQueryService } = require("./dashboard-query-service");
 const { findNewDuplicateConflict } = require("./account-duplicates");
 const { fetchActiveAdminNotification } = require("./admin-notifications");
 const { evaluateCachedLicense, isInsideWarningWindow } = require("./license-expiry-policy");
+const {
+  normalizeSettings: normalizeProductAlertSettings,
+  publicSettings: publicProductAlertSettings,
+  evaluateProducts: evaluateProductAlerts,
+  filterCooldown: filterProductAlertCooldown,
+  markSent: markProductAlertsSent,
+} = require("./notifications/product-alert-engine");
+const {
+  buildProductAlertMessage,
+  buildTestMessage: buildProductAlertTestMessage,
+} = require("./notifications/product-alert-message");
+const {
+  sendTelegram,
+  createTelegramBackendConnection,
+  getTelegramBackendConnectionStatus,
+} = require("./notifications/telegram-notifier");
 const {
   replaceRowsInDateRange,
   validateCurrentYearDashboardRange,
@@ -483,6 +499,262 @@ const dashboardQueryService = createDashboardQueryService({
   getRevision: () => Number(dashboardStore.get("snapshotRevision", 0) || 0),
   getMarketingRevision: () => Number(dashboardStore.get("marketingRevision", 0) || 0),
 });
+const PRODUCT_ALERT_SETTINGS_KEY = "productAlertNotifications.v1";
+const PRODUCT_ALERT_STATE_KEY = "productAlertNotificationsState.v1";
+const PRODUCT_ALERT_SCHEDULER_INTERVAL_MS = 4 * 60 * 60 * 1000;
+let productAlertSchedulerTimer = null;
+
+function readProductAlertSettings() {
+  return normalizeProductAlertSettings(store.get(PRODUCT_ALERT_SETTINGS_KEY, null));
+}
+
+function writeProductAlertSettings(input) {
+  const current = readProductAlertSettings();
+  const merged = {
+    ...current,
+    ...(input || {}),
+    telegram: {
+      ...(current.telegram || {}),
+      ...((input && input.telegram) || {}),
+    },
+    rule: {
+      ...(current.rule || {}),
+      ...((input && input.rule) || {}),
+    },
+  };
+  if (input && Array.isArray(input.cases)) {
+    merged.cases = input.cases;
+  }
+  if (merged.telegram && merged.telegram.botToken === "********") {
+    merged.telegram.botToken = current.telegram && current.telegram.botToken || "";
+  }
+  const next = normalizeProductAlertSettings(merged);
+  store.set(PRODUCT_ALERT_SETTINGS_KEY, next);
+  return next;
+}
+
+function readProductAlertState() {
+  const saved = dashboardStore.get(PRODUCT_ALERT_STATE_KEY, null);
+  return {
+    version: 1,
+    sent: saved && saved.sent && typeof saved.sent === "object" ? saved.sent : {},
+    history: Array.isArray(saved && saved.history) ? saved.history : [],
+  };
+}
+
+function writeProductAlertState(next) {
+  dashboardStore.set(PRODUCT_ALERT_STATE_KEY, {
+    version: 1,
+    sent: next && next.sent && typeof next.sent === "object" ? next.sent : {},
+    history: Array.isArray(next && next.history) ? next.history.slice(0, 50) : [],
+  });
+}
+
+function productAlertAllowedAccountIds(settings, overrideAccountIds) {
+  const configured = (store.get("accounts", []) || []).map((account) => account && account.id).filter(Boolean);
+  const available = configured.length ? configured : Object.keys(dashboardStore.get("accounts", {}) || {});
+  const allowed = new Set(available.map(String));
+  const selected = settings.scope === "selected" ? (settings.accountIds || []) : available;
+  const selectedSet = new Set(selected.map(String));
+  const requested = Array.isArray(overrideAccountIds) && overrideAccountIds.length
+    ? overrideAccountIds.filter((id) => settings.scope !== "selected" || selectedSet.has(String(id)))
+    : selected;
+  return Array.from(new Set((requested || []).map(String).filter((id) => allowed.has(id))));
+}
+
+function queryProductAlertRows(settings, options = {}) {
+  const accountIds = productAlertAllowedAccountIds(settings, options.accountIds);
+  const reportingCurrency = String(options.reportingCurrency || options.currency || "USD").toUpperCase();
+  const financialCurrency = String(options.productFinancialCurrency || options.financialCurrency || reportingCurrency).toUpperCase();
+  if (settings.scope === "selected" && !accountIds.length) {
+    return {
+      result: { ok: true, rows: [], scope: { accountIds: [], accountCount: 0 } },
+      accountIds,
+      payload: {
+        dateFrom: options.dateFrom || "",
+        dateTo: options.dateTo || "",
+        reportingCurrency,
+        productFinancialCurrency: financialCurrency,
+      },
+    };
+  }
+  const payload = {
+    kind: "products",
+    accountIds,
+    allRows: true,
+    page: 1,
+    filters: {},
+    sortBy: "profitLoss",
+    sortDir: "asc",
+    requestChannel: "product-alerts",
+    currency: reportingCurrency,
+    reportingCurrency,
+    productFinancialCurrency: financialCurrency,
+  };
+  if (options.dateFrom) payload.dateFrom = options.dateFrom;
+  if (options.dateTo) payload.dateTo = options.dateTo;
+  if (options.exchangeRates && typeof options.exchangeRates === "object") payload.exchangeRates = options.exchangeRates;
+  if (options.exchangeRatesUpdatedAt) payload.exchangeRatesUpdatedAt = options.exchangeRatesUpdatedAt;
+  if (options.egpRate) payload.egpRate = options.egpRate;
+  const result = dashboardQueryService.query(payload);
+  return { result, accountIds, payload };
+}
+
+function productAlertCaseKey(product) {
+  const alertCase = product && product.alertCase || {};
+  return String(alertCase.id || alertCase.label || "__default__");
+}
+
+function groupProductAlertFreshMatches(freshMatches) {
+  const groups = [];
+  const byKey = new Map();
+  (freshMatches || []).forEach((item) => {
+    const product = item && item.product || {};
+    const key = productAlertCaseKey(product);
+    if (!byKey.has(key)) {
+      const group = {
+        key,
+        alertCase: product.alertCase || null,
+        items: [],
+      };
+      byKey.set(key, group);
+      groups.push(group);
+    }
+    byKey.get(key).items.push(item);
+  });
+  return groups;
+}
+
+function productAlertBackendOptions() {
+  return {
+    request: supabaseFunctionRequest,
+    functionName: process.env.TAAGER_PRODUCT_ALERT_FUNCTION || "customer-product-alert",
+    licenseKey: licenseStore.get("licenseKey", ""),
+    machineUuid: _getOrCreateMachineUUID(),
+    deviceId: getDeviceFingerprint(),
+  };
+}
+
+async function previewProductAlerts(settingsInput, options = {}) {
+  const settings = normalizeProductAlertSettings(settingsInput || readProductAlertSettings());
+  const { result, accountIds, payload } = queryProductAlertRows(settings, options);
+  if (!result || !result.ok) return { ok: false, error: result && result.error || "PRODUCT_ALERT_QUERY_FAILED" };
+  const evaluation = evaluateProductAlerts(result.rows || [], settings);
+  return {
+    ok: true,
+    settings: publicProductAlertSettings(settings),
+    accountIds,
+    period: { dateFrom: payload.dateFrom || "", dateTo: payload.dateTo || "" },
+    totalProducts: evaluation.totalProducts,
+    cases: evaluation.cases || [],
+    matches: evaluation.matches,
+  };
+}
+
+async function runProductAlerts(options = {}) {
+  const settings = readProductAlertSettings();
+  if (!settings.enabled && !options.force) return { ok: true, skipped: true, reason: "DISABLED" };
+  const preview = await previewProductAlerts(settings, options);
+  if (!preview.ok) return preview;
+  if (!preview.matches.length) return { ok: true, sent: false, matches: [], skipped: 0, reason: "NO_MATCHES" };
+
+  const state = readProductAlertState();
+  const scope = {
+    accountKey: (preview.accountIds || []).join(",") || "all",
+    dateFrom: preview.period.dateFrom || "",
+    dateTo: preview.period.dateTo || "",
+  };
+  const cooldown = options.ignoreCooldown
+    ? { fresh: preview.matches.map((product) => ({ product, key: "" })), skipped: [] }
+    : filterProductAlertCooldown(preview.matches, settings, state, scope);
+  if (!cooldown.fresh.length) {
+    return { ok: true, sent: false, matches: preview.matches, skipped: cooldown.skipped.length, reason: "COOLDOWN" };
+  }
+
+  const limit = Math.max(1, Number(settings.maxProductsPerMessage) || 10);
+  const chunks = [];
+  groupProductAlertFreshMatches(cooldown.fresh).forEach((group) => {
+    const groupChunkTotal = Math.max(1, Math.ceil(group.items.length / limit));
+    for (let i = 0; i < group.items.length; i += limit) {
+      chunks.push({
+        group,
+        items: group.items.slice(i, i + limit),
+        groupChunkIndex: Math.floor(i / limit),
+        groupChunkTotal,
+        groupOffset: i,
+      });
+    }
+  });
+  if (!chunks.length) {
+    return { ok: true, sent: false, matches: preview.matches, skipped: cooldown.skipped.length, reason: "NO_FRESH_CHUNKS" };
+  }
+  const deliveries = [];
+  for (let index = 0; index < chunks.length; index += 1) {
+    const chunk = chunks[index];
+    const products = chunk.items.map((item) => item.product);
+    const cases = chunk.group.alertCase ? [chunk.group.alertCase] : preview.cases;
+    const message = buildProductAlertMessage({
+      products,
+      totalMatches: chunk.group.items.length,
+      rule: settings.rule,
+      cases,
+      period: preview.period,
+      lang: options.lang || "en",
+      chunkIndex: chunk.groupChunkIndex,
+      chunkTotal: chunk.groupChunkTotal,
+      chunkOffset: chunk.groupOffset,
+      showHiddenNote: false,
+    });
+    const delivery = await sendTelegram(settings.telegram, message, productAlertBackendOptions());
+    if (!delivery || !delivery.ok) return { ok: false, sent: false, error: delivery && delivery.error || "TELEGRAM_SEND_FAILED", deliveries };
+    deliveries.push(delivery);
+  }
+
+  const sentItems = cooldown.fresh;
+  const nextState = markProductAlertsSent(state, sentItems, {
+    trigger: options.trigger || "manual",
+    dateFrom: preview.period.dateFrom || "",
+    dateTo: preview.period.dateTo || "",
+  });
+  writeProductAlertState(nextState);
+  return { ok: true, sent: true, sentCount: sentItems.length, totalMatchedFresh: sentItems.length, matches: sentItems.map((item) => item.product), skipped: cooldown.skipped.length, deliveries };
+}
+
+function runProductAlertsAfterSnapshot(accountId, data, source) {
+  const settings = readProductAlertSettings();
+  if (!settings.enabled) return;
+  runProductAlerts({
+    accountIds: accountId ? [accountId] : undefined,
+    dateFrom: data && data.dateFrom || "",
+    dateTo: data && data.dateTo || "",
+    currency: "USD",
+    reportingCurrency: "USD",
+    productFinancialCurrency: "USD",
+    trigger: source || "dashboard-refresh",
+  }).catch((error) => {
+    log.warn("[ProductAlerts] non-blocking alert run failed", error && error.message ? error.message : error);
+    monitoring.captureException(error, { operation: "productAlerts.afterSnapshot", extra: { accountId } });
+  });
+}
+
+function startProductAlertScheduler() {
+  if (productAlertSchedulerTimer) clearInterval(productAlertSchedulerTimer);
+  productAlertSchedulerTimer = setInterval(() => {
+    runProductAlerts({ currency: "USD", reportingCurrency: "USD", productFinancialCurrency: "USD", trigger: "interval-4h" }).catch((error) => {
+      log.warn("[ProductAlerts] scheduled alert run failed", error && error.message ? error.message : error);
+      monitoring.captureException(error, { operation: "productAlerts.scheduler" });
+    });
+  }, PRODUCT_ALERT_SCHEDULER_INTERVAL_MS);
+  if (productAlertSchedulerTimer && typeof productAlertSchedulerTimer.unref === "function") productAlertSchedulerTimer.unref();
+}
+
+function stopProductAlertScheduler() {
+  if (productAlertSchedulerTimer) {
+    clearInterval(productAlertSchedulerTimer);
+    productAlertSchedulerTimer = null;
+  }
+}
+
 let analyticsRunsCache = null;
 let analyticsRunsCacheDirty = true;
 let analyticsSnapshotSyncCacheKey = "";
@@ -2107,6 +2379,7 @@ function persistDashboardSnapshot(accountId, data, options = {}) {
   bumpDashboardSnapshotRevision();
   analyticsSnapshotSyncCacheKey = "";
   const enriched = options.enrichAnalytics === false ? 0 : enrichAnalyticsRunsFromTaagerRows(accountId, rows);
+  runProductAlertsAfterSnapshot(accountId, data, options.source || "dashboard-refresh");
   return { saved: true, requiresConfirmation, rows, validation, mergedRows, enriched, warnings: data.warnings || [] };
 }
 
@@ -2497,6 +2770,7 @@ app.whenReady().then(() => {
   autoRunEnabled = store.get("autoRun", false);
   if (autoRunEnabled) scheduleAutoRun();
   monthlyDataCleanupScheduler.start();
+  startProductAlertScheduler();
 
   if (app.isPackaged) {
     setTimeout(() => {
@@ -2513,6 +2787,7 @@ app.whenReady().then(() => {
 app.on("before-quit", () => {
   app.isQuitting = true;
   stopLicensePresenceHeartbeat();
+  stopProductAlertScheduler();
   monthlyDataCleanupScheduler.stop();
 });
 
@@ -4843,6 +5118,105 @@ ipcMain.handle("query-dashboard-data", async (_, payload = {}) => {
   }
 });
 
+ipcMain.handle("get-product-alert-settings", async () => {
+  const settings = readProductAlertSettings();
+  const state = readProductAlertState();
+  let telegramConnection = { ok: true, connected: false, status: "unknown" };
+  if (settings.telegram && settings.telegram.mode === "backend") {
+    try {
+      telegramConnection = await getTelegramBackendConnectionStatus(productAlertBackendOptions());
+    } catch (error) {
+      telegramConnection = { ok: false, connected: false, error: error.message };
+    }
+  }
+  return {
+    ok: true,
+    settings: publicProductAlertSettings(settings),
+    history: state.history || [],
+    telegramConnection,
+    accounts: (store.get("accounts", []) || []).map((account) => ({
+      id: account && account.id,
+      label: accountDisplayName(account, account && account.id),
+    })).filter((account) => account.id),
+  };
+});
+
+ipcMain.handle("save-product-alert-settings", async (_, payload = {}) => {
+  try {
+    const settings = writeProductAlertSettings(payload.settings || payload || {});
+    return { ok: true, settings: publicProductAlertSettings(settings) };
+  } catch (error) {
+    monitoring.captureException(error, { operation: "productAlerts.saveSettings" });
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("preview-product-alerts", async (_, payload = {}) => {
+  try {
+    return await previewProductAlerts(payload.settings || readProductAlertSettings(), payload.options || {});
+  } catch (error) {
+    monitoring.captureException(error, { operation: "productAlerts.preview" });
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("test-product-alert-telegram", async (_, payload = {}) => {
+  try {
+    const current = readProductAlertSettings();
+    const incoming = payload.settings || current;
+    const incomingToken = incoming && incoming.telegram && Object.prototype.hasOwnProperty.call(incoming.telegram, "botToken")
+      ? incoming.telegram.botToken
+      : current.telegram && current.telegram.botToken;
+    const settings = normalizeProductAlertSettings({
+      ...current,
+      ...incoming,
+      telegram: {
+        ...(current.telegram || {}),
+        ...((incoming && incoming.telegram) || {}),
+        botToken: incomingToken === "********"
+          ? current.telegram && current.telegram.botToken || ""
+          : incomingToken,
+      },
+      rule: {
+        ...(current.rule || {}),
+        ...((incoming && incoming.rule) || {}),
+      },
+    });
+    const delivery = await sendTelegram(settings.telegram, buildProductAlertTestMessage({ lang: payload.options && payload.options.lang || "en" }), productAlertBackendOptions());
+    return delivery && delivery.ok ? { ok: true, delivery } : { ok: false, error: delivery && delivery.error || "TELEGRAM_SEND_FAILED" };
+  } catch (error) {
+    monitoring.captureException(error, { operation: "productAlerts.testTelegram" });
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("create-product-alert-telegram-connection", async () => {
+  try {
+    return await createTelegramBackendConnection(productAlertBackendOptions());
+  } catch (error) {
+    monitoring.captureException(error, { operation: "productAlerts.createTelegramConnection" });
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("get-product-alert-telegram-connection-status", async () => {
+  try {
+    return await getTelegramBackendConnectionStatus(productAlertBackendOptions());
+  } catch (error) {
+    monitoring.captureException(error, { operation: "productAlerts.telegramConnectionStatus" });
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("run-product-alerts-now", async (_, payload = {}) => {
+  try {
+    return await runProductAlerts({ ...(payload.options || {}), force: true, ignoreCooldown: payload.ignoreCooldown === true, trigger: "manual" });
+  } catch (error) {
+    monitoring.captureException(error, { operation: "productAlerts.runNow" });
+    return { ok: false, error: error.message };
+  }
+});
+
 ipcMain.handle("export-dashboard-orders-query", async (_, payload = {}) => {
   try {
     const result = dashboardQueryService.query({ ...payload, kind: "orders", allRows: true, page: 1 });
@@ -5819,11 +6193,38 @@ ipcMain.handle("sync-all-marketing-data", async (_, platform = "tiktok", range =
 ipcMain.handle("open-external-url", async (_, externalUrl) => {
   try {
     const parsed = new URL(String(externalUrl || ""));
-    const allowedHosts = new Set(["onboard.windsor.ai", "taager.com", "www.taager.com", "wa.me", "api.whatsapp.com", "web.whatsapp.com"]);
+    if (parsed.protocol === "tg:" && parsed.hostname === "resolve") {
+      const domain = String(parsed.searchParams.get("domain") || "");
+      if (!/^[A-Za-z0-9_]{5,64}$/.test(domain)) {
+        return { ok: false, error: "URL_NOT_ALLOWED" };
+      }
+      await shell.openExternal(parsed.toString());
+      return { ok: true };
+    }
+    const allowedHosts = new Set([
+      "onboard.windsor.ai",
+      "taager.com",
+      "www.taager.com",
+      "wa.me",
+      "api.whatsapp.com",
+      "web.whatsapp.com",
+      "t.me",
+      "telegram.me",
+      "www.telegram.me",
+    ]);
     if (parsed.protocol !== "https:" || !allowedHosts.has(parsed.hostname)) {
       return { ok: false, error: "URL_NOT_ALLOWED" };
     }
     await shell.openExternal(parsed.toString());
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("copy-text", async (_, value) => {
+  try {
+    clipboard.writeText(String(value == null ? "" : value));
     return { ok: true };
   } catch (error) {
     return { ok: false, error: error.message };
