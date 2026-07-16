@@ -1169,12 +1169,15 @@ function createDashboardQueryService(options) {
           netOrders: product.netOrderCount,
           actualDeliveredOrders: product.calculatorDeliveredCount,
           actualEarnedProfitAfterTax: product.calculatorEarnedProfitAfterTax,
-          netOrderProfitAfterTax: product.netOrderProfitAfterTax,
+          netOrderProfitAfterTax: product.calculatorDeliveredCount > 0 ? product.netOrderProfitAfterTax : null,
           currentTotalSales: product.revenue,
           expectedNdrRate: ndrRate,
           adSpend: 0,
           insufficientHistory: isExpected && productNdrBase <= 0 && globalNdrBase <= 0,
         });
+        const actualAverageProfit = product.calculatorDeliveredCount > 0
+          ? product.calculatorEarnedProfitAfterTax / product.calculatorDeliveredCount
+          : 0;
 
         const deliveriesVal = isExpected ? projection.expectedDeliveriesDisplay : product.deliveredCount;
         const commissionVal = isExpected ? projection.expectedTotalProfitBeforeAdSpend : product.commission;
@@ -1195,6 +1198,8 @@ function createDashboardQueryService(options) {
           actualDeliveredCount: product.calculatorDeliveredCount,
           actualCommission: product.calculatorEarnedProfitAfterTax,
           actualEarnedProfitAfterTax: product.calculatorEarnedProfitAfterTax,
+          actualAverageProfit,
+          actualAverageProfitSource: product.calculatorDeliveredCount > 0 ? "delivered_orders" : "unavailable",
           deliveries: deliveriesVal,
           deliveredCount: deliveriesVal,
           expectedDeliveriesExact: projection.expectedDeliveriesExact,
@@ -1252,7 +1257,7 @@ function createDashboardQueryService(options) {
           netOrders: product.netOrderCount,
           actualDeliveredOrders: product.actualDeliveredCount,
           actualEarnedProfitAfterTax: actualFinancialCommission,
-          netOrderProfitAfterTax: netOrderFinancialProfit,
+          netOrderProfitAfterTax: product.actualDeliveredCount > 0 ? netOrderFinancialProfit : null,
           currentTotalSales: financialSales,
           expectedNdrRate: product.expectedNdrRate,
           adSpend: financialSpend,
@@ -1260,8 +1265,12 @@ function createDashboardQueryService(options) {
         });
         product.allocatedAdSpend = financialSpend;
         product.cpa = productFinancials.cpa;
-        product.averageProfit = productFinancials.averageProfit;
-        product.averageProfitSource = productFinancials.averageProfitSource;
+        product.actualAverageProfit = product.actualDeliveredCount > 0
+          ? actualFinancialCommission / product.actualDeliveredCount
+          : 0;
+        product.actualAverageProfitSource = product.actualDeliveredCount > 0 ? "delivered_orders" : "unavailable";
+        product.averageProfit = product.actualAverageProfit;
+        product.averageProfitSource = product.actualAverageProfitSource;
         product.breakEvenCpa = productFinancials.breakEvenCpa;
         product.expectedDeliveredCpa = productFinancials.expectedDeliveredCpa;
         product.expectedNetProfit = productFinancials.expectedNetProfit;
@@ -1991,12 +2000,15 @@ function createDashboardQueryService(options) {
           netOrders: stat.count,
           actualDeliveredOrders: stat.deliveredOrders,
           actualEarnedProfitAfterTax: stat.earnedProfitAfterTax,
-          netOrderProfitAfterTax: stat.netOrderProfitAfterTax,
+          netOrderProfitAfterTax: stat.deliveredOrders > 0 ? stat.netOrderProfitAfterTax : null,
           currentTotalSales: stat.totalRevenue,
           expectedNdrRate: rateResolution.rate,
           adSpend: 0,
           insufficientHistory: rateResolution.insufficientHistory,
         });
+        const cityActualAverageProfit = stat.deliveredOrders > 0
+          ? stat.earnedProfitAfterTax / stat.deliveredOrders
+          : 0;
         const displayedCityDeliveries = citiesExpectedMode ? cityProjection.expectedDeliveriesDisplay : stat.deliveredOrders;
         const ndrPctCity = displayedCityDeliveries > 0 ? rateResolution.rate * 100 : 0;
 
@@ -2036,6 +2048,7 @@ function createDashboardQueryService(options) {
           pendingPct: cityStatusRates.pendingPct,
           ndrBaseOrders: cityNdrBase,
           deliveredOrders: displayedCityDeliveries,
+          actualDeliveredCount: stat.deliveredOrders,
           actualDeliveredOrders: stat.deliveredOrders,
           expectedDeliveriesExact: cityProjection.expectedDeliveriesExact,
           expectedDeliveriesDisplay: cityProjection.expectedDeliveriesDisplay,
@@ -2049,10 +2062,12 @@ function createDashboardQueryService(options) {
           earnedProfitAfterTax: citiesExpectedMode ? cityProjection.expectedTotalProfitBeforeAdSpend : stat.earnedProfitAfterTax,
           earnedCommission: citiesExpectedMode ? cityProjection.expectedTotalProfitBeforeAdSpend : stat.earnedProfitAfterTax,
           actualEarnedProfitAfterTax: stat.earnedProfitAfterTax,
+          actualAverageProfit: cityActualAverageProfit,
+          actualAverageProfitSource: stat.deliveredOrders > 0 ? "delivered_orders" : "unavailable",
           expectedTotalProfitBeforeAdSpend: cityProjection.expectedTotalProfitBeforeAdSpend,
           expectedDeliveredSales: cityProjection.expectedDeliveredSales,
-          averageProfit: cityProjection.averageProfit,
-          averageProfitSource: cityProjection.averageProfitSource,
+          averageProfit: cityActualAverageProfit,
+          averageProfitSource: stat.deliveredOrders > 0 ? "delivered_orders" : "unavailable",
           incomingCommission: stat.incomingCommission,
           lostCommission: stat.lostCommission,
           canceledCount: stat.canceledCount,

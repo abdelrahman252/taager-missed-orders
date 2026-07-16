@@ -176,14 +176,31 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
   if (!Number.isFinite(realConfirmedOrders)) {
     realConfirmedOrders = Math.round(realTotalOrders * (realConfirmationRate / 100));
   }
-  var realAvgCommission = d.averageProfit != null
+  var isExpectedRateMode = window.isExpectedNdrMode && window.isExpectedNdrMode();
+  var actualAverageDeliveredOrders = Number(d.actualDeliveredCount != null ? d.actualDeliveredCount : 0);
+  var actualAverageProfitTotal = Number(d.actualEarnedProfitAfterTax != null ? d.actualEarnedProfitAfterTax : 0);
+  var hasActualAverageFromDelivered = isExpectedRateMode &&
+    actualAverageDeliveredOrders > 0 &&
+    Number.isFinite(actualAverageProfitTotal);
+  var hasExplicitActualAverage = isExpectedRateMode &&
+    d.actualAverageProfit != null &&
+    d.actualAverageProfitSource === 'delivered_orders' &&
+    Number.isFinite(Number(d.actualAverageProfit));
+  var realAvgCommission = hasActualAverageFromDelivered
+    ? actualAverageProfitTotal / actualAverageDeliveredOrders
+    : hasExplicitActualAverage
+    ? Number(d.actualAverageProfit)
+    : d.averageProfit != null
     ? Number(d.averageProfit)
     : (d.avgCommission != null ? Number(d.avgCommission) : 0);
-  var realAverageProfitSource = d.averageProfitSource || (Number(d.actualDeliveredCount != null ? d.actualDeliveredCount : d.deliveredCount || 0) > 0 ? 'delivered_orders' : (realTotalOrders > 0 && d.netOrderProfitAfterTax != null ? 'net_orders_fallback' : 'unavailable'));
+  var realAverageProfitSource = hasActualAverageFromDelivered
+    ? 'delivered_orders'
+    : hasExplicitActualAverage
+    ? d.actualAverageProfitSource
+    : d.averageProfitSource || (Number(d.actualDeliveredCount != null ? d.actualDeliveredCount : d.deliveredCount || 0) > 0 ? 'delivered_orders' : (realTotalOrders > 0 && d.netOrderProfitAfterTax != null ? 'net_orders_fallback' : 'unavailable'));
   var realTaagerProfitAfterTax = d.actualEarnedProfitAfterTax != null
     ? Number(d.actualEarnedProfitAfterTax)
     : (d.taagerProfitAfterTax != null ? Number(d.taagerProfitAfterTax) : realAvgCommission);
-  var isExpectedRateMode = window.isExpectedNdrMode && window.isExpectedNdrMode();
 
   if (isExpectedRateMode) {
     var hasExplicitExpectedNdrRate = d.expectedNdrRate != null && Number.isFinite(Number(d.expectedNdrRate));

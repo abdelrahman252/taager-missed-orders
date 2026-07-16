@@ -310,13 +310,19 @@ function normalizeProducts(productRows, reportingCurrency, egpRate, orderCurrenc
     const actualDelivered = number(row.actualDeliveredCount ?? row.actualDeliveredOrders ?? delivered);
     const ndrPct = number(row.ndrPct ?? row.deliveryRate ?? row.deliveryPct);
     const netOrderProfit = round(convert(row.netOrderProfitAfterTax ?? row.totalPlacedCommission ?? 0, sourceCurrency, reportingCurrency, egpRate, ratesOverride));
-    const averageProfitSource = row.averageProfitSource || (actualDelivered > 0 ? "delivered_orders" : (orders > 0 && (row.netOrderProfitAfterTax != null || row.totalPlacedCommission != null) ? "net_orders_fallback" : "unavailable"));
-    const explicitAverageProfit = row.averageProfit != null
-      ? round(convert(row.averageProfit, sourceCurrency, reportingCurrency, egpRate, ratesOverride), 2)
+    const averageProfitSource = actualDelivered > 0
+      ? "delivered_orders"
+      : (row.actualAverageProfitSource === "delivered_orders"
+        ? "delivered_orders"
+        : "unavailable");
+    const explicitAverageProfit = row.actualAverageProfitSource === "delivered_orders" && row.actualAverageProfit != null
+      ? round(convert(row.actualAverageProfit, sourceCurrency, reportingCurrency, egpRate, ratesOverride), 2)
       : null;
-    const avgDeliveredProfit = explicitAverageProfit != null
-      ? explicitAverageProfit
-      : (actualDelivered > 0 ? round(actualProfit / actualDelivered, 2) : (averageProfitSource === "net_orders_fallback" ? round(netOrderProfit / orders, 2) : 0));
+    const avgDeliveredProfit = actualDelivered > 0
+      ? round(actualProfit / actualDelivered, 2)
+      : (explicitAverageProfit != null
+        ? explicitAverageProfit
+        : 0);
     return {
       id: text(row.key || row.id || productKey(row, row.accountId || row.dashboardAccountId)).toLowerCase(),
       accountId: text(row.accountId || row.dashboardAccountId),
@@ -331,6 +337,8 @@ function normalizeProducts(productRows, reportingCurrency, egpRate, orderCurrenc
       canceled: number(row.canceledCount || row.canceled),
       profit,
       actualCommission: actualProfit,
+      actualAverageProfit: actualDelivered > 0 ? round(actualProfit / actualDelivered, 2) : 0,
+      actualAverageProfitSource: actualDelivered > 0 ? "delivered_orders" : "unavailable",
       netOrderProfitAfterTax: netOrderProfit,
       averageProfitSource,
       totalSales,
@@ -463,6 +471,8 @@ function buildCampaignIntelligence(input) {
         netOrderCount: product.netOrderCount, totalOrderCount: product.totalOrderCount,
         cancelPct: product.cancelPct, taagerProfit: product.profit,
         actualCommission: product.actualCommission,
+        actualAverageProfit: product.actualAverageProfit,
+        actualAverageProfitSource: product.actualAverageProfitSource,
         netOrderProfitAfterTax: product.netOrderProfitAfterTax,
         averageProfitSource: product.averageProfitSource,
         totalSales: product.totalSales,
@@ -488,7 +498,7 @@ function buildCampaignIntelligence(input) {
       netOrders: group.taagerOrders,
       actualDeliveredOrders: group.actualDeliveredCount,
       actualEarnedProfitAfterTax: group.actualCommission,
-      netOrderProfitAfterTax: group.netOrderProfitAfterTax,
+      netOrderProfitAfterTax: group.actualDeliveredCount > 0 ? group.netOrderProfitAfterTax : null,
       actualDeliveredSales: group.deliveredSales,
       currentTotalSales: group.totalSales,
       expectedNdrRate: group.taagerNdrPct / 100,

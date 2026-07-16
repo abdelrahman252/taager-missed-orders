@@ -70,7 +70,11 @@ const calculatorSource = fs.readFileSync(
 
 assert(aggregatorSource.includes("expectedNdrRateSource = 'actual_period_fallback'"));
 assert(aggregatorSource.includes("expectedNdrSelectedBaseOrders"));
+assert(aggregatorSource.includes("actualAverageProfit: actualAverageProfit"));
+assert(aggregatorSource.includes("actualAverageProfitSource: actualAverageProfitSource"));
 assert(calculatorSource.includes("d.expectedNdrRate != null"));
 assert(calculatorSource.includes("d.expectedDeliveriesDisplay != null"));
+assert(calculatorSource.includes("actualAverageProfitTotal / actualAverageDeliveredOrders"));
+assert(calculatorSource.includes("d.actualAverageProfitSource === 'delivered_orders'"));
 
 console.log("expected NDR fallback regression test passed");

@@ -202,7 +202,9 @@
       ? Number(financials.adSpend || 0) * placed / Number(financials.totalPlaced || 1)
       : 0;
     var cpa = placed > 0 ? allocatedSpend / placed : 0;
-    var actualCommission = p.actualCommission != null ? Number(p.actualCommission) : Number(p.commission || 0);
+    var actualCommission = p.actualCommission != null
+      ? Number(p.actualCommission)
+      : Number(p.actualEarnedProfitAfterTax != null ? p.actualEarnedProfitAfterTax : p.commission || 0);
     var displayedCommission = p.expectedTotalProfitBeforeAdSpend != null
       ? Number(p.expectedTotalProfitBeforeAdSpend)
       : Number(p.commission || 0);
@@ -313,14 +315,18 @@
         ? window.DashboardOrderMetrics.netOrders(p)
         : Number(p.netOrderCount || p.placedCount || 0);
       var actualDelivered = Number(p.actualDeliveredCount != null ? p.actualDeliveredCount : p.deliveredCount || 0);
-      var actualCommission = Number(p.actualCommission != null ? p.actualCommission : p.commission || 0);
+      var actualCommission = Number(p.actualCommission != null
+        ? p.actualCommission
+        : (p.actualEarnedProfitAfterTax != null ? p.actualEarnedProfitAfterTax : p.commission || 0));
       var ndr = Math.max(0, Math.min(1, Number(p.ndrPct || 0) / 100));
       var calculation = window.TaagerDashboardFinancialCore.calculate({
         mode: 'expected',
         netOrders: orders,
         actualDeliveredOrders: actualDelivered,
         actualEarnedProfitAfterTax: actualCommission,
-        netOrderProfitAfterTax: p.netOrderProfitAfterTax != null ? p.netOrderProfitAfterTax : p.totalPlacedCommission,
+        netOrderProfitAfterTax: actualDelivered > 0
+          ? (p.netOrderProfitAfterTax != null ? p.netOrderProfitAfterTax : p.totalPlacedCommission)
+          : null,
         currentTotalSales: Number(p.totalSales || p.revenue || 0),
         expectedNdrRate: ndr,
         adSpend: 0

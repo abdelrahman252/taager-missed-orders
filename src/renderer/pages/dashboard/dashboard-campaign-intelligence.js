@@ -420,13 +420,21 @@
     var actualCommission = num(convertReportingMoney(actualCommissionNative, sourceCurrency, targetCurrency, egpRate), 2);
     var netOrderProfitNative = num(product && (product.netOrderProfitAfterTax != null ? product.netOrderProfitAfterTax : product.totalPlacedCommission), 2);
     var netOrderProfit = num(convertReportingMoney(netOrderProfitNative, sourceCurrency, targetCurrency, egpRate), 2);
-    var averageProfitSource = product && product.averageProfitSource
-      ? product.averageProfitSource
-      : (actualDelivered > 0 ? 'delivered_orders' : (orders > 0 && (product && (product.netOrderProfitAfterTax != null || product.totalPlacedCommission != null)) ? 'net_orders_fallback' : 'unavailable'));
-    var explicitAvgCommissionNative = product && product.averageProfit != null ? num(product.averageProfit, 2) : null;
-    var avgCommissionNative = explicitAvgCommissionNative != null
-      ? explicitAvgCommissionNative
-      : (actualDelivered > 0 ? actualCommissionNative / actualDelivered : (averageProfitSource === 'net_orders_fallback' ? netOrderProfitNative / orders : 0));
+    var averageProfitSource = actualDelivered > 0
+      ? 'delivered_orders'
+      : (product && product.actualAverageProfitSource === 'delivered_orders'
+        ? 'delivered_orders'
+        : (product && product.averageProfitSource
+          ? product.averageProfitSource
+          : 'unavailable'));
+    var explicitAvgCommissionNative = product && product.actualAverageProfitSource === 'delivered_orders' && product.actualAverageProfit != null
+      ? num(product.actualAverageProfit, 2)
+      : null;
+    var avgCommissionNative = actualDelivered > 0
+      ? actualCommissionNative / actualDelivered
+      : (explicitAvgCommissionNative != null
+        ? explicitAvgCommissionNative
+        : 0);
     var avgCommission = num(convertReportingMoney(avgCommissionNative, sourceCurrency, targetCurrency, egpRate), 2);
     var ndr = num(product && (product.ndrPct || product.deliveryRate || product.deliveryPct));
     var dr = num(product && (product.drRate || product.deliveryPct));
@@ -460,6 +468,8 @@
       commissionNative: commissionNative,
       actualCommission: actualCommission,
       actualCommissionNative: actualCommissionNative,
+      actualAverageProfit: actualDelivered > 0 ? num(actualCommission / actualDelivered, 2) : 0,
+      actualAverageProfitSource: actualDelivered > 0 ? 'delivered_orders' : 'unavailable',
       netOrderProfitAfterTax: netOrderProfit,
       averageProfitSource: averageProfitSource,
       avgDeliveredProfit: num(avgCommission, 2),
@@ -817,7 +827,9 @@
       var group = productGroups[key];
       var cpa = group.taagerOrders > 0 ? group.spend / group.taagerOrders : 0;
       var actualDelivered = group.actualDeliveredCount != null ? group.actualDeliveredCount : group.taagerDelivered;
-      var actualCommission = group.actualCommission != null ? group.actualCommission : group.taagerProfit;
+      var actualCommission = group.actualCommission != null
+        ? group.actualCommission
+        : (group.actualEarnedProfitAfterTax != null ? group.actualEarnedProfitAfterTax : group.taagerProfit);
       var deliveredCpa = actualDelivered > 0 ? group.spend / actualDelivered : 0;
       var breakEven = group.breakEvenCpa || 0;
       var avgDeliveredProfit = group.avgDeliveredProfit != null

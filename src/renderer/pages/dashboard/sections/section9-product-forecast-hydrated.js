@@ -215,21 +215,20 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
     var delivered = expectedRateMode ? displayedDelivered : actDelivered;
     var realNdr   = orders > 0 ? (delivered / orders) : 0;
     var expectedDeliveriesExact = p.expectedDeliveriesExact != null ? Number(p.expectedDeliveriesExact || 0) : null;
-    var actCommission = finiteNumber(p.actualCommission !== undefined ? p.actualCommission : (p.commission || 0));
-    var explicitAvgProfit = p.averageProfit != null ? Number(p.averageProfit) : NaN;
-    var expectedAvgProfit = (p.expectedTotalProfitBeforeAdSpend != null && expectedDeliveriesExact > 0)
-      ? Number(p.expectedTotalProfitBeforeAdSpend) / expectedDeliveriesExact
-      : NaN;
+    var actCommission = finiteNumber(p.actualCommission !== undefined
+      ? p.actualCommission
+      : (p.actualEarnedProfitAfterTax !== undefined ? p.actualEarnedProfitAfterTax : (p.commission || 0)));
+    var explicitAvgProfit = p.actualAverageProfitSource === 'delivered_orders' && p.actualAverageProfit != null
+      ? Number(p.actualAverageProfit)
+      : (p.averageProfit != null ? Number(p.averageProfit) : NaN);
     var fallbackProfit = p.netOrderProfitAfterTax != null ? p.netOrderProfitAfterTax : p.totalPlacedCommission;
     var realComm = actDelivered > 0
       ? actCommission / actDelivered
-      : (Number.isFinite(expectedAvgProfit)
-        ? expectedAvgProfit
+      : (window.DashboardOrderMetrics
+        ? window.DashboardOrderMetrics.averageProfit(p)
         : (Number.isFinite(explicitAvgProfit)
           ? explicitAvgProfit
-          : (window.DashboardOrderMetrics
-            ? window.DashboardOrderMetrics.averageProfit(p)
-            : (orders > 0 ? finiteNumber(fallbackProfit) / orders : 0))));
+          : (orders > 0 ? finiteNumber(fallbackProfit) / orders : 0)));
     var averageProfitSource = window.DashboardOrderMetrics
       ? window.DashboardOrderMetrics.averageProfitSource(p)
       : (actDelivered > 0 ? 'delivered_orders' : (orders > 0 ? 'net_orders_fallback' : 'unavailable'));

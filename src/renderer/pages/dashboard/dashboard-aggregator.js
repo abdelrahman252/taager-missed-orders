@@ -690,7 +690,7 @@
         netOrders: summary.totalOrders,
         actualDeliveredOrders: summary.deliveredCount,
         actualEarnedProfitAfterTax: summary.earnedCommission,
-        netOrderProfitAfterTax: totalPlacedCommission,
+        netOrderProfitAfterTax: summary.deliveredCount > 0 ? totalPlacedCommission : null,
         actualDeliveredSales: summary.totalDeliveredSales,
         currentTotalSales: summary.totalSales,
         expectedNdrRate: expectedNdrRate,
@@ -3208,12 +3208,18 @@
 
     var averageProfitSource = calculatorDeliveredCount > 0
       ? 'delivered_orders'
-      : (placedCount > 0 ? 'net_orders_fallback' : 'unavailable');
+      : 'unavailable';
     var actualAvgCommission = calculatorDeliveredCount > 0
       ? calculatorEarnedProfitAfterTax / calculatorDeliveredCount
-      : (placedCount > 0 ? totalPlacedCommission / placedCount : 0);
+      : 0;
     var actualDeliveredCount = calculatorDeliveredCount;
     var actualEarnedCommission = calculatorEarnedProfitAfterTax;
+    var actualAverageProfit = calculatorDeliveredCount > 0
+      ? calculatorEarnedProfitAfterTax / calculatorDeliveredCount
+      : 0;
+    var actualAverageProfitSource = calculatorDeliveredCount > 0
+      ? 'delivered_orders'
+      : 'unavailable';
     var actualTotalDeliveredSales = totalDeliveredSales;
     var accountFinancials = null;
     var expectedNdrRateSource = meta.deliveredDateMode === 'expected' ? 'selected_cohort' : 'actual';
@@ -3238,7 +3244,7 @@
         netOrders: placedCount,
         actualDeliveredOrders: actualDeliveredCount,
         actualEarnedProfitAfterTax: actualEarnedCommission,
-        netOrderProfitAfterTax: totalPlacedCommission,
+        netOrderProfitAfterTax: actualDeliveredCount > 0 ? totalPlacedCommission : null,
         actualDeliveredSales: actualTotalDeliveredSales,
         currentTotalSales: totalSales,
         expectedNdrRate: globalExpectedNdrRate,
@@ -3266,7 +3272,7 @@
           netOrders: cs.count,
           actualDeliveredOrders: cs.deliveredOrders,
           actualEarnedProfitAfterTax: cs.earnedProfitAfterTax,
-          netOrderProfitAfterTax: cs.totalPlacedCommission,
+          netOrderProfitAfterTax: cs.deliveredOrders > 0 ? cs.totalPlacedCommission : null,
           currentTotalSales: cs.totalRevenue,
           expectedNdrRate: cityExpectedNdrRate,
           adSpend: 0
@@ -3293,7 +3299,7 @@
             netOrders: cp.orders,
             actualDeliveredOrders: cp.delivered,
             actualEarnedProfitAfterTax: cp.commission,
-            netOrderProfitAfterTax: cp.totalPlacedCommission,
+            netOrderProfitAfterTax: cp.delivered > 0 ? cp.totalPlacedCommission : null,
             currentTotalSales: cp.revenue,
             expectedNdrRate: prodExpectedNdrRate,
             adSpend: 0
@@ -3325,7 +3331,7 @@
           netOrders: p.placedCount,
           actualDeliveredOrders: p.actualDeliveredCount,
           actualEarnedProfitAfterTax: p.actualCommission,
-          netOrderProfitAfterTax: p.totalPlacedCommission,
+          netOrderProfitAfterTax: p.actualDeliveredCount > 0 ? p.totalPlacedCommission : null,
           actualDeliveredSales: p.actualDeliveredSales,
           currentTotalSales: p.revenue,
           expectedNdrRate: prodExpectedNdrRate,
@@ -3347,7 +3353,7 @@
             netOrders: pcm.orders,
             actualDeliveredOrders: pcm.delivered,
             actualEarnedProfitAfterTax: pcm.commission,
-            netOrderProfitAfterTax: pcm.totalPlacedCommission,
+            netOrderProfitAfterTax: pcm.delivered > 0 ? pcm.totalPlacedCommission : null,
             currentTotalSales: pcm.revenue,
             expectedNdrRate: pcmExpectedNdrRate,
             adSpend: 0
@@ -3378,7 +3384,7 @@
           netOrders: cp.placedCount,
           actualDeliveredOrders: cp.actualDeliveredCount,
           actualEarnedProfitAfterTax: cp.actualCommission,
-          netOrderProfitAfterTax: cp.totalPlacedCommission,
+          netOrderProfitAfterTax: cp.actualDeliveredCount > 0 ? cp.totalPlacedCommission : null,
           actualDeliveredSales: cp.actualDeliveredSales,
           currentTotalSales: cp.totalPlacedSales,
           expectedNdrRate: cpExpectedNdrRate,
@@ -3699,6 +3705,9 @@
       var productDeliveredAov = productDeliveredAovBase > 0
         ? parseFloat((p.deliveredSales / productDeliveredAovBase).toFixed(2))
         : 0;
+      var productActualDelivered = p.actualDeliveredCount !== undefined ? p.actualDeliveredCount : p.calculatorDeliveredCount;
+      var productActualCommission = p.actualCommission !== undefined ? p.actualCommission : p.calculatorEarnedProfitAfterTax;
+      var productActualAverageProfit = productActualDelivered > 0 ? productActualCommission / productActualDelivered : 0;
 
       var activeTotal = confirmationBase;
       var drPct = boundedProductRatePct(productDrDelivered, activeTotal, key + ':dr');
@@ -3877,10 +3886,13 @@
         deliveredSales: p.deliveredSales,
         deliveredAov: productDeliveredAov,
         deliveredCount: p.deliveredCount,
-        actualDeliveredCount: p.actualDeliveredCount !== undefined ? p.actualDeliveredCount : p.calculatorDeliveredCount,
-        actualCommission: p.actualCommission !== undefined ? p.actualCommission : p.calculatorEarnedProfitAfterTax,
+        actualDeliveredCount: productActualDelivered,
+        actualCommission: productActualCommission,
+        actualEarnedProfitAfterTax: productActualCommission,
+        actualAverageProfit: productActualAverageProfit,
+        actualAverageProfitSource: productActualDelivered > 0 ? 'delivered_orders' : 'unavailable',
         netOrderProfitAfterTax: p.totalPlacedCommission || 0,
-        averageProfitSource: (p.actualDeliveredCount !== undefined ? p.actualDeliveredCount : p.calculatorDeliveredCount) > 0 ? 'delivered_orders' : (p.placedCount > 0 ? 'net_orders_fallback' : 'unavailable'),
+        averageProfitSource: productActualDelivered > 0 ? 'delivered_orders' : 'unavailable',
         actualDeliveredQty: p.actualDeliveredQty !== undefined ? p.actualDeliveredQty : p.deliveredQty,
         actualDeliveredSales: p.actualDeliveredSales !== undefined ? p.actualDeliveredSales : p.deliveredSales,
         expectedDeliveriesExact: p.expectedDeliveriesExact !== undefined ? p.expectedDeliveriesExact : p.deliveredCount,
@@ -4088,13 +4100,23 @@
         p.pendingStatusCount,
         statusTotal
       );
+      var campaignActualDelivered = p.actualDeliveredCount !== undefined ? p.actualDeliveredCount : p.deliveredCount;
+      var campaignActualCommission = p.actualCommission !== undefined
+        ? p.actualCommission
+        : (p.actualEarnedProfitAfterTax !== undefined ? p.actualEarnedProfitAfterTax : p.commission);
+      var campaignActualAverageProfit = campaignActualDelivered > 0
+        ? campaignActualCommission / campaignActualDelivered
+        : 0;
       return Object.assign({}, p, {
         key: key,
         orders: p.placedCount,
         netOrderCount: p.placedCount,
         delivered: p.deliveredCount,
-        actualDeliveredCount: p.actualDeliveredCount !== undefined ? p.actualDeliveredCount : p.deliveredCount,
-        actualCommission: p.actualCommission !== undefined ? p.actualCommission : p.commission,
+        actualDeliveredCount: campaignActualDelivered,
+        actualCommission: campaignActualCommission,
+        actualEarnedProfitAfterTax: campaignActualCommission,
+        actualAverageProfit: campaignActualAverageProfit,
+        actualAverageProfitSource: campaignActualDelivered > 0 ? 'delivered_orders' : 'unavailable',
         actualDeliveredSales: p.actualDeliveredSales !== undefined ? p.actualDeliveredSales : p.deliveredSales,
         expectedDeliveriesExact: p.expectedDeliveriesExact !== undefined ? p.expectedDeliveriesExact : p.deliveredCount,
         expectedTotalProfitBeforeAdSpend: p.expectedTotalProfitBeforeAdSpend !== undefined ? p.expectedTotalProfitBeforeAdSpend : p.commission,
@@ -4511,6 +4533,8 @@
         confirmationRate: confirmationPct, drPct: drPct,
         averageProfit: avgCommission, avgCommission: avgCommission,
         averageProfitSource: averageProfitSource,
+        actualAverageProfit: actualAverageProfit,
+        actualAverageProfitSource: actualAverageProfitSource,
         netOrderProfitAfterTax: totalPlacedCommission,
         taagerProfitAfterTax: taagerProfitAfterTax,
         deliveredCount: deliveredCount, shippingCount: shippingCount, totalDeliveredSales: totalDeliveredSales,

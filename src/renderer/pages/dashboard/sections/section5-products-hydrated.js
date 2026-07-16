@@ -581,7 +581,9 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         : (totalPlaced > 0 ? budget * placed / totalPlaced : 0);
       p.cpa = placed > 0 ? p.allocatedAdSpend / placed : 0;
       var delivered = p.actualDeliveredCount !== undefined ? p.actualDeliveredCount : (Number(p.deliveredCount) || 0);
-      var commissionVal = p.actualCommission !== undefined ? p.actualCommission : (Number(p.commission) || 0);
+      var commissionVal = p.actualCommission !== undefined
+        ? p.actualCommission
+        : (p.actualEarnedProfitAfterTax !== undefined ? p.actualEarnedProfitAfterTax : (Number(p.commission) || 0));
       var avgCommissionSar = window.DashboardOrderMetrics
         ? window.DashboardOrderMetrics.averageProfit(p)
         : (delivered > 0 ? (Number(commissionVal) || 0) / delivered : 0);
@@ -4194,7 +4196,9 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       clone.ndrPct = clone.deliveredCount > 0 ? (Number(product && product.ndrPct) || 0) : 0;
       clone.expectedDeliveriesExact = clone.deliveredCount;
       clone.commission = Number(product && (
-        product.actualCommission != null ? product.actualCommission : product.commission
+        product.actualCommission != null
+          ? product.actualCommission
+          : (product.actualEarnedProfitAfterTax != null ? product.actualEarnedProfitAfterTax : product.commission)
       )) || 0;
       clone.revenue = clone.commission;
       clone.deliveredSales = Number(product && (
@@ -4214,13 +4218,18 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         ? Number(product.expectedNdrRate)
         : (Number(product.ndrPct) || 0) / 100));
       var actualDelivered = Number(product.actualDeliveredCount != null ? product.actualDeliveredCount : product.deliveredCount) || 0;
-      var actualCommission = Number(product.actualCommission != null ? product.actualCommission : product.commission) || 0;
+      var actualCommission = Number(product.actualCommission != null
+        ? product.actualCommission
+        : (product.actualEarnedProfitAfterTax != null ? product.actualEarnedProfitAfterTax : product.commission)) || 0;
+      var actualAverageProfit = actualDelivered > 0 ? actualCommission / actualDelivered : 0;
       var calculation = window.TaagerDashboardFinancialCore.calculate({
         mode: 'expected',
         netOrders: placed,
         actualDeliveredOrders: actualDelivered,
         actualEarnedProfitAfterTax: actualCommission,
-        netOrderProfitAfterTax: product.netOrderProfitAfterTax != null ? product.netOrderProfitAfterTax : product.totalPlacedCommission,
+        netOrderProfitAfterTax: actualDelivered > 0
+          ? (product.netOrderProfitAfterTax != null ? product.netOrderProfitAfterTax : product.totalPlacedCommission)
+          : null,
         currentTotalSales: totalSalesValue(product),
         expectedNdrRate: ndrRate,
         adSpend: Number(product.allocatedAdSpend) || 0
@@ -4232,8 +4241,11 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         expectedDeliveriesExact: calculation.expectedDeliveriesExact,
         commission: calculation.expectedTotalProfitBeforeAdSpend,
         expectedTotalProfitBeforeAdSpend: calculation.expectedTotalProfitBeforeAdSpend,
-        averageProfit: calculation.averageProfit,
-        averageProfitSource: calculation.averageProfitSource,
+        averageProfit: actualDelivered > 0 ? actualAverageProfit : calculation.averageProfit,
+        averageProfitSource: actualDelivered > 0 ? 'delivered_orders' : calculation.averageProfitSource,
+        actualEarnedProfitAfterTax: actualCommission,
+        actualAverageProfit: actualAverageProfit,
+        actualAverageProfitSource: actualDelivered > 0 ? 'delivered_orders' : 'unavailable',
         revenue: calculation.expectedTotalProfitBeforeAdSpend,
         deliveredSales: calculation.expectedDeliveredSales,
         expectedDeliveredSales: calculation.expectedDeliveredSales,

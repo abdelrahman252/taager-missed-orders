@@ -447,8 +447,12 @@ window.renderSection8 = function (mountEl, data, ctx) {
 
   // Quick Summary dynamic items
   var ndrPct = cod.ndrPct != null ? num(cod.ndrPct, 0) : (d.roi ? num(d.roi.ndrPct, 0) : 0);
-  var avgCommission = num(roiLive.avgCommission, 0);
-  var averageProfitSource = roiLive.averageProfitSource || (num(roiLive.actualDeliveredCount, 0) > 0 ? 'delivered_orders' : (num(roiLive.netOrderCount || roiLive.totalOrders, 0) > 0 && roiLive.netOrderProfitAfterTax != null ? 'net_orders_fallback' : 'unavailable'));
+  var avgCommission = window.DashboardOrderMetrics
+    ? window.DashboardOrderMetrics.averageProfit(roiLive)
+    : num(roiLive.avgCommission, 0);
+  var averageProfitSource = window.DashboardOrderMetrics
+    ? window.DashboardOrderMetrics.averageProfitSource(roiLive)
+    : (roiLive.averageProfitSource || (num(roiLive.actualDeliveredCount, 0) > 0 ? 'delivered_orders' : (num(roiLive.netOrderCount || roiLive.totalOrders, 0) > 0 && roiLive.netOrderProfitAfterTax != null ? 'net_orders_fallback' : 'unavailable')));
   var accountSpend = Math.max(0, num(roiLive.adSpend, 0));
   var accountOrders = Math.max(0, window.DashboardOrderMetrics
     ? window.DashboardOrderMetrics.netOrders(roiLive)

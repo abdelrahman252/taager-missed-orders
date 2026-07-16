@@ -186,7 +186,9 @@
         ? window.DashboardOrderMetrics.averageProfit(p)
         : (function () {
             var actualDelivered = Number(p.actualDeliveredCount != null ? p.actualDeliveredCount : p.deliveredCount || 0);
-            var actualCommission = Number(p.actualCommission != null ? p.actualCommission : p.commission || 0);
+            var actualCommission = Number(p.actualCommission != null
+              ? p.actualCommission
+              : (p.actualEarnedProfitAfterTax != null ? p.actualEarnedProfitAfterTax : p.commission || 0));
             var netOrders = Number(p.netOrderCount != null ? p.netOrderCount : p.placedCount || 0);
             var netOrderProfit = Number(p.netOrderProfitAfterTax != null ? p.netOrderProfitAfterTax : p.totalPlacedCommission || 0);
             return actualDelivered > 0 ? actualCommission / actualDelivered : (netOrders > 0 ? netOrderProfit / netOrders : 0);

@@ -706,14 +706,16 @@
           : globalExpectedNdrRate;
         
         var oldDelivered = group.actualDeliveredCount != null ? group.actualDeliveredCount : group.taagerDelivered;
-        var oldProfit = group.actualCommission != null ? group.actualCommission : group.taagerProfit;
+        var oldProfit = group.actualCommission != null
+          ? group.actualCommission
+          : (group.actualEarnedProfitAfterTax != null ? group.actualEarnedProfitAfterTax : group.taagerProfit);
         var oldSales = group.totalSales != null ? group.totalSales : (group.deliveredSales || 0);
         var projection = window.TaagerDashboardFinancialCore.calculate({
           mode: 'expected',
           netOrders: group.taagerOrders,
           actualDeliveredOrders: oldDelivered,
           actualEarnedProfitAfterTax: oldProfit,
-          netOrderProfitAfterTax: group.netOrderProfitAfterTax,
+          netOrderProfitAfterTax: oldDelivered > 0 ? group.netOrderProfitAfterTax : null,
           currentTotalSales: oldSales,
           expectedNdrRate: expectedNdrRate,
           adSpend: group.spend || 0
@@ -1403,14 +1405,16 @@
             : globalExpectedNdrRate;
           
           var oldDelivered = group.actualDeliveredCount != null ? group.actualDeliveredCount : group.taagerDelivered;
-          var oldProfit = group.actualCommission != null ? group.actualCommission : group.taagerProfit;
+          var oldProfit = group.actualCommission != null
+            ? group.actualCommission
+            : (group.actualEarnedProfitAfterTax != null ? group.actualEarnedProfitAfterTax : group.taagerProfit);
           var oldSales = group.totalSales != null ? group.totalSales : (group.deliveredSales || 0);
           var projection = window.TaagerDashboardFinancialCore.calculate({
             mode: 'expected',
             netOrders: group.taagerOrders,
             actualDeliveredOrders: oldDelivered,
             actualEarnedProfitAfterTax: oldProfit,
-            netOrderProfitAfterTax: group.netOrderProfitAfterTax,
+            netOrderProfitAfterTax: oldDelivered > 0 ? group.netOrderProfitAfterTax : null,
             currentTotalSales: oldSales,
             expectedNdrRate: expectedNdrRate,
             adSpend: group.spend || 0
