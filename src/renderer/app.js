@@ -4126,16 +4126,19 @@ async function adminRefresh() {
   }
 }
 
+function clearAdminRepairBrowserStorage() {
+  try { localStorage.clear(); } catch (err) { console.warn("[AdminCacheReset] localStorage clear failed:", err); }
+  try { sessionStorage.clear(); } catch (err) { console.warn("[AdminCacheReset] sessionStorage clear failed:", err); }
+}
+
 function handleAdminCacheReset() {
+  clearAdminRepairBrowserStorage();
   if (window.invalidateDashboardCache) window.invalidateDashboardCache("admin-cache-reset");
   if (window.invalidateDashboardAiContextCache) window.invalidateDashboardAiContextCache();
   invalidatePage("page-dashboard", "admin-cache-reset");
   invalidatePage("page-analytics", "admin-cache-reset");
   invalidatePage("page-operations", "admin-cache-reset");
-  const activePage = document.querySelector(".page.active");
-  if (activePage && ["page-dashboard", "page-analytics", "page-operations"].includes(activePage.id)) {
-    reRenderCurrentPage();
-  }
+  reloadAppPreservingRoute("admin-cache-reset");
 }
 
 async function init() {
