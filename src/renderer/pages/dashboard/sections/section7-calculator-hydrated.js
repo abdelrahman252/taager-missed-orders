@@ -3213,7 +3213,9 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       ) +
       _kpiMiniTip(
         s7Txt("Net Delivery Rate (NDR)", "معدل التسليم الصافي (NDR)"),
-        '<span id="s7-real-ndr-pct">' + s7PctValue(realNdrPct) + "%</span>",
+        isExpectedRateMode
+          ? s7ValueStack('<span id="s7-real-ndr-pct">' + s7PctValue(realNdrPct) + "%</span>", 'delivered')
+          : '<span id="s7-real-ndr-pct">' + s7PctValue(realNdrPct) + "%</span>",
         "#f59e0b",
         S7_ICONS.target,
         s7Txt("Net Delivery Rate (NDR)", "معدل التسليم الصافي (NDR)"),

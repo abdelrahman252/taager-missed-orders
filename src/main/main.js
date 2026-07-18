@@ -13,7 +13,7 @@
   if (fs.existsSync(devLocalPath)) dotenv.config({ path: devLocalPath, override: true });
 })();
 
-const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage, clipboard } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage, clipboard, session } = require("electron");
 app.setAppUserModelId("com.taagerbot.orders");
 const path = require("path");
 const Store = require("electron-store");
@@ -3095,13 +3095,50 @@ function _handleForceFlush() {
   }
 }
 
+const RUNTIME_CACHE_RESET_TARGETS = [
+  "Cache",
+  "Code Cache",
+  "GPUCache",
+  "DawnCache",
+  "Shared Dictionary",
+  "ShaderCache",
+  "GrShaderCache",
+  "blob_storage",
+];
+
+function _clearRuntimeCacheFolders(reason = "admin-cache-reset") {
+  const userData = app.getPath("userData");
+  const cleared = [];
+  const failed = [];
+  for (const name of RUNTIME_CACHE_RESET_TARGETS) {
+    const target = path.join(userData, name);
+    try {
+      if (!fs.existsSync(target)) continue;
+      fs.rmSync(target, { recursive: true, force: true, maxRetries: 3, retryDelay: 80 });
+      cleared.push(name);
+    } catch (err) {
+      failed.push({ name, error: err?.message || String(err) });
+    }
+  }
+  log.warn("[License] Runtime cache repair finished", { reason, userData, cleared, failed });
+  return { userData, cleared, failed };
+}
+
 function _handleResetCache() {
-  log.warn("[License] Reset cache received - wiping local metrics and dashboard cache.");
+  log.warn("[License] Reset cache received - wiping local metrics, dashboard cache, and runtime cache.");
   try { analyticsStore.clear(); } catch (_) {}
   try { dashboardStore.clear(); } catch (_) {}
   invalidateAnalyticsRunsCache();
   analyticsSnapshotSyncCacheKey = "";
   dashboardQueryService.clearCache();
+  _clearRuntimeCacheFolders("admin-cache-reset");
+  try {
+    session.defaultSession.clearCache().catch((err) => {
+      log.warn("[License] Electron cache clear failed:", err?.message || err);
+    });
+  } catch (err) {
+    log.warn("[License] Electron cache clear unavailable:", err?.message || err);
+  }
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("reset-cache");
   }
