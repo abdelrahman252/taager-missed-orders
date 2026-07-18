@@ -715,7 +715,7 @@
           netOrders: group.taagerOrders,
           actualDeliveredOrders: oldDelivered,
           actualEarnedProfitAfterTax: oldProfit,
-          netOrderProfitAfterTax: oldDelivered > 0 ? group.netOrderProfitAfterTax : null,
+          netOrderProfitAfterTax: group.netOrderProfitAfterTax,
           currentTotalSales: oldSales,
           expectedNdrRate: expectedNdrRate,
           adSpend: group.spend || 0
@@ -1414,7 +1414,7 @@
             netOrders: group.taagerOrders,
             actualDeliveredOrders: oldDelivered,
             actualEarnedProfitAfterTax: oldProfit,
-            netOrderProfitAfterTax: oldDelivered > 0 ? group.netOrderProfitAfterTax : null,
+            netOrderProfitAfterTax: group.netOrderProfitAfterTax,
             currentTotalSales: oldSales,
             expectedNdrRate: expectedNdrRate,
             adSpend: group.spend || 0

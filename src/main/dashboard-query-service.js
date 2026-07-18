@@ -1169,7 +1169,7 @@ function createDashboardQueryService(options) {
           netOrders: product.netOrderCount,
           actualDeliveredOrders: product.calculatorDeliveredCount,
           actualEarnedProfitAfterTax: product.calculatorEarnedProfitAfterTax,
-          netOrderProfitAfterTax: product.calculatorDeliveredCount > 0 ? product.netOrderProfitAfterTax : null,
+          netOrderProfitAfterTax: product.netOrderProfitAfterTax,
           currentTotalSales: product.revenue,
           expectedNdrRate: ndrRate,
           adSpend: 0,
@@ -1257,7 +1257,7 @@ function createDashboardQueryService(options) {
           netOrders: product.netOrderCount,
           actualDeliveredOrders: product.actualDeliveredCount,
           actualEarnedProfitAfterTax: actualFinancialCommission,
-          netOrderProfitAfterTax: product.actualDeliveredCount > 0 ? netOrderFinancialProfit : null,
+          netOrderProfitAfterTax: netOrderFinancialProfit,
           currentTotalSales: financialSales,
           expectedNdrRate: product.expectedNdrRate,
           adSpend: financialSpend,
@@ -1269,8 +1269,8 @@ function createDashboardQueryService(options) {
           ? actualFinancialCommission / product.actualDeliveredCount
           : 0;
         product.actualAverageProfitSource = product.actualDeliveredCount > 0 ? "delivered_orders" : "unavailable";
-        product.averageProfit = product.actualAverageProfit;
-        product.averageProfitSource = product.actualAverageProfitSource;
+        product.averageProfit = productFinancials.averageProfit;
+        product.averageProfitSource = productFinancials.averageProfitSource;
         product.breakEvenCpa = productFinancials.breakEvenCpa;
         product.expectedDeliveredCpa = productFinancials.expectedDeliveredCpa;
         product.expectedNetProfit = productFinancials.expectedNetProfit;
@@ -2000,7 +2000,7 @@ function createDashboardQueryService(options) {
           netOrders: stat.count,
           actualDeliveredOrders: stat.deliveredOrders,
           actualEarnedProfitAfterTax: stat.earnedProfitAfterTax,
-          netOrderProfitAfterTax: stat.deliveredOrders > 0 ? stat.netOrderProfitAfterTax : null,
+          netOrderProfitAfterTax: stat.netOrderProfitAfterTax,
           currentTotalSales: stat.totalRevenue,
           expectedNdrRate: rateResolution.rate,
           adSpend: 0,
@@ -2066,8 +2066,8 @@ function createDashboardQueryService(options) {
           actualAverageProfitSource: stat.deliveredOrders > 0 ? "delivered_orders" : "unavailable",
           expectedTotalProfitBeforeAdSpend: cityProjection.expectedTotalProfitBeforeAdSpend,
           expectedDeliveredSales: cityProjection.expectedDeliveredSales,
-          averageProfit: cityActualAverageProfit,
-          averageProfitSource: stat.deliveredOrders > 0 ? "delivered_orders" : "unavailable",
+          averageProfit: cityProjection.averageProfit,
+          averageProfitSource: cityProjection.averageProfitSource,
           incomingCommission: stat.incomingCommission,
           lostCommission: stat.lostCommission,
           canceledCount: stat.canceledCount,

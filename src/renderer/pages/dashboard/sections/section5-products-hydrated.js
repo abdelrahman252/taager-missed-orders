@@ -4227,9 +4227,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         netOrders: placed,
         actualDeliveredOrders: actualDelivered,
         actualEarnedProfitAfterTax: actualCommission,
-        netOrderProfitAfterTax: actualDelivered > 0
-          ? (product.netOrderProfitAfterTax != null ? product.netOrderProfitAfterTax : product.totalPlacedCommission)
-          : null,
+        netOrderProfitAfterTax: product.netOrderProfitAfterTax != null ? product.netOrderProfitAfterTax : product.totalPlacedCommission,
         currentTotalSales: totalSalesValue(product),
         expectedNdrRate: ndrRate,
         adSpend: Number(product.allocatedAdSpend) || 0
@@ -4241,8 +4239,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         expectedDeliveriesExact: calculation.expectedDeliveriesExact,
         commission: calculation.expectedTotalProfitBeforeAdSpend,
         expectedTotalProfitBeforeAdSpend: calculation.expectedTotalProfitBeforeAdSpend,
-        averageProfit: actualDelivered > 0 ? actualAverageProfit : calculation.averageProfit,
-        averageProfitSource: actualDelivered > 0 ? 'delivered_orders' : calculation.averageProfitSource,
+        averageProfit: calculation.averageProfit,
+        averageProfitSource: calculation.averageProfitSource,
         actualEarnedProfitAfterTax: actualCommission,
         actualAverageProfit: actualAverageProfit,
         actualAverageProfitSource: actualDelivered > 0 ? 'delivered_orders' : 'unavailable',

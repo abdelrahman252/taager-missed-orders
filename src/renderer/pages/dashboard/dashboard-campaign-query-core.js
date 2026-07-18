@@ -498,7 +498,7 @@ function buildCampaignIntelligence(input) {
       netOrders: group.taagerOrders,
       actualDeliveredOrders: group.actualDeliveredCount,
       actualEarnedProfitAfterTax: group.actualCommission,
-      netOrderProfitAfterTax: group.actualDeliveredCount > 0 ? group.netOrderProfitAfterTax : null,
+      netOrderProfitAfterTax: group.netOrderProfitAfterTax,
       actualDeliveredSales: group.deliveredSales,
       currentTotalSales: group.totalSales,
       expectedNdrRate: group.taagerNdrPct / 100,

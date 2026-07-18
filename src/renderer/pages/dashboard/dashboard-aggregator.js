@@ -690,7 +690,7 @@
         netOrders: summary.totalOrders,
         actualDeliveredOrders: summary.deliveredCount,
         actualEarnedProfitAfterTax: summary.earnedCommission,
-        netOrderProfitAfterTax: summary.deliveredCount > 0 ? totalPlacedCommission : null,
+        netOrderProfitAfterTax: totalPlacedCommission,
         actualDeliveredSales: summary.totalDeliveredSales,
         currentTotalSales: summary.totalSales,
         expectedNdrRate: expectedNdrRate,
@@ -3208,7 +3208,7 @@
 
     var averageProfitSource = calculatorDeliveredCount > 0
       ? 'delivered_orders'
-      : 'unavailable';
+      : (placedCount > 0 ? 'net_orders_fallback' : 'unavailable');
     var actualAvgCommission = calculatorDeliveredCount > 0
       ? calculatorEarnedProfitAfterTax / calculatorDeliveredCount
       : 0;
@@ -3244,7 +3244,7 @@
         netOrders: placedCount,
         actualDeliveredOrders: actualDeliveredCount,
         actualEarnedProfitAfterTax: actualEarnedCommission,
-        netOrderProfitAfterTax: actualDeliveredCount > 0 ? totalPlacedCommission : null,
+        netOrderProfitAfterTax: totalPlacedCommission,
         actualDeliveredSales: actualTotalDeliveredSales,
         currentTotalSales: totalSales,
         expectedNdrRate: globalExpectedNdrRate,
@@ -3261,7 +3261,7 @@
         var stat = dailyStats[key];
         stat.actualEarned = stat.earned;
         stat.expectedDeliveriesExact = stat.orders * globalExpectedNdrRate;
-        stat.earned = stat.expectedDeliveriesExact * actualAvgCommission;
+        stat.earned = stat.expectedDeliveriesExact * accountFinancials.averageProfit;
       });
       
       Object.keys(cityStats).forEach(function (cityKey) {
@@ -3272,7 +3272,7 @@
           netOrders: cs.count,
           actualDeliveredOrders: cs.deliveredOrders,
           actualEarnedProfitAfterTax: cs.earnedProfitAfterTax,
-          netOrderProfitAfterTax: cs.deliveredOrders > 0 ? cs.totalPlacedCommission : null,
+          netOrderProfitAfterTax: cs.totalPlacedCommission,
           currentTotalSales: cs.totalRevenue,
           expectedNdrRate: cityExpectedNdrRate,
           adSpend: 0
@@ -3299,7 +3299,7 @@
             netOrders: cp.orders,
             actualDeliveredOrders: cp.delivered,
             actualEarnedProfitAfterTax: cp.commission,
-            netOrderProfitAfterTax: cp.delivered > 0 ? cp.totalPlacedCommission : null,
+            netOrderProfitAfterTax: cp.totalPlacedCommission,
             currentTotalSales: cp.revenue,
             expectedNdrRate: prodExpectedNdrRate,
             adSpend: 0
@@ -3331,7 +3331,7 @@
           netOrders: p.placedCount,
           actualDeliveredOrders: p.actualDeliveredCount,
           actualEarnedProfitAfterTax: p.actualCommission,
-          netOrderProfitAfterTax: p.actualDeliveredCount > 0 ? p.totalPlacedCommission : null,
+          netOrderProfitAfterTax: p.totalPlacedCommission,
           actualDeliveredSales: p.actualDeliveredSales,
           currentTotalSales: p.revenue,
           expectedNdrRate: prodExpectedNdrRate,
@@ -3340,6 +3340,8 @@
         p.expectedDeliveriesExact = productFinancials.expectedDeliveriesExact;
         p.expectedTotalProfitBeforeAdSpend = productFinancials.expectedTotalProfitBeforeAdSpend;
         p.expectedDeliveredSales = productFinancials.expectedDeliveredSales;
+        p.averageProfit = productFinancials.averageProfit;
+        p.averageProfitSource = productFinancials.averageProfitSource;
         p.deliveredCount = productFinancials.expectedDeliveriesDisplay;
         p.commission = productFinancials.expectedTotalProfitBeforeAdSpend;
         p.deliveredSales = productFinancials.expectedDeliveredSales;
@@ -3353,7 +3355,7 @@
             netOrders: pcm.orders,
             actualDeliveredOrders: pcm.delivered,
             actualEarnedProfitAfterTax: pcm.commission,
-            netOrderProfitAfterTax: pcm.delivered > 0 ? pcm.totalPlacedCommission : null,
+            netOrderProfitAfterTax: pcm.totalPlacedCommission,
             currentTotalSales: pcm.revenue,
             expectedNdrRate: pcmExpectedNdrRate,
             adSpend: 0
@@ -3384,7 +3386,7 @@
           netOrders: cp.placedCount,
           actualDeliveredOrders: cp.actualDeliveredCount,
           actualEarnedProfitAfterTax: cp.actualCommission,
-          netOrderProfitAfterTax: cp.actualDeliveredCount > 0 ? cp.totalPlacedCommission : null,
+          netOrderProfitAfterTax: cp.totalPlacedCommission,
           actualDeliveredSales: cp.actualDeliveredSales,
           currentTotalSales: cp.totalPlacedSales,
           expectedNdrRate: cpExpectedNdrRate,
@@ -3892,7 +3894,8 @@
         actualAverageProfit: productActualAverageProfit,
         actualAverageProfitSource: productActualDelivered > 0 ? 'delivered_orders' : 'unavailable',
         netOrderProfitAfterTax: p.totalPlacedCommission || 0,
-        averageProfitSource: productActualDelivered > 0 ? 'delivered_orders' : 'unavailable',
+        averageProfit: p.averageProfit !== undefined ? p.averageProfit : productActualAverageProfit,
+        averageProfitSource: p.averageProfitSource !== undefined ? p.averageProfitSource : (productActualDelivered > 0 ? 'delivered_orders' : (p.placedCount > 0 ? 'net_orders_fallback' : 'unavailable')),
         actualDeliveredQty: p.actualDeliveredQty !== undefined ? p.actualDeliveredQty : p.deliveredQty,
         actualDeliveredSales: p.actualDeliveredSales !== undefined ? p.actualDeliveredSales : p.deliveredSales,
         expectedDeliveriesExact: p.expectedDeliveriesExact !== undefined ? p.expectedDeliveriesExact : p.deliveredCount,
@@ -4320,6 +4323,11 @@
       expectedNdrRate: meta.deliveredDateMode === 'expected' ? globalExpectedNdrRate : (ndrPct / 100),
       adSpend: roiAdSpend
     });
+    avgCommission = accountFinancials.averageProfit;
+    averageProfitSource = accountFinancials.averageProfitSource;
+    nationalAverages.averageProfit = avgCommission;
+    nationalAverages.avgCommission = avgCommission;
+    nationalAverages.averageProfitSource = averageProfitSource;
     // Taager dashboard/status/NDR migration: dashboard rows are created-date based.
     var createdOrders = null;
     var outcomeOrders = null;

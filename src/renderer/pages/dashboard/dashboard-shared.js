@@ -139,7 +139,9 @@
               ? Number(row.earnedCommission)
               : Number(row.commission))));
       if (delivered > 0) return isFinite(earned) ? earned / delivered : 0;
-      if (row.averageProfitSource === 'unavailable' || row.actualAverageProfitSource === 'unavailable') return 0;
+      if (row.averageProfitSource === 'unavailable') return 0;
+      var explicitAverage = row.averageProfit != null ? Number(row.averageProfit) : NaN;
+      if (isFinite(explicitAverage) && row.averageProfitSource && row.averageProfitSource !== 'unavailable') return explicitAverage;
       var netOrders = this.netOrders(row);
       var netOrderProfit = row.netOrderProfitAfterTax != null
         ? Number(row.netOrderProfitAfterTax)
