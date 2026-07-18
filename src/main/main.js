@@ -3069,6 +3069,25 @@ function _getStartupCachedLicenseResult() {
   return { ...cached.result, startupCached: true };
 }
 
+const ADMIN_COMMAND_REFRESH_MIN_INTERVAL_MS = 15 * 1000;
+let adminCommandRefreshInFlight = false;
+let adminCommandRefreshLastAt = 0;
+
+function _scheduleAdminCommandRefresh(reason = "cached-license") {
+  if (adminCommandRefreshInFlight) return;
+  if (Date.now() - adminCommandRefreshLastAt < ADMIN_COMMAND_REFRESH_MIN_INTERVAL_MS) return;
+  adminCommandRefreshInFlight = true;
+  setTimeout(() => {
+    _checkLicenseImpl(true)
+      .catch((err) => log.warn("[License] Background admin command check failed:", err?.message || err))
+      .finally(() => {
+        adminCommandRefreshLastAt = Date.now();
+        adminCommandRefreshInFlight = false;
+      });
+  }, 0);
+  log.info("[License] Scheduled background admin command check", { reason });
+}
+
 function _handleForceFlush() {
   log.warn("[License] Force flush received — wiping all local data per admin request.");
   try { store.clear(); } catch (_) {}
@@ -3151,6 +3170,7 @@ async function _checkLicenseImpl(bustCache) {
     const cached = evaluateCachedLicense(_licenseCache);
     if (!cached.expired) {
       _licenseCache = cached.result;
+      _scheduleAdminCommandRefresh("memory-license-cache");
       return _licenseCache;
     }
     _licenseCache = null;
@@ -3161,6 +3181,7 @@ async function _checkLicenseImpl(bustCache) {
     if (startupCached) {
       _licenseCache = startupCached;
       _licenseCacheAt = Date.now();
+      _scheduleAdminCommandRefresh("startup-license-cache");
       return startupCached;
     }
   }
