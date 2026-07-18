@@ -795,14 +795,29 @@
            window.DashboardDeliveredDateState.get() === 'expected';
   };
 
+  window.isAverageProfitLabel = function (labelKey) {
+    var label = String(labelKey || '').toLowerCase();
+    return /average\s*profit|avg\s*profit|average\s*profits|\u0645\u062a\u0648\u0633\u0637\s*\u0627\u0644\u0631\u0628\u062d|\u0645\u062a\u0648\u0633\u0637\s*\u0627\u0644\u0623\u0631\u0628\u0627\u062d|متوسط.*ربح|متوسط.*أرباح/i.test(label);
+  };
+
+  window.actualAverageProfitBadgeHtml = function () {
+    if (!window.isExpectedNdrMode()) return '';
+    var isAr = window.dashboardI18n ? window.dashboardI18n.currentLocale === 'ar' : true;
+    var badgeText = isAr ? '\u0641\u0639\u0644\u064a' : 'actual';
+    return ' <span class="actual-average-profit-badge">(' + badgeText + ')</span>';
+  };
+
   window.supposedBadgeHtml = function (labelKey) {
     if (!window.isExpectedNdrMode()) return '';
     var label = String(labelKey || '').toLowerCase();
+    if (window.isAverageProfitLabel && window.isAverageProfitLabel(label)) {
+      return window.actualAverageProfitBadgeHtml();
+    }
     var matches = /delivered|earned|profit|roas|dr|aov|sales|revenue|commission|success|failure|lost|cpa|breakeven|roi|توصيل|مسلم|محقق|العائد|الربح|متوسط|إيراد|عمولة|نجاح|فشل|مرتجع/i.test(label);
     if (!matches) return '';
     
     var isAr = window.dashboardI18n ? window.dashboardI18n.currentLocale === 'ar' : true;
-    var badgeText = isAr ? 'مفترض' : 'supposed';
+    var badgeText = isAr ? '\u0645\u0641\u062a\u0631\u0636' : 'supposed';
     
     return ' <span class="supposed-badge">(' + badgeText + ')</span>';
   };
@@ -814,10 +829,12 @@
       style.id = styleId;
       style.textContent = 
         '@keyframes supposed-pulse { 0% { opacity: 0.95; } 50% { opacity: 0.6; } 100% { opacity: 0.95; } }\n' +
-        '.supposed-badge { display:inline-flex;align-items:center;justify-content:center;font-size:var(--type-micro);font-weight:var(--weight-semibold);line-height:1.1;color:#fbbf24;margin-inline-start:4px;vertical-align:middle;white-space:nowrap;animation:supposed-pulse 2s infinite ease-in-out;unicode-bidi:isolate; }\n' +
+        '.supposed-badge,.actual-average-profit-badge { display:inline-flex;align-items:center;justify-content:center;font-size:var(--type-micro);font-weight:var(--weight-semibold);line-height:1.1;margin-inline-start:4px;vertical-align:middle;white-space:nowrap;animation:supposed-pulse 2s infinite ease-in-out;unicode-bidi:isolate; }\n' +
+        '.supposed-badge { color:#fbbf24; }\n' +
+        '.actual-average-profit-badge { color:#38bdf8; }\n' +
         '.expected-value-stack { display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:0;max-width:100%;line-height:1.05;vertical-align:middle;text-align:center;unicode-bidi:isolate; }\n' +
         '.expected-value-stack .expected-value-main { display:block;max-width:100%;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }\n' +
-        '.expected-value-stack > .supposed-badge { margin-inline-start:0;font-size:var(--type-micro);max-width:100%;white-space:normal;text-align:center;overflow-wrap:anywhere; }';
+        '.expected-value-stack > .supposed-badge,.expected-value-stack > .actual-average-profit-badge { margin-inline-start:0;font-size:var(--type-micro);max-width:100%;white-space:normal;text-align:center;overflow-wrap:anywhere; }';
       document.head.appendChild(style);
     }
   })();

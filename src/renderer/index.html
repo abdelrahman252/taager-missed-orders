@@ -274,10 +274,11 @@
         #top-bar-accounts,
         #btn-copy-license,
         #btn-admin-refresh .refresh-label,
+        #btn-clear-cache .clear-cache-label,
         .titlebar-left .app-name {
           display: none !important;
         }
-        #btn-admin-refresh { width: 28px; padding: 0; }
+        #btn-admin-refresh, #btn-clear-cache { width: 28px; padding: 0; }
         .tb-divider-secondary,
         .tb-lang-switch,
         .tb-theme-switch {
@@ -383,7 +384,8 @@
       }
 
       /* ── Admin Refresh button ── */
-      #btn-admin-refresh {
+      #btn-admin-refresh,
+      #btn-clear-cache {
         display: none; /* shown only after license is valid */
         align-items: center;
         justify-content: center;
@@ -404,25 +406,30 @@
         flex-shrink: 0;
         margin: 0 4px;
       }
-      #btn-admin-refresh:hover {
+      #btn-admin-refresh:hover,
+      #btn-clear-cache:hover {
         background: rgba(124, 106, 247, 0.22);
         border-color: rgba(124, 106, 247, 0.6);
         color: #c4b8ff;
       }
-      #btn-admin-refresh:active {
+      #btn-admin-refresh:active,
+      #btn-clear-cache:active {
         background: rgba(124, 106, 247, 0.32);
       }
-      #btn-admin-refresh.refreshing {
+      #btn-admin-refresh.refreshing,
+      #btn-clear-cache.clearing {
         opacity: 0.6;
         pointer-events: none;
       }
-      #btn-admin-refresh .refresh-icon {
+      #btn-admin-refresh .refresh-icon,
+      #btn-clear-cache .clear-cache-icon {
         display: inline-flex;
         align-items: center;
         justify-content: center;
         transition: transform 0.6s ease;
       }
-      #btn-admin-refresh .refresh-icon svg {
+      #btn-admin-refresh .refresh-icon svg,
+      #btn-clear-cache .clear-cache-icon svg {
         width: 13px;
         height: 13px;
         display: block;
@@ -611,6 +618,23 @@
           </svg>
         </span>
         <span class="refresh-label">Sync</span>
+      </button>
+            <button
+        id="btn-clear-cache"
+        title="Clear local cache"
+        aria-label="Clear local cache"
+        data-tooltip="Clear local cache and reload the app."
+      >
+        <span class="clear-cache-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18"></path>
+            <path d="M8 6V4h8v2"></path>
+            <path d="M19 6l-1 14H6L5 6"></path>
+            <path d="M10 11v5"></path>
+            <path d="M14 11v5"></path>
+          </svg>
+        </span>
+        <span class="clear-cache-label">Clear Cache</span>
       </button>
       <div class="titlebar-divider tb-divider-secondary"></div>
 

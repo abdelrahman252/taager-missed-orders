@@ -3143,14 +3143,14 @@ function _clearRuntimeCacheFolders(reason = "admin-cache-reset") {
   return { userData, cleared, failed };
 }
 
-function _handleResetCache() {
-  log.warn("[License] Reset cache received - wiping local metrics, dashboard cache, and runtime cache.");
+function _handleResetCache(reason = "admin-cache-reset") {
+  log.warn("[License] Reset cache received - wiping local metrics, dashboard cache, and runtime cache.", { reason });
   try { analyticsStore.clear(); } catch (_) {}
   try { dashboardStore.clear(); } catch (_) {}
   invalidateAnalyticsRunsCache();
   analyticsSnapshotSyncCacheKey = "";
   dashboardQueryService.clearCache();
-  _clearRuntimeCacheFolders("admin-cache-reset");
+  _clearRuntimeCacheFolders(reason);
   try {
     session.defaultSession.clearCache().catch((err) => {
       log.warn("[License] Electron cache clear failed:", err?.message || err);
@@ -3274,6 +3274,10 @@ async function _checkLicenseImpl(bustCache) {
 
 ipcMain.handle("check-license", async () => _checkLicenseImpl(false));
 ipcMain.handle("check-license-nocache", async () => _checkLicenseImpl(true));
+ipcMain.handle("repair-local-cache", async () => {
+  _handleResetCache("local-clear-cache");
+  return { ok: true };
+});
 ipcMain.handle("get-license-credential-backup-status", async () => getLicenseCredentialBackupStatus());
 ipcMain.handle("get-license-credential-backup-prompt-status", async () => getLicenseCredentialBackupPromptStatus());
 ipcMain.handle("backup-license-credentials-now", async () => backupLicenseCredentialsNow());

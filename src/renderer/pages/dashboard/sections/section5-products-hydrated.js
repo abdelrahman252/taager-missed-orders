@@ -1887,7 +1887,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       <!-- Col 11: Average Profit -->
       <div class="s5-cell s5-cell-average-profit" title="${attr(averageProfitFallback ? s5Txt('Estimated average profit from net orders', 'متوسط ربح تقديري من صافي الطلبات') : s5Txt('Average profit per delivered order', 'متوسط الربح لكل طلب مسلم'))}" style="flex:0 0 80px;min-width:80px;text-align:center;padding:0 5px">
         <div class="s5-number-fit" data-financial-value="averageProfit" title="${attr(productMoney(p.averageProfit || 0))}" style="font-size:${compact?'12px':'13px'};font-weight:var(--weight-bold);color:#38bdf8;white-space:nowrap">${averageProfitText}</div>
-        <div data-financial-currency="averageProfit" style="font-size:var(--type-micro);color:rgba(56,189,248,0.55);font-weight:var(--weight-bold);margin-top:2px">${selectedCurrency()}</div>
+        <div data-financial-currency="averageProfit" style="font-size:var(--type-micro);color:rgba(56,189,248,0.55);font-weight:var(--weight-bold);margin-top:2px">${selectedCurrency()}${window.supposedBadgeHtml('Average Profit')}</div>
         ${averageProfitFallback ? `<div style="font-size:9px;color:#f59e0b;margin-top:1px;white-space:nowrap">${s5Txt('from net orders', 'من صافي الطلبات')}</div>` : ''}
       </div>
       ${DIV}
@@ -4227,6 +4227,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         netOrders: placed,
         actualDeliveredOrders: actualDelivered,
         actualEarnedProfitAfterTax: actualCommission,
+        actualAverageProfit: actualAverageProfit,
+        actualAverageProfitSource: actualDelivered > 0 ? 'delivered_orders' : 'unavailable',
         netOrderProfitAfterTax: product.netOrderProfitAfterTax != null ? product.netOrderProfitAfterTax : product.totalPlacedCommission,
         currentTotalSales: totalSalesValue(product),
         expectedNdrRate: ndrRate,

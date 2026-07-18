@@ -56,10 +56,17 @@
     var adSpend = nonNegative(input.adSpend);
     var expectedNdrRate = rate(input.expectedNdrRate);
 
-    var averageProfitSource = actualDeliveredOrders > 0
+    var hasExplicitActualAverage = input.actualAverageProfit != null &&
+      input.actualAverageProfitSource === "delivered_orders";
+    var explicitActualAverage = hasExplicitActualAverage ? number(input.actualAverageProfit) : 0;
+    var averageProfitSource = hasExplicitActualAverage
+      ? "delivered_orders"
+      : actualDeliveredOrders > 0
       ? "delivered_orders"
       : (netOrders > 0 && hasNetOrderProfit ? "net_orders_fallback" : "unavailable");
-    var averageProfit = averageProfitSource === "delivered_orders"
+    var averageProfit = hasExplicitActualAverage
+      ? explicitActualAverage
+      : averageProfitSource === "delivered_orders"
       ? divide(actualEarnedProfit, actualDeliveredOrders)
       : (averageProfitSource === "net_orders_fallback" ? divide(netOrderProfit, netOrders) : 0);
     var actualNetProfit = actualEarnedProfit - adSpend;

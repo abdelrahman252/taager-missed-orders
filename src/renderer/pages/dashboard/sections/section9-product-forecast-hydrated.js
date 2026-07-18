@@ -1198,7 +1198,7 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
       '<div class="s9-kpi-grid s9-kpi-grid--details">' +
         _kpiMiniTip(
           p9Txt('Average Profit', 'متوسط الربح') + (s.averageProfitSource === 'net_orders_fallback' ? ' · ' + p9Txt('Estimated from net orders', 'تقديري من صافي الطلبات') : ''),
-          valueStack(formatMoney(s.realCommission, true, 2), 'profit', 's9-card-value-stack'), '#3b82f6', '💵',
+          valueStack(formatMoney(s.realCommission, true, 2), 'Average Profit', 's9-card-value-stack'), '#3b82f6', '💵',
           p9Txt('Average Profit', 'متوسط الربح'),
           s.averageProfitSource === 'net_orders_fallback'
             ? p9Txt('Estimated average profit from net orders because this product has no delivered orders.', 'متوسط ربح تقديري من صافي الطلبات لأن هذا المنتج لا يحتوي على طلبات مسلمة.')

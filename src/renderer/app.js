@@ -20,6 +20,10 @@ const _STRINGS = {
     "topbar.notifications": "Notifications",
     "titlebar.sync":      "Sync",
     "titlebar.sync_tooltip": "Refresh the whole app.",
+    "titlebar.clear_cache": "Clear Cache",
+    "titlebar.clear_cache_tooltip": "Clear local cache and reload the app.",
+    "titlebar.clear_cache_confirm": "This clears local cache and reloads the app. It will not delete accounts, license, or orders. Continue?",
+    "titlebar.clearing_cache": "Clearing...",
     "titlebar.lang_tooltip": "Switch between English and Arabic.",
     "titlebar.theme_tooltip": "Switch between light and dark theme.",
     "titlebar.zoom_group": "Application zoom",
@@ -602,6 +606,10 @@ const _STRINGS = {
     "topbar.notifications": "التنبيهات",
     "titlebar.sync":     "مزامنة",
     "titlebar.sync_tooltip": "تحديث التطبيق بالكامل.",
+    "titlebar.clear_cache": "\u062a\u0646\u0638\u064a\u0641 \u0627\u0644\u0643\u0627\u0634",
+    "titlebar.clear_cache_tooltip": "\u062a\u0646\u0638\u064a\u0641 \u0627\u0644\u0643\u0627\u0634 \u0627\u0644\u0645\u062d\u0644\u064a \u0648\u0625\u0639\u0627\u062f\u0629 \u062a\u0634\u063a\u064a\u0644 \u0627\u0644\u062a\u0637\u0628\u064a\u0642.",
+    "titlebar.clear_cache_confirm": "\u0633\u064a\u062a\u0645 \u062a\u0646\u0638\u064a\u0641 \u0627\u0644\u0643\u0627\u0634 \u0627\u0644\u0645\u062d\u0644\u064a \u0648\u0625\u0639\u0627\u062f\u0629 \u062a\u0634\u063a\u064a\u0644 \u0627\u0644\u062a\u0637\u0628\u064a\u0642 \u0641\u0642\u0637. \u0644\u0646 \u064a\u062a\u0645 \u062d\u0630\u0641 \u0627\u0644\u062d\u0633\u0627\u0628\u0627\u062a \u0623\u0648 \u0627\u0644\u062a\u0631\u062e\u064a\u0635 \u0623\u0648 \u0627\u0644\u0637\u0644\u0628\u0627\u062a. \u0647\u0644 \u062a\u0631\u064a\u062f \u0627\u0644\u0645\u062a\u0627\u0628\u0639\u0629\u061f",
+    "titlebar.clearing_cache": "\u062c\u0627\u0631\u064a \u0627\u0644\u062a\u0646\u0638\u064a\u0641...",
     "titlebar.lang_tooltip": "التبديل بين العربية والإنجليزية.",
     "titlebar.theme_tooltip": "التبديل بين الوضع الفاتح والداكن.",
     "titlebar.minimize": "تصغير النافذة",
@@ -2257,9 +2265,12 @@ function updateTopBarText() {
 
   const syncLbl = document.querySelector('#btn-admin-refresh .refresh-label');
   if (syncLbl) syncLbl.textContent = window._t('titlebar.sync');
+  const clearCacheLbl = document.querySelector('#btn-clear-cache .clear-cache-label');
+  if (clearCacheLbl) clearCacheLbl.textContent = window._t('titlebar.clear_cache');
 
   const localizedTooltips = [
     ["btn-admin-refresh", "titlebar.sync_tooltip"],
+    ["btn-clear-cache", "titlebar.clear_cache_tooltip"],
     ["toggle-lang", "titlebar.lang_tooltip"],
     ["toggle-theme", "titlebar.theme_tooltip"],
     ["btn-zoom-out", "titlebar.zoom_out"],
@@ -4005,6 +4016,8 @@ function returnToLicensePage() {
   updateTopBarText();
   const btn = document.getElementById("btn-admin-refresh");
   if (btn) btn.style.display = "none";
+  const clearCacheBtn = document.getElementById("btn-clear-cache");
+  if (clearCacheBtn) clearCacheBtn.style.display = "none";
   renderLicense(() => afterLicense());
   showPage("page-license");
 }
@@ -4131,6 +4144,23 @@ function clearAdminRepairBrowserStorage() {
   try { sessionStorage.clear(); } catch (err) { console.warn("[AdminCacheReset] sessionStorage clear failed:", err); }
 }
 
+async function handleLocalClearCache() {
+  const btn = document.getElementById("btn-clear-cache");
+  if (!btn || btn.classList.contains("clearing")) return;
+  const message = window._t ? window._t("titlebar.clear_cache_confirm") : "This clears local cache and reloads the app. It will not delete accounts, license, or orders. Continue?";
+  if (!window.confirm(message)) return;
+  btn.classList.add("clearing");
+  const label = btn.querySelector(".clear-cache-label");
+  if (label) label.textContent = window._t ? window._t("titlebar.clearing_cache") : "Clearing...";
+  try {
+    if (window.api && typeof window.api.repairLocalCache === "function") await window.api.repairLocalCache();
+  } catch (err) {
+    console.warn("[LocalClearCache] Failed:", err?.message || err);
+    btn.classList.remove("clearing");
+    if (label) label.textContent = window._t ? window._t("titlebar.clear_cache") : "Clear Cache";
+  }
+}
+
 function handleAdminCacheReset() {
   clearAdminRepairBrowserStorage();
   if (window.invalidateDashboardCache) window.invalidateDashboardCache("admin-cache-reset");
@@ -4156,6 +4186,10 @@ async function init() {
   const _refreshBtn = document.getElementById("btn-admin-refresh");
   if (_refreshBtn) {
     _refreshBtn.addEventListener("click", () => reloadAppPreservingRoute("admin-refresh"));
+  }
+  const _clearCacheBtn = document.getElementById("btn-clear-cache");
+  if (_clearCacheBtn) {
+    _clearCacheBtn.addEventListener("click", handleLocalClearCache);
   }
   window.api.removeAllListeners("reset-cache");
   window.api.on("reset-cache", handleAdminCacheReset);
@@ -4227,6 +4261,8 @@ async function init() {
   // Show admin sync button now that license is confirmed valid
   const _rb = document.getElementById("btn-admin-refresh");
   if (_rb) _rb.style.display = "inline-flex";
+  const _ccb = document.getElementById("btn-clear-cache");
+  if (_ccb) _ccb.style.display = "inline-flex";
 
   window.api.removeAllListeners("license-expired");
   window.api.onLicenseExpired(() => {
@@ -4337,6 +4373,8 @@ async function afterLicense(isFlush = false) {
         // Show admin sync button now that license is confirmed valid
         const _rb = document.getElementById("btn-admin-refresh");
         if (_rb) _rb.style.display = "inline-flex";
+        const _ccb = document.getElementById("btn-clear-cache");
+        if (_ccb) _ccb.style.display = "inline-flex";
       }
     } catch(e) {}
   }

@@ -1164,20 +1164,25 @@ function createDashboardQueryService(options) {
         const drRate = drBase > 0
           ? Math.max(0, Math.min(1, drDelivered / drBase))
           : (isExpected ? globalExpectedDrRate : 0);
+        const actualAverageDelivered = product.deliveredCount;
+        const actualAverageProfitTotal = product.commission;
+        const actualAverageProfit = actualAverageDelivered > 0
+          ? actualAverageProfitTotal / actualAverageDelivered
+          : 0;
+        const actualAverageProfitSource = actualAverageDelivered > 0 ? "delivered_orders" : "unavailable";
         const projection = financialCore.calculate({
           mode: isExpected ? "expected" : "actual",
           netOrders: product.netOrderCount,
-          actualDeliveredOrders: product.calculatorDeliveredCount,
-          actualEarnedProfitAfterTax: product.calculatorEarnedProfitAfterTax,
+          actualDeliveredOrders: actualAverageDelivered,
+          actualEarnedProfitAfterTax: actualAverageProfitTotal,
+          actualAverageProfit,
+          actualAverageProfitSource,
           netOrderProfitAfterTax: product.netOrderProfitAfterTax,
           currentTotalSales: product.revenue,
           expectedNdrRate: ndrRate,
           adSpend: 0,
           insufficientHistory: isExpected && productNdrBase <= 0 && globalNdrBase <= 0,
         });
-        const actualAverageProfit = product.calculatorDeliveredCount > 0
-          ? product.calculatorEarnedProfitAfterTax / product.calculatorDeliveredCount
-          : 0;
 
         const deliveriesVal = isExpected ? projection.expectedDeliveriesDisplay : product.deliveredCount;
         const commissionVal = isExpected ? projection.expectedTotalProfitBeforeAdSpend : product.commission;
@@ -1195,11 +1200,11 @@ function createDashboardQueryService(options) {
           placedCount: product.netOrderCount,
           totalOrders: product.totalOrderCount,
           totalOrderCount: product.totalOrderCount,
-          actualDeliveredCount: product.calculatorDeliveredCount,
-          actualCommission: product.calculatorEarnedProfitAfterTax,
-          actualEarnedProfitAfterTax: product.calculatorEarnedProfitAfterTax,
+          actualDeliveredCount: actualAverageDelivered,
+          actualCommission: actualAverageProfitTotal,
+          actualEarnedProfitAfterTax: actualAverageProfitTotal,
           actualAverageProfit,
-          actualAverageProfitSource: product.calculatorDeliveredCount > 0 ? "delivered_orders" : "unavailable",
+          actualAverageProfitSource,
           deliveries: deliveriesVal,
           deliveredCount: deliveriesVal,
           expectedDeliveriesExact: projection.expectedDeliveriesExact,
@@ -1252,11 +1257,17 @@ function createDashboardQueryService(options) {
         const actualFinancialCommission = convertMoney(product.actualCommission, reportingCurrency, financialCurrency, financialInput);
         const netOrderFinancialProfit = convertMoney(product.netOrderProfitAfterTax, reportingCurrency, financialCurrency, financialInput);
         const financialSales = convertMoney(product.totalSales, reportingCurrency, financialCurrency, financialInput);
+        const productActualAverageProfit = product.actualDeliveredCount > 0
+          ? actualFinancialCommission / product.actualDeliveredCount
+          : 0;
+        const productActualAverageProfitSource = product.actualDeliveredCount > 0 ? "delivered_orders" : "unavailable";
         const productFinancials = financialCore.calculate({
           mode: isExpected ? "expected" : "actual",
           netOrders: product.netOrderCount,
           actualDeliveredOrders: product.actualDeliveredCount,
           actualEarnedProfitAfterTax: actualFinancialCommission,
+          actualAverageProfit: productActualAverageProfit,
+          actualAverageProfitSource: productActualAverageProfitSource,
           netOrderProfitAfterTax: netOrderFinancialProfit,
           currentTotalSales: financialSales,
           expectedNdrRate: product.expectedNdrRate,
@@ -1265,10 +1276,8 @@ function createDashboardQueryService(options) {
         });
         product.allocatedAdSpend = financialSpend;
         product.cpa = productFinancials.cpa;
-        product.actualAverageProfit = product.actualDeliveredCount > 0
-          ? actualFinancialCommission / product.actualDeliveredCount
-          : 0;
-        product.actualAverageProfitSource = product.actualDeliveredCount > 0 ? "delivered_orders" : "unavailable";
+        product.actualAverageProfit = productActualAverageProfit;
+        product.actualAverageProfitSource = productActualAverageProfitSource;
         product.averageProfit = productFinancials.averageProfit;
         product.averageProfitSource = productFinancials.averageProfitSource;
         product.breakEvenCpa = productFinancials.breakEvenCpa;

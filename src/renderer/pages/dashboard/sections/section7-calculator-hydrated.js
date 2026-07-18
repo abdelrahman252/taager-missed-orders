@@ -3239,7 +3239,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       ) +
       _kpiMiniTip(
         s7Txt("Average Profit", "متوسط الربح") + (realAverageProfitSource === 'net_orders_fallback' ? ' · ' + s7Txt('Estimated from net orders', 'تقديري من صافي الطلبات') : ''),
-        '<span id="s7-real-average-profit">' + realAvgCommission.toLocaleString("en-US", { maximumFractionDigits: 2 }) + " " + nativeCurrency + "</span>",
+        '<span class="expected-value-stack" dir="auto"><span id="s7-real-average-profit" class="expected-value-main">' + realAvgCommission.toLocaleString("en-US", { maximumFractionDigits: 2 }) + " " + nativeCurrency + "</span>" + window.supposedBadgeHtml("Average Profit") + "</span>",
         "#3b82f6",
         S7_ICONS.money,
         s7Txt("Average Profit", "متوسط الربح"),
