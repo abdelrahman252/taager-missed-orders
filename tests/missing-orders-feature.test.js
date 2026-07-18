@@ -127,6 +127,21 @@ assert.strictEqual(groupedRows.length, 3, "multi-product cart upload should writ
 assert.strictEqual(groupedRows[1][0], "SKU-A");
 assert.strictEqual(groupedRows[2][0], "SKU-B");
 assert.strictEqual(groupedRows[2][3], 2);
+const repeatedSkuResult = mergeAndDeduplicate([
+  { source: "real", normPhone: "500000006", sku: "SKU-D", productName: "Product D", qty: 1, unitPrice: 50, subtotal: 50, uploadGroupKey: "multi-repeat" },
+  { source: "real", normPhone: "500000006", sku: "SKU-D", productName: "Product D", qty: 2, unitPrice: 50, subtotal: 100, uploadGroupKey: "multi-repeat" },
+  { source: "real", normPhone: "500000006", sku: "SKU-E", productName: "Product E", qty: 1, unitPrice: 80, subtotal: 80, uploadGroupKey: "multi-repeat" },
+], [], new Set());
+assert.strictEqual(repeatedSkuResult.orders.length, 2, "same source order should upload one row per unique SKU");
+assert.strictEqual(repeatedSkuResult.orders[0].sku, "SKU-D");
+assert.strictEqual(repeatedSkuResult.orders[0].qty, 3, "duplicate SKU lines in one source order should merge quantity");
+assert.strictEqual(repeatedSkuResult.orders[0].subtotal, 150);
+const repeatedSkuWorkbook = XLSX.read(buildOutputExcel(repeatedSkuResult.orders), { type: "buffer" });
+const repeatedSkuRows = XLSX.utils.sheet_to_json(repeatedSkuWorkbook.Sheets.Cart, { header: 1, defval: "" });
+assert.strictEqual(repeatedSkuRows.length, 3, "duplicate SKU merge should prevent duplicate Taager rows for the same phone+SKU");
+assert.strictEqual(repeatedSkuRows[1][0], "SKU-D");
+assert.strictEqual(repeatedSkuRows[1][3], 3);
+assert.strictEqual(repeatedSkuRows[2][0], "SKU-E");
 const partialExisting = new Set(["966500000005|SKU-A"]);
 const partialDedupeResult = mergeAndDeduplicate([
   { source: "real", normPhone: "966500000005", sku: "SKU-A", productName: "Product A", uploadGroupKey: "multi-partial" },

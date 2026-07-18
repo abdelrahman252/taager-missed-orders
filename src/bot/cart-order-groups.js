@@ -49,7 +49,7 @@ function mergeItemList(items) {
     const sku = clean(item && item.sku);
     if (!sku) continue;
     const productName = clean(item && item.productName);
-    const key = sku + "|" + productName + "|" + clean(item && item.unitPrice);
+    const key = sku;
     const qty = numberOrZero(item && item.qty) || 1;
     const subtotal = numberOrZero(item && item.subtotal);
     const unitPrice = numberOrZero(item && item.unitPrice) || (qty ? Math.round(subtotal / qty) : 0);
@@ -67,6 +67,11 @@ function mergeItemList(items) {
       existing.qty = (numberOrZero(existing.qty) || 1) + qty;
       existing.subtotal = numberOrZero(existing.subtotal) + (subtotal || unitPrice * qty);
       existing.unitPrice = existing.qty ? Math.round(existing.subtotal / existing.qty) : unitPrice;
+      if (productName && !clean(existing.productName).includes(productName)) {
+        existing.productName = clean(existing.productName)
+          ? clean(existing.productName) + " + " + productName
+          : productName;
+      }
     }
   }
   return [...byKey.values()];
@@ -115,5 +120,6 @@ module.exports = {
   buildGroupedCartOrders,
   cartOrderGroupKey,
   cartOrderItemKeys,
+  mergeItemList,
   orderLineItems,
 };

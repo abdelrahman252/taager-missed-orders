@@ -4,7 +4,7 @@ const XLSX = require("xlsx");
 const { normalizePhone, normalizePhoneCandidatesWithMeta } = require("./phone");
 const { normalizeTaagerCountry } = require("./taager-country");
 const { normalizeProvinceMatch } = require("./output");
-const { buildGroupedCartOrders, cartOrderGroupKey } = require("./cart-order-groups");
+const { buildGroupedCartOrders, cartOrderGroupKey, mergeItemList } = require("./cart-order-groups");
 
 const config = JSON.parse(process.env.BOT_CONFIG || "{}");
 const COUNTRY = normalizeTaagerCountry(config.taagerCountry || config.taagerCountry || "sa");
@@ -650,8 +650,9 @@ function mergeAndDeduplicate(realOrders, resolvedMissed, existingPhones) {
   }
 
   function acceptGroup(items, source) {
-    const groupedOrder = buildGroupedCartOrders(items)[0];
-    const itemKeys = items.map((order) => ({ order, key: makeOrderKey(order.normPhone, order.sku) }));
+    const mergedItems = mergeItemList(items);
+    const groupedOrder = buildGroupedCartOrders(mergedItems)[0];
+    const itemKeys = mergedItems.map((order) => ({ order, key: makeOrderKey(order.normPhone, order.sku) }));
     const missing = itemKeys.filter((entry) => !entry.key);
     if (missing.length > 0) {
       stats[`${source}MissingSku`] += missing.length;
@@ -680,8 +681,8 @@ function mergeAndDeduplicate(realOrders, resolvedMissed, existingPhones) {
     }
 
     itemKeys.forEach((entry) => seen.add(entry.key));
-    result.push(...items);
-    stats[`${source}New`] += items.length;
+    result.push(...mergedItems);
+    stats[`${source}New`] += mergedItems.length;
   }
 
   function acceptOrders(orders, source) {
