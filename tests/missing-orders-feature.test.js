@@ -168,6 +168,7 @@ const root = path.join(__dirname, "..");
 const mainSource = fs.readFileSync(path.join(root, "src", "main", "main.js"), "utf8");
 const runnerSource = fs.readFileSync(path.join(root, "src", "bot", "runner.js"), "utf8");
 const preloadSource = fs.readFileSync(path.join(root, "src", "main", "preload.js"), "utf8");
+const rendererAppSource = fs.readFileSync(path.join(root, "src", "renderer", "app.js"), "utf8");
 const setupSource = fs.readFileSync(path.join(root, "src", "renderer", "pages", "setup.js"), "utf8");
 assert(mainSource.includes('store.get("missingOrdersUploadEnabled", false)'), "feature must default OFF");
 assert(mainSource.includes('ipcMain.handle("set-missing-orders-upload-enabled"'), "main process must persist the toggle");
@@ -189,5 +190,10 @@ assert(runnerSource.includes("hardFailed: true"), "Taager-declared failed rows s
 assert(runnerSource.includes("hardFailed: false"), "export-unconfirmed rows should not be treated as Taager hard failures inside the current run");
 assert(runnerSource.includes("cartVerificationKeys"), "verification should check every SKU key inside a grouped cart order");
 assert(!runnerSource.includes("buildGroupedCartOrders"), "cart upload should not group multi-product rows because Taager rejects grouped product cells");
+assert(rendererAppSource.includes("function confirmedAnalyticsRows"), "analytics save must explicitly select confirmed Taager rows");
+assert(rendererAppSource.includes("orders:          confirmedRows"), "analytics/operations stored order rows must be confirmed-only");
+assert(rendererAppSource.includes("analyticsOrdersSource: \"taager-confirmed\""), "analytics save must mark confirmed-only runs");
+assert(rendererAppSource.includes("buffer:          null"), "analytics save must not allow upload workbook fallback for confirmed-only runs");
+assert(mainSource.includes("confirmedOnlyAnalytics") && mainSource.includes("analyticsOrdersSource === \"taager-confirmed\""), "main process must not parse attempted workbook rows for confirmed-only analytics runs");
 
 console.log("Missing Orders feature verification passed.");

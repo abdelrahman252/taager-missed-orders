@@ -4393,6 +4393,17 @@ async function _saveAnalyticsFromResult(data, selectedAccountIds) {
   const runDate = new Date(now).toISOString().slice(0, 10);
   const accounts = Array.isArray(window._kbotAccounts) ? window._kbotAccounts : [];
 
+  function confirmedAnalyticsRows(resultData) {
+    if (Array.isArray(resultData?.confirmedOrderRows)) return resultData.confirmedOrderRows;
+    if (Array.isArray(resultData?.orderRows)) return resultData.orderRows;
+    return [];
+  }
+
+  function attemptedAnalyticsRows(resultData) {
+    if (Array.isArray(resultData?.attemptedOrderRows)) return resultData.attemptedOrderRows;
+    if (Array.isArray(resultData?.orderRows)) return resultData.orderRows;
+    return [];
+  }
   function resolveAccountIdentity(result, fallbackId) {
     const accountId = result?.accountId || fallbackId || "__single__";
     const account = accounts.find(a => a.id === accountId) || null;
@@ -4411,6 +4422,8 @@ async function _saveAnalyticsFromResult(data, selectedAccountIds) {
   if (data._multiAccount && Array.isArray(data._accountResults)) {
     for (const r of data._accountResults) {
       const identity = resolveAccountIdentity(r);
+      const confirmedRows = confirmedAnalyticsRows(r.data);
+      const attemptedRows = attemptedAnalyticsRows(r.data);
       const saveRes = await window.api.saveRunAnalytics({
         runId:           `${r.accountId || "acc"}-${now}`,
         runDate,
@@ -4419,13 +4432,16 @@ async function _saveAnalyticsFromResult(data, selectedAccountIds) {
         accountEmail:    identity.accountEmail,
         accountLabel:    identity.accountLabel,
         taagerCountry:   identity.taagerCountry,
-        ordersSubmitted: r.data?.orders    || 0,
+        ordersSubmitted: confirmedRows.length,
+        ordersConfirmed: confirmedRows.length,
+        ordersAttempted: attemptedRows.length || r.data?.orders || 0,
         ordersFailed:    r.data?.failedOrders?.count || 0,
         runtimeMs:       r.runtimeMs || r.data?.runtimeMs || 0,
         runStartedAt:    r.runStartedAt || r.data?.runStartedAt || null,
         runEndedAt:      r.runEndedAt || r.data?.runEndedAt || null,
-        orders:          r.data?.orderRows || [],
-        buffer:          r.data?.buffer || null,
+        orders:          confirmedRows,
+        analyticsOrdersSource: "taager-confirmed",
+        buffer:          null,
         taagerSnapshot:    r.data?.taagerSnapshot || null,
         taagerDashboardSnapshot: r.data?.taagerDashboardSnapshot || null,
       });
@@ -4437,6 +4453,8 @@ async function _saveAnalyticsFromResult(data, selectedAccountIds) {
 
   // Single-account path
   const identity = resolveAccountIdentity(data, selectedAccountIds?.[0]);
+  const confirmedRows = confirmedAnalyticsRows(data);
+  const attemptedRows = attemptedAnalyticsRows(data);
   const saveRes = await window.api.saveRunAnalytics({
     runId:           `single-${now}`,
     runDate,
@@ -4445,13 +4463,16 @@ async function _saveAnalyticsFromResult(data, selectedAccountIds) {
     accountEmail:    identity.accountEmail,
     accountLabel:    identity.accountLabel,
     taagerCountry:   identity.taagerCountry,
-    ordersSubmitted: data.orders || 0,
+    ordersSubmitted: confirmedRows.length,
+    ordersConfirmed: confirmedRows.length,
+    ordersAttempted: attemptedRows.length || data.orders || 0,
     ordersFailed:    data.failedOrders?.count || 0,
     runtimeMs:       data.runtimeMs || 0,
     runStartedAt:    data.runStartedAt || null,
     runEndedAt:      data.runEndedAt || null,
-    orders:          data.orderRows || [],
-    buffer:          data.buffer || null,
+    orders:          confirmedRows,
+    analyticsOrdersSource: "taager-confirmed",
+    buffer:          null,
     taagerSnapshot:    data.taagerSnapshot || null,
     taagerDashboardSnapshot: data.taagerDashboardSnapshot || null,
   });

@@ -4316,7 +4316,8 @@ ipcMain.handle("save-run-analytics", async (_, payload) => {
   try {
     // Extract taagerSnapshot before storing (don't persist it — it's only for enrichment)
     const { taagerSnapshot, taagerDashboardSnapshot, buffer, ...rawRunData } = payload;
-    if ((!Array.isArray(rawRunData.orders) || rawRunData.orders.length === 0) && buffer) {
+    const confirmedOnlyAnalytics = rawRunData.analyticsOrdersSource === "taager-confirmed";
+    if (!confirmedOnlyAnalytics && (!Array.isArray(rawRunData.orders) || rawRunData.orders.length === 0) && buffer) {
       rawRunData.orders = parseOrderRowsFromOutputBuffer(buffer);
     }
     const runData = normalizeAnalyticsRun(rawRunData);
