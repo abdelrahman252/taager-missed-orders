@@ -4,6 +4,7 @@ const XLSX = require("xlsx");
 const { formatPhone } = require("./phone");
 const { normalizeTaagerCountry } = require("./taager-country");
 const { groupMissingOrders } = require("./missing-orders");
+const { orderLineItems } = require("./cart-order-groups");
 
 const config = JSON.parse(process.env.BOT_CONFIG || "{}");
 const COUNTRY = normalizeTaagerCountry(config.taagerCountry || config.taagerCountry || "sa");
@@ -306,7 +307,8 @@ function buildOutputExcel(orders, options = {}) {
   ];
 
   const fallbackUsage = { provided: 0, sku: 0, global: 0, static: 0 };
-  const dataRows = orders.map((order) => {
+  const cartRows = Array.isArray(orders) ? orders : [];
+  const dataRows = cartRows.map((order) => {
     const fallback = fallbackProvinceForOrder(order, options, COUNTRY, cfg.defaultProvince);
     const cityMatch = normalizeProvinceMatch(order.city, COUNTRY);
     const province = normalizeProvince(order.city, COUNTRY, { fallbackProvince: fallback.province });
@@ -341,7 +343,7 @@ function buildOutputExcel(orders, options = {}) {
     ? options.fallbackProvinceBySku.size
     : Object.keys(options.fallbackProvinceBySku || {}).length;
   console.log(
-    `[Province fallback] Excel rows=${orders.length} | provided=${fallbackUsage.provided} | SKU=${fallbackUsage.sku} | global=${fallbackUsage.global} | static=${fallbackUsage.static}`
+    `[Province fallback] Excel rows=${cartRows.length} | provided=${fallbackUsage.provided} | SKU=${fallbackUsage.sku} | global=${fallbackUsage.global} | static=${fallbackUsage.static}`
     + ` | configured SKU fallbacks=${configuredSkuFallbacks} | global province=${normalizeFallbackProvince(options.fallbackProvince, COUNTRY) || "none"}`
   );
 
@@ -411,27 +413,32 @@ function buildMissingOrdersExcel(orders, options = {}) {
 
 function buildSummarySheet(orders) {
   const groups = {};
+  let lineCount = 0;
+  let totalQty = 0;
   for (const order of orders) {
-    const key = order.productName || "Unknown";
-    if (!groups[key]) groups[key] = { productName: key, sku: order.sku, count: 0, totalQty: 0 };
-    groups[key].count++;
-    groups[key].totalQty += order.qty || 1;
+    for (const item of orderLineItems(order)) {
+      const key = item.productName || "Unknown";
+      if (!groups[key]) groups[key] = { productName: key, sku: item.sku, count: 0, totalQty: 0 };
+      groups[key].count++;
+      groups[key].totalQty += item.qty || 1;
+      lineCount++;
+      totalQty += item.qty || 1;
+    }
   }
 
   const headers = [
-    "Product Name / اسم المنتج",
-    "SKU / كود المنتج",
-    "Orders / عدد الطلبات",
-    "Total Qty / إجمالي الكمية",
+    "Product Name",
+    "SKU",
+    "Orders",
+    "Total Qty",
   ];
   const rows = Object.values(groups).map((g) => [g.productName, g.sku, g.count, g.totalQty]);
-  rows.push(["TOTAL", "", orders.length, orders.reduce((sum, order) => sum + (order.qty || 1), 0)]);
+  rows.push(["TOTAL", "", lineCount, totalQty]);
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   ws["!cols"] = [{ wch: 45 }, { wch: 22 }, { wch: 20 }, { wch: 20 }];
   return ws;
 }
-
 function buildFailedExcel(failedOrders) {
   const wb = XLSX.utils.book_new();
   const headers = [
@@ -480,7 +487,9 @@ function buildSkippedExcel(skippedOrders) {
     product_not_in_catalog: "المنتج غير موجود في الكتالوج",
   };
   reasonLabels.product_not_in_catalog = "المنتج غير موجود في شيت EasyOrders أو شيت Taager";
-  reasonLabels.product_not_in_easyorders_or_taager = "المنتج غير موجود في شيت EasyOrders أو شيت Taager";
+  reasonLabels.product_not_in_easyorders_or_taager = "\u0627\u0644\u0645\u0646\u062a\u062c \u063a\u064a\u0631 \u0645\u0648\u062c\u0648\u062f \u0641\u064a \u0634\u064a\u062a EasyOrders \u0623\u0648 \u0634\u064a\u062a Taager";
+  reasonLabels.partial_order_already_in_taager = "\u0628\u0639\u0636 \u0645\u0646\u062a\u062c\u0627\u062a \u0627\u0644\u0637\u0644\u0628 \u0645\u0648\u062c\u0648\u062f\u0629 \u0641\u064a Taager - \u0631\u0627\u062c\u0639\u0647 \u0642\u0628\u0644 \u0625\u0646\u0634\u0627\u0621 \u0637\u0644\u0628 \u0634\u062d\u0646 \u062c\u062f\u064a\u062f";
+  reasonLabels.missing_sku_in_group = "\u0637\u0644\u0628 \u0645\u062c\u0645\u0639 \u064a\u062d\u062a\u0648\u064a \u0639\u0644\u0649 SKU \u0646\u0627\u0642\u0635";
 
   const headers = [
     "Outcome / الحالة",

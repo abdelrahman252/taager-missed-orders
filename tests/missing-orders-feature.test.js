@@ -8,7 +8,7 @@ const XLSX = require("xlsx");
 process.env.BOT_CONFIG = JSON.stringify({ taagerCountry: "sa" });
 delete require.cache[require.resolve("../src/bot/output")];
 
-const { buildMissingOrdersExcel, buildSkippedExcel } = require("../src/bot/output");
+const { buildOutputExcel, buildMissingOrdersExcel, buildSkippedExcel } = require("../src/bot/output");
 const {
   splitOrdersByDestination,
   groupMissingOrders,
@@ -29,6 +29,8 @@ const {
 const {
   buildTaagerProductCatalog,
   resolveMissedOrders,
+  parseTaagerOrderKeys,
+  mergeAndDeduplicate,
 } = require("../src/bot/parser");
 
 const real = { source: "real", normPhone: "966500000001", sku: "REAL-1" };
@@ -95,6 +97,43 @@ assert.strictEqual(taagerFallbackResult.resolved[0].catalogSource, "taager");
 const missingEverywhereResult = resolveMissedOrders([
   { ...missedA, sku: null, qty: null, productName: "Unknown Product" },
 ], {}, taagerCatalog);
+const taagerExistingHeader = Array(19).fill("");
+taagerExistingHeader[0] = "Order Number";
+taagerExistingHeader[5] = "Phone Number";
+taagerExistingHeader[16] = "Products";
+const taagerExistingSheet = XLSX.utils.aoa_to_sheet([
+  taagerExistingHeader,
+  ["T-1", "", "", "", "", "966500000003", "", "", "", "", "", "", "", "", "", "", "OLD-SKU"],
+]);
+const taagerExistingBook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(taagerExistingBook, taagerExistingSheet, "Orders");
+const existingKeys = parseTaagerOrderKeys(XLSX.write(taagerExistingBook, { type: "buffer", bookType: "xlsx" }));
+const dedupeResult = mergeAndDeduplicate([
+  { source: "real", normPhone: "500000003", sku: "OLD-SKU", uploadGroupKey: "order-old" },
+  { source: "real", normPhone: "500000003", sku: "NEW-SKU", uploadGroupKey: "order-new" },
+], [], existingKeys);
+assert.strictEqual(dedupeResult.stats.realInTaager, 1, "same phone+same SKU should be treated as already in Taager");
+assert.strictEqual(dedupeResult.stats.realNew, 1, "same phone+different SKU from a separate source order must still be uploaded");
+assert.strictEqual(dedupeResult.orders[0].sku, "NEW-SKU");
+const groupedDedupeResult = mergeAndDeduplicate([
+  { source: "real", normPhone: "500000004", sku: "SKU-A", productName: "Product A", qty: 1, unitPrice: 100, subtotal: 100, uploadGroupKey: "multi-1" },
+  { source: "real", normPhone: "500000004", sku: "SKU-B", productName: "Product B", qty: 2, unitPrice: 75, subtotal: 150, uploadGroupKey: "multi-1" },
+], [], new Set());
+assert.strictEqual(groupedDedupeResult.stats.realNew, 2, "multi-product source order should separate for Taager bulk cart upload because grouped product cells are rejected");
+assert.strictEqual(groupedDedupeResult.orders.length, 2);
+const groupedWorkbook = XLSX.read(buildOutputExcel(groupedDedupeResult.orders), { type: "buffer" });
+const groupedRows = XLSX.utils.sheet_to_json(groupedWorkbook.Sheets.Cart, { header: 1, defval: "" });
+assert.strictEqual(groupedRows.length, 3, "multi-product cart upload should write separate Taager rows when the cart cannot parse grouped products");
+assert.strictEqual(groupedRows[1][0], "SKU-A");
+assert.strictEqual(groupedRows[2][0], "SKU-B");
+assert.strictEqual(groupedRows[2][3], 2);
+const partialExisting = new Set(["966500000005|SKU-A"]);
+const partialDedupeResult = mergeAndDeduplicate([
+  { source: "real", normPhone: "966500000005", sku: "SKU-A", productName: "Product A", uploadGroupKey: "multi-partial" },
+  { source: "real", normPhone: "966500000005", sku: "SKU-B", productName: "Product B", uploadGroupKey: "multi-partial" },
+], [], partialExisting);
+assert.strictEqual(partialDedupeResult.orders.length, 0, "partial existing grouped order should not create another shipping order");
+assert.strictEqual(partialDedupeResult.skippedOrders[0].reason, "partial_order_already_in_taager");
 assert.strictEqual(missingEverywhereResult.skippedOrders[0].reason, "product_not_in_easyorders_or_taager");
 const skippedWorkbook = XLSX.read(buildSkippedExcel(missingEverywhereResult.skippedOrders), { type: "buffer" });
 const skippedRows = XLSX.utils.sheet_to_json(skippedWorkbook.Sheets["Warnings & Skipped"], { header: 1, defval: "" });
@@ -142,5 +181,13 @@ assert(runnerSource.includes("splitOrdersByMissedDestination"), "runner must use
 assert(runnerSource.includes('legacyEnabled: config.missingOrdersUploadEnabled === true'), "runner may receive the legacy toggle but blank destinations must still normalize to cart");
 assert(runnerSource.includes("runSecondTaagerCartUpload"), "runner must support a second Taager cart destination");
 assert(runnerSource.includes('mode: "second-taager-cart-upload"'), "runner must launch a Taager-only worker for second cart uploads");
+assert(runnerSource.includes("const defaultMaxCycles = Math.max(12, list.length)"), "verified cart upload should scale reconciliation cycles to the pending order count by default");
+assert(runnerSource.includes("cartVerificationNoProgressCycles"), "verified cart upload should stop on repeated no-progress cycles instead of pretending completion");
+assert(runnerSource.includes("cartVerificationBatchSize"), "verified cart upload should submit controlled chunks instead of the whole pending list");
+assert(runnerSource.includes("noProgressCycles >= maxNoProgressCycles"), "verified cart upload should have a no-progress brake");
+assert(runnerSource.includes("hardFailed: true"), "Taager-declared failed rows should be marked as hard failures inside the current run");
+assert(runnerSource.includes("hardFailed: false"), "export-unconfirmed rows should not be treated as Taager hard failures inside the current run");
+assert(runnerSource.includes("cartVerificationKeys"), "verification should check every SKU key inside a grouped cart order");
+assert(!runnerSource.includes("buildGroupedCartOrders"), "cart upload should not group multi-product rows because Taager rejects grouped product cells");
 
 console.log("Missing Orders feature verification passed.");

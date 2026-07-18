@@ -4,6 +4,7 @@ const XLSX = require("xlsx");
 const { normalizePhone, normalizePhoneCandidatesWithMeta } = require("./phone");
 const { normalizeTaagerCountry } = require("./taager-country");
 const { normalizeProvinceMatch } = require("./output");
+const { buildGroupedCartOrders, cartOrderGroupKey } = require("./cart-order-groups");
 
 const config = JSON.parse(process.env.BOT_CONFIG || "{}");
 const COUNTRY = normalizeTaagerCountry(config.taagerCountry || config.taagerCountry || "sa");
@@ -225,6 +226,7 @@ function explodeRealOrderRow(row, phoneMeta) {
 
   const base = {
     source: "real",
+    orderId: String(row["Order ID"] || row["ID"] || row["External Order ID"] || "").trim(),
     normPhone: phoneMeta.digits,
     uncertain: !!phoneMeta.uncertain,
     phoneAmbiguous: !!phoneMeta.phoneAmbiguous,
@@ -245,6 +247,16 @@ function explodeRealOrderRow(row, phoneMeta) {
     marketerCommission: 0,
     taagerOrderNumber: "",
   };
+  base.uploadGroupKey = [
+    base.source,
+    base.normPhone,
+    base.orderId,
+    base.easyCreatedAt,
+    base.name,
+    base.address || "",
+    base.phoneAmbiguityGroupId || "",
+    base.phoneCandidateIndex || "",
+  ].map((value) => String(value || "").trim()).join("|");
 
   const bySku = new Map();
   for (let i = 0; i < itemCount; i++) {
@@ -381,6 +393,15 @@ function parseMissedOrders(buffer, dateFrom, dateTo) {
         subtotal: null,
         unitPrice: null,
       };
+      baseOrder.uploadGroupKey = [
+        baseOrder.source,
+        baseOrder.normPhone,
+        baseOrder.easyCreatedAt,
+        baseOrder.name,
+        baseOrder.address || "",
+        baseOrder.phoneAmbiguityGroupId || "",
+        baseOrder.phoneCandidateIndex || "",
+      ].map((value) => String(value || "").trim()).join("|");
 
       productText.split("|").map((part) => part.trim()).filter(Boolean).forEach((productName) => {
         orders.push({ ...baseOrder, productName });
@@ -555,7 +576,9 @@ function parseTaagerOrderKeys(buffer, country = COUNTRY) {
   const header = rows[0] || [];
   const orderIdx = findHeaderIndex(header, ["Order Number"], 0);
   const phoneIdx = findHeaderIndex(header, ["رقم الهاتف", "Phone Number", "Phone"], 5);
+  const productsIdx = findHeaderIndex(header, ["المنتجات", "Products", "SKU"], 16);
 
+  const keys = new Set();
   const phones = new Set();
   const orderNumbers = new Set();
   let rowOrderCount = 0;
@@ -570,15 +593,24 @@ function parseTaagerOrderKeys(buffer, country = COUNTRY) {
     if (orderNumber) orderNumbers.add(orderNumber);
 
     const phone = normalizePhone(row[phoneIdx], country);
-    if (phone) phones.add(phone);
-    else skipped++;
+    const products = splitTaagerProducts(row[productsIdx]);
+    if (!phone) {
+      skipped++;
+      continue;
+    }
+    phones.add(phone);
+    products.forEach((sku) => {
+      const key = makeOrderKey(phone, sku);
+      if (key) keys.add(key);
+    });
   }
 
-  phones.taagerOrderCount = orderNumbers.size || rowOrderCount;
-  phones.taagerUniqueOrderNumbers = orderNumbers.size;
-  phones.taagerRowOrderCount = rowOrderCount;
-  console.log(`Taager: ${phones.taagerOrderCount} orders loaded | ${phones.size} existing phones loaded | skipped phones:${skipped}`);
-  return phones;
+  keys.taagerOrderCount = orderNumbers.size || rowOrderCount;
+  keys.taagerUniqueOrderNumbers = orderNumbers.size;
+  keys.taagerRowOrderCount = rowOrderCount;
+  keys.taagerUniquePhones = phones.size;
+  console.log(`Taager: ${keys.taagerOrderCount} orders loaded | ${keys.size} existing phone+SKU pairs loaded | ${phones.size} existing phones loaded | skipped phones:${skipped}`);
+  return keys;
 }
 
 function parseTaagerPhones(buffer, country = COUNTRY) {
@@ -588,6 +620,7 @@ function parseTaagerPhones(buffer, country = COUNTRY) {
 function mergeAndDeduplicate(realOrders, resolvedMissed, existingPhones) {
   const seen = new Set();
   const result = [];
+  const skippedOrders = [];
   const stats = {
     taagerOrderCount: Number(existingPhones && existingPhones.taagerOrderCount) || 0,
     realValid: realOrders.length,
@@ -596,31 +629,80 @@ function mergeAndDeduplicate(realOrders, resolvedMissed, existingPhones) {
     realDupe: 0,
     realInTaager: 0,
     realMissingSku: 0,
+    realPartialInTaager: 0,
     missedNew: 0,
     missedDupe: 0,
     missedInTaager: 0,
     missedMissingSku: 0,
+    missedPartialInTaager: 0,
   };
 
-  function accept(order, source) {
-    const orderKey = makeOrderKey(order.normPhone, order.sku);
-    if (!orderKey) { stats[`${source}MissingSku`]++; return; }
-    if (existingPhones.has(order.normPhone)) { stats[`${source}InTaager`]++; return; }
-    if (seen.has(orderKey)) { stats[`${source}Dupe`]++; return; }
-    seen.add(orderKey);
-    result.push(order);
-    stats[`${source}New`]++;
+  function skippedGroupOrder(groupedOrder, reason, detail = {}) {
+    skippedOrders.push({
+      ...groupedOrder,
+      rawPhone: groupedOrder.rawPhone || groupedOrder.phone || groupedOrder.normPhone || "",
+      normalizedPhone: groupedOrder.normPhone || groupedOrder.phone || "",
+      reason,
+      existingSkus: detail.existingSkus || "",
+      missingSkus: detail.missingSkus || "",
+      duplicateSkus: detail.duplicateSkus || "",
+    });
   }
 
-  realOrders.forEach((order) => accept(order, "real"));
-  resolvedMissed.forEach((order) => accept(order, "missed"));
+  function acceptGroup(items, source) {
+    const groupedOrder = buildGroupedCartOrders(items)[0];
+    const itemKeys = items.map((order) => ({ order, key: makeOrderKey(order.normPhone, order.sku) }));
+    const missing = itemKeys.filter((entry) => !entry.key);
+    if (missing.length > 0) {
+      stats[`${source}MissingSku`] += missing.length;
+      skippedGroupOrder(groupedOrder, "missing_sku_in_group");
+      return;
+    }
+
+    const existing = itemKeys.filter((entry) => existingPhones.has(entry.key));
+    const duplicate = itemKeys.filter((entry) => seen.has(entry.key));
+    if (existing.length === itemKeys.length) {
+      stats[`${source}InTaager`]++;
+      return;
+    }
+    if (duplicate.length === itemKeys.length) {
+      stats[`${source}Dupe`]++;
+      return;
+    }
+    if (existing.length > 0 || duplicate.length > 0) {
+      stats[`${source}PartialInTaager`]++;
+      skippedGroupOrder(groupedOrder, "partial_order_already_in_taager", {
+        existingSkus: existing.map((entry) => entry.order.sku).join(", "),
+        missingSkus: itemKeys.filter((entry) => !existingPhones.has(entry.key) && !seen.has(entry.key)).map((entry) => entry.order.sku).join(", "),
+        duplicateSkus: duplicate.map((entry) => entry.order.sku).join(", "),
+      });
+      return;
+    }
+
+    itemKeys.forEach((entry) => seen.add(entry.key));
+    result.push(...items);
+    stats[`${source}New`] += items.length;
+  }
+
+  function acceptOrders(orders, source) {
+    const groups = new Map();
+    for (const order of Array.isArray(orders) ? orders : []) {
+      const key = cartOrderGroupKey(order);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(order);
+    }
+    for (const items of groups.values()) acceptGroup(items, source);
+  }
+
+  acceptOrders(realOrders, "real");
+  acceptOrders(resolvedMissed, "missed");
 
   console.log(`New orders: real=${stats.realNew} missed=${stats.missedNew}`);
-  console.log(`Already in Taager (phone): real=${stats.realInTaager} missed=${stats.missedInTaager}`);
+  console.log(`Already in Taager (phone+SKU): real=${stats.realInTaager} missed=${stats.missedInTaager}`);
+  console.log(`Partial groups needing review (phone+SKU): real=${stats.realPartialInTaager} missed=${stats.missedPartialInTaager}`);
   console.log(`Dupes in this batch (phone+SKU): real=${stats.realDupe} missed=${stats.missedDupe}`);
-  return { orders: result, stats };
+  return { orders: result, stats, skippedOrders };
 }
-
 function splitTaagerProducts(value) {
   return splitCellLines(value).flatMap((line) => String(line).split(/[|,]/).map((part) => part.trim()).filter(Boolean));
 }

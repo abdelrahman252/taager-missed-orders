@@ -383,6 +383,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       phone_uncertain_zero_appended: t("results.reason_phone_uncertain_zero_appended"),
       product_not_in_catalog: t("results.reason_product_not_in_catalog"),
       product_not_in_easyorders_or_taager: t("results.reason_product_not_in_easyorders_or_taager"),
+      partial_order_already_in_taager: t("results.reason_partial_order_already_in_taager"),
+      missing_sku_in_group: t("results.reason_missing_sku_in_group"),
     };
     const paged = buildPagedItems(rows, (row, i, attrs) => {
       const reasonKey = row.uncertain && row.reason === "phone_parse_failed" ? "phone_uncertain_zero_appended" : row.reason;
@@ -814,7 +816,13 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           </div>
         </div>
 
-        <!-- ALL ORDERS — aggregated across all accounts -->
+        <!-- CONFIRMED ORDERS - aggregated across all accounts -->
+        ${buildOrdersTableHtml(
+          accountResults.flatMap(r => (r.data?.confirmedOrderRows || r.data?.orderRows || []).map(o => ({ ...o, _acc: r.accountLabel || r.accountId }))),
+          translated("results.confirmed_orders_table", "New Orders Confirmed in Taager")
+        )}
+
+        <!-- ALL ORDERS - aggregated across all accounts -->
         ${buildOrdersTableHtml(
           accountResults.flatMap(r => (r.data?.attemptedOrderRows || r.data?.orderRows || []).map(o => ({ ...o, _acc: r.accountLabel || r.accountId }))),
           t("results.all_attempted_all") || t("results.all_uploaded_all")
@@ -1046,6 +1054,9 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         </div>`}
 
         ${buildSkippedOrdersHtml(skippedOrders)}
+
+        <!-- CONFIRMED ORDERS TABLE -->
+        ${buildOrdersTableHtml(accData.confirmedOrderRows || successfulRows, translated("results.confirmed_orders_table", "New Orders Confirmed in Taager"))}
 
         <!-- ALL ORDERS TABLE -->
         ${buildOrdersTableHtml(accData.attemptedOrderRows || accData.orderRows, t("results.all_attempted") || t("results.all_uploaded"))}
@@ -1449,6 +1460,9 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       </div>`}
 
       ${buildSkippedOrdersHtml(skippedOrders)}
+
+      <!-- CONFIRMED ORDERS TABLE -->
+      ${buildOrdersTableHtml(data.confirmedOrderRows || successfulRows, translated("results.confirmed_orders_table", "New Orders Confirmed in Taager"))}
 
       <!-- ALL ORDERS TABLE -->
       ${buildOrdersTableHtml(data.attemptedOrderRows || data.orderRows, t("results.all_attempted") || t("results.all_uploaded"))}
