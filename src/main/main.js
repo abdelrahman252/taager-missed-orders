@@ -6042,7 +6042,7 @@ ipcMain.handle("get-marketing-status", async (_, accountId, platform = "tiktok",
       cache: { status: "local-miss", providerRequestCount: 0 },
     };
   }
-  if (cached && mode === "revalidate" && (marketingStatusIsFresh(cached) || cached.status === "disconnected")) {
+  if (cached && mode === "revalidate" && marketingStatusIsFresh(cached) && cached.status !== "disconnected") {
     return { ok: true, ...cached, cache: { ...(cached.cache || {}), status: "local", providerRequestCount: 0 } };
   }
   try {

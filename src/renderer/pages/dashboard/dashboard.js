@@ -741,7 +741,7 @@
         dbg('marketing-sync:load-connections', { activeId: activeId, reason: reason || 'dashboard', syncKey: syncKey });
         console.log('[Marketing] Loading connections before dashboard auto-sync:', activeId, reason || 'dashboard', syncPayload);
         var connectionPromise = typeof store.load === 'function'
-          ? store.load(activeId).catch(function (error) {
+          ? store.load(activeId, undefined, { revalidate: true, background: true }).catch(function (error) {
               console.warn('[Marketing] Could not load connections before dashboard auto-sync:', error);
               return null;
             })

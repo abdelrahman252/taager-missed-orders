@@ -1647,7 +1647,11 @@
         }), id, platform);
         var nextCheckedAt = next.statusCheckedAt ? new Date(next.statusCheckedAt).getTime() : 0;
         var nextIsStale = !nextCheckedAt || Date.now() - nextCheckedAt >= MARKETING_STATUS_TTL;
-        if (requestMode === 'cached' && (next.status === 'connected' || next.status === 'pending') && nextIsStale) {
+        var shouldBackgroundRevalidate = requestMode === 'cached' && (
+          ((next.status === 'connected' || next.status === 'pending') && nextIsStale) ||
+          next.status === 'disconnected'
+        );
+        if (shouldBackgroundRevalidate) {
           setTimeout(function () {
             self.load(id, platform, { revalidate: true, background: true }).catch(function () {});
           }, 0);

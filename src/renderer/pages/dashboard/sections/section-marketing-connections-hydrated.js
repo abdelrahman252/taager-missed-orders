@@ -1018,6 +1018,7 @@
       }
       return store.load(selectedAccountId, platform, {
         force: !!options.force || !!options.autoRefresh,
+        revalidate: !!options.revalidate,
         background: !!options.background
       }).then(function (result) {
         busyLabel = '';
@@ -1672,7 +1673,12 @@
     window.addEventListener('focus', refreshAfterAuthorizationFocus);
     window.addEventListener('taager-lang-change', render);
     render();
-    LIVE_PLATFORMS.forEach(function (platform) { loadStatus(platform.id, { cached: true }); });
+    LIVE_PLATFORMS.forEach(function (platform) {
+      loadStatus(platform.id, { cached: true }).then(function (result) {
+        if (!mount || !mount.isConnected || !result || result.status !== 'disconnected') return null;
+        return loadStatus(platform.id, { force: true, background: true });
+      }).catch(function () {});
+    });
 
     return function cleanupMarketingConnections() {
       window.removeEventListener('focus', refreshAfterAuthorizationFocus);
