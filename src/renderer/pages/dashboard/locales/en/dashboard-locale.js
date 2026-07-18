@@ -892,7 +892,7 @@
       'تنفقه على الإعلانات': 'spent on ads',
       'عدد الطلبات المتوقع': 'Expected Orders',
       'الطلبات المسلمة': 'Delivered Orders',
-      'نسبة التسليم (NDR)': 'Delivery Rate (NDR)',
+      'نسبة التسليم (NDR)': 'Net Delivery Rate (NDR)',
       'متوسط العمولة': 'Taager Profit After Tax',
       'العائد:': 'Return:',
       'أداء مرتفع': 'High Performance',

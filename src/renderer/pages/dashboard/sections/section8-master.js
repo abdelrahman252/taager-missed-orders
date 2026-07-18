@@ -235,11 +235,21 @@ window.renderSection8 = function (mountEl, data, ctx) {
     adSpend:        finalAdSpend,
     netOrderCount:  roiNetOrderCount,
     totalOrders:    roiNetOrderCount,
-    deliveredCount: _roiLiveRaw.deliveredCount != null ? _roiLiveRaw.deliveredCount : (d.roi ? d.roi.deliveredCount : null),
+    deliveredCount: d.roi && d.roi.expectedDeliveriesDisplay != null
+      ? d.roi.expectedDeliveriesDisplay
+      : (_roiLiveRaw.deliveredCount != null ? _roiLiveRaw.deliveredCount : (d.roi ? d.roi.deliveredCount : null)),
+    actualDeliveredCount: d.roi && d.roi.actualDeliveredCount != null ? d.roi.actualDeliveredCount : null,
+    actualEarnedProfitAfterTax: d.roi && d.roi.actualEarnedProfitAfterTax != null ? d.roi.actualEarnedProfitAfterTax : null,
+    netOrderProfitAfterTax: d.roi && d.roi.netOrderProfitAfterTax != null ? d.roi.netOrderProfitAfterTax : null,
+    averageProfit: d.roi && d.roi.averageProfit != null ? d.roi.averageProfit : null,
+    averageProfitSource: d.roi && d.roi.averageProfitSource ? d.roi.averageProfitSource : null,
     avgCommission:  d.roi && d.roi.averageProfit != null
       ? d.roi.averageProfit
       : (_roiLiveRaw.avgCommission != null ? _roiLiveRaw.avgCommission : (d.roi && d.roi.avgCommission != null ? d.roi.avgCommission : 0)),
-    ndrPct:         _roiLiveRaw.ndrPct         != null ? _roiLiveRaw.ndrPct         : (d.roi ? d.roi.ndrPct         : 0)
+    ndrPct:         d.roi && d.roi.ndrPct != null ? d.roi.ndrPct : (_roiLiveRaw.ndrPct != null ? _roiLiveRaw.ndrPct : 0),
+    expectedTotalProfitBeforeAdSpend: d.roi && d.roi.expectedTotalProfitBeforeAdSpend != null ? d.roi.expectedTotalProfitBeforeAdSpend : null,
+    expectedNetProfit: d.roi && d.roi.expectedNetProfit != null ? d.roi.expectedNetProfit : null,
+    breakEvenCpa: d.roi && d.roi.breakEvenCpa != null ? d.roi.breakEvenCpa : null
   };
 
   // -- 1. Resolve live data structures -----------------------------------------
@@ -280,7 +290,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
     { label: s8Txt('Average Order Value (Delivered)', 'متوسط قيمة الطلب المسلم'), value: overview.deliveredAov ? overview.deliveredAov.value : 0, unit: nativeCurrency, delta: overview.deliveredAov ? overview.deliveredAov.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.deliveredAov.tooltip', 'Delivered AOV = net delivered sales / delivered orders.') },
     { label: s8Txt('Confirmation Rate', 'نسبة التأكيد'), value: overview.confirmationRate ? overview.confirmationRate.value : 0, unit: '%', delta: overview.confirmationRate ? overview.confirmationRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.confirmationRate.tooltip', 'Confirmation Rate = progressed statuses / all orders. Confirmation + cancel + pending = 100%.') },
     { label: s8Txt('DR Rate', 'نسبة DR'), value: overview.drRate ? overview.drRate.value : 0, unit: '%', delta: overview.drRate ? overview.drRate.delta : 0, color: 'blue', spark: [], iconType: 'blue', tooltip: tx('kpi.drRate.tooltip', 'DR = delivered orders / confirmed orders.') },
-    { label: s8Txt('NDR Rate', 'نسبة NDR'), value: overview.ndrRate ? overview.ndrRate.value : (cod.ndrPct != null ? num(cod.ndrPct, 0) : 0), unit: '%', delta: overview.ndrRate ? overview.ndrRate.delta : 0, color: 'orange', spark: [], iconType: 'orange', tooltip: tx('kpi.ndrRate.tooltip', 'NDR = delivered orders / net placed orders.') },
+    { label: s8Txt('Net Delivery Rate (NDR)', 'معدل التسليم الصافي (NDR)'), value: overview.ndrRate ? overview.ndrRate.value : (cod.ndrPct != null ? num(cod.ndrPct, 0) : 0), unit: '%', delta: overview.ndrRate ? overview.ndrRate.delta : 0, color: 'orange', spark: [], iconType: 'orange', tooltip: tx('kpi.ndrRate.tooltip', 'NDR = delivered orders / net placed orders.') },
     { label: s8Txt('Net ROAS', 'العائد الصافي على الإعلان'), value: netRoasUnavailable ? 0 : netRoas.toFixed(2), displayValue: netRoasUnavailable ? '—' : netRoas.toFixed(2), loading: marketingSpendPending, unavailable: marketingSpendUnavailable, unit: 'x', delta: netRoasDelta, hideDelta: netRoasUnavailable, color: 'purple', spark: [], iconType: 'purple', tooltip: tx('kpi.netRoas.tooltip', s8Txt('Net ROAS = delivered sales divided by ad spend. It uses only successfully delivered order revenue, so pending, canceled, and returned orders do not inflate ad performance.', 'العائد الصافي على الإعلان يساوي المبيعات المسلمة مقسومة على الإنفاق الإعلاني، ويستخدم فقط إيرادات الطلبات المسلمة بنجاح حتى لا تضخم الطلبات المعلقة أو الملغاة أو المرتجعة أداء الإعلانات.')) }
   ];
 
@@ -463,9 +473,15 @@ window.renderSection8 = function (mountEl, data, ctx) {
     : Math.max(0, Math.round(accountOrders * (accountNdrPct / 100)));
   var avgCommissionInTargetCurrency = convert(avgCommission, nativeCurrency, targetCurrency);
   var accountCpa = accountOrders > 0 ? accountSpend / accountOrders : 0;
-  var accountBreakEvenCpa = avgCommissionInTargetCurrency * (accountNdrPct / 100);
-  var accountRevenue = accountDeliveredOrders * avgCommissionInTargetCurrency;
-  var accountNetProfit = accountRevenue - accountSpend;
+  var accountBreakEvenCpa = roiLive.breakEvenCpa != null
+    ? convert(num(roiLive.breakEvenCpa, 0), nativeCurrency, targetCurrency)
+    : avgCommissionInTargetCurrency * (accountNdrPct / 100);
+  var accountRevenue = roiLive.expectedTotalProfitBeforeAdSpend != null
+    ? convert(num(roiLive.expectedTotalProfitBeforeAdSpend, 0), nativeCurrency, targetCurrency)
+    : accountDeliveredOrders * avgCommissionInTargetCurrency;
+  var accountNetProfit = roiLive.expectedNetProfit != null
+    ? convert(num(roiLive.expectedNetProfit, 0), nativeCurrency, targetCurrency)
+    : accountRevenue - accountSpend;
   var averageDeliveredOrderValue = overview.deliveredAov ? num(overview.deliveredAov.value, 0) : 0;
   var deliveredSalesValue = overview.totalDeliveredSales ? num(overview.totalDeliveredSales.value, 0) : 0;
   var activeCitiesCount = cod.totalCitiesCount != null

@@ -3212,11 +3212,11 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         "outForDeliveryOrders = count(status: shipping)",
       ) +
       _kpiMiniTip(
-        s7Txt("Delivery Rate NDR", "معدل التسليم NDR"),
+        s7Txt("Net Delivery Rate (NDR)", "معدل التسليم الصافي (NDR)"),
         '<span id="s7-real-ndr-pct">' + s7PctValue(realNdrPct) + "%</span>",
         "#f59e0b",
         S7_ICONS.target,
-        s7Txt("Delivery Rate (NDR)", "معدل التسليم (NDR)"),
+        s7Txt("Net Delivery Rate (NDR)", "معدل التسليم الصافي (NDR)"),
         s7Txt(
           "Percentage of orders delivered successfully. Healthy benchmark starts at 30%, with top tier at 40%+.",
           "نسبة الطلبات التي تم تسليمها بنجاح. يبدأ المعيار الصحي من 30%، والمستوى الأعلى عند 40% أو أكثر.",
@@ -3799,6 +3799,21 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       useBestCycleBtn.addEventListener("click", function () {
         orderNdrSourceKey = "best_cycle";
         mountEl._s7OrderNdrSourceKey = "best_cycle";
+        var bestChoice = activeOrderNdrChoice();
+        if (bestChoice && bestChoice.bestCycle) {
+          window.DashboardBestNdrCyclePreferred = {
+            key: "best_cycle",
+            dateFrom: bestChoice.bestCycle.dateFrom,
+            dateTo: bestChoice.bestCycle.dateTo,
+            ndrPct: bestChoice.bestCycle.ndrPct,
+          };
+          if (window.DashboardExpectedNdrRangeState && typeof window.DashboardExpectedNdrRangeState.setRange === "function") {
+            window.DashboardExpectedNdrRangeState.setRange(bestChoice.bestCycle.dateFrom, bestChoice.bestCycle.dateTo);
+          }
+          if (window.DashboardDeliveredDateState && typeof window.DashboardDeliveredDateState.set === "function") {
+            window.DashboardDeliveredDateState.set("expected");
+          }
+        }
         applyOrderNdrChoice(true);
         simState._ndrModified = false;
         var ndrInput = document.getElementById("sfe-ndr");

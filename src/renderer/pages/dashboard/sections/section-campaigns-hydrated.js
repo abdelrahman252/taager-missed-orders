@@ -731,6 +731,7 @@
         group.netProfit = projection.expectedNetProfit;
         group.roiPct = projection.expectedRoi;
         group.profitRoas = projection.expectedProfitRoas;
+        group.breakEvenCpa = projection.breakEvenCpa;
         group.deliveredCpa = projection.expectedDeliveredCpa;
         group.totalSales = projection.expectedDeliveredSales;
         group.deliveredSales = group.totalSales;
@@ -1430,6 +1431,7 @@
           group.netProfit = projection.expectedNetProfit;
           group.roiPct = projection.expectedRoi;
           group.profitRoas = projection.expectedProfitRoas;
+          group.breakEvenCpa = projection.breakEvenCpa;
           group.deliveredCpa = projection.expectedDeliveredCpa;
           group.totalSales = projection.expectedDeliveredSales;
           group.deliveredSales = group.totalSales;

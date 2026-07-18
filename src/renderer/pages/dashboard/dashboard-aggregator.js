@@ -4328,6 +4328,21 @@
     nationalAverages.averageProfit = avgCommission;
     nationalAverages.avgCommission = avgCommission;
     nationalAverages.averageProfitSource = averageProfitSource;
+    if (meta.deliveredDateMode === 'expected' && accountFinancials && Array.isArray(pipelineStages)) {
+      pipelineStages.forEach(function (st) {
+        if (!st || st.id !== 'delivered') return;
+        st.actualCount = actualDeliveredCount;
+        st.count = accountFinancials.expectedDeliveriesDisplay;
+        st.expectedDeliveriesExact = accountFinancials.expectedDeliveriesExact;
+        st.pct = formatPct(st.count, placedCount);
+        st.share = percentOf(st.count, placedCount);
+        st.conv = ndrPct;
+        st.sar = fmtNum(accountFinancials.expectedTotalProfitBeforeAdSpend);
+        st.profitAfterTax = roundMoney(accountFinancials.expectedTotalProfitBeforeAdSpend);
+        st.salesSar = roundMoney(accountFinancials.expectedDeliveredSales);
+        st.expected = true;
+      });
+    }
     // Taager dashboard/status/NDR migration: dashboard rows are created-date based.
     var createdOrders = null;
     var outcomeOrders = null;
@@ -4379,6 +4394,12 @@
         actualEarnedCommission: { value: actualEarnedCommission, unit: meta.activeCurrency || 'SAR', color: 'green' },
         expectedTotalProfitBeforeAdSpend: { value: accountFinancials.expectedTotalProfitBeforeAdSpend, unit: meta.activeCurrency || 'SAR', color: 'green' },
         expectedNetProfit: { value: accountFinancials.expectedNetProfit, unit: roiCurrency, color: accountFinancials.expectedNetProfit >= 0 ? 'green' : 'red' },
+        averageProfit: { value: accountFinancials.averageProfit, unit: meta.activeCurrency || 'SAR', source: accountFinancials.averageProfitSource, color: 'green' },
+        accountCpa: { value: accountFinancials.cpa, unit: roiCurrency, color: 'purple' },
+        accountBreakEvenCpa: { value: accountFinancials.breakEvenCpa, unit: meta.activeCurrency || 'SAR', color: 'orange' },
+        totalSpend: { value: roiAdSpend, unit: roiCurrency, color: 'blue' },
+        totalRevenue: { value: accountFinancials.displayedTotalProfitBeforeAdSpend, unit: meta.activeCurrency || 'SAR', color: 'green' },
+        accountNetProfit: { value: accountFinancials.displayedNetProfit, unit: roiCurrency, color: accountFinancials.displayedNetProfit >= 0 ? 'green' : 'red' },
         incomingCommission: { value: incomingCommission, delta: calcDelta(incomingCommission, previousOverview.incomingCommission),    unit: meta.activeCurrency || 'SAR', color: 'orange' },
         lostCommission:     { value: lostCommission,     delta: calcDelta(lostCommission, previousOverview.lostCommission),            unit: meta.activeCurrency || 'SAR', color: 'red'    },
         totalOrders:        { value: placedCount, netOrderCount: placedCount, totalOrderCount: rawTotalOrders, rawValue: rawTotalOrders, canceledByYou: canceledByYouCount, delta: calcDelta(placedCount, previousOverview.totalOrders), unit: raw('طلب'), color: 'blue' },

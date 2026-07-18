@@ -250,7 +250,10 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
       : (delivered > 0 ? realDeliveredSales / delivered : 0);
 
     if (expectedRateMode) {
-      var globalExpectedNdrRate = (data && data.overview && data.overview.deliveryRate != null) ? (data.overview.deliveryRate / 100) : 0.35;
+      var overviewNdrPct = data && data.overview && data.overview.ndrRate && data.overview.ndrRate.value != null
+        ? Number(data.overview.ndrRate.value)
+        : (data && data.overview && data.overview.deliveryRate != null ? Number(data.overview.deliveryRate) : NaN);
+      var globalExpectedNdrRate = Number.isFinite(overviewNdrPct) ? Math.max(0, Math.min(1, overviewNdrPct / 100)) : 0.35;
       var expectedNdrRate = (p.expectedNdrRate != null) ? Number(p.expectedNdrRate) : ((p.ndrPct != null) ? (p.ndrPct / 100) : globalExpectedNdrRate);
       
       realNdr = expectedNdrRate;
