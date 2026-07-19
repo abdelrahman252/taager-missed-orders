@@ -710,6 +710,12 @@ window.renderSetup = function (onComplete, initialStep) {
             radial-gradient(circle at 88% 0%, rgba(245,158,11,.14), transparent 40%),
             linear-gradient(180deg, rgba(34,32,25,.94), rgba(28,26,20,.78));
         }
+        .sv3-users-panel .sv3-setting-card.is-on.is-recovery {
+          border-color: rgba(34,211,238,.46);
+          background:
+            radial-gradient(circle at 88% 0%, rgba(34,211,238,.15), transparent 40%),
+            linear-gradient(180deg, rgba(22,38,54,.94), rgba(16,31,45,.78));
+        }
         .sv3-users-panel .sv3-setting-copy {
           grid-column: 1 / -1;
           align-items: center;
@@ -2626,6 +2632,13 @@ window.renderSetup = function (onComplete, initialStep) {
             linear-gradient(180deg, #ffffff, #fff9ed);
           box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 10px 24px rgba(217, 119, 6, .08);
         }
+        [data-theme="light"] .sv3-users-panel .sv3-setting-card.is-on.is-recovery {
+          border-color: rgba(8, 145, 178, .4);
+          background:
+            radial-gradient(circle at 88% 0%, rgba(34, 211, 238, .16), transparent 42%),
+            linear-gradient(180deg, #ffffff, #effcff);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 10px 24px rgba(8, 145, 178, .08);
+        }
         [data-theme="light"] .sv3-users-panel .sv3-setting-control {
           border-top-color: rgba(15, 23, 42, .08);
         }
@@ -3049,6 +3062,11 @@ window.renderSetup = function (onComplete, initialStep) {
             <span class="sv3-nav-label">${t("setup.nav_operations")}</span>
             ${window._operationsEnabled === false ? '<span class="sv3-nav-preview-badge">Preview</span>' : ""}
           </div>`}
+          ${window._teamLeaderEnabled ? "" : `<div class="sv3-nav-item sv3-nav-page${window._operationsEnabled === false ? " sv3-nav-preview" : ""}" id="nav-run-results" data-page="run-results">
+            <div class="sv3-step-num" style="background:linear-gradient(135deg,#38bdf8,#ef4444)">â—</div>
+            <span class="sv3-nav-label">${t("setup.nav_run_results") || "Run Results"}</span>
+            ${window._operationsEnabled === false ? '<span class="sv3-nav-preview-badge">Preview</span>' : ""}
+          </div>`}
           <div class="sv3-nav-item sv3-nav-page${window._dashboardEnabled === false ? " sv3-nav-preview" : ""}" id="nav-dashboard" data-page="dashboard">
             <div class="sv3-step-num" style="background:linear-gradient(135deg,#f59e0b,#ef4444)">📈</div>
             <span class="sv3-nav-label">${t("setup.nav_dashboard") || "Dashboard"}</span>
@@ -3088,6 +3106,7 @@ window.renderSetup = function (onComplete, initialStep) {
         // Page-level nav (Analytics / Operations)
         if (item.dataset.page === "analytics")  { goToAnalytics();  return; }
         if (item.dataset.page === "operations") { goToOperations(); return; }
+        if (item.dataset.page === "run-results") { goToRunResults(); return; }
         if (item.dataset.page === "dashboard")  { goToDashboard();  return; }
         const targetStep = item.dataset.step;
         if (targetStep === "run" && !accounts.some(acc => acc.accountType !== "static")) { goToDashboard(); return; }
@@ -3409,6 +3428,27 @@ window.renderSetup = function (onComplete, initialStep) {
             <div class="sv3-setting-card sv3-setting-card--compact">
               <div class="sv3-setting-row">
                 <div class="sv3-setting-copy">
+                  <div class="sv3-setting-icon">🔁</div>
+                  <div class="sv3-setting-title-line">
+                    <div class="sv3-setting-title">${esc(setupText("welcome.affiliate_recovery_title", "Affiliate Recovery"))}</div>
+                    <span class="sv3-setting-help">
+                      <button type="button" class="sv3-setting-help-btn" aria-label="${esc(setupText("welcome.affiliate_recovery_title", "Affiliate Recovery"))}" aria-describedby="sv3-affiliate-recovery-tooltip">?</button>
+                      <span id="sv3-affiliate-recovery-tooltip" class="sv3-setting-tooltip" role="tooltip">${esc(setupText("welcome.affiliate_recovery_desc", "Resend missing EasyOrders real orders and convert missed orders, then verify them from Taager exports."))}</span>
+                    </span>
+                  </div>
+                </div>
+                <div class="sv3-setting-control">
+                  <span id="sv3-affiliate-recovery-label" class="sv3-toggle-label">${t("welcome.off")}</span>
+                  <button id="sv3-btn-affiliate-recovery" class="sv3-toggle-btn" type="button" aria-pressed="false">
+                    <span id="sv3-affiliate-recovery-knob"></span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="sv3-setting-card sv3-setting-card--compact">
+              <div class="sv3-setting-row">
+                <div class="sv3-setting-copy">
                   <div class="sv3-setting-icon">📥</div>
                   <div class="sv3-setting-title-line">
                     <div class="sv3-setting-title">${t("welcome.missing_orders_title")}</div>
@@ -3638,7 +3678,8 @@ window.renderSetup = function (onComplete, initialStep) {
       const tones = {
         accent: { color: "var(--accent)", shadow: "0 0 0 3px rgba(124,106,247,.14)", cardClass: "is-accent", pill: "rgba(124,106,247,.14)" },
         success: { color: "var(--success)", shadow: "0 0 0 3px rgba(0,214,143,.12)", cardClass: "is-success", pill: "rgba(0,214,143,.12)" },
-        warning: { color: "var(--warning)", shadow: "0 0 0 3px rgba(245,158,11,.12)", cardClass: "is-warning", pill: "rgba(245,158,11,.12)" }
+        warning: { color: "var(--warning)", shadow: "0 0 0 3px rgba(245,158,11,.12)", cardClass: "is-warning", pill: "rgba(245,158,11,.12)" },
+        recovery: { color: "#22d3ee", shadow: "0 0 0 3px rgba(34,211,238,.13)", cardClass: "is-recovery", pill: "rgba(34,211,238,.13)" }
       };
       const current = tones[tone] || tones.accent;
       const card = btn.closest(".sv3-setting-card");
@@ -3649,6 +3690,7 @@ window.renderSetup = function (onComplete, initialStep) {
         card.classList.toggle("is-accent", enabled && current.cardClass === "is-accent");
         card.classList.toggle("is-success", enabled && current.cardClass === "is-success");
         card.classList.toggle("is-warning", enabled && current.cardClass === "is-warning");
+        card.classList.toggle("is-recovery", enabled && current.cardClass === "is-recovery");
       }
       if (enabled) {
         btn.style.background = current.color;
@@ -3779,6 +3821,33 @@ window.renderSetup = function (onComplete, initialStep) {
       sv3UpdateMissingOrdersUI();
     });
 
+    // ── Affiliate Recovery toggle (setup page) ──
+    let sv3AffiliateRecoveryEnabled = false;
+    function sv3UpdateAffiliateRecoveryUI() {
+      const btn = document.getElementById("sv3-btn-affiliate-recovery");
+      const knob = document.getElementById("sv3-affiliate-recovery-knob");
+      const label = document.getElementById("sv3-affiliate-recovery-label");
+      if (!btn) return;
+      sv3SetSettingToggleVisual(btn, knob, label, sv3AffiliateRecoveryEnabled, "recovery");
+    }
+
+    document.getElementById("sv3-btn-affiliate-recovery")?.addEventListener("click", async () => {
+      const next = !sv3AffiliateRecoveryEnabled;
+      sv3AffiliateRecoveryEnabled = next;
+      sv3UpdateAffiliateRecoveryUI();
+      localStorage.setItem("easyOrdersAffiliateRecoveryEnabled", next ? "true" : "false");
+      window._easyOrdersAffiliateRecoveryEnabled = next;
+      try {
+        if (typeof window.api.saveSettings === "function") {
+          await window.api.saveSettings({ easyOrdersAffiliateRecoveryEnabled: next });
+        } else if (typeof window.api.setEasyOrdersAffiliateRecoveryEnabled === "function") {
+          await window.api.setEasyOrdersAffiliateRecoveryEnabled(next);
+        }
+      } catch (err) {
+        console.warn("Affiliate Recovery setting saved locally; restart the app if the main process has not picked it up yet.", err);
+      }
+    });
+
     // ── Auto-Run toggle (setup page) ──
     let sv3AutoRunEnabled      = false;
     let sv3AutoRunIntervalMins = 30;
@@ -3873,9 +3942,18 @@ window.renderSetup = function (onComplete, initialStep) {
 
     // Load saved state from store
     window.api.getCredentials().then(async (creds) => {
+      let settings = null;
+      try {
+        settings = typeof window.api.getSettings === "function" ? await window.api.getSettings() : null;
+      } catch (_) {}
       sv3LaunchMinEnabled    = creds.launchMinimized || false;
       sv3AutoConfirmEnabled  = creds.autoConfirm     || false;
       sv3MissingOrdersEnabled = creds.missingOrdersUploadEnabled === true;
+      const localAffiliateRecovery = localStorage.getItem("easyOrdersAffiliateRecoveryEnabled");
+      sv3AffiliateRecoveryEnabled = creds.easyOrdersAffiliateRecoveryEnabled === true ||
+        settings?.easyOrdersAffiliateRecoveryEnabled === true ||
+        localAffiliateRecovery === "true";
+      window._easyOrdersAffiliateRecoveryEnabled = sv3AffiliateRecoveryEnabled;
       sv3AutoRunEnabled      = creds.autoRun         || false;
       sv3AutoRunIntervalMins = creds.autoRunInterval  || 30;
       const savedAutoRunIds = Array.isArray(creds.autoRunAccountIds)
@@ -3888,6 +3966,7 @@ window.renderSetup = function (onComplete, initialStep) {
       sv3UpdateLaunchMinUI();
       sv3UpdateAutoConfirmUI();
       sv3UpdateMissingOrdersUI();
+      sv3UpdateAffiliateRecoveryUI();
       if (sv3AutoRunEnabled) {
         const allIds = runnableAccounts.map(a => a.id);
         const autoRunIds = selectedIds.length ? selectedIds : allIds;

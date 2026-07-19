@@ -792,7 +792,12 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
 
     if (typeof wireSharedSidebar === "function") wireSharedSidebar(el);
 
-    window.api.runBot({ dateFrom, dateTo, accountIds: selectedAccountIds || [] }).then((result) => {
+    window.api.runBot({
+      dateFrom,
+      dateTo,
+      accountIds: selectedAccountIds || [],
+      easyOrdersAffiliateRecoveryEnabled: window._easyOrdersAffiliateRecoveryEnabled === true || localStorage.getItem("easyOrdersAffiliateRecoveryEnabled") === "true",
+    }).then((result) => {
       if (stopRequested) return;
       botDone = true;
       window._botIsRunning = false;
@@ -1766,7 +1771,12 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
   if (typeof wireSharedSidebar === "function") wireSharedSidebar(el);
 
   // ── RUN BOT + handle multi-account result (Task 4) ──
-  window.api.runBot({ dateFrom, dateTo, accountIds: selectedAccountIds || [] }).then((result) => {
+  window.api.runBot({
+    dateFrom,
+    dateTo,
+    accountIds: selectedAccountIds || [],
+    easyOrdersAffiliateRecoveryEnabled: window._easyOrdersAffiliateRecoveryEnabled === true || localStorage.getItem("easyOrdersAffiliateRecoveryEnabled") === "true",
+  }).then((result) => {
     if (stopRequested) return;
     allBotsDone = true;
     window._botIsRunning = false;

@@ -139,6 +139,7 @@ contextBridge.exposeInMainWorld("api", {
   setLaunchMinimized: (val)  => monitoredInvoke("set-launch-minimized", val),
   setAutoConfirm:     (val)  => monitoredInvoke("set-auto-confirm", val),
   setMissingOrdersUploadEnabled: (val) => monitoredInvoke("set-missing-orders-upload-enabled", val),
+  setEasyOrdersAffiliateRecoveryEnabled: (val) => monitoredInvoke("set-easyorders-affiliate-recovery-enabled", val),
   getAutoRunProgress: ()     => monitoredInvoke("get-auto-run-progress"),
   killBot:            ()     => monitoredInvoke("kill-bot"),
   openFolder:         (folder) => monitoredInvoke("open-folder", folder),
@@ -176,6 +177,12 @@ contextBridge.exposeInMainWorld("api", {
   clearAnalyticsData:    ()        => monitoredInvoke("clear-analytics-data"),
   getAnalyticsSettings:  ()        => monitoredInvoke("get-analytics-settings"),
   saveAnalyticsSettings: (s)       => monitoredInvoke("save-analytics-settings", s),
+
+  // Run Results
+  saveRunResults:      (payload) => monitoredInvoke("save-run-results", payload),
+  getRunResultsIndex:  (filter)  => monitoredInvoke("get-run-results-index", filter),
+  getRunResultDetail:  (runId)   => monitoredInvoke("get-run-result-detail", runId),
+  clearRunResultsData: ()        => monitoredInvoke("clear-run-results-data"),
 
   // Dashboard
   runDashboardFetch:     (params)          => monitoredInvoke("run-dashboard-fetch",     params),

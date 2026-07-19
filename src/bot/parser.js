@@ -197,6 +197,25 @@ function makeOrderKey(normPhone, sku) {
   return phone && cleanSku ? `${phone}|${cleanSku}` : null;
 }
 
+function normalizeSourceOrderId(value) {
+  return String(value == null ? "" : value).trim().toLowerCase();
+}
+
+function orderSourceId(order) {
+  return normalizeSourceOrderId(order && (
+    order.orderId
+    || order.easyOrderUuid
+    || order.easyOrderId
+    || order.orderUuid
+    || order.sourceOrderId
+    || order.storeOrderId
+  ));
+}
+
+function orderCreatedDay(order) {
+  return localDateKey(order && (order.easyCreatedAt || order.createdAt || order.date));
+}
+
 function findHeaderIndex(header, candidates, fallback) {
   const normalized = header.map((item) => String(item || "").trim());
   for (const candidate of candidates) {
@@ -292,6 +311,127 @@ function explodeRealOrderRow(row, phoneMeta) {
   return [...bySku.values()];
 }
 
+function realOrderHistoryKey(order) {
+  const sku = String(order && order.sku || "").trim();
+  const product = normalizeProductName(order && order.productName || "");
+  return sku && product ? `${sku}|${product}` : "";
+}
+
+function numbersCloseForHistory(a, b) {
+  const left = Number(a);
+  const right = Number(b);
+  if (!Number.isFinite(left) || !Number.isFinite(right) || left <= 0 || right <= 0) return false;
+  return Math.abs(left - right) <= Math.max(1, Math.abs(right) * 0.02);
+}
+
+function repairRealOrderQuantitiesFromHistory(orders) {
+  const groups = new Map();
+  for (const order of orders || []) {
+    const key = realOrderHistoryKey(order);
+    if (!key) continue;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(order);
+  }
+
+  let repaired = 0;
+  for (const items of groups.values()) {
+    const qtyCounts = new Map();
+    const unitPricesByQty = new Map();
+    for (const item of items) {
+      const qty = Number(item.qty || 1) || 1;
+      const unitPrice = Number(item.unitPrice || 0) || 0;
+      qtyCounts.set(qty, (qtyCounts.get(qty) || 0) + 1);
+      if (!unitPricesByQty.has(qty)) unitPricesByQty.set(qty, []);
+      if (unitPrice > 0) unitPricesByQty.get(qty).push(unitPrice);
+    }
+    const total = items.length;
+    const dominant = Array.from(qtyCounts.entries())
+      .map(([qty, count]) => ({ qty, count }))
+      .filter((entry) => entry.qty > 0 && entry.count > 0)
+      .sort((a, b) => (b.count - a.count) || (b.qty - a.qty))[0];
+    if (!dominant || dominant.qty <= 1 || dominant.qty > 10 || total < 4 || dominant.count / total < 0.65) continue;
+
+    const dominantPrices = unitPricesByQty.get(dominant.qty) || [];
+    const dominantUnitPrice = dominantPrices.length
+      ? dominantPrices.sort((a, b) => a - b)[Math.floor(dominantPrices.length / 2)]
+      : 0;
+    for (const item of items) {
+      const qty = Number(item.qty || 1) || 1;
+      const unitPrice = Number(item.unitPrice || 0) || 0;
+      if (qty >= dominant.qty) continue;
+      if (dominantUnitPrice > 0 && unitPrice > 0 && !numbersCloseForHistory(unitPrice, dominantUnitPrice)) continue;
+      item.qty = dominant.qty;
+      item.subtotal = unitPrice > 0 ? unitPrice * dominant.qty : item.subtotal;
+      item.quantityRepair = {
+        from: qty,
+        to: dominant.qty,
+        reason: "sku_product_history_min_quantity",
+        sampleCount: total,
+        dominantCount: dominant.count,
+        confidence: dominant.count / total,
+      };
+      repaired++;
+    }
+  }
+  return repaired;
+}
+
+function catalogQuantityConfidence(match) {
+  const dominantQty = Number(match && match.dominantQty || 0) || 0;
+  const totalSamples = Number(match && match.totalSamples || 0) || 0;
+  const dominantCount = Number(match && match.dominantQtyCount || 0) || 0;
+  const confidence = Number(match && match.dominantQtyConfidence || 0) || (totalSamples > 0 ? dominantCount / totalSamples : 0);
+  return { dominantQty, totalSamples, dominantCount, confidence };
+}
+
+function findCatalogBySku(catalog, sku) {
+  const cleanSku = String(sku || "").trim();
+  if (!cleanSku || !catalog || typeof catalog !== "object") return null;
+  return Object.values(catalog).find((entry) => String(entry && entry.sku || "").trim() === cleanSku) || null;
+}
+
+function repairOrderQuantitiesFromCatalog(orders, catalog = {}, taagerCatalog = {}) {
+  let repaired = 0;
+  for (const order of orders || []) {
+    const currentQty = Number(order && order.qty || 1) || 1;
+    if (!order || currentQty <= 0 || currentQty > 10) continue;
+    const unitPrice = Number(order.unitPrice || 0) || 0;
+    if (unitPrice <= 0) continue;
+
+    const productMatch = findProductInCatalog(order.productName, catalog);
+    const easyMatch = productMatch && String(productMatch.sku || "").trim() === String(order.sku || "").trim()
+      ? productMatch
+      : null;
+    const taagerMatch = findCatalogBySku(taagerCatalog, order.sku);
+    const sources = [
+      { match: easyMatch, source: "easyorders_catalog", minSamples: 4, minConfidence: 0.65 },
+      { match: taagerMatch, source: "taager_catalog", minSamples: 5, minConfidence: 0.85 },
+    ];
+
+    for (const source of sources) {
+      if (!source.match) continue;
+      const confidence = catalogQuantityConfidence(source.match);
+      const targetQty = confidence.dominantQty;
+      if (targetQty <= currentQty || targetQty <= 1 || targetQty > 10) continue;
+      if (confidence.totalSamples < source.minSamples || confidence.confidence < source.minConfidence) continue;
+      order.qty = targetQty;
+      order.subtotal = unitPrice * targetQty;
+      order.quantityRepair = {
+        from: currentQty,
+        to: targetQty,
+        reason: "sku_product_history_min_quantity",
+        source: source.source,
+        sampleCount: confidence.totalSamples,
+        dominantCount: confidence.dominantCount,
+        confidence: confidence.confidence,
+      };
+      repaired++;
+      break;
+    }
+  }
+  return repaired;
+}
+
 function parseRealOrders(buffer, dateFrom, dateTo) {
   const wb = XLSX.read(buffer, { type: "buffer" });
   const ws = wb.Sheets[wb.SheetNames[0]];
@@ -327,7 +467,9 @@ function parseRealOrders(buffer, dateFrom, dateTo) {
     if (!explodedCount) skipped.sku++;
   }
 
+  const repairedQuantities = repairRealOrderQuantitiesFromHistory(orders);
   console.log(`Real orders: ${orders.length} valid items | skipped date:${skipped.date} phone:${skipped.phone} status:${skipped.status} sku:${skipped.sku}`);
+  if (repairedQuantities > 0) console.log(`Real orders quantity repaired from SKU/product history: ${repairedQuantities}`);
   if (uncertainPhones > 0) console.log(`Real orders uncertain phones rescued with trailing 0: ${uncertainPhones}`);
   if (ambiguousPhones > 0) console.log(`Real orders expanded from ambiguous phones: ${ambiguousPhones}`);
   return orders;
@@ -443,7 +585,24 @@ function buildProductCatalog(realOrders) {
       const entries = Object.entries(freq).sort((a, b) => b[1] - a[1]);
       prices[qty] = entries.length ? Number(entries[0][0]) : 0;
     }
-    result[name] = { sku: entry.sku, productName: name, minQty: qtys[0] || 1, prices, source: entry.source || "easyorders" };
+    const totalSamples = Object.values(entry.qtyCounts).reduce((sum, count) => sum + (Number(count) || 0), 0);
+    const dominant = Object.entries(entry.qtyCounts)
+      .map(([qty, count]) => ({ qty: Number(qty) || 0, count: Number(count) || 0 }))
+      .filter((item) => item.qty > 0 && item.count > 0)
+      .sort((a, b) => (b.count - a.count) || (a.qty - b.qty))[0] || { qty: qtys[0] || 1, count: 0 };
+    result[name] = {
+      sku: entry.sku,
+      productName: name,
+      minQty: qtys[0] || 1,
+      maxQty: qtys[qtys.length - 1] || 1,
+      prices,
+      qtyCounts: { ...entry.qtyCounts },
+      totalSamples,
+      dominantQty: dominant.qty,
+      dominantQtyCount: dominant.count,
+      dominantQtyConfidence: totalSamples > 0 ? dominant.count / totalSamples : 0,
+      source: entry.source || "easyorders",
+    };
   }
 
   console.log(`EasyOrders product catalog: ${Object.keys(result).length} products`);
@@ -502,7 +661,24 @@ function buildTaagerProductCatalog(buffer, country = COUNTRY) {
         const entries = Object.entries(freq).sort((a, b) => b[1] - a[1]);
         prices[qty] = entries.length ? Number(entries[0][0]) : 0;
       }
-      result[name] = { sku: entry.sku, productName: name, minQty: qtys[0] || 1, prices, source: "taager" };
+      const totalSamples = Object.values(entry.qtyCounts).reduce((sum, count) => sum + (Number(count) || 0), 0);
+      const dominant = Object.entries(entry.qtyCounts)
+        .map(([qty, count]) => ({ qty: Number(qty) || 0, count: Number(count) || 0 }))
+        .filter((item) => item.qty > 0 && item.count > 0)
+        .sort((a, b) => (b.count - a.count) || (a.qty - b.qty))[0] || { qty: qtys[0] || 1, count: 0 };
+      result[name] = {
+        sku: entry.sku,
+        productName: name,
+        minQty: qtys[0] || 1,
+        maxQty: qtys[qtys.length - 1] || 1,
+        prices,
+        qtyCounts: { ...entry.qtyCounts },
+        totalSamples,
+        dominantQty: dominant.qty,
+        dominantQtyCount: dominant.count,
+        dominantQtyConfidence: totalSamples > 0 ? dominant.count / totalSamples : 0,
+        source: "taager",
+      };
     }
 
     console.log(`Taager product catalog: ${Object.keys(result).length} products`);
@@ -536,6 +712,10 @@ function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}) {
     if (!match) {
       skippedNames.push(order.productName);
       skippedOrders.push({
+        ...order,
+        source: order.source || "missed",
+        normPhone: order.normPhone || "",
+        normalizedPhone: order.normPhone || "",
         name: order.name,
         rawPhone: order.rawPhone,
         productName: order.productName,
@@ -575,11 +755,21 @@ function parseTaagerOrderKeys(buffer, country = COUNTRY) {
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
   const header = rows[0] || [];
   const orderIdx = findHeaderIndex(header, ["Order Number"], 0);
+  const statusIdx = findHeaderIndex(header, ["Status"], 2);
+  const createdIdx = findHeaderIndex(header, ["تاريخ الإنشاء", "Created At", "CreatedAt", "Created Date", "Order Date"], 3);
   const phoneIdx = findHeaderIndex(header, ["رقم الهاتف", "Phone Number", "Phone"], 5);
   const productsIdx = findHeaderIndex(header, ["المنتجات", "Products", "SKU"], 16);
 
+  const storeOrderIdx = findHeaderIndex(header, ["كود الطلب للمتجر", "Order ID on your store", "Store Order ID", "Merchant Order ID", "External Order ID"], 22);
+
   const keys = new Set();
+  const deliveredKeys = new Set();
+  const allKeys = new Set();
+  const statusByKey = new Map();
+  const sourceOrderIds = new Set();
   const phones = new Set();
+  const blockingPhones = new Set();
+  const deliveredPhones = new Set();
   const orderNumbers = new Set();
   let rowOrderCount = 0;
   let skipped = 0;
@@ -591,17 +781,38 @@ function parseTaagerOrderKeys(buffer, country = COUNTRY) {
 
     const orderNumber = String(row[orderIdx] || "").trim();
     if (orderNumber) orderNumbers.add(orderNumber);
+    const sourceOrderId = normalizeSourceOrderId(row[storeOrderIdx]);
+    const createdDay = localDateKey(row[createdIdx]);
+    const createdAt = localDateTimeKey(row[createdIdx]) || createdDay;
+    if (sourceOrderId) sourceOrderIds.add(sourceOrderId);
 
     const phone = normalizePhone(row[phoneIdx], country);
     const products = splitTaagerProducts(row[productsIdx]);
+    const status = String(row[statusIdx] || "").trim();
+    const statusMeta = taagerStatusMeta(status);
     if (!phone) {
       skipped++;
       continue;
     }
     phones.add(phone);
+    if (statusMeta.delivered === true) deliveredPhones.add(phone);
+    else blockingPhones.add(phone);
     products.forEach((sku) => {
       const key = makeOrderKey(phone, sku);
-      if (key) keys.add(key);
+      if (!key) return;
+      allKeys.add(key);
+      if (!statusByKey.has(key)) statusByKey.set(key, []);
+      statusByKey.get(key).push({
+        orderNumber,
+        sourceOrderId,
+        createdAt,
+        createdDay,
+        status,
+        bucket: statusMeta.bucket,
+        delivered: statusMeta.delivered === true,
+      });
+      if (statusMeta.delivered === true) deliveredKeys.add(key);
+      else keys.add(key);
     });
   }
 
@@ -609,7 +820,15 @@ function parseTaagerOrderKeys(buffer, country = COUNTRY) {
   keys.taagerUniqueOrderNumbers = orderNumbers.size;
   keys.taagerRowOrderCount = rowOrderCount;
   keys.taagerUniquePhones = phones.size;
-  console.log(`Taager: ${keys.taagerOrderCount} orders loaded | ${keys.size} existing phone+SKU pairs loaded | ${phones.size} existing phones loaded | skipped phones:${skipped}`);
+  keys.taagerAllPhoneSkuKeys = allKeys.size;
+  keys.taagerBlockingPhoneSkuKeys = keys.size;
+  keys.taagerDeliveredOnlyPhoneSkuKeys = Array.from(deliveredKeys).filter((key) => !keys.has(key)).length;
+  keys.taagerPhones = phones;
+  keys.taagerBlockingPhones = blockingPhones;
+  keys.taagerDeliveredOnlyPhones = Array.from(deliveredPhones).filter((phone) => !blockingPhones.has(phone));
+  keys.taagerStatusByKey = statusByKey;
+  keys.taagerSourceOrderIds = sourceOrderIds;
+  console.log(`Taager: ${keys.taagerOrderCount} orders loaded | ${keys.size} blocking phone+SKU pairs loaded | ${keys.taagerDeliveredOnlyPhoneSkuKeys} delivered-only phone+SKU pairs allowed for repeat | ${phones.size} existing phones loaded | skipped phones:${skipped}`);
   return keys;
 }
 
@@ -646,7 +865,41 @@ function mergeAndDeduplicate(realOrders, resolvedMissed, existingPhones) {
       existingSkus: detail.existingSkus || "",
       missingSkus: detail.missingSkus || "",
       duplicateSkus: detail.duplicateSkus || "",
+      actionMessage: detail.actionMessage || "",
     });
+  }
+
+  function deliveredRepeatDecision(order, key) {
+    const records = existingPhones && existingPhones.taagerStatusByKey instanceof Map
+      ? (existingPhones.taagerStatusByKey.get(key) || [])
+      : [];
+    const deliveredRecords = records.filter((record) => record.delivered === true);
+    if (!deliveredRecords.length) return { action: "allow" };
+
+    const sourceId = orderSourceId(order);
+    if (sourceId) {
+      if (deliveredRecords.some((record) => record.sourceOrderId && record.sourceOrderId === sourceId)) {
+        return { action: "block", reason: "source_order_already_in_taager" };
+      }
+      if (deliveredRecords.some((record) => record.sourceOrderId)) {
+        return { action: "allow" };
+      }
+    }
+
+    const incomingDay = orderCreatedDay(order);
+    const deliveredDays = deliveredRecords.map((record) => record.createdDay).filter(Boolean);
+    if (incomingDay && deliveredDays.length) {
+      if (deliveredDays.includes(incomingDay)) {
+        return { action: "block", reason: "delivered_order_already_in_taager" };
+      }
+      return { action: "allow" };
+    }
+
+    return {
+      action: "uncertain",
+      reason: "delivered_repeat_needs_identity",
+      actionMessage: "Delivered phone+SKU history exists, but no source order ID/date proves this is a new order.",
+    };
   }
 
   function acceptGroup(items, source) {
@@ -660,9 +913,25 @@ function mergeAndDeduplicate(realOrders, resolvedMissed, existingPhones) {
       return;
     }
 
+    const groupSourceId = orderSourceId(groupedOrder) || mergedItems.map(orderSourceId).find(Boolean) || "";
+    if (groupSourceId && existingPhones && existingPhones.taagerSourceOrderIds instanceof Set && existingPhones.taagerSourceOrderIds.has(groupSourceId)) {
+      stats[`${source}InTaager`]++;
+      return;
+    }
+
     const existing = itemKeys.filter((entry) => existingPhones.has(entry.key));
     const duplicate = itemKeys.filter((entry) => seen.has(entry.key));
+    const deliveredDecisions = itemKeys
+      .filter((entry) => entry.key && !existingPhones.has(entry.key) && !seen.has(entry.key))
+      .map((entry) => ({ ...entry, decision: deliveredRepeatDecision(entry.order, entry.key) }))
+      .filter((entry) => entry.decision.action !== "allow");
+    const deliveredBlocked = deliveredDecisions.filter((entry) => entry.decision.action === "block");
+    const deliveredUncertain = deliveredDecisions.filter((entry) => entry.decision.action === "uncertain");
     if (existing.length === itemKeys.length) {
+      stats[`${source}InTaager`]++;
+      return;
+    }
+    if (deliveredBlocked.length === itemKeys.length) {
       stats[`${source}InTaager`]++;
       return;
     }
@@ -670,12 +939,21 @@ function mergeAndDeduplicate(realOrders, resolvedMissed, existingPhones) {
       stats[`${source}Dupe`]++;
       return;
     }
-    if (existing.length > 0 || duplicate.length > 0) {
+    if (existing.length > 0 || duplicate.length > 0 || deliveredBlocked.length > 0 || deliveredUncertain.length > 0) {
       stats[`${source}PartialInTaager`]++;
-      skippedGroupOrder(groupedOrder, "partial_order_already_in_taager", {
-        existingSkus: existing.map((entry) => entry.order.sku).join(", "),
-        missingSkus: itemKeys.filter((entry) => !existingPhones.has(entry.key) && !seen.has(entry.key)).map((entry) => entry.order.sku).join(", "),
+      const reason = deliveredUncertain.length > 0 && existing.length === 0 && duplicate.length === 0 && deliveredBlocked.length === 0
+        ? "delivered_repeat_needs_identity"
+        : "partial_order_already_in_taager";
+      const blockedEntries = [...existing, ...deliveredBlocked, ...deliveredUncertain];
+      skippedGroupOrder(groupedOrder, reason, {
+        existingSkus: blockedEntries.map((entry) => entry.order.sku).join(", "),
+        missingSkus: itemKeys.filter((entry) => {
+          return !existingPhones.has(entry.key)
+            && !seen.has(entry.key)
+            && !deliveredDecisions.some((blocked) => blocked.key === entry.key);
+        }).map((entry) => entry.order.sku).join(", "),
         duplicateSkus: duplicate.map((entry) => entry.order.sku).join(", "),
+        actionMessage: deliveredUncertain.map((entry) => entry.decision.actionMessage).filter(Boolean).join(" | "),
       });
       return;
     }
@@ -686,11 +964,39 @@ function mergeAndDeduplicate(realOrders, resolvedMissed, existingPhones) {
   }
 
   function acceptOrders(orders, source) {
+    const list = Array.isArray(orders) ? orders : [];
+    const phonesBySourceId = new Map();
+    for (const order of list) {
+      const sourceId = orderSourceId(order);
+      if (!sourceId) continue;
+      if (!phonesBySourceId.has(sourceId)) phonesBySourceId.set(sourceId, new Set());
+      const phone = normalizePhone(order.normPhone || order.phone || order.rawPhone || "", COUNTRY) || String(order.normPhone || order.phone || "").trim();
+      if (phone) phonesBySourceId.get(sourceId).add(phone);
+    }
+    const conflictingSourceIds = new Set(
+      Array.from(phonesBySourceId.entries())
+        .filter(([, phones]) => phones.size > 1)
+        .map(([sourceId]) => sourceId)
+    );
+    const conflictItemsById = new Map();
     const groups = new Map();
-    for (const order of Array.isArray(orders) ? orders : []) {
+    for (const order of list) {
+      const sourceId = orderSourceId(order);
+      if (sourceId && conflictingSourceIds.has(sourceId)) {
+        if (!conflictItemsById.has(sourceId)) conflictItemsById.set(sourceId, []);
+        conflictItemsById.get(sourceId).push(order);
+        continue;
+      }
       const key = cartOrderGroupKey(order);
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(order);
+    }
+    for (const items of conflictItemsById.values()) {
+      const groupedOrder = buildGroupedCartOrders(mergeItemList(items))[0];
+      stats[`${source}PartialInTaager`]++;
+      skippedGroupOrder(groupedOrder, "duplicate_easyorders_uuid_conflicting_phone", {
+        actionMessage: "Same EasyOrders order ID produced conflicting phone candidates; review before upload.",
+      });
     }
     for (const items of groups.values()) acceptGroup(items, source);
   }
@@ -1127,6 +1433,7 @@ module.exports = {
   parseMissedOrders,
   buildProductCatalog,
   buildTaagerProductCatalog,
+  repairOrderQuantitiesFromCatalog,
   resolveMissedOrders,
   mergeAndDeduplicate,
   normalizeProductName,

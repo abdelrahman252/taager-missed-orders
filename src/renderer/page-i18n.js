@@ -141,7 +141,7 @@
       var roots = [];
       mutations.forEach(function (m) {
         var target = m.target && m.target.nodeType === 1 ? m.target : null;
-        var root = target && target.closest ? target.closest('#page-analytics,#page-operations') : null;
+        var root = target && target.closest ? target.closest('#page-analytics,#page-operations,#page-run-results') : null;
         if (root && roots.indexOf(root) === -1) roots.push(root);
       });
       roots.forEach(cleanDom);
@@ -155,6 +155,7 @@
     });
     cleanDom(document.getElementById('page-analytics'));
     cleanDom(document.getElementById('page-operations'));
+    cleanDom(document.getElementById('page-run-results'));
   }
 
   function translate(namespace, key, args) {

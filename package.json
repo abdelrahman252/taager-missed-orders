@@ -1,6 +1,6 @@
 {
   "name": "taager-orders",
-  "version": "1.0.84",
+  "version": "1.0.85",
   "description": "Taager Orders Automation Bot",
   "repository": {
     "type": "git",
@@ -29,6 +29,8 @@
     "verify:taager-flow": "node scripts/verify-taager-flow-recovery.js",
     "verify:taager-recovery": "node scripts/verify-taager-recovery.js",
     "verify:missing-orders": "node tests/missing-orders-feature.test.js",
+    "verify:affiliate-recovery:sheets": "node scripts/verify-affiliate-recovery-sheets.js",
+    "verify:affiliate-recovery:live-selectors": "node scripts/live-affiliate-recovery-selector-smoke.js",
     "verify:stage1-recovery": "node scripts/verify-stage1-account-recovery.js",
     "verify:stage2-recovery": "node scripts/verify-stage2-zoom-sync-recovery.js",
     "verify:stage3-recovery": "node scripts/verify-stage3-support-recovery.js",

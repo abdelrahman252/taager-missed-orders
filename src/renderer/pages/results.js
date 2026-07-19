@@ -38,6 +38,18 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     return value === key ? fallback : value;
   }
 
+  function formatFailReason(reason) {
+    const text = String(reason || "").trim();
+    if (!text) return t("results.error_occurred");
+    if (/INTERNET_ISSUE|ERR_CONNECTION|net::|timeout/i.test(text)) {
+      return translated(
+        "results.internet_issue",
+        "Internet connection or website timeout. The bot retries recoverable pages automatically; if the run stops, check your internet and run again."
+      );
+    }
+    return text;
+  }
+
   function callTranslation(key, fallback, ...args) {
     const value = t(key);
     if (typeof value === "function") return value(...args);
@@ -385,6 +397,9 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       product_not_in_easyorders_or_taager: t("results.reason_product_not_in_easyorders_or_taager"),
       partial_order_already_in_taager: t("results.reason_partial_order_already_in_taager"),
       missing_sku_in_group: t("results.reason_missing_sku_in_group"),
+      source_order_already_in_taager: t("results.reason_source_order_already_in_taager"),
+      delivered_order_already_in_taager: t("results.reason_delivered_order_already_in_taager"),
+      delivered_repeat_needs_identity: t("results.reason_delivered_repeat_needs_identity"),
     };
     const paged = buildPagedItems(rows, (row, i, attrs) => {
       const reasonKey = row.uncertain && row.reason === "phone_parse_failed" ? "phone_uncertain_zero_appended" : row.reason;
@@ -439,6 +454,14 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       </div>`;
   }
 
+  function failedOrderDisplayPhone(row) {
+    return row?.phone || row?.formattedPhone || row?.normalizedPhone || row?.normPhone || row?.rawPhone || "";
+  }
+
+  function failedOrderDisplayError(row) {
+    return row?.error || row?.failureCode || row?.actionMessage || row?.message || row?.finalStatus || row?.recoveryStatus || "";
+  }
+
   function buildFailedOrdersDetailHtmlLegacy(failedOrders) {
     const rows = failedOrders?.errorRows || [];
     if (rows.length > 0) {
@@ -446,8 +469,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         <td style="color:var(--text2)">${row.row || i + 1}</td>
         <td style="font-family:var(--font-mono);color:var(--accent)">${row.sku || "—"}</td>
         <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(row.product || row.productName || "").replace(/"/g,"")}">${row.product || row.productName || "—"}</td>
-        <td style="font-family:var(--font-mono)">${row.phone || "—"}</td>
-        <td style="color:var(--danger);font-weight:var(--weight-semibold)">${row.error || "—"}</td>
+        <td style="font-family:var(--font-mono)">${failedOrderDisplayPhone(row) || "—"}</td>
+        <td style="color:var(--danger);font-weight:var(--weight-semibold)">${failedOrderDisplayError(row) || "—"}</td>
       </tr>`, "failed-orders");
       return `<div style="overflow-x:auto">
         <table class="orders-preview-table" style="font-size:var(--type-label)">
@@ -485,12 +508,14 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         .replace(/"/g, "&quot;");
       const paged = buildPagedItems(rows, (row, i, attrs) => {
         const product = row.product || row.productName || "";
+        const phone = failedOrderDisplayPhone(row);
+        const error = failedOrderDisplayError(row);
         return `<tr ${attrs}>
           <td class="failed-row">${esc(row.row || i + 1)}</td>
           <td class="failed-sku" title="${esc(row.sku)}">${esc(row.sku)}</td>
           <td class="failed-product" title="${esc(product)}">${esc(product)}</td>
-          <td class="failed-phone" title="${esc(row.phone)}">${esc(row.phone)}</td>
-          <td class="failed-error" title="${esc(row.error)}">${esc(row.error)}</td>
+          <td class="failed-phone" title="${esc(phone)}">${esc(phone)}</td>
+          <td class="failed-error" title="${esc(error)}">${esc(error)}</td>
         </tr>`;
       }, "failed-orders");
       return `<div class="failed-orders-table-wrap">
@@ -566,11 +591,11 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       return `<tr ${attrs || ""}>
         <td class="res-index">${i + 1}</td>
         <td class="res-name" title="${String(o.name || "").replace(/"/g,"")}">${o.name || "—"}</td>
-        <td class="res-phone">${o.phone || "—"}</td>
+        <td class="res-phone" title="${String(o.phone || "").replace(/"/g,"")}">${o.phone || "—"}</td>
         <td class="res-product" title="${(o.productName||"").replace(/"/g,"")}">${o.productName || "—"}</td>
-        <td class="res-number">${o.qty || 1}</td>
-        <td class="res-number res-price">${o.subtotal || "—"}</td>
-        <td class="res-destination">${destination || "-"}</td>
+        <td class="res-number" title="${String(o.qty || 1).replace(/"/g,"")}">${o.qty || 1}</td>
+        <td class="res-number res-price" title="${String(o.subtotal || "").replace(/"/g,"")}">${o.subtotal || "—"}</td>
+        <td class="res-destination" title="${String(destination || "").replace(/"/g,"")}">${destination || "-"}</td>
         <td class="res-date" title="${String(createdAt).replace(/"/g,"")}">${createdAt}</td>
         <td class="res-city" title="${String(o.city || "").replace(/"/g,"")}">${o.city || "—"}</td>
       </tr>`;
@@ -656,6 +681,73 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     `;
   }
 
+  function affiliateHtmlEsc(value) {
+    return String(value == null || value === "" ? "-" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function buildRecoveryUncertainHtml(recovery) {
+    if (!recovery || recovery.enabled !== true) return "";
+    const rows = (recovery.manualReviewRows || []).slice(0, 60);
+    if (!rows.length) return "";
+    const labelFor = (prefix, value, fallback = "-") => {
+      const raw = value || fallback;
+      return translated(`${prefix}${raw}`, raw);
+    };
+    const messageFor = (row) => {
+      if (row.reason === "no_trusted_product_reference") {
+        return translated(
+          "results.message_no_trusted_product_reference",
+          "No trusted product history exists; not submitted automatically."
+        );
+      }
+      return row.actionMessage || row.existingSkus || row.missingSkus || "-";
+    };
+    const td = (value, className = "", extra = "") => {
+      const text = affiliateHtmlEsc(value);
+      const cls = className ? ` class="${className}"` : "";
+      return `<td${cls} title="${text}"${extra}>${text}</td>`;
+    };
+    const countText = translated("results.uncertain_orders_need_review", "{count} need review").replace("{count}", rows.length);
+    const rowHtml = (row) => {
+      const reasonText = labelFor("results.reason_", row.reason || row.recoveryStatus);
+      const messageText = messageFor(row);
+      return `
+      <tr>
+        ${td(row.source || row.recoverySource)}
+        ${td(row.name)}
+        ${td(row.rawPhone)}
+        ${td(row.phone || row.normalizedPhone)}
+        ${td(row.sku || row.productName)}
+        ${td(reasonText, "", ` style="color:var(--warning);font-weight:var(--weight-semibold)"`)}
+        ${td(messageText)}
+      </tr>`;
+    };
+    return `
+      <div class="dash-section" style="border-color:var(--warning)">
+        <div class="dash-section-header">
+          <div class="dash-section-title"><span>⚠️</span> ${translated("results.uncertain_orders_title", "Uncertain Orders")}</div>
+          <div style="font-size:var(--type-caption);color:var(--text2)">${countText}</div>
+        </div>
+        <div class="dash-section-body no-pad" style="overflow-x:auto">
+          <table class="orders-preview-table" style="font-size:var(--type-label);width:100%;min-width:980px">
+            <thead><tr>
+              <th>${translated("results.source_col", "Source")}</th>
+              <th>${t("results.customer_name_col")}</th>
+              <th>${t("results.raw_phone_col")}</th>
+              <th>${t("results.phone_col") || t("results.phone")}</th>
+              <th>${translated("results.sku_product_col", "SKU/Product")}</th>
+              <th>${t("results.reason_col")}</th>
+              <th>${translated("results.message_col", "Message")}</th>
+            </tr></thead>
+            <tbody>${rows.map(rowHtml).join("")}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
 
   // ─────────────────────────────────────
   // MULTI-ACCOUNT — sidebar + rich dashboard per account
@@ -888,7 +980,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <span class="notice-icon">❌</span>
           <div class="notice-text">
             <strong>${t("results.run_failed")}</strong>
-            <div style="font-size:var(--type-label);color:var(--text2);margin-top:3px">${failReason||t("results.error_occurred")}</div>
+            <div style="font-size:var(--type-label);color:var(--text2);margin-top:3px">${formatFailReason(failReason)}</div>
           </div>
         </div>` : ""}
 
@@ -1052,6 +1144,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <span class="notice-icon">✅</span>
           <div class="notice-text">${t("results.all_ok")}</div>
         </div>`}
+
+        ${buildRecoveryUncertainHtml(accData.affiliateRecovery)}
 
         ${buildSkippedOrdersHtml(skippedOrders)}
 
@@ -1300,7 +1394,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         <span class="notice-icon">❌</span>
         <div class="notice-text">
           <strong>${t("results.run_failed")}</strong>
-          <div style="font-size:var(--type-label);color:var(--text2);margin-top:3px">${failReason || t("results.error_occurred")}</div>
+          <div style="font-size:var(--type-label);color:var(--text2);margin-top:3px">${formatFailReason(failReason)}</div>
         </div>
       </div>` : ""}
 
@@ -1458,6 +1552,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         <span class="notice-icon">✅</span>
         <div class="notice-text">${t("results.all_ok")}</div>
       </div>`}
+
+      ${buildRecoveryUncertainHtml(data.affiliateRecovery)}
 
       ${buildSkippedOrdersHtml(skippedOrders)}
 

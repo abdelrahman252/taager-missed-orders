@@ -28,6 +28,8 @@ const {
 } = require("../src/bot/order-destinations");
 const {
   buildTaagerProductCatalog,
+  parseRealOrders,
+  repairOrderQuantitiesFromCatalog,
   resolveMissedOrders,
   parseTaagerOrderKeys,
   mergeAndDeduplicate,
@@ -97,10 +99,81 @@ assert.strictEqual(taagerFallbackResult.resolved[0].catalogSource, "taager");
 const missingEverywhereResult = resolveMissedOrders([
   { ...missedA, sku: null, qty: null, productName: "Unknown Product" },
 ], {}, taagerCatalog);
-const taagerExistingHeader = Array(19).fill("");
+const realPackageHeader = [
+  "ID", "Status", "FullName", "Phone", "City", "Address", "Total Cost", "Product Cost", "Shipping Cost", "Coupon",
+  "Coupon Discount", "Product Name", "Variant", "Quantity", "SKU", "Item Price", "CreatedAt", "Extra Data",
+  "Extra Data2", "Alt Phone", "Note", "Ref", "Utm Source", "Utm Campaign", "Payment Method", "Payment Status",
+  "Funnel ID", "Order ID", "Referral Code", "External Order ID",
+];
+const realPackageSheet = XLSX.utils.aoa_to_sheet([
+  realPackageHeader,
+  [
+    1, "pending", "Bundle Customer", "0537583140", "منطقة مكة المكرمة", "Address", 90.5, 62.5, 28, "",
+    0, "2 حبه مكنسة كهربائية لاسلكية محمولة باليد 3*1 ببطارية 1200 مللي أمبير بضمان عام", "", 1,
+    "SA050106WA0099", 62.5, "2026-07-18", "", "", "", "", "", "", "", "cod", "", "", "EO-BUNDLE", "", "",
+  ],
+  [
+    2, "pending", "Bundle Customer 2", "0537583141", "منطقة مكة المكرمة", "Address", 153, 125, 28, "",
+    0, "2 حبه مكنسة كهربائية لاسلكية محمولة باليد 3*1 ببطارية 1200 مللي أمبير بضمان عام", "", 2,
+    "SA050106WA0099", 62.5, "2026-07-18", "", "", "", "", "", "", "", "cod", "", "", "EO-BUNDLE-2", "", "",
+  ],
+  [
+    3, "pending", "Bundle Customer 3", "0537583142", "منطقة مكة المكرمة", "Address", 153, 125, 28, "",
+    0, "2 حبه مكنسة كهربائية لاسلكية محمولة باليد 3*1 ببطارية 1200 مللي أمبير بضمان عام", "", 2,
+    "SA050106WA0099", 62.5, "2026-07-18", "", "", "", "", "", "", "", "cod", "", "", "EO-BUNDLE-3", "", "",
+  ],
+  [
+    4, "pending", "Bundle Customer 4", "0537583143", "منطقة مكة المكرمة", "Address", 153, 125, 28, "",
+    0, "2 حبه مكنسة كهربائية لاسلكية محمولة باليد 3*1 ببطارية 1200 مللي أمبير بضمان عام", "", 2,
+    "SA050106WA0099", 62.5, "2026-07-18", "", "", "", "", "", "", "", "cod", "", "", "EO-BUNDLE-4", "", "",
+  ],
+]);
+const realPackageBook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(realPackageBook, realPackageSheet, "Sheet1");
+const realPackageRows = parseRealOrders(
+  XLSX.write(realPackageBook, { type: "buffer", bookType: "xlsx" }),
+  new Date(2026, 6, 1),
+  new Date(2026, 6, 19),
+);
+assert.strictEqual(realPackageRows.length, 4);
+const repairedPackageRow = realPackageRows.find((row) => row.orderId === "EO-BUNDLE");
+assert.strictEqual(repairedPackageRow.qty, 2, "SKU/product history should repair exported quantity=1 when the same item is consistently sold as quantity 2");
+assert.strictEqual(repairedPackageRow.unitPrice, 62.5);
+assert.strictEqual(repairedPackageRow.subtotal, 125);
+assert.strictEqual(repairedPackageRow.quantityRepair.reason, "sku_product_history_min_quantity");
+const taagerQuantityFallback = {
+  "TAAGER-QTY-SKU": {
+    sku: "TAAGER-QTY-SKU",
+    productName: "TAAGER-QTY-SKU",
+    dominantQty: 2,
+    dominantQtyCount: 5,
+    dominantQtyConfidence: 1,
+    totalSamples: 5,
+    maxQty: 2,
+    prices: { 2: 120 },
+    source: "taager",
+  },
+};
+const taagerQuantityRepairRows = [{
+  source: "real",
+  normPhone: "500000010",
+  sku: "TAAGER-QTY-SKU",
+  productName: "New EasyOrders Product Name",
+  qty: 1,
+  unitPrice: 60,
+  subtotal: 60,
+}];
+assert.strictEqual(repairOrderQuantitiesFromCatalog(taagerQuantityRepairRows, {}, taagerQuantityFallback), 1);
+assert.strictEqual(taagerQuantityRepairRows[0].qty, 2, "Taager SKU history should repair quantity when EasyOrders history is not enough");
+assert.strictEqual(taagerQuantityRepairRows[0].subtotal, 120);
+assert.strictEqual(taagerQuantityRepairRows[0].quantityRepair.source, "taager_catalog");
+const taagerExistingHeader = Array(23).fill("");
 taagerExistingHeader[0] = "Order Number";
+taagerExistingHeader[2] = "Status";
+taagerExistingHeader[3] = "Created At";
 taagerExistingHeader[5] = "Phone Number";
 taagerExistingHeader[16] = "Products";
+taagerExistingHeader[22] = "Order ID on your store";
 const taagerExistingSheet = XLSX.utils.aoa_to_sheet([
   taagerExistingHeader,
   ["T-1", "", "", "", "", "966500000003", "", "", "", "", "", "", "", "", "", "", "OLD-SKU"],
@@ -115,6 +188,34 @@ const dedupeResult = mergeAndDeduplicate([
 assert.strictEqual(dedupeResult.stats.realInTaager, 1, "same phone+same SKU should be treated as already in Taager");
 assert.strictEqual(dedupeResult.stats.realNew, 1, "same phone+different SKU from a separate source order must still be uploaded");
 assert.strictEqual(dedupeResult.orders[0].sku, "NEW-SKU");
+const taagerDeliveredSheet = XLSX.utils.aoa_to_sheet([
+  taagerExistingHeader,
+  ["T-2", "", "\u062a\u0645 \u0627\u0644\u062a\u0648\u0635\u064a\u0644", "2026-07-06", "", "966500000007", "", "", "", "", "", "", "", "", "", "", "DELIVERED-SKU", "", "", "", "", "", "EO-OLD"],
+]);
+const taagerDeliveredBook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(taagerDeliveredBook, taagerDeliveredSheet, "Orders");
+const deliveredOnlyKeys = parseTaagerOrderKeys(XLSX.write(taagerDeliveredBook, { type: "buffer", bookType: "xlsx" }));
+assert.strictEqual(deliveredOnlyKeys.size, 0, "delivered-only Taager phone+SKU should not block a fresh repeat order");
+assert.strictEqual(deliveredOnlyKeys.taagerDeliveredOnlyPhoneSkuKeys, 1);
+const deliveredSameSourceResult = mergeAndDeduplicate([
+  { source: "real", normPhone: "500000007", sku: "DELIVERED-SKU", orderId: "EO-OLD", createdAt: "2026-07-06", uploadGroupKey: "same-delivered-order" },
+], [], deliveredOnlyKeys);
+assert.strictEqual(deliveredSameSourceResult.stats.realInTaager, 1, "same EasyOrders source order ID should stay skipped even if Taager status is delivered");
+assert.strictEqual(deliveredSameSourceResult.orders.length, 0);
+const deliveredSameDayResult = mergeAndDeduplicate([
+  { source: "real", normPhone: "500000007", sku: "DELIVERED-SKU", createdAt: "2026-07-06", uploadGroupKey: "same-delivered-day" },
+], [], deliveredOnlyKeys);
+assert.strictEqual(deliveredSameDayResult.stats.realInTaager, 1, "same phone+SKU and same created day should stay skipped even if Taager status is delivered");
+const deliveredFreshRepeatResult = mergeAndDeduplicate([
+  { source: "real", normPhone: "500000007", sku: "DELIVERED-SKU", orderId: "EO-NEW", createdAt: "2026-07-07", uploadGroupKey: "new-order-after-delivery" },
+], [], deliveredOnlyKeys);
+assert.strictEqual(deliveredFreshRepeatResult.stats.realNew, 1, "delivered phone+SKU repeat should be allowed only when source identity/date proves it is a different order");
+const conflictingSourceIdResult = mergeAndDeduplicate([
+  { source: "real", normPhone: "500000008", sku: "SKU-CONFLICT", orderId: "EO-CONFLICT", uploadGroupKey: "conflict-a" },
+  { source: "real", normPhone: "500000009", sku: "SKU-CONFLICT", orderId: "EO-CONFLICT", uploadGroupKey: "conflict-b" },
+], [], new Set());
+assert.strictEqual(conflictingSourceIdResult.orders.length, 0, "same EasyOrders source ID with conflicting phone candidates must not be uploaded");
+assert.strictEqual(conflictingSourceIdResult.skippedOrders[0].reason, "duplicate_easyorders_uuid_conflicting_phone");
 const groupedDedupeResult = mergeAndDeduplicate([
   { source: "real", normPhone: "500000004", sku: "SKU-A", productName: "Product A", qty: 1, unitPrice: 100, subtotal: 100, uploadGroupKey: "multi-1" },
   { source: "real", normPhone: "500000004", sku: "SKU-B", productName: "Product B", qty: 2, unitPrice: 75, subtotal: 150, uploadGroupKey: "multi-1" },
@@ -204,7 +305,8 @@ assert(runnerSource.includes("noProgressCycles >= maxNoProgressCycles"), "verifi
 assert(runnerSource.includes("hardFailed: true"), "Taager-declared failed rows should be marked as hard failures inside the current run");
 assert(runnerSource.includes("hardFailed: false"), "export-unconfirmed rows should not be treated as Taager hard failures inside the current run");
 assert(runnerSource.includes("cartVerificationKeys"), "verification should check every SKU key inside a grouped cart order");
-assert(!runnerSource.includes("buildGroupedCartOrders"), "cart upload should not group multi-product rows because Taager rejects grouped product cells");
+assert(runnerSource.includes("await phase5_uploadToTaagerVerified(page, primaryCartOrders"), "normal cart upload should still receive raw destination rows because Taager rejects grouped product cells");
+assert(!runnerSource.includes("await phase5_uploadToTaagerVerified(page, buildGroupedCartOrders"), "normal cart upload must not group multi-product rows");
 assert(rendererAppSource.includes("function confirmedAnalyticsRows"), "analytics save must explicitly select confirmed Taager rows");
 assert(rendererAppSource.includes("orders:          confirmedRows"), "analytics/operations stored order rows must be confirmed-only");
 assert(rendererAppSource.includes("analyticsOrdersSource: \"taager-confirmed\""), "analytics save must mark confirmed-only runs");

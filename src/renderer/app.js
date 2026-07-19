@@ -16,6 +16,7 @@ const _STRINGS = {
     "topbar.expires": "License expires soon",
     "topbar.analytics":   "Analytics",
     "topbar.operations":  "Operations",
+    "topbar.run_results": "Run Results",
     "topbar.dashboard":   "Dashboard",
     "topbar.notifications": "Notifications",
     "titlebar.sync":      "Sync",
@@ -104,6 +105,8 @@ const _STRINGS = {
     "setup.missing_orders_store_ph": "Enter the Taager Missing Orders store name",
     "setup.missing_orders_store_hint": "Used in Taager's Missing Orders upload modal. Required when Route Missed Orders is ON.",
     "setup.missing_orders_store_no_accounts": "Select at least one EasyOrders account to set the Missing Orders store name.",
+    "setup.affiliate_recovery_label": "EasyOrders Affiliate Recovery",
+    "setup.affiliate_recovery_hint": "When enabled, this feature resends missing EasyOrders real orders and converts missed orders, then verifies them from Taager exports.",
     "setup.account_identity_section": "Account Display",
     "setup.account_name_label": "Account Name",
     "setup.account_name_ph": "e.g. Riyadh Team, Main Store",
@@ -140,6 +143,8 @@ const _STRINGS = {
     "welcome.autoconfirm_desc":  "When ON, bot clicks confirm automatically. Keep OFF until you fully trust the output.",
     "welcome.missing_orders_title": "📥 Route Missed Orders",
     "welcome.missing_orders_desc":  "When ON, resolved EasyOrders missed-source orders go to Taager's legacy Missing Orders uploader. Real orders still go to the normal cart. Saudi accounts only.",
+    "welcome.affiliate_recovery_title": "Affiliate Recovery",
+    "welcome.affiliate_recovery_desc": "Resend missing EasyOrders real orders and convert missed orders, then verify them from Taager exports.",
     "welcome.autorun":        "⏱️ Auto-Run",
     "welcome.autorun_desc":   "Automatically run for today's orders on a schedule.",
     "welcome.run_every":      "Run Every",
@@ -200,6 +205,11 @@ const _STRINGS = {
     "results.warning_skipped": "Skipped",
     "results.raw_phone_col": "Raw Phone",
     "results.normalized_phone_col": "Normalized Phone",
+    "results.source_col": "Source",
+    "results.sku_product_col": "SKU/Product",
+    "results.message_col": "Message",
+    "results.uncertain_orders_title": "Uncertain Orders",
+    "results.uncertain_orders_need_review": "{count} need review",
     "results.reason_col": "Reason",
     "results.reason_phone_parse_failed": "Invalid phone number",
     "results.reason_phone_uncertain_zero_appended": "Phone missing digit — trailing 0 added (uncertain)",
@@ -207,6 +217,14 @@ const _STRINGS = {
     "results.reason_product_not_in_easyorders_or_taager": "Product not found in EasyOrders sheet or Taager sheet",
     "results.reason_partial_order_already_in_taager": "Some products already exist in Taager - review before creating another shipping order",
     "results.reason_missing_sku_in_group": "Grouped order has a missing SKU",
+    "results.reason_source_order_already_in_taager": "Same EasyOrders order already exists in Taager",
+    "results.reason_delivered_order_already_in_taager": "Delivered order already exists with the same phone, SKU, and created date",
+    "results.reason_delivered_repeat_needs_identity": "Delivered history exists, but source order ID/date cannot prove this is a new order",
+    "results.reason_no_trusted_product_reference": "No trusted product reference",
+    "results.reason_normal_flow_prepared_quantity_is_suspicious": "Suspicious prepared quantity",
+    "results.reason_duplicate_easyorders_uuid_conflicting_phone": "Same EasyOrders order has conflicting phone candidates",
+    "results.reason_skipped_manual": "Manual review",
+    "results.message_no_trusted_product_reference": "No trusted product history exists; not submitted automatically.",
     "results.confirmed_orders_table": "New Orders Confirmed in Taager",
     "results.phone_rescued_verify": "Phone rescued with trailing 0 — verify before calling",
     "results.new_orders": "New Orders",
@@ -238,6 +256,7 @@ const _STRINGS = {
     "setup.nav_accounts":       "Accounts",
     "setup.nav_analytics":      "Analytics",
     "setup.nav_operations":     "Operations",
+    "setup.nav_run_results":    "Run Results",
     "setup.nav_notifications":  "Notifications",
     "setup.nav_run":            "Run",
     "setup.sub_title":          "Setup",
@@ -354,6 +373,7 @@ const _STRINGS = {
     "setup.taager_pass_hint":       "Leave blank to keep existing password",
     "results.run_failed":         "Bot run failed",
     "results.error_occurred":     "An error occurred. Check the log for details.",
+    "results.internet_issue":     "Internet connection or website timeout. The bot retries recoverable EasyOrders pages automatically; if the run stops, check your internet and run again.",
     "results.multi_all_ok":       "All accounts completed successfully.",
     "results.multi_some_errors":  "Some accounts had errors. Select an account from the dropdown to see details and download.",
     "run.all_accounts":           "🌐 All Accounts",
@@ -444,6 +464,12 @@ const _STRINGS = {
     "results.confirmed_plus_missing": (confirmed, missing) => `${confirmed} cart confirmed + ${missing} Missing Orders submitted`,
     "results.missing_orders_pending_title": "Missing Orders are submitted, not confirmed cart orders",
     "results.missing_orders_pending_body": "Taager accepted the Missing Orders workbook, but those rows may not appear immediately in the normal Taager orders list. Check the Missing Orders tab, or route missed orders to Cart/Second Cart when you need confirmed normal orders.",
+    "results.affiliate_recovery_title": "EasyOrders Affiliate Recovery",
+    "results.affiliate_recovery_verified": "Verified in Taager",
+    "results.affiliate_recovery_failed": "Found in Taager failed orders",
+    "results.affiliate_recovery_unresolved": "Not found after retry",
+    "results.affiliate_recovery_sent_as_is": "Sent as-is",
+    "results.affiliate_recovery_skipped": "Skipped",
     "results.all_products_combined":"All Products — Combined",
     "results.failed_uploads_total":"Failed uploads total",
     "results.all_uploaded_ok":    "All uploaded OK",
@@ -602,6 +628,7 @@ const _STRINGS = {
     "topbar.expires": "الترخيص ينتهي قريباً",
     "topbar.analytics":  "التحليلات",
     "topbar.operations": "العمليات",
+    "topbar.run_results": "نتائج التشغيل",
     "topbar.dashboard":  "لوحة التحكم",
     "topbar.notifications": "التنبيهات",
     "titlebar.sync":     "مزامنة",
@@ -680,6 +707,8 @@ const _STRINGS = {
     "setup.missing_orders_store_ph": "أدخل اسم متجر الطلبات المفقودة في تاجر",
     "setup.missing_orders_store_hint": "يُستخدم داخل نافذة رفع الطلبات المفقودة في تاجر. مطلوب عند تفعيل توجيه الطلبات المفقودة.",
     "setup.missing_orders_store_no_accounts": "اختر حساب EasyOrders واحداً على الأقل لتحديد اسم متجر الطلبات المفقودة.",
+    "setup.affiliate_recovery_label": "EasyOrders Affiliate Recovery",
+    "setup.affiliate_recovery_hint": "When enabled, this feature resends missing EasyOrders real orders and converts missed orders, then verifies them from Taager exports.",
     "setup.email_label":  "البريد الإلكتروني",
     "setup.email_ph":     "you@example.com",
     "setup.pass_label":   "كلمة المرور",
@@ -712,6 +741,8 @@ const _STRINGS = {
     "welcome.autoconfirm_desc":  "عند التفعيل، يضغط البوت على تأكيد تلقائياً. أبقه معطلاً حتى تثق تماماً في المخرجات.",
     "welcome.missing_orders_title": "📥 توجيه الطلبات المفقودة",
     "welcome.missing_orders_desc":  "عند التفعيل، تُرفع الطلبات القادمة من مصدر الطلبات المفقودة في EasyOrders إلى قسم الطلبات المفقودة القديم في تاجر، بينما تظل الطلبات الحقيقية في العربة العادية. متاح لحسابات السعودية فقط.",
+    "welcome.affiliate_recovery_title": "Affiliate Recovery",
+    "welcome.affiliate_recovery_desc": "Resend missing EasyOrders real orders and convert missed orders, then verify them from Taager exports.",
     "welcome.autorun":        "⏱️ التشغيل التلقائي",
     "welcome.autorun_desc":   "تشغيل تلقائي لطلبات اليوم وفق جدول زمني.",
     "welcome.run_every":      "كل",
@@ -772,6 +803,11 @@ const _STRINGS = {
     "results.warning_skipped": "مستبعد",
     "results.raw_phone_col": "الهاتف الأصلي",
     "results.normalized_phone_col": "الهاتف بعد التعديل",
+    "results.source_col": "\u0627\u0644\u0645\u0635\u062f\u0631",
+    "results.sku_product_col": "\u0643\u0648\u062f/\u0645\u0646\u062a\u062c",
+    "results.message_col": "\u0627\u0644\u0631\u0633\u0627\u0644\u0629",
+    "results.uncertain_orders_title": "\u0637\u0644\u0628\u0627\u062a \u062a\u062d\u062a\u0627\u062c \u0645\u0631\u0627\u062c\u0639\u0629",
+    "results.uncertain_orders_need_review": "{count} \u062a\u062d\u062a\u0627\u062c \u0645\u0631\u0627\u062c\u0639\u0629",
     "results.reason_col": "السبب",
     "results.reason_phone_parse_failed": "رقم الهاتف غير صالح",
     "results.reason_phone_uncertain_zero_appended": "رقم الهاتف ناقص — تمت إضافة 0 في النهاية مع الحاجة للمراجعة",
@@ -779,6 +815,14 @@ const _STRINGS = {
     "results.reason_product_not_in_easyorders_or_taager": "المنتج غير موجود في شيت EasyOrders أو شيت Taager",
     "results.reason_partial_order_already_in_taager": "\u0628\u0639\u0636 \u0645\u0646\u062a\u062c\u0627\u062a \u0627\u0644\u0637\u0644\u0628 \u0645\u0648\u062c\u0648\u062f\u0629 \u0641\u064a \u062a\u0627\u062c\u0631 - \u0631\u0627\u062c\u0639 \u0642\u0628\u0644 \u0625\u0646\u0634\u0627\u0621 \u0637\u0644\u0628 \u0634\u062d\u0646 \u062c\u062f\u064a\u062f",
     "results.reason_missing_sku_in_group": "\u0637\u0644\u0628 \u0645\u062c\u0645\u0639 \u064a\u062d\u062a\u0648\u064a \u0639\u0644\u0649 SKU \u0646\u0627\u0642\u0635",
+    "results.reason_source_order_already_in_taager": "\u0646\u0641\u0633 \u0637\u0644\u0628 EasyOrders \u0645\u0648\u062c\u0648\u062f \u0628\u0627\u0644\u0641\u0639\u0644 \u0641\u064a \u062a\u0627\u062c\u0631",
+    "results.reason_delivered_order_already_in_taager": "\u0637\u0644\u0628 \u0645\u0648\u0635\u0644 \u0645\u0648\u062c\u0648\u062f \u0628\u0646\u0641\u0633 \u0627\u0644\u0647\u0627\u062a\u0641 \u0648SKU \u0648\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0625\u0646\u0634\u0627\u0621",
+    "results.reason_delivered_repeat_needs_identity": "\u064a\u0648\u062c\u062f \u062a\u0627\u0631\u064a\u062e \u062a\u0648\u0635\u064a\u0644\u060c \u0644\u0643\u0646 \u0643\u0648\u062f \u0627\u0644\u0637\u0644\u0628 \u0623\u0648 \u0627\u0644\u062a\u0627\u0631\u064a\u062e \u0644\u0627 \u064a\u062b\u0628\u062a \u0623\u0646\u0647 \u0637\u0644\u0628 \u062c\u062f\u064a\u062f",
+    "results.reason_no_trusted_product_reference": "\u0644\u0627 \u064a\u0648\u062c\u062f \u0645\u0631\u062c\u0639 \u0645\u0648\u062b\u0648\u0642 \u0644\u0644\u0645\u0646\u062a\u062c",
+    "results.reason_normal_flow_prepared_quantity_is_suspicious": "\u0643\u0645\u064a\u0629 \u0645\u0634\u0643\u0648\u0643 \u0641\u064a\u0647\u0627 \u0645\u0646 \u062a\u062d\u0636\u064a\u0631 \u0627\u0644\u0637\u0644\u0628",
+    "results.reason_duplicate_easyorders_uuid_conflicting_phone": "\u0646\u0641\u0633 \u0637\u0644\u0628 EasyOrders \u0644\u0647 \u0623\u0631\u0642\u0627\u0645 \u0647\u0627\u062a\u0641 \u0645\u062a\u0639\u0627\u0631\u0636\u0629",
+    "results.reason_skipped_manual": "\u0645\u0631\u0627\u062c\u0639\u0629 \u064a\u062f\u0648\u064a\u0629",
+    "results.message_no_trusted_product_reference": "\u0644\u0627 \u064a\u0648\u062c\u062f \u062a\u0627\u0631\u064a\u062e \u0645\u0648\u062b\u0648\u0642 \u0644\u0644\u0645\u0646\u062a\u062c\u061b \u0644\u0645 \u064a\u062a\u0645 \u0625\u0631\u0633\u0627\u0644\u0647 \u062a\u0644\u0642\u0627\u0626\u064a\u0627.",
     "results.confirmed_orders_table": "\u0637\u0644\u0628\u0627\u062a \u062c\u062f\u064a\u062f\u0629 \u0645\u0624\u0643\u062f\u0629 \u0641\u064a \u062a\u0627\u062c\u0631",
     "results.phone_rescued_verify": "تم تعديل الهاتف بإضافة 0 في النهاية — راجعه قبل الاتصال",
     "results.new_orders": "طلبات جديدة",
@@ -810,6 +854,7 @@ const _STRINGS = {
     "setup.nav_accounts":       "الحسابات",
     "setup.nav_analytics":      "التحليلات",
     "setup.nav_operations":     "العمليات",
+    "setup.nav_run_results":    "نتائج التشغيل",
     "setup.nav_notifications":  "التنبيهات",
     "setup.nav_run":            "التشغيل",
     "setup.sub_title":          "الإعداد",
@@ -924,6 +969,7 @@ const _STRINGS = {
     "setup.taager_pass_hint":       "اتركه فارغاً للإبقاء على كلمة المرور الحالية",
     "results.run_failed":         "فشل تشغيل البوت",
     "results.error_occurred":     "حدث خطأ. راجع السجل للتفاصيل.",
+    "results.internet_issue":     "\u0645\u0634\u0643\u0644\u0629 \u0627\u062a\u0635\u0627\u0644 \u0628\u0627\u0644\u0625\u0646\u062a\u0631\u0646\u062a \u0623\u0648 \u0627\u0646\u062a\u0647\u0627\u0621 \u0645\u0647\u0644\u0629 \u0627\u0644\u0645\u0648\u0642\u0639. \u0627\u0644\u0628\u0648\u062a \u064a\u0639\u064a\u062f \u0645\u062d\u0627\u0648\u0644\u0629 \u0635\u0641\u062d\u0627\u062a EasyOrders \u0627\u0644\u0642\u0627\u0628\u0644\u0629 \u0644\u0644\u0627\u0633\u062a\u0631\u062c\u0627\u0639 \u062a\u0644\u0642\u0627\u0626\u064a\u0627\u061b \u0625\u0630\u0627 \u062a\u0648\u0642\u0641 \u0627\u0644\u062a\u0634\u063a\u064a\u0644 \u0641\u0631\u0627\u062c\u0639 \u0627\u0644\u0625\u0646\u062a\u0631\u0646\u062a \u0648\u0634\u063a\u0644\u0647 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649.",
     "results.multi_all_ok":       "اكتملت جميع الحسابات بنجاح.",
     "results.multi_some_errors":  "بعض الحسابات واجهت أخطاء. اختر حساباً من القائمة لرؤية التفاصيل والتنزيل.",
     "run.all_accounts":           "🌐 جميع الحسابات",
@@ -1013,6 +1059,12 @@ const _STRINGS = {
     "results.confirmed_plus_missing": (confirmed, missing) => `${confirmed} مؤكدة في سلة تاجر + ${missing} مرسلة إلى Missing Orders`,
     "results.missing_orders_pending_title": "طلبات Missing Orders مرسلة وليست مؤكدة كسلة عادية",
     "results.missing_orders_pending_body": "تاجر قبل ملف Missing Orders، لكن هذه الطلبات قد لا تظهر فورًا في قائمة طلبات تاجر العادية. راجع تبويب Missing Orders، أو وجّه الطلبات الفائتة إلى السلة/السلة الثانية عندما تحتاج تأكيدًا كطلبات عادية.",
+    "results.affiliate_recovery_title": "EasyOrders Affiliate Recovery",
+    "results.affiliate_recovery_verified": "Verified in Taager",
+    "results.affiliate_recovery_failed": "Found in Taager failed orders",
+    "results.affiliate_recovery_unresolved": "Not found after retry",
+    "results.affiliate_recovery_sent_as_is": "Sent as-is",
+    "results.affiliate_recovery_skipped": "Skipped",
     "results.all_products_combined":"جميع المنتجات — مجمّعة",
     "results.failed_uploads_total":"إجمالي فشل الرفع",
     "results.all_uploaded_ok":    "تم رفع الكل بنجاح",
@@ -2148,6 +2200,7 @@ function applyLang(lang, options) {
       invalidatePage("page-dashboard", "language");
       invalidatePage("page-analytics", "language");
       invalidatePage("page-operations", "language");
+      invalidatePage("page-run-results", "language");
     }
   };
   if (opts.deferWork) {
@@ -2337,7 +2390,7 @@ function installAppZoomShortcuts() {
 }
 
 // ── Top bar visibility ──
-const PAGES_WITH_TOPBAR = new Set(["page-setup", "page-run", "page-results", "page-license", "page-analytics", "page-operations", "page-dashboard", "page-notifications", "page-ai-intelligence"]);
+const PAGES_WITH_TOPBAR = new Set(["page-setup", "page-run", "page-results", "page-run-results", "page-license", "page-analytics", "page-operations", "page-dashboard", "page-notifications", "page-ai-intelligence"]);
 
 const FEATURE_SCRIPT_GROUPS = {
   analytics: [
@@ -2375,6 +2428,18 @@ const FEATURE_SCRIPT_GROUPS = {
     "pages/operations/operations-presets.js",
     "pages/operations/operations-insights.js",
     "pages/operations/operations.js",
+  ],
+  runResults: [
+    "../../node_modules/xlsx/dist/xlsx.full.min.js",
+    "locales/ar/analytics.js",
+    "locales/en/analytics.js",
+    "locales/ar/operations.js",
+    "locales/en/operations.js",
+    "page-i18n.js",
+    "pages/guided-tour.js",
+    "pages/premium-preview.js",
+    "pages/taager-status.js",
+    "pages/run-results.js",
   ],
   ai: [
     "pages/taager-product-names.js",
@@ -2458,6 +2523,7 @@ const FEATURE_SCRIPT_GROUPS = {
   dashboardOrders: ["pages/dashboard/sections/section3-orders.js"],
   dashboardOrdersHydrated: ["pages/dashboard/sections/section3-orders-hydrated.js"],
   dashboardOrderSources: ["pages/dashboard/sections/section-order-sources.js"],
+  dashboardProductSources: ["pages/dashboard/sections/section-product-sources.js"],
   dashboardOrdersExport: ["../../node_modules/xlsx/dist/xlsx.full.min.js"],
   dashboardCod: [
     "pages/dashboard/sections/section4-cod.js",
@@ -2549,6 +2615,7 @@ function keepVisualSystemLast() {
 const FEATURE_STYLE_GROUPS = {
   analytics: ["styles/analytics.css"],
   operations: ["styles/operations.css"],
+  runResults: ["styles/run-results.css"],
   ai: ["pages/ai-intelligence/ai-intelligence.css"],
   dashboard: [
     "styles/analytics.css",
@@ -2558,6 +2625,7 @@ const FEATURE_STYLE_GROUPS = {
   dashboardPipeline: ["pages/dashboard/dashboard-pipeline.css"],
   dashboardOrders: ["pages/dashboard/dashboard-orders.css"],
   dashboardOrderSources: ["pages/dashboard/dashboard-order-sources.css"],
+  dashboardProductSources: ["pages/dashboard/dashboard-product-sources.css"],
   dashboardCod: ["pages/dashboard/dashboard-cod.css"],
   dashboardProducts: ["pages/dashboard/dashboard-products.css"],
   dashboardCities: ["pages/dashboard/dashboard-cities.css"],
@@ -2680,6 +2748,7 @@ const DASHBOARD_SECTION_FEATURES = {
   pipeline: "dashboardPipeline",
   orders: "dashboardOrders",
   orderSources: "dashboardOrderSources",
+  productSources: "dashboardProductSources",
   cod: "dashboardCod",
   products: "dashboardProducts",
   cities: "dashboardCities",
@@ -2707,6 +2776,7 @@ const DASHBOARD_INTERACTIVE_FEATURES = [
   "dashboardOrders",
   "dashboardOrdersHydrated",
   "dashboardOrderSources",
+  "dashboardProductSources",
   "dashboardCod",
   "dashboardCodHydrated",
   "dashboardProducts",
@@ -2792,6 +2862,7 @@ window.prewarmDashboardSections = function prewarmDashboardSections() {
       "dashboardPipeline",
       "dashboardOrders",
       "dashboardOrderSources",
+      "dashboardProductSources",
       "dashboardCod",
       "dashboardProducts",
       "dashboardCommission",
@@ -2953,6 +3024,11 @@ function routeAfterCredentialsReady(creds, restoreState) {
 
   if (restorePage === "page-operations" && hasAccounts && window._operationsEnabled && !window._teamLeaderEnabled) {
     goToOperations();
+    return;
+  }
+
+  if (restorePage === "page-run-results" && hasAccounts && window._operationsEnabled && !window._teamLeaderEnabled) {
+    goToRunResults();
     return;
   }
 
@@ -3760,7 +3836,7 @@ function dismissPreloaderWhenReady(pageId) {
     return;
   }
 
-  if (["page-analytics", "page-operations", "page-notifications", "page-ai-intelligence"].includes(pageId) && !pageLifecycle(pageId).mounted) {
+  if (["page-analytics", "page-operations", "page-run-results", "page-notifications", "page-ai-intelligence"].includes(pageId) && !pageLifecycle(pageId).mounted) {
     taagerDebugLog("preloader", "dismissWhenReady:feature-not-mounted-yet", { pageId });
     return;
   }
@@ -3929,11 +4005,12 @@ function startPeriodicLicenseCheck() {
         invalidatePage("page-dashboard", "periodic-sync");
         invalidatePage("page-analytics", "periodic-sync");
         invalidatePage("page-operations", "periodic-sync");
+        invalidatePage("page-run-results", "periodic-sync");
 
         updateTopBarText();
         topbarUpdated = true;
         const activeId = document.querySelector(".page.active")?.id;
-        if (window._teamLeaderEnabled && ["page-run", "page-results", "page-analytics", "page-operations"].includes(activeId)) {
+        if (window._teamLeaderEnabled && ["page-run", "page-results", "page-run-results", "page-analytics", "page-operations"].includes(activeId)) {
           goToDashboard();
         } else {
           reRenderCurrentPage();
@@ -4112,6 +4189,7 @@ async function adminRefresh() {
     invalidatePage("page-dashboard", "admin-refresh");
     invalidatePage("page-analytics", "admin-refresh");
     invalidatePage("page-operations", "admin-refresh");
+    invalidatePage("page-run-results", "admin-refresh");
 
     // 4. Refresh topbar text (expiry days, accounts badge)
     updateTopBarText();
@@ -4123,7 +4201,7 @@ async function adminRefresh() {
     const activePageId = activePage && activePage.id;
     taagerDebugLog("admin-sync", "refresh-route", { activePageId });
     if (activePageId === "page-dashboard" ||
-        (window._teamLeaderEnabled && ["page-run", "page-results", "page-analytics", "page-operations"].includes(activePageId))) {
+        (window._teamLeaderEnabled && ["page-run", "page-results", "page-run-results", "page-analytics", "page-operations"].includes(activePageId))) {
       await goToDashboard();
     } else {
       await reRenderCurrentPage();
@@ -4168,6 +4246,7 @@ function handleAdminCacheReset() {
   invalidatePage("page-dashboard", "admin-cache-reset");
   invalidatePage("page-analytics", "admin-cache-reset");
   invalidatePage("page-operations", "admin-cache-reset");
+  invalidatePage("page-run-results", "admin-cache-reset");
   reloadAppPreservingRoute("admin-cache-reset");
 }
 
@@ -4429,8 +4508,8 @@ function goToRun(dateFrom, dateTo, selectedAccountIds) {
 }
 
 // ── Analytics: save hook ─────────────────────────────────────────────────────
-async function _saveAnalyticsFromResult(data, selectedAccountIds) {
-  const now     = Date.now();
+async function _saveAnalyticsFromResult(data, selectedAccountIds, runTimestamp) {
+  const now     = Number(runTimestamp) || Date.now();
   const runDate = new Date(now).toISOString().slice(0, 10);
   const accounts = Array.isArray(window._kbotAccounts) ? window._kbotAccounts : [];
 
@@ -4521,11 +4600,182 @@ async function _saveAnalyticsFromResult(data, selectedAccountIds) {
   window.dispatchEvent(new CustomEvent("taager-analytics-runs-updated"));
 }
 
+async function _saveRunResultsFromResult(data, dateFrom, dateTo, selectedAccountIds, runTimestamp) {
+  if (!window.api || typeof window.api.saveRunResults !== "function") return;
+  const now = Number(runTimestamp) || Date.now();
+  const accounts = Array.isArray(window._kbotAccounts) ? window._kbotAccounts : [];
+
+  function safeText(value) {
+    return value == null ? "" : String(value);
+  }
+
+  function orderDestination(order) {
+    return safeText(order && order.destination || "cart").trim() || "cart";
+  }
+
+  function isMissingDestination(order) {
+    return orderDestination(order) === "missing-orders";
+  }
+
+  function confirmedRows(resultData) {
+    const rows = Array.isArray(resultData?.confirmedOrderRows)
+      ? resultData.confirmedOrderRows
+      : (Array.isArray(resultData?.orderRows) ? resultData.orderRows : []);
+    return rows.filter(row => !isMissingDestination(row));
+  }
+
+  function successfulRows(resultData) {
+    return Array.isArray(resultData?.confirmedOrderRows)
+      ? resultData.confirmedOrderRows
+      : (Array.isArray(resultData?.orderRows) ? resultData.orderRows : []);
+  }
+
+  function attemptedRows(resultData) {
+    if (Array.isArray(resultData?.attemptedOrderRows)) return resultData.attemptedOrderRows;
+    if (Array.isArray(resultData?.orderRows)) return resultData.orderRows;
+    return [];
+  }
+
+  function failedRows(resultData) {
+    const failed = resultData?.failedOrders || {};
+    if (Array.isArray(failed.errorRows) && failed.errorRows.length) return failed.errorRows;
+    if (Array.isArray(failed.summary) && failed.summary.length) return failed.summary;
+    return [];
+  }
+
+  function skippedRows(resultData) {
+    return Array.isArray(resultData?.skippedOrders?.rows) ? resultData.skippedOrders.rows : [];
+  }
+
+  function recoveryManualRows(resultData) {
+    const recovery = resultData?.affiliateRecovery;
+    return recovery && recovery.enabled === true && Array.isArray(recovery.manualReviewRows)
+      ? recovery.manualReviewRows
+      : [];
+  }
+
+  function reasonFor(row, fallback) {
+    return safeText(row.reasonMessage || row.actionMessage || row.error || row.errorMessage || row.reason || row.recoveryStatus || fallback);
+  }
+
+  function actionFor(outcome, row) {
+    const reason = reasonFor(row, "").toLowerCase();
+    if (outcome === "failed_on_taager") {
+      if (/stock|out_of_stock|Ù…Ø®Ø²ÙˆÙ†/.test(reason)) return "Change SKU or check stock, then retry manually.";
+      if (/phone|Ù‡Ø§ØªÙ/.test(reason)) return "Fix the phone number, then retry.";
+      return "Open the failed order details and review it manually.";
+    }
+    if (outcome === "submitted_uncertain") return "Check Taager or Missing Orders before treating this as confirmed.";
+    if (outcome === "skipped_warning") return "Review the warning and fix the row before retrying.";
+    return "";
+  }
+
+  function normalizeOrder(row, outcome, index) {
+    row = row || {};
+    const product = row.productName || row.product || row.skuProduct || "";
+    const phone = row.phone || row.normalizedPhone || row.normPhone || row.rawPhone || "";
+    return {
+      outcome,
+      customerName: safeText(row.customerName || row.name || row.recipientName),
+      phone: safeText(phone),
+      sku: safeText(row.sku || row.productSku || row.taagerSku),
+      productName: safeText(product),
+      quantity: Number(row.qty || row.quantity || row.count) || 1,
+      city: safeText(row.city || row.region || ""),
+      source: safeText(row.source || row.recoverySource || "real"),
+      destination: orderDestination(row),
+      taagerOrderNumber: safeText(row.taagerOrderNumber || row.orderNumber || row.orderId),
+      reasonCode: safeText(row.reason || row.recoveryStatus || row.errorCode),
+      reasonMessage: reasonFor(row, ""),
+      suggestedAction: actionFor(outcome, row),
+      rowNumber: row.row || row.index || index + 1,
+    };
+  }
+
+  function resolveAccountIdentity(result, fallbackId) {
+    const accountId = result?.accountId || fallbackId || "__single__";
+    const account = accounts.find(a => a.id === accountId) || null;
+    const label = result?.accountLabel || result?._accountLabel || result?.accountEmail || "";
+    const email = account?.lightfunnelsEmail || account?.easyEmail || result?.accountEmail || (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(label) ? label : "");
+    const friendlyLabel = account?.memberName || account?.lightfunnelsAccountName || account?.label || account?.easyStore || account?.storeName || account?.name || label || email || "";
+    return {
+      accountId,
+      accountEmail: email || label || "",
+      accountLabel: friendlyLabel || "Account",
+      taagerCountry: (result?.taagerCountry || result?.data?.taagerCountry || account?.taagerCountry || "sa").toLowerCase(),
+    };
+  }
+
+  async function saveOne(resultData, identity, runIdSuffix) {
+    const attempts = attemptedRows(resultData);
+    const confirmed = confirmedRows(resultData);
+    const submittedUncertain = successfulRows(resultData).filter(isMissingDestination);
+    const failed = failedRows(resultData);
+    const skipped = skippedRows(resultData);
+    const recoveryRows = recoveryManualRows(resultData);
+    const uncertain = submittedUncertain.length + skipped.length + recoveryRows.length;
+    const status = failed.length > 0 ? "failed" : (uncertain > 0 ? "needs_review" : "all_ok");
+    const orders = [
+      ...attempts.map((row, i) => normalizeOrder(row, "attempted", i)),
+      ...confirmed.map((row, i) => normalizeOrder(row, "confirmed_in_taager", i)),
+      ...submittedUncertain.map((row, i) => normalizeOrder(row, "submitted_uncertain", i)),
+      ...recoveryRows.map((row, i) => normalizeOrder(row, "submitted_uncertain", i)),
+      ...skipped.map((row, i) => normalizeOrder(row, "skipped_warning", i)),
+      ...failed.map((row, i) => normalizeOrder(row, "failed_on_taager", i)),
+    ];
+
+    await window.api.saveRunResults({
+      runId: `${identity.accountId || "account"}-${runIdSuffix}`,
+      accountId: identity.accountId,
+      accountLabel: identity.accountLabel,
+      taagerCountry: identity.taagerCountry,
+      dateFrom,
+      dateTo,
+      runTimestamp: now,
+      status,
+      summary: {
+        attempted: attempts.length,
+        confirmed: confirmed.length,
+        uncertain,
+        failed: failed.length,
+      },
+      account: {
+        id: identity.accountId,
+        label: identity.accountLabel,
+        email: identity.accountEmail,
+        country: identity.taagerCountry,
+      },
+      range: { from: dateFrom || "", to: dateTo || "" },
+      orders,
+      artifacts: {
+        failedWorkbookPath: resultData?.failedOrders?.failedPath || "",
+        failedFolderPath: resultData?.failedOrders?.failedDir || "",
+        skippedWorkbookPath: resultData?.skippedOrders?.filePath || "",
+      },
+    });
+  }
+
+  if (data && data._multiAccount && Array.isArray(data._accountResults)) {
+    await Promise.all(data._accountResults.map((result) => {
+      const identity = resolveAccountIdentity(result);
+      return saveOne(result.data || {}, identity, now);
+    }));
+  } else {
+    await saveOne(data || {}, resolveAccountIdentity(data, selectedAccountIds?.[0]), now);
+  }
+  window.dispatchEvent(new CustomEvent("taager-run-results-updated"));
+}
+
 function goToResults(data, dateFrom, dateTo, selectedAccountIds) {
+  const runTimestamp = Date.now();
   // Fire-and-forget: save run data for Analytics/Operations pages
-  _saveAnalyticsFromResult(data, selectedAccountIds).catch(e => {
+  _saveAnalyticsFromResult(data, selectedAccountIds, runTimestamp).catch(e => {
     console.warn("[Analytics] save failed silently:", e);
     if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(e, { operation: "analytics.saveFromResult" });
+  });
+  _saveRunResultsFromResult(data, dateFrom, dateTo, selectedAccountIds, runTimestamp).catch(e => {
+    console.warn("[RunResults] save failed silently:", e);
+    if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(e, { operation: "runResults.saveFromResult" });
   });
   const onRunAgain = () => { goToRun(dateFrom, dateTo, selectedAccountIds); };
   const onHome     = () => { sessionDate = null; goToSetup("run"); };
@@ -4651,6 +4901,39 @@ async function goToOperations() {
     if (isLatestFeatureRoute("operations", token)) {
       showPage("page-operations");
       showFeatureError("page-operations", "Operations failed to load", err);
+    }
+  }
+}
+
+async function goToRunResults() {
+  if (window._teamLeaderEnabled || !(window._kbotAccounts || []).some(account => account && account.accountType !== "static")) {
+    goToDashboard();
+    return;
+  }
+  const token = nextFeatureRouteToken("runResults");
+  perfMark("route:page-run-results:click");
+  if (canWarmActivate("page-run-results")) {
+    showPage("page-run-results");
+    return;
+  }
+  try {
+    await ensureFeatureScripts("runResults");
+    if (!isLatestFeatureRoute("runResults", token)) return;
+    let renderResult = null;
+    if (typeof renderRunResults === "function") {
+      renderResult = renderRunResults(() => goToSetup("run"));
+    }
+    if (isLatestFeatureRoute("runResults", token)) showPage("page-run-results");
+    if (renderResult && typeof renderResult.then === "function") await renderResult;
+    if (!isLatestFeatureRoute("runResults", token)) return;
+    markPageMounted("page-run-results");
+    perfMark("route:page-run-results:data-ready");
+    if (isLatestFeatureRoute("runResults", token) && isActivePage("page-run-results")) showPage("page-run-results");
+  } catch (err) {
+    if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(err, { operation: "runResults.render" });
+    if (isLatestFeatureRoute("runResults", token)) {
+      showPage("page-run-results");
+      showFeatureError("page-run-results", "Run Results failed to load", err);
     }
   }
 }
@@ -5475,12 +5758,21 @@ async function reRenderCurrentPage() {
     await ensureFeatureScripts("operations");
     if (typeof renderOperations === "function") await renderOperations(() => goToSetup("run"));
     markPageMounted("page-operations");
+  } else if (id === "page-run-results") {
+    invalidatePage("page-run-results", "language");
+    await ensureFeatureScripts("runResults");
+    if (typeof renderRunResults === "function") await renderRunResults(() => goToSetup("run"));
+    markPageMounted("page-run-results");
   }
 }
 
 window.addEventListener("taager-analytics-runs-updated", () => {
   invalidatePage("page-analytics", "runs-updated");
   invalidatePage("page-operations", "runs-updated");
+});
+
+window.addEventListener("taager-run-results-updated", () => {
+  invalidatePage("page-run-results", "run-results-updated");
 });
 
 window.addEventListener("taager-product-names-change", () => {

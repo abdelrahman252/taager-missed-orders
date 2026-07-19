@@ -577,6 +577,53 @@
     ].join('|line:');
   }
 
+  function periodSignature(period) {
+    return period && period.dateFrom && period.dateTo ? (period.dateFrom + ':' + period.dateTo) : 'all';
+  }
+
+  function sourcePerfRowState(row, rowIndex, period, ndrPeriod, mode) {
+    var cacheKey = [
+      mode || 'actual',
+      periodSignature(period),
+      periodSignature(ndrPeriod)
+    ].join('|');
+    var cache = row && row.__dashboardSourcePerfState;
+    if (cache && cache.key === cacheKey) return cache.state;
+
+    var exactBucket = row.__dashboardExactBucket || exactStatusBucket(row);
+    var rowIsCanceledByYou = isCanceledByYouBucket(exactBucket);
+    var orderKey = row.__dashboardOrderKey || orderOnlyKey(row, rowIndex);
+    var lineKey = row.__dashboardFinancialLineKey || financialLineKey(row, rowIndex);
+    var state = {
+      cacheKey: cacheKey,
+      orderKey: orderKey,
+      lineKey: lineKey,
+      exactBucket: exactBucket,
+      statusGroup: productStatusGroup(exactBucket),
+      rowIsCanceledByYou: rowIsCanceledByYou,
+      rowIsNetOrder: !rowIsCanceledByYou,
+      inCreatedPeriod: row.__dashboardInCreatedPeriod != null
+        ? !!row.__dashboardInCreatedPeriod
+        : isRowCreatedInPeriod(row, period),
+      inNdrCohortPeriod: isRowCreatedInPeriod(row, ndrPeriod),
+      ndrEligible: window.TaagerStatus
+        ? window.TaagerStatus.isEligibleForNdr(row.orderStatus || row.status)
+        : !isNdrCanceledBucket(exactBucket),
+      isDeliveredInPeriod: isDeliveredRowInPeriod(row, period, mode)
+    };
+
+    try {
+      Object.defineProperty(row, '__dashboardSourcePerfState', {
+        configurable: true,
+        enumerable: false,
+        value: { key: cacheKey, state: state }
+      });
+    } catch (_) {
+      row.__dashboardSourcePerfState = { key: cacheKey, state: state };
+    }
+    return state;
+  }
+
   function orderLevelRows(rows, includeCanceled) {
     var map = {};
     var lineSeen = {};
@@ -807,35 +854,23 @@
       var rawSource = typeof options.sourceValue === 'function' ? options.sourceValue(row) : orderSourceRawValue(row);
       if (rawSource == null && options.skipMissing) return;
       var bucket = bucketFor(rawSource);
-      var orderKey = row.__dashboardOrderKey || orderOnlyKey(row, rowIndex);
-      var lineKey = row.__dashboardFinancialLineKey || financialLineKey(row, rowIndex);
-      var exactBucket = row.__dashboardExactBucket || exactStatusBucket(row);
-      var rowIsCanceledByYou = isCanceledByYouBucket(exactBucket);
-      var rowIsNetOrder = !rowIsCanceledByYou;
-      var inCreatedPeriod = row.__dashboardInCreatedPeriod != null
-        ? !!row.__dashboardInCreatedPeriod
-        : isRowCreatedInPeriod(row, period);
-      var inNdrCohortPeriod = isRowCreatedInPeriod(row, ndrPeriod);
-      var ndrEligible = window.TaagerStatus
-        ? window.TaagerStatus.isEligibleForNdr(row.orderStatus || row.status)
-        : !isNdrCanceledBucket(exactBucket);
-      var statusGroup = productStatusGroup(exactBucket);
-      var sourceOrderKey = bucket.key + ':' + orderKey;
-      var sourceLineKey = bucket.key + ':' + lineKey;
+      var state = sourcePerfRowState(row, rowIndex, period, ndrPeriod, mode);
+      var sourceOrderKey = bucket.key + ':' + state.orderKey;
+      var sourceLineKey = bucket.key + ':' + state.lineKey;
 
-      if (inCreatedPeriod) {
+      if (state.inCreatedPeriod) {
         addMetricOnce(bucket, 'raw', sourceOrderKey, function () { bucket.rawOrders++; });
-        if (rowIsCanceledByYou) addMetricOnce(bucket, 'canceledByYou', sourceOrderKey, function () { bucket.canceledByYou++; });
-        if (rowIsNetOrder) {
+        if (state.rowIsCanceledByYou) addMetricOnce(bucket, 'canceledByYou', sourceOrderKey, function () { bucket.canceledByYou++; });
+        if (state.rowIsNetOrder) {
           addMetricOnce(bucket, 'net', sourceOrderKey, function () { bucket.netOrders++; });
-          if (statusGroup === 'confirmation') addMetricOnce(bucket, 'confirmation', sourceOrderKey, function () { bucket.confirmationCount++; });
-          else if (statusGroup === 'cancel') addMetricOnce(bucket, 'cancel', sourceOrderKey, function () { bucket.cancel++; });
-          else if (exactBucket === 'received' || exactBucket === 'pending') addMetricOnce(bucket, 'pending', sourceOrderKey, function () { bucket.pending++; });
-          if (exactBucket === 'confirmed') addMetricOnce(bucket, 'confirmed', sourceOrderKey, function () { bucket.confirmed++; });
-          if (exactBucket === 'shipping' || exactBucket === 'delivery_suspended' || exactBucket === 'after_sales_progress') {
+          if (state.statusGroup === 'confirmation') addMetricOnce(bucket, 'confirmation', sourceOrderKey, function () { bucket.confirmationCount++; });
+          else if (state.statusGroup === 'cancel') addMetricOnce(bucket, 'cancel', sourceOrderKey, function () { bucket.cancel++; });
+          else if (state.exactBucket === 'received' || state.exactBucket === 'pending') addMetricOnce(bucket, 'pending', sourceOrderKey, function () { bucket.pending++; });
+          if (state.exactBucket === 'confirmed') addMetricOnce(bucket, 'confirmed', sourceOrderKey, function () { bucket.confirmed++; });
+          if (state.exactBucket === 'shipping' || state.exactBucket === 'delivery_suspended' || state.exactBucket === 'after_sales_progress') {
             addMetricOnce(bucket, 'shipping', sourceOrderKey, function () { bucket.shipping++; });
           }
-          if (isLostBucket(exactBucket)) addMetricOnce(bucket, 'failed', sourceOrderKey, function () { bucket.failed++; });
+          if (isLostBucket(state.exactBucket)) addMetricOnce(bucket, 'failed', sourceOrderKey, function () { bucket.failed++; });
 
           var cityName = String(row.city || '').trim();
           if (cityName) {
@@ -855,14 +890,14 @@
         }
       }
 
-      if (ndrEligible && inNdrCohortPeriod && rowIsNetOrder) {
-        if (exactBucket === 'delivered') {
+      if (state.ndrEligible && state.inNdrCohortPeriod && state.rowIsNetOrder) {
+        if (state.exactBucket === 'delivered') {
           addMetricOnce(bucket, 'delivered', sourceOrderKey, function () { bucket.delivered++; });
           if (sourceOrderSet[sourceOrderKey] == null) sourceOrderSet[sourceOrderKey] = bucket.key;
         }
       }
 
-      if (isDeliveredRowInPeriod(row, period, mode) && rowIsNetOrder) {
+      if (state.isDeliveredInPeriod && state.rowIsNetOrder) {
         addMetricOnce(bucket, 'deliveredProfit', sourceOrderKey, function () {
           bucket.deliveredProfit += rowCommissionValue(row);
         });
@@ -939,6 +974,346 @@
       sources: sources,
       bestReliableSource: reliableSources[0] || null,
       reliableSources: reliableSources
+    };
+  }
+
+  function normalizePlatformSourceValue(rawValue) {
+    var rawValueText = String(rawValue == null ? '' : rawValue).trim();
+    var normalized = rawValueText.toLowerCase().replace(/[_-]+/g, ' ');
+    if (!rawValueText) return { key: '__unknown__', label: 'Unmatched / Unknown' };
+    if (/\btik\s*tok\b|\btiktok\b|\btik\b/.test(normalized)) return { key: 'tiktok', label: 'TikTok' };
+    if (/\bfacebook\b|\bmeta\b|\bfb\b/.test(normalized)) return { key: 'facebook', label: 'Facebook' };
+    if (/\bsnap\s*chat\b|\bsnapchat\b|\bsnap\b|\bsc\b/.test(normalized)) return { key: 'snapchat', label: 'Snapchat' };
+    return { key: normalized || '__unknown__', label: orderSourceDisplayValue(rawValueText, 'Unmatched / Unknown') };
+  }
+
+  function productSourceIdentity(row, meta) {
+    var productName = window.TaagerStatus
+      ? window.TaagerStatus.productName(row)
+      : (row && (row.products || row.productName || row.product || row.sku || ''));
+    productName = String(productName || '').trim();
+    var sku = String(row && (row.sku || row.skuNumber || '') || '').trim();
+    var savedName = window.TaagerProductNames && sku && typeof window.TaagerProductNames.get === 'function'
+      ? String(window.TaagerProductNames.get(sku) || '').trim()
+      : '';
+    if (savedName) productName = savedName;
+    var country = effectiveCountry(row && (row.taagerCountry || row.country), meta || {}, 'sa');
+    var key = sku
+      ? (country + '|sku:' + sku.toLowerCase())
+      : (country + '|name:' + (productName || 'unknown product').toLowerCase());
+    return {
+      key: key,
+      sku: sku,
+      name: productName || sku || raw('Unknown Product'),
+      country: country
+    };
+  }
+
+  function emptyProductSourceProduct(identity, minSample) {
+    return {
+      key: identity.key,
+      sku: identity.sku,
+      name: identity.name,
+      country: identity.country,
+      rawOrders: 0,
+      canceledByYou: 0,
+      netOrders: 0,
+      ndrBaseOrders: 0,
+      delivered: 0,
+      actualDelivered: 0,
+      confirmed: 0,
+      cancel: 0,
+      pending: 0,
+      shipping: 0,
+      failed: 0,
+      confirmationCount: 0,
+      confirmationRate: 0,
+      dr: 0,
+      ndr: 0,
+      deliveredProfit: 0,
+      deliveredSales: 0,
+      deliveredAov: 0,
+      avgProfit: 0,
+      isLowSample: true,
+      minSample: minSample,
+      topCities: [],
+      _sets: {},
+      _cities: {}
+    };
+  }
+
+  function emptyProductSourceBucket(sourceInfo, minSample) {
+    return {
+      key: sourceInfo.key || '__unknown__',
+      rawSource: sourceInfo.raw || '',
+      label: sourceInfo.label || orderSourceDisplayValue(sourceInfo.raw, 'Unknown source'),
+      rawOrders: 0,
+      canceledByYou: 0,
+      netOrders: 0,
+      delivered: 0,
+      confirmedOrders: 0,
+      failed: 0,
+      pending: 0,
+      confirmationRate: 0,
+      dr: 0,
+      ndr: 0,
+      deliveredSales: 0,
+      deliveredProfit: 0,
+      avgProfit: 0,
+      productCount: 0,
+      minSample: minSample,
+      products: [],
+      _sets: {},
+      _products: {}
+    };
+  }
+
+  function finalizeProductSourceProduct(product, minSample) {
+    var ndrBase = product.ndrBaseOrders > 0 ? product.ndrBaseOrders : product.netOrders;
+    product.ndr = ndrBase > 0 ? parseFloat(((product.delivered / ndrBase) * 100).toFixed(2)) : 0;
+    product.confirmationRate = product.netOrders > 0 ? parseFloat(((product.confirmationCount / product.netOrders) * 100).toFixed(1)) : 0;
+    product.dr = product.confirmationCount > 0 ? parseFloat(((product.delivered / product.confirmationCount) * 100).toFixed(1)) : 0;
+    product.deliveredSales = roundMoney(product.deliveredSales);
+    product.deliveredProfit = roundMoney(product.deliveredProfit);
+    product.deliveredAov = product.actualDelivered > 0 ? roundMoney(product.deliveredSales / product.actualDelivered) : 0;
+    product.avgProfit = product.actualDelivered > 0 ? roundMoney(product.deliveredProfit / product.actualDelivered) : 0;
+    product.isLowSample = product.netOrders < minSample;
+    product.topCities = Object.keys(product._cities).map(function (name) {
+      var city = product._cities[name];
+      return { name: city.name, orders: city.orders, delivered: city.delivered };
+    }).sort(function (a, b) { return b.orders - a.orders || b.delivered - a.delivered; }).slice(0, 5);
+    delete product._sets;
+    delete product._cities;
+    return product;
+  }
+
+  function summarizeProductSourceRows(products, sourceCount) {
+    var summary = (products || []).reduce(function (acc, product) {
+      acc.rawOrders += product.rawOrders;
+      acc.canceledByYou += product.canceledByYou;
+      acc.netOrders += product.netOrders;
+      acc.ndrBaseOrders += product.ndrBaseOrders;
+      acc.confirmedOrders += product.confirmationCount;
+      acc.delivered += product.delivered;
+      acc.actualDelivered += product.actualDelivered;
+      acc.failed += product.failed;
+      acc.pending += product.pending;
+      acc.deliveredSales += product.deliveredSales;
+      acc.deliveredProfit += product.deliveredProfit;
+      return acc;
+    }, {
+      sourceCount: sourceCount || 0,
+      productCount: (products || []).length,
+      rawOrders: 0,
+      canceledByYou: 0,
+      netOrders: 0,
+      ndrBaseOrders: 0,
+      confirmedOrders: 0,
+      delivered: 0,
+      actualDelivered: 0,
+      failed: 0,
+      pending: 0,
+      deliveredSales: 0,
+      deliveredProfit: 0
+    });
+    var summaryNdrBase = summary.ndrBaseOrders > 0 ? summary.ndrBaseOrders : summary.netOrders;
+    summary.ndr = summaryNdrBase > 0 ? parseFloat(((summary.delivered / summaryNdrBase) * 100).toFixed(2)) : 0;
+    summary.confirmationRate = summary.netOrders > 0 ? parseFloat(((summary.confirmedOrders / summary.netOrders) * 100).toFixed(1)) : 0;
+    summary.dr = summary.confirmedOrders > 0 ? parseFloat(((summary.delivered / summary.confirmedOrders) * 100).toFixed(1)) : 0;
+    summary.deliveredSales = roundMoney(summary.deliveredSales);
+    summary.deliveredProfit = roundMoney(summary.deliveredProfit);
+    summary.avgProfit = summary.actualDelivered > 0 ? roundMoney(summary.deliveredProfit / summary.actualDelivered) : 0;
+    return summary;
+  }
+
+  function buildProductSourceBreakdown(rows, meta, minSample, options) {
+    rows = Array.isArray(rows) ? rows : [];
+    meta = meta || {};
+    options = options || {};
+    minSample = minSample || 30;
+    var period = meta.period || activePeriod();
+    var mode = meta.deliveredDateMode || 'actual';
+    var ndrPeriod = mode === 'expected' ? (meta.ndrPeriod || activeNdrPeriod(mode) || period) : period;
+    var buckets = {};
+    var allProducts = {};
+
+    function sourceInfoFor(row) {
+      var rawSource = typeof options.sourceValue === 'function' ? options.sourceValue(row) : orderSourceRawValue(row);
+      var rawSourceText = String(rawSource == null ? '' : rawSource).trim();
+      if (options.type === 'platform') {
+        var platform = normalizePlatformSourceValue(rawSourceText);
+        platform.raw = rawSourceText;
+        return platform;
+      }
+      return {
+        key: rawSourceText || '__unknown__',
+        raw: rawSourceText,
+        label: orderSourceDisplayValue(rawSourceText, options.unknownLabel)
+      };
+    }
+
+    function bucketFor(info) {
+      var key = info.key || '__unknown__';
+      if (!buckets[key]) buckets[key] = emptyProductSourceBucket(info, minSample);
+      return buckets[key];
+    }
+
+    function addMetricOnce(target, metric, key, fn) {
+      if (!target._sets[metric]) target._sets[metric] = {};
+      if (!addOnce(target._sets[metric], key)) return false;
+      if (typeof fn === 'function') fn();
+      return true;
+    }
+
+    function productFor(container, identity) {
+      if (!container._products[identity.key]) container._products[identity.key] = emptyProductSourceProduct(identity, minSample);
+      return container._products[identity.key];
+    }
+
+    function allProductFor(identity) {
+      if (!allProducts[identity.key]) allProducts[identity.key] = emptyProductSourceProduct(identity, minSample);
+      return allProducts[identity.key];
+    }
+
+    function updateProduct(product, row, keys, status) {
+      var sourceOrderKey = keys.sourceOrderKey;
+      var productOrderKey = keys.productOrderKey;
+      var productLineKey = keys.productLineKey;
+      var exactBucket = status.exactBucket;
+      var statusGroup = status.statusGroup || productStatusGroup(exactBucket);
+
+      if (status.inCreatedPeriod) {
+        addMetricOnce(product, 'raw', productOrderKey, function () { product.rawOrders++; });
+        if (status.rowIsCanceledByYou) addMetricOnce(product, 'canceledByYou', productOrderKey, function () { product.canceledByYou++; });
+        if (status.rowIsNetOrder) {
+          addMetricOnce(product, 'net', productOrderKey, function () { product.netOrders++; });
+          if (statusGroup === 'confirmation') addMetricOnce(product, 'confirmation', productOrderKey, function () { product.confirmationCount++; });
+          else if (statusGroup === 'cancel') addMetricOnce(product, 'cancel', productOrderKey, function () { product.cancel++; });
+          else if (exactBucket === 'received' || exactBucket === 'pending') addMetricOnce(product, 'pending', productOrderKey, function () { product.pending++; });
+          if (exactBucket === 'confirmed') addMetricOnce(product, 'confirmed', productOrderKey, function () { product.confirmed++; });
+          if (exactBucket === 'shipping' || exactBucket === 'delivery_suspended' || exactBucket === 'after_sales_progress') {
+            addMetricOnce(product, 'shipping', productOrderKey, function () { product.shipping++; });
+          }
+          if (isLostBucket(exactBucket)) addMetricOnce(product, 'failed', productOrderKey, function () { product.failed++; });
+
+          var cityName = String(row.city || row.cityName || '').trim();
+          if (cityName) {
+            if (!product._cities[cityName]) product._cities[cityName] = { name: cityName, orders: 0, delivered: 0, _sets: {} };
+            var city = product._cities[cityName];
+            if (!city._sets.orders) city._sets.orders = {};
+            if (addOnce(city._sets.orders, sourceOrderKey)) city.orders++;
+          }
+        }
+      }
+
+      if (status.ndrEligible && status.inNdrCohortPeriod && status.rowIsNetOrder && exactBucket === 'delivered') {
+        addMetricOnce(product, 'delivered', productOrderKey, function () { product.delivered++; });
+      }
+
+      if (status.ndrEligible && status.inNdrCohortPeriod && status.rowIsNetOrder) {
+        addMetricOnce(product, 'ndrBase', productOrderKey, function () { product.ndrBaseOrders++; });
+      }
+
+      if (status.isDeliveredInPeriod && status.rowIsNetOrder) {
+        addMetricOnce(product, 'actualDelivered', productOrderKey, function () { product.actualDelivered++; });
+        addMetricOnce(product, 'deliveredProfit', productOrderKey, function () {
+          product.deliveredProfit += rowCommissionValue(row);
+        });
+        addMetricOnce(product, 'deliveredSales', productLineKey, function () {
+          product.deliveredSales += row.dashboardTotalPrice != null ? Number(row.dashboardTotalPrice) || 0 : rowTotalPrice(row);
+        });
+        var deliveredCityName = String(row.city || row.cityName || '').trim();
+        if (deliveredCityName && product._cities[deliveredCityName]) {
+          var deliveredCity = product._cities[deliveredCityName];
+          if (!deliveredCity._sets.delivered) deliveredCity._sets.delivered = {};
+          if (addOnce(deliveredCity._sets.delivered, sourceOrderKey)) deliveredCity.delivered++;
+        }
+      }
+    }
+
+    rows.forEach(function (row, rowIndex) {
+      if (!row) return;
+      var info = sourceInfoFor(row);
+      var source = bucketFor(info);
+      var identity = productSourceIdentity(row, meta);
+      var sourceProduct = productFor(source, identity);
+      var allProduct = allProductFor(identity);
+      var status = sourcePerfRowState(row, rowIndex, period, ndrPeriod, mode);
+      var sourceOrderKey = source.key + ':' + status.orderKey;
+      var productOrderKey = source.key + ':' + identity.key + ':' + status.orderKey;
+      var productLineKey = source.key + ':' + identity.key + ':' + status.lineKey;
+      updateProduct(sourceProduct, row, {
+        sourceOrderKey: sourceOrderKey,
+        productOrderKey: productOrderKey,
+        productLineKey: productLineKey
+      }, status);
+      updateProduct(allProduct, row, {
+        sourceOrderKey: identity.key + ':' + status.orderKey,
+        productOrderKey: identity.key + ':' + status.orderKey,
+        productLineKey: identity.key + ':' + status.lineKey
+      }, status);
+    });
+
+    if (options.type === 'platform') {
+      [
+        { key: 'tiktok', label: 'TikTok' },
+        { key: 'facebook', label: 'Facebook' },
+        { key: 'snapchat', label: 'Snapchat' }
+      ].forEach(function (platform) {
+        if (!buckets[platform.key]) buckets[platform.key] = emptyProductSourceBucket(platform, minSample);
+      });
+    }
+
+    var sources = Object.keys(buckets).map(function (key) {
+      var source = buckets[key];
+      source.products = Object.keys(source._products).map(function (productKey) {
+        return finalizeProductSourceProduct(source._products[productKey], minSample);
+      }).sort(function (a, b) {
+        return b.netOrders - a.netOrders || b.delivered - a.delivered || b.ndr - a.ndr || String(a.name || '').localeCompare(String(b.name || ''));
+      });
+      var sourceSummary = summarizeProductSourceRows(source.products, 1);
+      source.rawOrders = sourceSummary.rawOrders;
+      source.canceledByYou = sourceSummary.canceledByYou;
+      source.netOrders = sourceSummary.netOrders;
+      source.ndrBaseOrders = sourceSummary.ndrBaseOrders;
+      source.confirmedOrders = sourceSummary.confirmedOrders;
+      source.delivered = sourceSummary.delivered;
+      source.actualDelivered = sourceSummary.actualDelivered;
+      source.failed = sourceSummary.failed;
+      source.pending = sourceSummary.pending;
+      source.confirmationRate = sourceSummary.confirmationRate;
+      source.dr = sourceSummary.dr;
+      source.ndr = sourceSummary.ndr;
+      source.deliveredSales = sourceSummary.deliveredSales;
+      source.deliveredProfit = sourceSummary.deliveredProfit;
+      source.avgProfit = sourceSummary.avgProfit;
+      source.productCount = source.products.length;
+      delete source._sets;
+      delete source._products;
+      return source;
+    }).sort(function (a, b) {
+      var order = { tiktok: 1, facebook: 2, snapchat: 3, '__unknown__': 99 };
+      if (options.type === 'platform') return (order[a.key] || 50) - (order[b.key] || 50) || b.netOrders - a.netOrders;
+      return b.netOrders - a.netOrders || b.delivered - a.delivered || String(a.label || '').localeCompare(String(b.label || ''));
+    });
+
+    var products = Object.keys(allProducts).map(function (productKey) {
+      return finalizeProductSourceProduct(allProducts[productKey], minSample);
+    }).sort(function (a, b) {
+      return b.netOrders - a.netOrders || b.delivered - a.delivered || b.ndr - a.ndr || String(a.name || '').localeCompare(String(b.name || ''));
+    });
+    var summary = summarizeProductSourceRows(products, sources.length);
+    var reliableProducts = products.filter(function (item) { return item.netOrders >= minSample; })
+      .slice().sort(function (a, b) { return b.ndr - a.ndr || b.netOrders - a.netOrders; });
+
+    return {
+      type: options.type || 'taager',
+      minSample: minSample,
+      summary: summary,
+      sources: sources,
+      products: products,
+      bestReliableProduct: reliableProducts[0] || null,
+      reliableProducts: reliableProducts
     };
   }
 
@@ -4378,6 +4753,12 @@
       sourceValue: platformSourceRawValue,
       unknownLabel: raw('Unknown platform')
     });
+    var productSources = buildProductSourceBreakdown(displayRows, meta, 30, { type: 'taager' });
+    var platformProductSources = buildProductSourceBreakdown(displayRows, meta, 30, {
+      type: 'platform',
+      sourceValue: platformSourceRawValue,
+      unknownLabel: raw('Unmatched / Unknown')
+    });
 
     var pmTotalCount = totalPrepaidCount + totalCodCount;
     var codVal = pmTotalCount > 0 ? parseFloat(((totalCodCount / pmTotalCount) * 100).toFixed(1)) : 0;
@@ -4482,6 +4863,8 @@
       get outcomeOrders() { return getOutcomeOrders(); },
       orderSources: orderSources,
       platformSources: platformSources,
+      productSources: productSources,
+      platformProductSources: platformProductSources,
       cod: {
         netOrderCount: placedCount,
         totalOrderCount: rawTotalOrders,
@@ -4565,6 +4948,8 @@
         expectedNdrSelectedDeliveredOrders: expectedNdrSelectedDeliveredOrders,
         orderSources: orderSources,
         platformSources: platformSources,
+        productSources: productSources,
+        platformProductSources: platformProductSources,
         ndrBaseOrders: ndrBaseOrders, ndrDeliveredOrders: ndrDeliveredOrders,
         confirmationRate: confirmationPct, drPct: drPct,
         averageProfit: avgCommission, avgCommission: avgCommission,

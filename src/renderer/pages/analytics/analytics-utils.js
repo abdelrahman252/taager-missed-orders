@@ -631,16 +631,17 @@ if (!window._customSelectInitialized) {
 
 // ── Shared sidebar ────────────────────────────────────────────────────────────
 // Generates sidebar HTML identical to the setup/run page.
-// activeNav: "accounts" | "run" | "analytics" | "operations" | "dashboard"
+// activeNav: "accounts" | "run" | "analytics" | "operations" | "runResults" | "dashboard"
 // Nav item labels are wrapped in <span class="sv3-nav-label"> for icon-only collapse.
 function renderSharedSidebar(activeNav) {
   var t = window._t || function(k) { return k; };
 
   function itemClass(name) {
     var cls = 'sv3-nav-item';
-    if (name === 'analytics' || name === 'operations' || name === 'dashboard') {
+    if (name === 'analytics' || name === 'operations' || name === 'runResults' || name === 'dashboard') {
       var locked = (name === 'analytics'  && window._analyticsEnabled  === false) ||
                    (name === 'operations' && window._operationsEnabled === false) ||
+                   (name === 'runResults' && window._operationsEnabled === false) ||
                    (name === 'dashboard' && window._dashboardEnabled  === false);
       cls += ' sv3-nav-page';
       if (locked) cls += ' sv3-nav-preview';
@@ -684,6 +685,11 @@ function renderSharedSidebar(activeNav) {
       '<div class="' + itemClass('operations') + '" id="nav-operations" data-page="operations">' +
         '<div class="sv3-step-num" style="background:linear-gradient(135deg,#00d4aa,#4fa8e8)">⚙️</div>' +
         lbl((t('setup.nav_operations') || 'Operations') + previewBadge(window._operationsEnabled)) +
+      '</div>' +
+
+      '<div class="' + itemClass('runResults') + '" id="nav-run-results" data-page="run-results">' +
+        '<div class="sv3-step-num" style="background:linear-gradient(135deg,#38bdf8,#ef4444)">â—</div>' +
+        lbl((t('setup.nav_run_results') || 'Run Results') + previewBadge(window._operationsEnabled)) +
       '</div>' +
 
       '<div class="' + itemClass('dashboard') + '" id="nav-dashboard" data-page="dashboard">' +
@@ -759,6 +765,7 @@ function wireSharedSidebar(container) {
   on('nav-run',        function() { if (typeof goToSetup      === 'function') goToSetup('run'); });
   on('nav-analytics',  function() { if (typeof goToAnalytics  === 'function') goToAnalytics(); });
   on('nav-operations', function() { if (typeof goToOperations === 'function') goToOperations(); });
+  on('nav-run-results', function() { if (typeof goToRunResults === 'function') goToRunResults(); });
   on('nav-dashboard',  function() { if (typeof goToDashboard  === 'function') goToDashboard(); });
 
   // Apply done-checkmarks

@@ -44,6 +44,8 @@
       commissionTrend: null,
       orderSources: null,
       platformSources: null,
+      productSources: null,
+      platformProductSources: null,
       roi: null,
       geo: null
     };
@@ -80,6 +82,8 @@
       getOutcomeOrders: getOutcomeOrders,
       orderSources: result.orderSources || null,
       platformSources: result.platformSources || null,
+      productSources: result.productSources || null,
+      platformProductSources: result.platformProductSources || null,
       cod: result.cod || null,
       products: result.products || null,
       commissionTrend: result.commissionTrend || null,

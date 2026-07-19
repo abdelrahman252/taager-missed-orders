@@ -488,6 +488,8 @@ const store          = createStore({ encryptionKey: deriveStoreKey("taager-creds
 const licenseStore   = createStore({ encryptionKey: deriveStoreKey("taager-license-v1"), name: "license" });
 const analyticsStore = createStore({ name: "analytics" }); // unencrypted — run history only
 const dashboardStore = createStore({ name: "dashboard" }); // unencrypted — monthly snapshots
+const RUN_RESULTS_INDEX_KEY = "runResults.index.v1";
+const RUN_RESULTS_DETAIL_DIR = "run-results";
 const AI_MIRROR_STORE_KEY = "aiMirrors.v1";
 const AI_MIRROR_STORE_LIMIT = 8;
 const dashboardQueryService = createDashboardQueryService({
@@ -839,6 +841,89 @@ function mergeAiAssistantMemory(base, delta) {
 function invalidateAnalyticsRunsCache() {
   analyticsRunsCache = null;
   analyticsRunsCacheDirty = true;
+}
+
+function runResultsBaseDir() {
+  return path.join(app.getPath("userData"), RUN_RESULTS_DETAIL_DIR);
+}
+
+function ensureRunResultsBaseDir() {
+  const dir = runResultsBaseDir();
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function safeRunResultId(value) {
+  const raw = String(value || "").trim();
+  const cleaned = raw.replace(/[^a-zA-Z0-9@._-]/g, "_").replace(/_+/g, "_").slice(0, 120);
+  if (cleaned) return cleaned;
+  return crypto.createHash("sha1").update(raw || String(Date.now())).digest("hex").slice(0, 16);
+}
+
+function monthKeyFromTimestamp(ts) {
+  const d = new Date(Number(ts) || Date.now());
+  if (isNaN(d.getTime())) return new Date().toISOString().slice(0, 7);
+  return d.toISOString().slice(0, 7);
+}
+
+function previousMonthKey(date = new Date()) {
+  const d = new Date(date.getFullYear(), date.getMonth() - 1, 1);
+  return d.toISOString().slice(0, 7);
+}
+
+function resolveRunResultDetailPath(relativePath) {
+  const base = runResultsBaseDir();
+  const resolved = path.resolve(base, String(relativePath || ""));
+  const normalizedBase = path.resolve(base) + path.sep;
+  if (!resolved.startsWith(normalizedBase)) return null;
+  return resolved;
+}
+
+function readRunResultsIndex() {
+  const rows = analyticsStore.get(RUN_RESULTS_INDEX_KEY, []);
+  return Array.isArray(rows) ? rows : [];
+}
+
+function writeRunResultsIndex(rows) {
+  analyticsStore.set(RUN_RESULTS_INDEX_KEY, Array.isArray(rows) ? rows : []);
+}
+
+function runResultWithinRange(run, dateFrom, dateTo) {
+  const ts = Number(run && run.runTimestamp);
+  if (!Number.isFinite(ts)) return false;
+  if (dateFrom) {
+    const from = new Date(dateFrom).getTime();
+    if (Number.isFinite(from) && ts < from) return false;
+  }
+  if (dateTo) {
+    const to = new Date(dateTo).getTime() + (86400000 - 1);
+    if (Number.isFinite(to) && ts > to) return false;
+  }
+  return true;
+}
+
+function pruneOldRunResultDetails(indexRows) {
+  try {
+    const keep = new Set([monthKeyFromTimestamp(Date.now()), previousMonthKey(new Date())]);
+    const rows = Array.isArray(indexRows) ? indexRows : [];
+    for (const run of rows) {
+      const month = monthKeyFromTimestamp(run && run.runTimestamp);
+      if (keep.has(month)) continue;
+      const abs = resolveRunResultDetailPath(run && run.detailPath);
+      if (abs && fs.existsSync(abs)) fs.rmSync(abs, { force: true });
+    }
+  } catch (err) {
+    log.warn("[RunResults] prune failed:", err && err.message ? err.message : err);
+  }
+}
+
+function clearRunResultsFiles() {
+  try {
+    const dir = runResultsBaseDir();
+    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 80 });
+  } catch (err) {
+    log.warn("[RunResults] clear files failed:", err && err.message ? err.message : err);
+  }
 }
 
 configureAiGateway({
@@ -3093,6 +3178,7 @@ function _handleForceFlush() {
   try { store.clear(); } catch (_) {}
   try { analyticsStore.clear(); } catch (_) {}
   try { dashboardStore.clear(); } catch (_) {}
+  clearRunResultsFiles();
   // licenseStore intentionally NOT cleared — customer can re-enter their existing key
   // Bust in-memory caches
   _licenseCache = null; _licenseCacheAt = 0;
@@ -3147,6 +3233,7 @@ function _handleResetCache(reason = "admin-cache-reset") {
   log.warn("[License] Reset cache received - wiping local metrics, dashboard cache, and runtime cache.", { reason });
   try { analyticsStore.clear(); } catch (_) {}
   try { dashboardStore.clear(); } catch (_) {}
+  clearRunResultsFiles();
   invalidateAnalyticsRunsCache();
   analyticsSnapshotSyncCacheKey = "";
   dashboardQueryService.clearCache();
@@ -3445,6 +3532,7 @@ function getLocalCredentialsSnapshot() {
     launchMinimized:  store.get("launchMinimized", false),
     autoConfirm:      store.get("autoConfirm",     false),
     missingOrdersUploadEnabled: store.get("missingOrdersUploadEnabled", false),
+    easyOrdersAffiliateRecoveryEnabled: store.get("easyOrdersAffiliateRecoveryEnabled", false),
     startupCached:    true,
   };
 }
@@ -3574,6 +3662,7 @@ ipcMain.handle("get-credentials", async () => {
     launchMinimized:  store.get("launchMinimized", false),
     autoConfirm:      store.get("autoConfirm",     false),
     missingOrdersUploadEnabled: store.get("missingOrdersUploadEnabled", false),
+    easyOrdersAffiliateRecoveryEnabled: store.get("easyOrdersAffiliateRecoveryEnabled", false),
   };
   _credCache = result;
   _credCacheAt = Date.now();
@@ -4255,10 +4344,16 @@ ipcMain.handle("get-settings", () => ({
   theme: store.get("theme", "dark"),
   lang:  store.get("lang",  "ar"),
   appZoom: getSavedAppZoom(),
+  easyOrdersAffiliateRecoveryEnabled: store.get("easyOrdersAffiliateRecoveryEnabled", false),
 }));
-ipcMain.handle("save-settings", (_, { theme, lang }) => {
+ipcMain.handle("save-settings", (_, { theme, lang, easyOrdersAffiliateRecoveryEnabled }) => {
   if (theme !== undefined) store.set("theme", theme);
   if (lang  !== undefined) store.set("lang",  lang);
+  if (easyOrdersAffiliateRecoveryEnabled !== undefined) {
+    store.set("easyOrdersAffiliateRecoveryEnabled", easyOrdersAffiliateRecoveryEnabled === true);
+    _credCache = null;
+    _credCacheAt = 0;
+  }
   return true;
 });
 
@@ -4277,6 +4372,12 @@ ipcMain.handle("set-launch-minimized", (_, v) => { store.set("launchMinimized", 
 ipcMain.handle("set-auto-confirm", (_, v) => { store.set("autoConfirm", v); return true; });
 ipcMain.handle("set-missing-orders-upload-enabled", (_, v) => {
   store.set("missingOrdersUploadEnabled", v === true);
+  _credCache = null;
+  _credCacheAt = 0;
+  return true;
+});
+ipcMain.handle("set-easyorders-affiliate-recovery-enabled", (_, v) => {
+  store.set("easyOrdersAffiliateRecoveryEnabled", v === true);
   _credCache = null;
   _credCacheAt = 0;
   return true;
@@ -4468,6 +4569,116 @@ ipcMain.handle("clear-analytics-data", async () => {
     return { ok: true };
   } catch (err) {
     monitoring.captureException(err, { operation: "analytics.clear" });
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle("save-run-results", async (_, payload) => {
+  try {
+    if (!payload || typeof payload !== "object") return { ok: false, error: "INVALID_PAYLOAD" };
+    const runId = String(payload.runId || "").trim();
+    if (!runId) return { ok: false, error: "MISSING_RUN_ID" };
+
+    const summary = payload.summary && typeof payload.summary === "object" ? payload.summary : {};
+    const timestamp = Number(payload.runTimestamp) || Date.now();
+    const monthKey = monthKeyFromTimestamp(timestamp);
+    const safeId = safeRunResultId(runId);
+    const relativePath = path.join(monthKey, `${safeId}.json.gz`).replace(/\\/g, "/");
+    const absPath = path.join(ensureRunResultsBaseDir(), monthKey, `${safeId}.json.gz`);
+    fs.mkdirSync(path.dirname(absPath), { recursive: true });
+
+    const detail = {
+      schemaVersion: 1,
+      runId,
+      account: payload.account || {
+        id: payload.accountId || "__single__",
+        label: payload.accountLabel || "",
+        country: payload.taagerCountry || "sa",
+      },
+      range: payload.range || { from: payload.dateFrom || "", to: payload.dateTo || "" },
+      summary: {
+        attempted: Number(summary.attempted) || 0,
+        confirmed: Number(summary.confirmed) || 0,
+        uncertain: Number(summary.uncertain) || 0,
+        failed: Number(summary.failed) || 0,
+      },
+      orders: Array.isArray(payload.orders) ? payload.orders : [],
+      artifacts: payload.artifacts || {},
+      savedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(absPath, zlib.gzipSync(Buffer.from(JSON.stringify(detail), "utf8")));
+
+    const indexEntry = {
+      schemaVersion: 1,
+      runId,
+      accountId: payload.accountId || detail.account.id || "__single__",
+      accountLabel: payload.accountLabel || detail.account.label || "",
+      taagerCountry: payload.taagerCountry || detail.account.country || "sa",
+      dateFrom: payload.dateFrom || detail.range.from || "",
+      dateTo: payload.dateTo || detail.range.to || "",
+      runTimestamp: timestamp,
+      status: payload.status || (detail.summary.failed > 0 ? "failed" : (detail.summary.uncertain > 0 ? "needs_review" : "all_ok")),
+      summary: detail.summary,
+      detailPath: relativePath,
+    };
+
+    const previous = readRunResultsIndex();
+    const exists = previous.some((run) => String(run && run.runId) === runId);
+    const next = previous
+      .filter((run) => String(run && run.runId) !== runId)
+      .concat(indexEntry)
+      .sort((a, b) => (Number(b.runTimestamp) || 0) - (Number(a.runTimestamp) || 0));
+    writeRunResultsIndex(next);
+    pruneOldRunResultDetails(next);
+    return { ok: true, duplicate: exists, runId };
+  } catch (err) {
+    log.error("[RunResults] save failed:", err && err.message ? err.message : err);
+    monitoring.captureException(err, { operation: "runResults.save", extra: { runId: payload && payload.runId } });
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle("get-run-results-index", async (_, filter = {}) => {
+  try {
+    let runs = readRunResultsIndex();
+    if (filter && typeof filter === "object") {
+      if (filter.dateFrom || filter.dateTo) {
+        runs = runs.filter((run) => runResultWithinRange(run, filter.dateFrom, filter.dateTo));
+      }
+      if (filter.accountId && filter.accountId !== "__all__") {
+        runs = runs.filter((run) => run.accountId === filter.accountId || run.accountLabel === filter.accountId);
+      }
+    }
+    runs = runs.slice().sort((a, b) => (Number(b.runTimestamp) || 0) - (Number(a.runTimestamp) || 0));
+    return { ok: true, runs };
+  } catch (err) {
+    monitoring.captureException(err, { operation: "runResults.getIndex" });
+    return { ok: false, runs: [], error: err.message };
+  }
+});
+
+ipcMain.handle("get-run-result-detail", async (_, runId) => {
+  try {
+    const wanted = String(runId || "");
+    const entry = readRunResultsIndex().find((run) => String(run && run.runId) === wanted);
+    if (!entry) return { ok: false, error: "RUN_RESULT_NOT_FOUND" };
+    const abs = resolveRunResultDetailPath(entry.detailPath);
+    if (!abs || !fs.existsSync(abs)) return { ok: false, error: "RUN_RESULT_DETAIL_NOT_FOUND", entry };
+    const detail = JSON.parse(zlib.gunzipSync(fs.readFileSync(abs)).toString("utf8"));
+    return { ok: true, entry, detail };
+  } catch (err) {
+    monitoring.captureException(err, { operation: "runResults.getDetail", extra: { runId } });
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle("clear-run-results-data", async () => {
+  try {
+    writeRunResultsIndex([]);
+    clearRunResultsFiles();
+    return { ok: true };
+  } catch (err) {
+    monitoring.captureException(err, { operation: "runResults.clear" });
     return { ok: false, error: err.message };
   }
 });
@@ -6678,7 +6889,40 @@ function saveFailedOrdersFile(easyEmail, buffer) {
   }
 }
 
-ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
+function safeFilePart(value) {
+  return String(value || "unknown").replace(/[<>:"/\\|?*\x00-\x1F]/g, "_").slice(0, 80);
+}
+
+function createBotRunLogWriter(account, dateFrom, dateTo, suffix = "") {
+  const appdata = process.env.APPDATA || app.getPath("userData");
+  const dir = path.join(appdata, "taager-orders", "run-logs");
+  fs.mkdirSync(dir, { recursive: true });
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+  const accountPart = safeFilePart(accountContactEmail(account) || accountDisplayName(account, account && account.id || "account"));
+  const filePath = path.join(dir, `bot-run-${ts}-${accountPart}${suffix ? "-" + safeFilePart(suffix) : ""}.log`);
+  const header = [
+    `Run started: ${now.toISOString()}`,
+    `Account: ${accountDisplayName(account, accountPart)}`,
+    `Email: ${accountContactEmail(account) || ""}`,
+    `Date range: ${dateFrom || ""} -> ${dateTo || ""}`,
+    "",
+  ].join(os.EOL);
+  fs.writeFileSync(filePath, header, "utf8");
+  const write = (line) => {
+    const text = String(line || "").trimEnd();
+    if (!text) return;
+    try {
+      fs.appendFileSync(filePath, `[${new Date().toISOString()}] ${text}${os.EOL}`, "utf8");
+    } catch (error) {
+      log.warn("[BotRunLog] append failed:", error.message);
+    }
+  };
+  return { filePath, write };
+}
+
+ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAffiliateRecoveryEnabled: runAffiliateRecoveryEnabled } = {}) => {
   if (!(await isLicenseValid())) return { success: false, error: "LICENSE_INVALID" };
   if (licenseStore.get("teamLeaderEnabled", false) === true) {
     return { success: false, error: "TEAM_LEADER_DASHBOARD_ONLY" };
@@ -6692,6 +6936,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
   lastExportTimestamp = 0;
   const autoConfirm = store.get("autoConfirm", false);
   const missingOrdersUploadEnabled = store.get("missingOrdersUploadEnabled", false) === true;
+  const easyOrdersAffiliateRecoveryEnabled = runAffiliateRecoveryEnabled === true || store.get("easyOrdersAffiliateRecoveryEnabled", false) === true;
   const secondTaagerProfilePathFor = (accountId) => path.join(app.getPath("userData"), `bot-profile-${accountId}-second-taager-cart`);
   const accountRunConfig = (acc) => {
     const missedOrdersDestination = missedOrdersDestinationOf(acc, missingOrdersUploadEnabled);
@@ -6700,6 +6945,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
       missedOrdersDestination,
       missingOrdersUploadEnabled: missedOrdersDestination === "legacy_missing_orders",
       secondTaagerCartEnabled: missedOrdersDestination === "second_taager_cart",
+      easyOrdersAffiliateRecoveryEnabled,
       secondTaagerPassword: acc.secondTaagerPassword || (acc.id ? store.get(`pwd_second_taager_${acc.id}`, "") : ""),
       secondTaagerProfilePath: acc.id ? secondTaagerProfilePathFor(acc.id) : "",
     };
@@ -6853,6 +7099,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
       launchMinimized: store.get("launchMinimized", false),
       autoConfirm,
       missingOrdersUploadEnabled,
+      easyOrdersAffiliateRecoveryEnabled,
       needsSnapshot: false,
       operationsSuiteEnabled,
       dashboardEnabled,
@@ -6869,15 +7116,18 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
       currentBotChild = child;
       botChildren = [child];
       const logs = []; let resolved = false;
+      const runLog = createBotRunLogWriter(acc, dateFrom, dateTo);
+      mainWindow.webContents.send("bot-log", `[Run Log] Saved to: ${runLog.filePath}`);
       const safeResolve = (v) => { if (!resolved) { resolved = true; resolve(v); } };
-      child.stdout.on("data", (d) => { const m = d.toString().trim(); if (m) { logs.push(m); mainWindow.webContents.send("bot-log", m); } });
+      child.stdout.on("data", (d) => { const m = d.toString().trim(); if (m) { logs.push(m); runLog.write(m); mainWindow.webContents.send("bot-log", m); } });
       child.stderr.on("data", (d) => {
         const m = d.toString().trim(); if (!m) return;
         if (m.includes("CHROME_NOT_FOUND")) {
+          runLog.write("ERR: " + m);
           mainWindow.webContents.send("bot-log", "❌ Google Chrome غير مثبت على جهازك.");
           mainWindow.webContents.send("bot-log", "👉 حمّل Chrome من: https://www.google.com/chrome");
           mainWindow.webContents.send("bot-log", "✅ بعد التثبيت افتح البرنامج من جديد.");
-        } else { mainWindow.webContents.send("bot-log", "ERR: " + m); }
+        } else { runLog.write("ERR: " + m); mainWindow.webContents.send("bot-log", "ERR: " + m); }
       });
       child.on("message", (msg) => {
         if (msg.type === "result") {
@@ -6894,6 +7144,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
             success: true,
             data,
             ...finishTiming(),
+            runLogPath: runLog.filePath,
             accountId: acc.id || "__single__",
             accountEmail: accountContactEmail(acc),
             accountLabel: accountDisplayName(acc, "Account 1"),
@@ -6915,6 +7166,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
             success: false,
             error: msg.error,
             ...finishTiming(),
+            runLogPath: runLog.filePath,
             accountId: acc.id || "__single__",
             accountEmail: accountContactEmail(acc),
             accountLabel: accountDisplayName(acc, "Account 1"),
@@ -6924,11 +7176,14 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
           lastExportTimestamp = msg.timestamp;
         }
         if (msg.type === "debug-screenshot") {
+          runLog.write(`[Debug] Screenshot saved for ${msg.label || "bot"}: ${msg.path || ""}`);
           mainWindow.webContents.send("bot-log", `[Debug] Screenshot saved for ${msg.label || "bot"}: ${msg.path || ""}`);
           log.info(`[Bot] Debug screenshot saved for ${msg.label || "bot"}: ${msg.path || ""}`);
         }
         if (msg.type === "stage") {
-          mainWindow.webContents.send("bot-log", `[Stage:${msg.flow || "runner"}] ${msg.stage || "unknown"} ${msg.status ? `(${msg.status})` : ""}${msg.message ? ` - ${msg.message}` : ""}`);
+          const stageLine = `[Stage:${msg.flow || "runner"}] ${msg.stage || "unknown"} ${msg.status ? `(${msg.status})` : ""}${msg.message ? ` - ${msg.message}` : ""}`;
+          runLog.write(stageLine);
+          mainWindow.webContents.send("bot-log", stageLine);
         }
         if (msg.type === "2fa-needed")     mainWindow.webContents.send("bot-2fa-needed");
         if (msg.type === "needs-confirm")  mainWindow.webContents.send("bot-needs-confirm");
@@ -6982,6 +7237,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
           error: err.message,
           logs,
           ...finishTiming(),
+          runLogPath: runLog.filePath,
           accountId: acc.id || "__single__",
           accountEmail: accountContactEmail(acc),
           accountLabel: accountDisplayName(acc, "Account 1"),
@@ -7006,6 +7262,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
           error: code !== 0 ? "Bot exited with code " + code : null,
           logs,
           ...finishTiming(),
+          runLogPath: runLog.filePath,
           accountId: acc.id || "__single__",
           accountEmail: accountContactEmail(acc),
           accountLabel: accountDisplayName(acc, "Account 1"),
@@ -7033,6 +7290,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
       launchMinimized: store.get("launchMinimized", false),
       autoConfirm,
       missingOrdersUploadEnabled,
+      easyOrdersAffiliateRecoveryEnabled,
       needsSnapshot: false,
       operationsSuiteEnabled,
       dashboardEnabled,
@@ -7051,17 +7309,20 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
       botChildren.push(child);
       currentBotChild = child;
       const logs = [];
+      const runLog = createBotRunLogWriter(acc, dateFrom, dateTo, "account-" + (idx + 1));
+      mainWindow.webContents.send("bot-log", `${prefix}[Run Log] Saved to: ${runLog.filePath}`);
       let resolved = false;
       const safeResolve = (v) => { if (!resolved) { resolved = true; resolve(v); } };
 
       child.stdout.on("data", (d) => {
         const m = d.toString().trim();
-        if (m) { logs.push(m); mainWindow.webContents.send("bot-log", prefix + m); }
+        if (m) { logs.push(m); runLog.write(prefix + m); mainWindow.webContents.send("bot-log", prefix + m); }
       });
 
       child.stderr.on("data", (d) => {
         const m = d.toString().trim();
         if (!m) return;
+        runLog.write(prefix + "ERR: " + m);
         if (m.includes("CHROME_NOT_FOUND")) {
           mainWindow.webContents.send("bot-log", prefix + "❌ Google Chrome غير مثبت على جهازك.");
           mainWindow.webContents.send("bot-log", prefix + "👉 حمّل Chrome من: https://www.google.com/chrome");
@@ -7084,7 +7345,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
             data.failedOrders.failedDir  = dir;
             data.failedOrders.failedPath = filePath;
           }
-          safeResolve({ success: true, data, ...finishTiming(), accountId, accountEmail, accountLabel });
+          safeResolve({ success: true, data, ...finishTiming(), runLogPath: runLog.filePath, accountId, accountEmail, accountLabel });
         }
         if (msg.type === "error") {
           notifyAdminErrorAlert({
@@ -7097,7 +7358,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
             dateTo,
             recentLogs: logs.slice(-10),
           });
-          safeResolve({ success: false, error: msg.error, ...finishTiming(), accountId, accountEmail, accountLabel });
+          safeResolve({ success: false, error: msg.error, ...finishTiming(), runLogPath: runLog.filePath, accountId, accountEmail, accountLabel });
         }
 
         if (msg.type === "export-timestamp") {
@@ -7105,12 +7366,15 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
           accountExportTimestamps[idx] = msg.timestamp;
         }
         if (msg.type === "debug-screenshot") {
+          runLog.write(`${prefix}[Debug] Screenshot saved for ${msg.label || "bot"}: ${msg.path || ""}`);
           mainWindow.webContents.send("bot-log", `${prefix}[Debug] Screenshot saved for ${msg.label || "bot"}: ${msg.path || ""}`);
           log.info(`${prefix}[Bot] Debug screenshot saved for ${msg.label || "bot"}: ${msg.path || ""}`);
         }
         const tagged = { ...msg, accountId, accountEmail, accountLabel, accountIdx: idx, totalAccounts: accountsToRun.length };
         if (msg.type === "stage") {
-          mainWindow.webContents.send("bot-log", `${prefix}[Stage:${msg.flow || "runner"}] ${msg.stage || "unknown"} ${msg.status ? `(${msg.status})` : ""}${msg.message ? ` - ${msg.message}` : ""}`);
+          const stageLine = `${prefix}[Stage:${msg.flow || "runner"}] ${msg.stage || "unknown"} ${msg.status ? `(${msg.status})` : ""}${msg.message ? ` - ${msg.message}` : ""}`;
+          runLog.write(stageLine);
+          mainWindow.webContents.send("bot-log", stageLine);
         }
         if (msg.type === "2fa-needed")     mainWindow.webContents.send("bot-2fa-needed",     tagged);
         if (msg.type === "needs-confirm")  mainWindow.webContents.send("bot-needs-confirm",  tagged);
@@ -7152,6 +7416,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
           error: `${prefix}${err.message}`,
           logs,
           ...finishTiming(),
+          runLogPath: runLog.filePath,
           accountId:    acc.id,
           accountEmail: accountContactEmail(acc),
           accountLabel: accountDisplayName(acc, "Account " + (idx + 1)),
@@ -7176,6 +7441,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds }) => {
           error: code !== 0 ? `${prefix}exited with code ${code}` : null,
           logs,
           ...finishTiming(),
+          runLogPath: runLog.filePath,
           accountId:    acc.id,
           accountEmail: accountContactEmail(acc),
           accountLabel: accountDisplayName(acc, "Account " + (idx + 1)),

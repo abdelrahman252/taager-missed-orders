@@ -10,7 +10,7 @@ const {
   launchPersistentChromeContext,
 } = require("./chrome-launch");
 const { formatPhone, normalizePhone } = require("./phone");
-const { cartOrderItemKeys, orderLineItems } = require("./cart-order-groups");
+const { buildGroupedCartOrders, cartOrderItemKeys, orderLineItems } = require("./cart-order-groups");
 const { resolveSafeTaagerExportRange } = require("./taager-date-range");
 const {
   normalizeTaagerCountry,
@@ -22,6 +22,7 @@ const { createEasyOrdersExportFlow } = require("./easy-orders-export");
 const { createLightFunnelsFlow } = require("./lightfunnels-flow");
 const { createTaagerOrdersExportFlow } = require("./taager-orders-export-flow");
 const { createMissingOrdersUploadFlow } = require("./missing-orders-upload-flow");
+const { createEasyOrdersAffiliateRecoveryFlow } = require("./easy-orders-affiliate-recovery-flow");
 const {
   DESTINATION_LEGACY_MISSING_ORDERS,
   DESTINATION_SECOND_TAAGER_CART,
@@ -4897,6 +4898,7 @@ if (config.mode === "second-taager-cart-upload") {
       parseMissedOrders,
       buildProductCatalog,
       buildTaagerProductCatalog,
+      repairOrderQuantitiesFromCatalog,
       resolveMissedOrders,
       mergeAndDeduplicate,
     } = parser();
@@ -4910,10 +4912,18 @@ if (config.mode === "second-taager-cart-upload") {
     const realOrders         = parseRealOrders(realBuffer, dateFrom, dateTo);
     const { orders: missedOrders, skippedOrders: phoneFailedOrders } =
       parseMissedOrders(missedBuffer, dateFrom, dateTo);
-    const catalog         = buildProductCatalog(realOrders);
+    let catalog         = buildProductCatalog(realOrders);
     const taagerCatalog   = buildTaagerProductCatalog(taagerBuffer);
+    const catalogQuantityRepairs = typeof repairOrderQuantitiesFromCatalog === "function"
+      ? repairOrderQuantitiesFromCatalog(realOrders, catalog, taagerCatalog)
+      : 0;
+    if (catalogQuantityRepairs > 0) {
+      log(`Real orders quantity repaired from EasyOrders/Taager history: ${catalogQuantityRepairs}`);
+      catalog = buildProductCatalog(realOrders);
+    }
     const { resolved: resolvedMissedAll, skippedOrders: catalogFailedOrders } =
       resolveMissedOrders(missedOrders, catalog, taagerCatalog);
+
     let missedOrdersDestination = normalizeMissedOrdersDestination(config.missedOrdersDestination, {
       legacyEnabled: config.missingOrdersUploadEnabled === true,
     });
@@ -4960,6 +4970,166 @@ if (config.mode === "second-taager-cart-upload") {
       taagerCountry: TAAGER_COUNTRY,
     }));
     const allSkippedOrders = [...baseSkippedOrders, ...dedupeSkippedOrders, ...uncertainUploadWarnings];
+
+    if (config.easyOrdersAffiliateRecoveryEnabled === true) {
+      const isPhoneTrashSkip = (row) => {
+        const reason = String(row && row.reason || "").toLowerCase();
+        return reason === "phone_parse_failed" || reason === "invalid_phone_number";
+      };
+      const catalogUnknownMissed = allSkippedOrders.filter((row) => {
+        if (String(row && row.reason || "") !== "product_not_in_easyorders_or_taager") return false;
+        const phone = normalizePhone(row.normalizedPhone || row.normPhone || row.rawPhone || row.phone || "", TAAGER_COUNTRY);
+        if (!phone) return false;
+        const blockingPhones = taagerOrderKeys.taagerBlockingPhones instanceof Set ? taagerOrderKeys.taagerBlockingPhones : new Set();
+        return !blockingPhones.has(phone);
+      });
+      const catalogUnknownManualRows = catalogUnknownMissed.map((row) => {
+        const normPhone = normalizePhone(row.normalizedPhone || row.normPhone || row.rawPhone || row.phone || "", TAAGER_COUNTRY);
+        const city = row.city || "";
+        const address = row.address || city || "";
+        const name = String(row.name || "").trim() || formatPhone(normPhone, TAAGER_COUNTRY) || normPhone || "";
+        return {
+          ...row,
+          source: "missed",
+          recoverySource: "missed",
+          normPhone,
+          normalizedPhone: normPhone,
+          phone: formatPhone(normPhone, TAAGER_COUNTRY) || normPhone,
+          name,
+          city,
+          address,
+          reason: "no_trusted_product_reference",
+          actionMessage: "Product was not found in EasyOrders/Taager history; recovery did not submit it automatically.",
+          items: [{
+            source: "missed",
+            recoverySource: "missed",
+            sku: "",
+            productName: row.productName || "",
+            qty: Number(row.qty || 1) || 1,
+            unitPrice: Number(row.unitPrice || 0) || 0,
+            subtotal: Number(row.subtotal || 0) || 0,
+            trusted: false,
+            referenceSource: "easyorders-ui-as-is",
+            normPhone,
+            rawPhone: row.rawPhone || "",
+            name,
+            city,
+            address,
+            createdAt: row.createdAt || row.date || "",
+            easyCreatedAt: row.easyCreatedAt || "",
+          }],
+        };
+      });
+      const catalogUnknownKeys = new Set(catalogUnknownMissed.map((row) => [
+        normalizePhone(row.normalizedPhone || row.normPhone || row.rawPhone || row.phone || "", TAAGER_COUNTRY),
+        row.easyCreatedAt || row.createdAt || row.date || "",
+        row.name || "",
+        row.productName || "",
+      ].join("|")));
+      const recoveryManualSkippedOrders = allSkippedOrders.filter((row) => {
+        const key = [
+          normalizePhone(row.normalizedPhone || row.normPhone || row.rawPhone || row.phone || "", TAAGER_COUNTRY),
+          row.easyCreatedAt || row.createdAt || row.date || "",
+          row.name || "",
+          row.productName || "",
+        ].join("|");
+        return !isPhoneTrashSkip(row) && !catalogUnknownKeys.has(key);
+      }).concat(catalogUnknownManualRows);
+      const recoveryTrashSkippedOrders = allSkippedOrders.filter(isPhoneTrashSkip);
+      if (catalogUnknownMissed.length > 0) {
+        log(`Affiliate recovery: ${catalogUnknownMissed.length} missed orders have no trusted catalog match; they will be shown as Uncertain and not submitted automatically.`);
+      }
+      if (recoveryManualSkippedOrders.length > 0) {
+        log(`Affiliate recovery: ${recoveryManualSkippedOrders.length} actionable/manual skipped rows will be shown in the recovery manual-review table.`);
+      }
+      log("\n========================================");
+      log("  EASYORDERS AFFILIATE RECOVERY MODE");
+      log("========================================\n");
+      log("Affiliate recovery uses the exact old-flow prepared orders. Only the final Taager upload action is replaced by EasyOrders edit/resend/convert.");
+      emitStage("affiliate-recovery.mode", "started", "EasyOrders affiliate recovery is enabled for this account");
+      const recoveryFlow = createEasyOrdersAffiliateRecoveryFlow({
+        log,
+        stage: emitStage,
+        country: TAAGER_COUNTRY,
+        gotoEasyOrders: async (recoveryPage, url) => {
+          await gotoWithNetworkRetries(recoveryPage, url, "EasyOrders affiliate recovery", { attempts: 3, timeout: 45000, waitMs: 5000 });
+          return recoveryPage;
+        },
+        gotoTaager: (recoveryPage, pathOrUrl) => taagerGoto(recoveryPage, pathOrUrl),
+        readDownloadToBuffer,
+        exportTaagerOrders: (recoveryPage, from, to) => createRunnerTaagerOrdersExportFlow().exportOrders(recoveryPage, from, to),
+        parseTaagerOrderKeys,
+      });
+
+      const affiliateRecovery = await recoveryFlow.run(page, {
+        preparedOrders: buildGroupedCartOrders(orders),
+        skippedOrders: recoveryManualSkippedOrders,
+        normalFlowStats: stats,
+        initialTaagerKeys: taagerOrderKeys,
+        catalog,
+        taagerCatalog,
+        fallbackProvince: taagerAnalyticsMap.provinceFallback,
+        fallbackProvinceBySku: taagerAnalyticsMap.provinceFallbackBySku,
+        fromDate: dateFrom,
+        toDate: dateTo,
+        taagerFromDate: taagerStartDate,
+        taagerToDate: taagerEndDate,
+        taagerFromText: formatDataDay(taagerStartDate),
+        taagerToText: formatDataDay(taagerEndDate),
+      });
+      const failedRecoveryRows = [
+        ...(affiliateRecovery.failedInTaager || []),
+        ...(affiliateRecovery.unresolved || []),
+      ];
+      const skippedRecoveryRows = [
+        ...(affiliateRecovery.skippedRows || []),
+      ];
+      const skippedRecoveryBuffer = recoveryTrashSkippedOrders.length > 0 ? buildSkippedExcel(recoveryTrashSkippedOrders) : null;
+      const recoveryStats = {
+        taagerOrderCount: Number(affiliateRecovery.finalVerification?.taagerOrderCount || taagerOrderKeys.taagerOrderCount || 0),
+        ...dedupeResult.stats,
+        realNew: affiliateRecovery.realAttempted || dedupeResult.stats.realNew || 0,
+        missedNew: affiliateRecovery.missedAttempted || dedupeResult.stats.missedNew || 0,
+      };
+      process.send && process.send({
+        type: "result",
+        data: {
+          orders: affiliateRecovery.verifiedCount || 0,
+          taagerCountry: TAAGER_COUNTRY,
+          stats: recoveryStats,
+          productSummary: affiliateRecovery.productSummary || [],
+          buffer: null,
+          confirmedOrderRows: affiliateRecovery.verifiedRows || [],
+          orderRows: affiliateRecovery.verifiedRows || [],
+          attemptedOrderRows: affiliateRecovery.attemptedRows || [],
+          failedOrders: {
+            count: failedRecoveryRows.length,
+            summary: failedRecoveryRows,
+            errorRows: failedRecoveryRows,
+            source: "easyorders-affiliate-recovery",
+            failedDir: "",
+            failedPath: "",
+            buffer: affiliateRecovery.failedOrdersDiagnostic?.buffer || null,
+          },
+          skippedOrders: {
+            count: recoveryTrashSkippedOrders.length,
+            rows: recoveryTrashSkippedOrders,
+            buffer: skippedRecoveryBuffer ? Array.from(skippedRecoveryBuffer) : null,
+            filePath: "",
+          },
+          affiliateRecovery,
+          taagerSnapshot: {
+            entries:     Array.from(taagerAnalyticsMap.byPhoneSku.entries()),
+            skuDefaults: taagerAnalyticsMap.skuDefaults,
+            provinceFallback: taagerAnalyticsMap.provinceFallback,
+            provinceFallbackBySku: taagerAnalyticsMap.provinceFallbackBySku,
+            provinceFallbackStats: taagerAnalyticsMap.provinceFallbackStats,
+          },
+          taagerDashboardSnapshot: null,
+        },
+      });
+      return;
+    }
     let skippedBuffer = null;
     let skippedFilePath = "";
     if (allSkippedOrders.length > 0) {

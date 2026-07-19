@@ -6,6 +6,65 @@
     actions: {
       updateUploadedOrders: "Update Uploaded Orders"
     },
+    runResults: {
+      title: "Run Results",
+      subtitle: "Saved receipts for every bot run",
+      searchPlaceholder: "Search phone, product, SKU, or customer...",
+      allAccounts: "All Accounts",
+      totalRuns: "{count} runs",
+      latestRun: "Latest run",
+      noRunsTitle: "No saved run results yet",
+      noRunsBody: "Run the bot once and the receipt will stay here for later review.",
+      noDetailTitle: "Select a run",
+      noDetailBody: "Choose a saved run from the left to see attempted, confirmed, uncertain, and failed orders.",
+      noRows: "No orders in this view.",
+      noSearch: "No orders match this search.",
+      status: {
+        all_ok: "All OK",
+        needs_review: "Needs Review",
+        failed: "Failed"
+      },
+      filters: {
+        today: "Today",
+        yesterday: "Yesterday",
+        last7: "7 Days",
+        thisMonth: "This Month",
+        custom: "Custom",
+        apply: "Apply",
+        to: "to"
+      },
+      buckets: {
+        attempted: "Attempted Orders",
+        confirmed: "Confirmed in Taager",
+        uncertain: "Uncertain",
+        failed: "Failed Orders"
+      },
+      cols: {
+        customer: "Customer",
+        phone: "Phone",
+        product: "Product",
+        sku: "SKU",
+        source: "Source",
+        destination: "Destination",
+        reason: "Reason",
+        action: "Action"
+      },
+      actionsBar: {
+        copyPhone: "Copy phone",
+        copyRow: "Copy row",
+        exportVisible: "Export visible",
+        openFailedFolder: "Open failed folder"
+      },
+      copied: "Copied",
+      exported: "Saved visible rows",
+      detailMissing: "This older run has no saved detail file.",
+      summary: {
+        attempted: "attempted",
+        confirmed: "confirmed",
+        uncertain: "uncertain",
+        failed: "failed"
+      }
+    },
     tour: {
       common: {
         quickGuide: "Quick Guide"
