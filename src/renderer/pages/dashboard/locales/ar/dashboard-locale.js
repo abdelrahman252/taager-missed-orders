@@ -60,6 +60,7 @@
       'commission.aboveBreakEven': 'CPA فوق التعادل',
       'commission.belowBreakEven': 'CPA تحت التعادل',
       'nav.marketing': 'ربط الإعلانات',
+      'nav.saudiipickMarketing': 'Saudi iPick API',
       'nav.campaigns': 'الحملات',
       'nav.dailyPerformance': 'الأداء اليومي',
       'nav.calculator': 'حاسبة الربح',

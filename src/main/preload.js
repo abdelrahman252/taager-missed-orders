@@ -214,6 +214,12 @@ contextBridge.exposeInMainWorld("api", {
   saveAllMarketingMappings: (platform, mappings) => monitoredInvoke("save-all-marketing-mappings", platform, mappings),
   syncMarketingData:     (accountId, platform, range) => monitoredInvoke("sync-marketing-data", accountId, platform, range),
   syncAllMarketingData:  (platform, range) => monitoredInvoke("sync-all-marketing-data", platform, range),
+  getSaudiIPickMarketingTokenStatus: () => monitoredInvoke("get-saudiipick-marketing-token-status"),
+  saveSaudiIPickMarketingToken: (token) => monitoredInvoke("save-saudiipick-marketing-token", token),
+  clearSaudiIPickMarketingToken: () => monitoredInvoke("clear-saudiipick-marketing-token"),
+  getSaudiIPickMarketingStatus: (accountId, platform, options) => monitoredInvoke("get-saudiipick-marketing-status", accountId, platform, options),
+  saveSaudiIPickMarketingMapping: (accountId, platform, sourceAccounts) => monitoredInvoke("save-saudiipick-marketing-mapping", accountId, platform, sourceAccounts),
+  syncSaudiIPickMarketingData: (accountId, platform, range) => monitoredInvoke("sync-saudiipick-marketing-data", accountId, platform, range),
   openExternalUrl:       (url)             => monitoredInvoke("open-external-url", url),
   dashboardAiQuery:      (payload)         => monitoredInvoke("dashboard-ai-query", payload),
   onDashboardAiProgress: (requestId, cb)   => {

@@ -29,6 +29,7 @@
       'commission.aboveBreakEven': 'CPA Above Break-even',
       'commission.belowBreakEven': 'CPA Below Break-even',
       'nav.marketing': 'Marketing Connections',
+      'nav.saudiipickMarketing': 'Saudi iPick API',
       'nav.campaigns': 'Campaigns',
       'nav.dailyPerformance': 'Daily Performance',
       'nav.calculator': 'Account Calculator',

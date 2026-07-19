@@ -215,6 +215,7 @@ autoUpdater.logger = {
 // ══════════════════════════════════════════════════════
 const SUPABASE_URL             = process.env.SUPABASE_URL             || "";
 const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || "";
+const SAUDIIPICK_MARKETING_API_BASE = (process.env.SAUDIIPICK_MARKETING_API_BASE || "https://saudiipick.com").replace(/\/+$/, "");
 
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
   log.warn("[App] Supabase config missing — license checks will fail until .env is configured.");
@@ -319,6 +320,49 @@ function supabaseFunctionRequest(fn, body) {
     req.on("timeout", () => { req.destroy(); settle(reject, new Error("supabase_function_timeout")); });
     req.on("error", (error) => settle(reject, error));
     req.write(bodyStr);
+    req.end();
+  });
+}
+
+function httpsJsonRequest(method, requestUrl, body, extraHeaders = {}) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(requestUrl);
+    const bodyStr = body ? JSON.stringify(body) : "";
+    const headers = {
+      "Content-Type": "application/json",
+      ...extraHeaders,
+    };
+    if (bodyStr) headers["Content-Length"] = Buffer.byteLength(bodyStr);
+    const options = {
+      hostname: url.hostname,
+      path: url.pathname + url.search,
+      method,
+      headers,
+      timeout: SUPABASE_TIMEOUT_MS,
+    };
+    let settled = false;
+    const settle = (fnSettle, value) => {
+      if (!settled) {
+        settled = true;
+        fnSettle(value);
+      }
+    };
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        let parsed = null;
+        try { parsed = data ? JSON.parse(data) : {}; } catch { parsed = { error: data || "invalid_json_response" }; }
+        if (res.statusCode >= 400) {
+          settle(reject, new Error(parsed.errorDescription || parsed.error || parsed.message || `request_failed_${res.statusCode}`));
+          return;
+        }
+        settle(resolve, parsed);
+      });
+    });
+    req.on("timeout", () => { req.destroy(); settle(reject, new Error("request_timeout")); });
+    req.on("error", (error) => settle(reject, error));
+    if (bodyStr) req.write(bodyStr);
     req.end();
   });
 }
@@ -5991,6 +6035,8 @@ function getCachedMarketingStatus(accountId, platform) {
       sourceAccountId: "",
       linkedAccounts: mergeMarketingSourceAccounts(storedAll && storedAll.linkedAccounts, Array.from(linkedAccountsMap.values())),
       mappedAccounts: mergeMarketingSourceAccounts(storedAll && storedAll.mappedAccounts),
+      selectedSourceAccounts: mergeMarketingSourceAccounts(storedAll && storedAll.selectedSourceAccounts),
+      selectedSourceAccountIds: storedAll && Array.isArray(storedAll.selectedSourceAccountIds) ? storedAll.selectedSourceAccountIds : [],
       availableAccounts: mergeMarketingSourceAccounts(storedAll && storedAll.availableAccounts),
       mappings: mergeMarketingMappings(storedAll && storedAll.mappings, combinedMappings),
       limits: storedAll && storedAll.limits || null,
@@ -6021,6 +6067,8 @@ function marketingRevisionValue(status) {
     sourceAccountId: status && status.sourceAccountId || "",
     linkedAccounts: status && status.linkedAccounts || [],
     mappedAccounts: status && status.mappedAccounts || [],
+    selectedSourceAccounts: status && status.selectedSourceAccounts || [],
+    selectedSourceAccountIds: status && status.selectedSourceAccountIds || [],
     availableAccounts: status && status.availableAccounts || [],
     mappings,
     reconnectRequired: !!(status && status.reconnectRequired),
@@ -6053,6 +6101,7 @@ function saveCachedMarketingStatus(accountId, platform, status) {
     !hasMarketingConnectionPayload(status);
   const next = {
     platform,
+    provider: status.provider || previous && previous.provider || "",
     status: status.status || (isPendingMarketingStatus(status) ? "pending" : "disconnected"),
     statusCheckedAt: status.statusCheckedAt || previous && previous.statusCheckedAt || null,
     lastSyncAt: preservePreviousPayload ? previous.lastSyncAt || null : status.lastSyncAt || null,
@@ -6061,6 +6110,8 @@ function saveCachedMarketingStatus(accountId, platform, status) {
     sourceAccountId: status.sourceAccountId || preservePreviousPayload && previous.sourceAccountId || "",
     linkedAccounts: preservePreviousPayload ? previous.linkedAccounts || [] : Array.isArray(status.linkedAccounts) ? status.linkedAccounts : [],
     mappedAccounts: preservePreviousPayload ? previous.mappedAccounts || [] : Array.isArray(status.mappedAccounts) ? status.mappedAccounts : [],
+    selectedSourceAccounts: preservePreviousPayload ? previous.selectedSourceAccounts || [] : Array.isArray(status.selectedSourceAccounts) ? status.selectedSourceAccounts : [],
+    selectedSourceAccountIds: preservePreviousPayload ? previous.selectedSourceAccountIds || [] : Array.isArray(status.selectedSourceAccountIds) ? status.selectedSourceAccountIds : [],
     availableAccounts: preservePreviousPayload ? previous.availableAccounts || [] : Array.isArray(status.availableAccounts) ? status.availableAccounts : [],
     diagnostics: status.diagnostics || null,
     reconnectRequired: !!status.reconnectRequired,
@@ -6229,6 +6280,124 @@ async function callMarketingBackend(action, accountId, platform, range) {
     ...marketingResultLogSummary(result),
   });
   return result;
+}
+
+function getSaudiIPickDesktopToken() {
+  return String(dashboardStore.get("saudiIPickMarketing.desktopToken", "") || process.env.SAUDIIPICK_DESKTOP_TOKEN || "").trim();
+}
+
+function maskToken(value) {
+  const clean = String(value || "");
+  if (!clean) return "";
+  return `${clean.slice(0, 7)}...${clean.slice(-4)}`;
+}
+
+function normalizeNativeSourceAccount(source, fallbackCurrency = "SAR") {
+  const id = String(source && (source.id || source.sourceAccountId || source.adAccountId) || "").trim();
+  if (!id) return null;
+  return {
+    id,
+    name: String(source && (source.name || source.sourceAccountName || source.adAccountName) || id),
+    currency: String(source && (source.currency || source.rawCurrency) || fallbackCurrency || "SAR").toUpperCase(),
+    platform: "snapchat",
+    provider: "saudiipick",
+    organizationName: String(source && source.organizationName || ""),
+    canManageCampaigns: !!(source && source.canManageCampaigns),
+  };
+}
+
+function mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAccountKey, sourceAccounts) {
+  const mappings = previous && previous.mappings && typeof previous.mappings === "object" ? { ...previous.mappings } : {};
+  const sources = (Array.isArray(sourceAccounts) ? sourceAccounts : [])
+    .map((source) => normalizeNativeSourceAccount(source))
+    .filter(Boolean);
+  mappings[dashboardAccountId] = sources;
+  if (dashboardAccountKey) mappings[dashboardAccountKey] = sources;
+  return mappings;
+}
+
+async function callSaudiIPickMarketing(action, accountId, platform = "snapchat", range = {}) {
+  const dashboardAccountId = marketingAccountKey(accountId, action !== "sync");
+  if (!dashboardAccountId) return { ok: false, error: "SELECT_SINGLE_ACCOUNT" };
+  if (platform !== "snapchat") return { ok: false, error: "PLATFORM_NOT_AVAILABLE" };
+  if (!(await isLicenseValid())) return { ok: false, error: "LICENSE_INVALID" };
+
+  const token = getSaudiIPickDesktopToken();
+  const connectUrl = `${SAUDIIPICK_MARKETING_API_BASE}/dashboard/settings`;
+  if (!token) {
+    return {
+      ok: false,
+      provider: "saudiipick",
+      platform,
+      status: "disconnected",
+      error: "SAUDIIPICK_TOKEN_REQUIRED",
+      authorizationUrl: connectUrl,
+    };
+  }
+
+  const account = getStoredAccountById(dashboardAccountId);
+  const dashboardAccountKey = marketingStableAccountKey(dashboardAccountId);
+  const previous = getCachedMarketingStatus(dashboardAccountId, platform);
+  const payload = {
+    action,
+    platform,
+    dashboardAccountId,
+    dashboardAccountKey,
+    dashboardAccountLabel: accountDisplayName(account, dashboardAccountId),
+    range: range || {},
+    sourceAccounts: range && Array.isArray(range.sourceAccounts) ? range.sourceAccounts : [],
+    mappings: range && Array.isArray(range.mappings) ? range.mappings : [],
+    identity: {
+      licenseKey: licenseStore.get("licenseKey", ""),
+      machineUuid: _getOrCreateMachineUUID(),
+      deviceId: getDeviceFingerprint(),
+      accountIdents: _buildAccountIdents(),
+    },
+  };
+
+  log.info("[SaudiIPick][Marketing] request", {
+    action,
+    platform,
+    dashboardAccountId,
+    sourceAccountIds: payload.sourceAccounts.map((source) => source && (source.id || source.sourceAccountId)).filter(Boolean),
+    token: maskToken(token),
+  });
+
+  const result = await httpsJsonRequest("POST", `${SAUDIIPICK_MARKETING_API_BASE}/api/desktop/marketing/snapchat`, payload, {
+    Authorization: `Bearer ${token}`,
+  });
+
+  const merged = {
+    ...result,
+    provider: "saudiipick",
+    platform,
+    mappings: result.mappings && Object.keys(result.mappings).length ? result.mappings : previous && previous.mappings || {},
+  };
+
+  if (action === "sync" && merged.ok) {
+    const chosen = (Array.isArray(range && range.sourceAccounts) ? range.sourceAccounts : [])
+      .map((source) => normalizeNativeSourceAccount(source, merged.summary && merged.summary.currency || "SAR"))
+      .filter(Boolean);
+    if (chosen.length) {
+      merged.mappedAccounts = chosen;
+      merged.selectedSourceAccounts = chosen;
+      merged.mappings = mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAccountKey, chosen);
+    }
+    saveCachedMarketingStatus(dashboardAccountId, platform, merged);
+  }
+
+  if (action === "status" && merged.ok) {
+    saveCachedMarketingStatus(dashboardAccountId, platform, {
+      ...merged,
+      summary: previous && previous.summary || null,
+      lastSyncAt: previous && previous.lastSyncAt || null,
+      mappedAccounts: previous && previous.mappedAccounts && previous.mappedAccounts.length ? previous.mappedAccounts : merged.mappedAccounts,
+      selectedSourceAccounts: previous && previous.selectedSourceAccounts && previous.selectedSourceAccounts.length ? previous.selectedSourceAccounts : merged.selectedSourceAccounts,
+      mappings: previous && previous.mappings || merged.mappings || {},
+    });
+  }
+
+  return merged;
 }
 
 const MARKETING_STATUS_TTL_MS = 15 * 60 * 1000;
@@ -6464,6 +6633,108 @@ ipcMain.handle("sync-all-marketing-data", async (_, platform = "tiktok", range =
   }
 });
 
+ipcMain.handle("get-saudiipick-marketing-token-status", async () => {
+  const token = getSaudiIPickDesktopToken();
+  return {
+    ok: true,
+    configured: !!token,
+    tokenPreview: maskToken(token),
+    connectUrl: `${SAUDIIPICK_MARKETING_API_BASE}/dashboard/settings`,
+  };
+});
+
+ipcMain.handle("save-saudiipick-marketing-token", async (_, token) => {
+  const clean = String(token || "").trim();
+  if (!clean || !clean.startsWith("sipdt_")) {
+    return { ok: false, error: "INVALID_SAUDIIPICK_TOKEN" };
+  }
+  dashboardStore.set("saudiIPickMarketing.desktopToken", clean);
+  return { ok: true, configured: true, tokenPreview: maskToken(clean) };
+});
+
+ipcMain.handle("clear-saudiipick-marketing-token", async () => {
+  dashboardStore.delete("saudiIPickMarketing.desktopToken");
+  return { ok: true, configured: false };
+});
+
+ipcMain.handle("get-saudiipick-marketing-status", async (_, accountId, platform = "snapchat", options = {}) => {
+  const dashboardAccountId = marketingAccountKey(accountId, true);
+  if (!dashboardAccountId) return { ok: false, error: "SELECT_ACCOUNT" };
+  const cached = getCachedMarketingStatus(dashboardAccountId, platform);
+  if (cached && options && options.mode === "cached") {
+    return { ok: true, ...cached, provider: cached.provider || "saudiipick", cache: { ...(cached.cache || {}), status: "local", providerRequestCount: 0 } };
+  }
+  try {
+    const result = await callSaudiIPickMarketing("status", dashboardAccountId, platform, options || {});
+    if (result && result.ok) {
+      const nextCached = getCachedMarketingStatus(dashboardAccountId, platform) || {};
+      return {
+        ...result,
+        ...nextCached,
+        ok: true,
+        provider: "saudiipick",
+        availableAccounts: result.availableAccounts || nextCached.availableAccounts || [],
+        linkedAccounts: result.linkedAccounts || nextCached.linkedAccounts || [],
+      };
+    }
+    return cached ? { ok: true, ...cached, offline: true, error: result && result.error || "" } : result;
+  } catch (error) {
+    log.error("[SaudiIPick][Marketing] status failed", { accountId: dashboardAccountId, platform, error: error.message });
+    if (cached) return { ok: true, ...cached, offline: true, error: error.message };
+    return { ok: false, provider: "saudiipick", platform, error: error.message };
+  }
+});
+
+ipcMain.handle("save-saudiipick-marketing-mapping", async (_, accountId, platform = "snapchat", sourceAccounts = []) => {
+  const dashboardAccountId = marketingAccountKey(accountId);
+  if (!dashboardAccountId) return { ok: false, error: "SELECT_ACCOUNT_TO_MAP" };
+  const previous = getCachedMarketingStatus(dashboardAccountId, platform) || {};
+  const account = getStoredAccountById(dashboardAccountId);
+  const dashboardAccountKey = marketingStableAccountKey(dashboardAccountId);
+  const selected = (Array.isArray(sourceAccounts) ? sourceAccounts : [])
+    .map((source) => normalizeNativeSourceAccount(source))
+    .filter(Boolean);
+  const next = {
+    ...previous,
+    ok: true,
+    provider: "saudiipick",
+    platform,
+    status: selected.length ? "connected" : "disconnected",
+    sourceAccountId: selected.length === 1 ? selected[0].id : "",
+    sourceAccountName: selected.length === 1 ? selected[0].name : accountDisplayName(account, dashboardAccountId),
+    mappedAccounts: selected,
+    selectedSourceAccounts: selected,
+    selectedSourceAccountIds: selected.map((source) => source.id),
+    availableAccounts: previous.availableAccounts || selected,
+    linkedAccounts: previous.linkedAccounts || selected,
+    mappings: mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAccountKey, selected),
+    statusCheckedAt: new Date().toISOString(),
+  };
+  saveCachedMarketingStatus(dashboardAccountId, platform, next);
+  return { ok: true, ...getCachedMarketingStatus(dashboardAccountId, platform), provider: "saudiipick" };
+});
+
+ipcMain.handle("sync-saudiipick-marketing-data", async (_, accountId, platform = "snapchat", range = {}) => {
+  const dashboardAccountId = marketingAccountKey(accountId);
+  if (!dashboardAccountId) return { ok: false, error: "SELECT_SINGLE_ACCOUNT" };
+  try {
+    const previous = getCachedMarketingStatus(dashboardAccountId, platform) || {};
+    const sourceAccounts = Array.isArray(range && range.sourceAccounts) && range.sourceAccounts.length
+      ? range.sourceAccounts
+      : previous.selectedSourceAccounts || previous.mappedAccounts || [];
+    const result = await callSaudiIPickMarketing("sync", dashboardAccountId, platform, {
+      ...(range || {}),
+      sourceAccounts,
+    });
+    return result;
+  } catch (error) {
+    log.error("[SaudiIPick][Marketing] sync failed", { accountId: dashboardAccountId, platform, error: error.message });
+    const cached = getCachedMarketingStatus(dashboardAccountId, platform);
+    if (cached) return { ok: false, ...cached, provider: "saudiipick", error: error.message };
+    return { ok: false, provider: "saudiipick", platform, error: error.message };
+  }
+});
+
 ipcMain.handle("open-external-url", async (_, externalUrl) => {
   try {
     const parsed = new URL(String(externalUrl || ""));
@@ -6477,6 +6748,8 @@ ipcMain.handle("open-external-url", async (_, externalUrl) => {
     }
     const allowedHosts = new Set([
       "onboard.windsor.ai",
+      "saudiipick.com",
+      "www.saudiipick.com",
       "taager.com",
       "www.taager.com",
       "wa.me",
