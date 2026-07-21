@@ -210,12 +210,65 @@ const deliveredFreshRepeatResult = mergeAndDeduplicate([
   { source: "real", normPhone: "500000007", sku: "DELIVERED-SKU", orderId: "EO-NEW", createdAt: "2026-07-07", uploadGroupKey: "new-order-after-delivery" },
 ], [], deliveredOnlyKeys);
 assert.strictEqual(deliveredFreshRepeatResult.stats.realNew, 1, "delivered phone+SKU repeat should be allowed only when source identity/date proves it is a different order");
+function assertRepeatAllowedStatus(status, bucketName) {
+  const sheet = XLSX.utils.aoa_to_sheet([
+    taagerExistingHeader,
+    [`T-${bucketName}`, "", status, "2026-07-08", "", "966500000010", "", "", "", "", "", "", "", "", "", "", `${bucketName}-SKU`, "", "", "", "", "", `EO-${bucketName}-OLD`],
+  ]);
+  const book = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book, sheet, "Orders");
+  const repeatAllowedKeys = parseTaagerOrderKeys(XLSX.write(book, { type: "buffer", bookType: "xlsx" }));
+  assert.strictEqual(repeatAllowedKeys.size, 0, `${bucketName} phone+SKU should not block a proven fresh repeat order`);
+  assert.strictEqual(repeatAllowedKeys.taagerRepeatAllowedOnlyPhoneSkuKeys, 1);
+  const sameDayResult = mergeAndDeduplicate([
+    { source: "real", normPhone: "500000010", sku: `${bucketName}-SKU`, createdAt: "2026-07-08", uploadGroupKey: `${bucketName}-same-day` },
+  ], [], repeatAllowedKeys);
+  assert.strictEqual(sameDayResult.stats.realInTaager, 1, `${bucketName} same phone+SKU and same created day should stay skipped`);
+  const freshResult = mergeAndDeduplicate([
+    { source: "real", normPhone: "500000010", sku: `${bucketName}-SKU`, orderId: `EO-${bucketName}-NEW`, createdAt: "2026-07-09", uploadGroupKey: `${bucketName}-new-day` },
+  ], [], repeatAllowedKeys);
+  assert.strictEqual(freshResult.stats.realNew, 1, `${bucketName} phone+SKU repeat should be allowed for a proven new source/date`);
+}
+assertRepeatAllowedStatus("\u0641\u0634\u0644 \u0627\u0644\u062a\u0633\u0644\u064a\u0645", "failed-delivery");
+assertRepeatAllowedStatus("\u0637\u0644\u0628 \u0645\u0644\u063a\u064a \u0628\u0648\u0627\u0633\u0637\u062a\u0643", "canceled-by-you");
 const conflictingSourceIdResult = mergeAndDeduplicate([
   { source: "real", normPhone: "500000008", sku: "SKU-CONFLICT", orderId: "EO-CONFLICT", uploadGroupKey: "conflict-a" },
   { source: "real", normPhone: "500000009", sku: "SKU-CONFLICT", orderId: "EO-CONFLICT", uploadGroupKey: "conflict-b" },
 ], [], new Set());
 assert.strictEqual(conflictingSourceIdResult.orders.length, 0, "same EasyOrders source ID with conflicting phone candidates must not be uploaded");
 assert.strictEqual(conflictingSourceIdResult.skippedOrders[0].reason, "duplicate_easyorders_uuid_conflicting_phone");
+const ambiguousPhonePreferenceResult = mergeAndDeduplicate([
+  {
+    source: "real",
+    normPhone: "512345678",
+    rawPhone: "5012345678",
+    sku: "SKU-AMB",
+    orderId: "EO-AMB",
+    phoneAmbiguous: true,
+    phoneAmbiguityGroupId: "real-amb-1",
+    phoneCandidateIndex: 1,
+    phoneCandidateCount: 2,
+    phoneCorrection: "misplaced_domestic_zero",
+    uploadGroupKey: "amb-preferred",
+  },
+  {
+    source: "real",
+    normPhone: "501234567",
+    rawPhone: "5012345678",
+    sku: "SKU-AMB",
+    orderId: "EO-AMB",
+    phoneAmbiguous: true,
+    phoneAmbiguityGroupId: "real-amb-1",
+    phoneCandidateIndex: 2,
+    phoneCandidateCount: 2,
+    phoneCorrection: "trailing_extra_digits",
+    uploadGroupKey: "amb-trimmed",
+  },
+], [], new Set());
+assert.strictEqual(ambiguousPhonePreferenceResult.orders.length, 1, "ambiguous misplaced-zero phones should process only the preferred correction");
+assert.strictEqual(ambiguousPhonePreferenceResult.orders[0].normPhone, "512345678");
+assert.strictEqual(ambiguousPhonePreferenceResult.skippedOrders[0].normalizedPhone, "501234567");
+assert.strictEqual(ambiguousPhonePreferenceResult.skippedOrders[0].reason, "ambiguous_phone_alternative_unselected");
 const groupedDedupeResult = mergeAndDeduplicate([
   { source: "real", normPhone: "500000004", sku: "SKU-A", productName: "Product A", qty: 1, unitPrice: 100, subtotal: 100, uploadGroupKey: "multi-1" },
   { source: "real", normPhone: "500000004", sku: "SKU-B", productName: "Product B", qty: 2, unitPrice: 75, subtotal: 150, uploadGroupKey: "multi-1" },

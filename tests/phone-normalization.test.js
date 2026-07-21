@@ -44,4 +44,15 @@ for (const item of cases) {
   );
 }
 
+assert.strictEqual(
+  normalizePhone("8560212438", "sa"),
+  "560212438",
+  "sa overlong phone with a leading stray digit should keep the valid Saudi mobile window"
+);
+assert.deepStrictEqual(
+  normalizePhoneCandidatesWithMeta("8560212438", "sa"),
+  [{ digits: "560212438", uncertain: false, correction: "valid_sliding_window" }],
+  "sa candidate expansion should remove the leading stray digit before upload/recovery"
+);
+
 console.log("Phone normalization trailing dial-code cases verified");

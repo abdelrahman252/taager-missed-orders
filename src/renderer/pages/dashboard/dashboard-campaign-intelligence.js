@@ -359,7 +359,7 @@
   }
 
   function rowCurrency(row, state) {
-    return String(row && (row.currency || row.account_currency) || (state && state.currency) || "SAR").toUpperCase();
+    return String(row && (row.rawCurrency || row.nativeRawCurrency || row.sourceCurrency || row.accountCurrency || row.account_currency || row.currency) || (state && state.currency) || "SAR").toUpperCase();
   }
 
   function campaignPerformance(row, spend, fallbackCurrency) {

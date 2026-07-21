@@ -183,7 +183,7 @@ window.renderSection6HydratedEntry = function (mountEl, data, ctx) {
       sources.forEach(function (source) {
         const platform = normalizePlatformKey(source && source.platform || summary.platform || 'unknown');
         const row = ensure(platform);
-        const sourceCurrency = String(source && (source.currency || source.targetCurrency) || summary.currency || activeCurrency).toUpperCase();
+        const sourceCurrency = String(source && (source.rawCurrency || source.nativeRawCurrency || source.sourceCurrency || source.accountCurrency || source.account_currency || source.currency || source.targetCurrency) || summary.currency || activeCurrency).toUpperCase();
         const rawSpend = source && source.rawSpend != null
           ? convert(Number(source.rawSpend || 0), sourceCurrency, activeCurrency)
           : convert(Number(source && (source.convertedSpend || source.adSpend) || 0), String(source && source.targetCurrency || summary.currency || activeCurrency).toUpperCase(), activeCurrency);
@@ -1031,7 +1031,7 @@ window.renderSection6HydratedEntry = function (mountEl, data, ctx) {
         : [];
       if (sourceBreakdown.length > 0) {
         totalSpend = sourceBreakdown.reduce(function (total, source) {
-          const sourceCurrency = String(source && (source.currency || source.targetCurrency) || marketingState.summary.currency || activeCurrency).toUpperCase();
+          const sourceCurrency = String(source && (source.rawCurrency || source.nativeRawCurrency || source.sourceCurrency || source.accountCurrency || source.account_currency || source.currency || source.targetCurrency) || marketingState.summary.currency || activeCurrency).toUpperCase();
           const sourceSpend = source && source.rawSpend != null
             ? convert(Number(source.rawSpend || 0), sourceCurrency, activeCurrency)
             : convert(Number(source && (source.convertedSpend || source.adSpend) || 0), String(source && source.targetCurrency || marketingState.summary.currency || activeCurrency).toUpperCase(), activeCurrency);

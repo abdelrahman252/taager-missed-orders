@@ -1,0 +1,56 @@
+{
+  "runId": "selector-smoke-2026-07-19T04-27-00-163Z",
+  "artifactDir": "F:\\code\\khod-bot2\\khod-order-bot\\taager clone from khod whaat\\affiliate-recovery-live-artifacts\\selector-smoke-2026-07-19T04-27-00-163Z",
+  "accountNeedle": "abdo",
+  "dateFrom": "2026-07-16",
+  "dateTo": "2026-07-19",
+  "checks": [],
+  "failures": [
+    {
+      "name": "fatal",
+      "message": "Account not found for live selector smoke: abdo. Available: test taager 1:abdelrhmantaager@gmail.com | test taager 2:eng.elrawy2@gmail.com | test taager 3:eng.elrawy2@gmail.com | test taager 4:abdelrhmantaager@gmail.com | test taager 5:tst | test taager 6:1 | test taager 7:1 | test taager 8:ف | test taager 9:ahmed.elrawy@taager.com",
+      "stack": "Error: Account not found for live selector smoke: abdo. Available: test taager 1:abdelrhmantaager@gmail.com | test taager 2:eng.elrawy2@gmail.com | test taager 3:eng.elrawy2@gmail.com | test taager 4:abdelrhmantaager@gmail.com | test taager 5:tst | test taager 6:1 | test taager 7:1 | test taager 8:ف | test taager 9:ahmed.elrawy@taager.com\n    at launchElectronAndEnableFeature (F:\\code\\khod-bot2\\khod-order-bot\\taager clone from khod whaat\\scripts\\live-affiliate-recovery-selector-smoke.js:108:11)\n    at async runLiveSmoke (F:\\code\\khod-bot2\\khod-order-bot\\taager clone from khod whaat\\scripts\\live-affiliate-recovery-selector-smoke.js:280:33)"
+    }
+  ],
+  "screenshots": [],
+  "sheetDryRun": {
+    "dateRange": "2026-07-16..2026-07-19",
+    "files": {
+      "taager": "H:\\marketing\\tageer\\new\\خرباانه\\19-7\\taager orders.xlsx",
+      "real": "H:\\marketing\\tageer\\new\\خرباانه\\19-7\\1784432677716577224-real easyorders-2026-07-19.xlsx",
+      "missed": "H:\\marketing\\tageer\\new\\خرباانه\\19-7\\1784432696876836387-missed-orders-2026-07-13-2026-07-19.xlsx"
+    },
+    "parsed": {
+      "taagerOrderCount": 114,
+      "taagerPhoneSkuKeys": 110,
+      "realOrders": 47,
+      "missedRows": 7,
+      "missedResolved": 6,
+      "phoneSkipped": 7,
+      "catalogSkipped": 1
+    },
+    "dedupe": {
+      "taagerOrderCount": 114,
+      "realValid": 47,
+      "missedValid": 6,
+      "realNew": 5,
+      "realDupe": 0,
+      "realInTaager": 37,
+      "realMissingSku": 0,
+      "realPartialInTaager": 2,
+      "missedNew": 1,
+      "missedDupe": 0,
+      "missedInTaager": 5,
+      "missedMissingSku": 0,
+      "missedPartialInTaager": 0
+    },
+    "recoveryDryRun": {
+      "preparedOrders": 6,
+      "preparedReal": 5,
+      "preparedMissed": 1,
+      "preparedPhoneSkuKeys": 6,
+      "manualReviewQuantityRows": 2,
+      "manualReviewGuard": "2 prepared line(s) have quantity > 10 and must not be saved/resend/converted automatically."
+    }
+  }
+}

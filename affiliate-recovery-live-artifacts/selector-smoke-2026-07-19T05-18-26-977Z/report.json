@@ -1,0 +1,216 @@
+{
+  "runId": "selector-smoke-2026-07-19T05-18-26-977Z",
+  "artifactDir": "F:\\code\\khod-bot2\\khod-order-bot\\taager clone from khod whaat\\affiliate-recovery-live-artifacts\\selector-smoke-2026-07-19T05-18-26-977Z",
+  "accountNeedle": "abdelrhmantaager@gmail.com",
+  "dateFrom": "2026-07-16",
+  "dateTo": "2026-07-19",
+  "checks": [
+    {
+      "name": "app feature toggle enabled",
+      "status": "ok",
+      "before": "true",
+      "after": "true",
+      "setting": true,
+      "account": "test taager 1",
+      "easyEmail": "abdelrhmantaager@gmail.com"
+    },
+    {
+      "name": "date filters applied",
+      "status": "ok",
+      "start": "2026-07-16",
+      "end": "2026-07-19"
+    },
+    {
+      "name": "rows per page set to 100",
+      "status": "ok",
+      "before": "100",
+      "after": "100"
+    },
+    {
+      "name": "orders table selector",
+      "status": "ok"
+    },
+    {
+      "name": "orders table row scrape",
+      "status": "ok",
+      "rows": 49,
+      "sample": [
+        {
+          "index": 0,
+          "status": "New",
+          "shortId": "3482",
+          "name": "3482",
+          "phone": "ام فهد 0508055748",
+          "createdAt": "١٩‏/٧‏/٢٠٢٦، ٧:٥٦:٣٠ ص",
+          "text": "New 3482 ام فهد 0508055748 الدمام المزروعيه 298 Under Review sa ١٩‏/٧‏/٢٠٢٦، ٧:٥٦:٣٠ ص"
+        },
+        {
+          "index": 1,
+          "status": "New",
+          "shortId": "3481",
+          "name": "3481",
+          "phone": "علي سالم ابو رائد 0541248880",
+          "createdAt": "١٩‏/٧‏/٢٠٢٦، ٦:٥٨:٥٠ ص",
+          "text": "New 3481 علي سالم ابو رائد 0541248880 جده الصفا شارع الاربعين حي القنابير بجوار العربيه العود والكبه الدمشقيه في ال 17 188 Under Review sa ١٩‏/٧‏/٢٠٢٦، ٦:٥٨:٥٠ ص"
+        },
+        {
+          "index": 2,
+          "status": "New",
+          "shortId": "3480",
+          "name": "3480",
+          "phone": "محمد ممدوح الجميلي 0538646440",
+          "createdAt": "١٩‏/٧‏/٢٠٢٦، ٦:٤١:٠٥ ص",
+          "text": "New 3480 محمد ممدوح الجميلي 0538646440 حفرالباطن حي ابو موسى الاشعري بقرب جامع المغيره بن شعبه شارع عمر بن الخطاب 188 Under Review sa ١٩‏/٧‏/٢٠٢٦، ٦:٤١:٠٥ ص"
+        }
+      ]
+    },
+    {
+      "name": "real detail Edit Order button",
+      "status": "ok"
+    },
+    {
+      "name": "real detail Resend button",
+      "status": "ok"
+    },
+    {
+      "name": "real edit modal selectors",
+      "status": "ok",
+      "expectedItems": [
+        "SA0305012099 qty=1 unit=270 subtotal=270"
+      ],
+      "modalItemCount": 1,
+      "unmatchedReferences": [],
+      "fields": {
+        "fullName": "إبراهيم محمد ",
+        "phone": "057414994",
+        "government": "المنطقة الشرقية",
+        "address": "جده الفيصليه جوار مسجد عمر بن الخطاب "
+      }
+    },
+    {
+      "name": "missed add filter selector",
+      "status": "ok"
+    },
+    {
+      "name": "date filters applied",
+      "status": "ok",
+      "start": "2026-07-16",
+      "end": "2026-07-19"
+    },
+    {
+      "name": "rows per page set to 100",
+      "status": "ok",
+      "before": "100",
+      "after": "100"
+    },
+    {
+      "name": "missed table selector",
+      "status": "ok"
+    },
+    {
+      "name": "missed prepared row match",
+      "status": "ok",
+      "target": {
+        "name": "خالد",
+        "phone": "538489920",
+        "items": [
+          "SA050301XFJ499 qty=1 unit=175 subtotal=175"
+        ]
+      },
+      "rows": 24,
+      "match": {
+        "index": 6,
+        "status": "Under Review",
+        "shortId": "",
+        "name": "خالد",
+        "phone": "٠٥٣٨٤٨٩٩٢٠",
+        "createdAt": "١٨‏/٧‏/٢٠٢٦، ٣:٥٥:١٠ م",
+        "text": "Under Review خالد ٠٥٣٨٤٨٩٩٢٠ ١٨‏/٧‏/٢٠٢٦، ٣:٥٥:١٠ م"
+      }
+    },
+    {
+      "name": "missed detail Edit button",
+      "status": "ok"
+    },
+    {
+      "name": "missed detail Convert button",
+      "status": "warning",
+      "visible": false,
+      "selector": "locator"
+    },
+    {
+      "name": "missed detail convert fallback",
+      "status": "ok",
+      "behavior": "Actual recovery will report this prepared missed row as manual review after modal verification because Convert to Order is not available."
+    },
+    {
+      "name": "missed edit modal selectors",
+      "status": "ok",
+      "expectedItems": [
+        "SA050301XFJ499 qty=1 unit=175 subtotal=175"
+      ],
+      "modalItemCount": 1,
+      "unmatchedReferences": [],
+      "fields": {
+        "fullName": "خالد ",
+        "phone": "٠٥٣٨٤٨٩٩٢٠",
+        "government": "المنطقة الشرقية",
+        "address": ""
+      }
+    }
+  ],
+  "failures": [],
+  "screenshots": [
+    "F:\\code\\khod-bot2\\khod-order-bot\\taager clone from khod whaat\\affiliate-recovery-live-artifacts\\selector-smoke-2026-07-19T05-18-26-977Z\\01-app-affiliate-recovery-toggle.png",
+    "F:\\code\\khod-bot2\\khod-order-bot\\taager clone from khod whaat\\affiliate-recovery-live-artifacts\\selector-smoke-2026-07-19T05-18-26-977Z\\02-orders-list-filtered.png",
+    "F:\\code\\khod-bot2\\khod-order-bot\\taager clone from khod whaat\\affiliate-recovery-live-artifacts\\selector-smoke-2026-07-19T05-18-26-977Z\\03-real-detail.png",
+    "F:\\code\\khod-bot2\\khod-order-bot\\taager clone from khod whaat\\affiliate-recovery-live-artifacts\\selector-smoke-2026-07-19T05-18-26-977Z\\04-real-edit-modal.png",
+    "F:\\code\\khod-bot2\\khod-order-bot\\taager clone from khod whaat\\affiliate-recovery-live-artifacts\\selector-smoke-2026-07-19T05-18-26-977Z\\05-missed-list-filtered.png",
+    "F:\\code\\khod-bot2\\khod-order-bot\\taager clone from khod whaat\\affiliate-recovery-live-artifacts\\selector-smoke-2026-07-19T05-18-26-977Z\\06-missed-detail.png",
+    "F:\\code\\khod-bot2\\khod-order-bot\\taager clone from khod whaat\\affiliate-recovery-live-artifacts\\selector-smoke-2026-07-19T05-18-26-977Z\\07-missed-edit-modal.png"
+  ],
+  "sheetDryRun": {
+    "dateRange": "2026-07-16..2026-07-19",
+    "files": {
+      "taager": "H:\\marketing\\tageer\\new\\خرباانه\\19-7\\taager orders.xlsx",
+      "real": "H:\\marketing\\tageer\\new\\خرباانه\\19-7\\1784432677716577224-real easyorders-2026-07-19.xlsx",
+      "missed": "H:\\marketing\\tageer\\new\\خرباانه\\19-7\\1784432696876836387-missed-orders-2026-07-13-2026-07-19.xlsx"
+    },
+    "parsed": {
+      "taagerOrderCount": 114,
+      "taagerPhoneSkuKeys": 110,
+      "taagerBlockingPhoneSkuKeys": 98,
+      "taagerDeliveredOnlyPhoneSkuKeys": 12,
+      "realOrders": 47,
+      "missedRows": 7,
+      "missedResolved": 6,
+      "phoneSkipped": 7,
+      "catalogSkipped": 1
+    },
+    "dedupe": {
+      "taagerOrderCount": 114,
+      "realValid": 47,
+      "missedValid": 6,
+      "realNew": 6,
+      "realDupe": 0,
+      "realInTaager": 36,
+      "realMissingSku": 0,
+      "realPartialInTaager": 2,
+      "missedNew": 1,
+      "missedDupe": 0,
+      "missedInTaager": 5,
+      "missedMissingSku": 0,
+      "missedPartialInTaager": 0
+    },
+    "recoveryDryRun": {
+      "preparedOrders": 7,
+      "preparedReal": 6,
+      "preparedMissed": 1,
+      "preparedPhoneSkuKeys": 7,
+      "manualReviewQuantityRows": 2,
+      "manualReviewGuard": "2 prepared line(s) have quantity > 10 and must not be saved/resend/converted automatically."
+    }
+  },
+  "profilePath": "C:\\Users\\abdel\\AppData\\Roaming\\taager-orders\\bot-profile-account_1781183026872",
+  "chromePath": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+}

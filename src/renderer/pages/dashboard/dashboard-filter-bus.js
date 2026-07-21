@@ -458,8 +458,10 @@
     var nativeCurrency = cleanMarketingCurrency(
       source.nativeRawCurrency ||
       source.rawCurrency ||
-      source.currency ||
+      source.sourceCurrency ||
+      source.accountCurrency ||
       source.account_currency ||
+      source.currency ||
       options.sourceCurrency ||
       options.summaryCurrency ||
       target,
@@ -500,9 +502,9 @@
       sourceKind = 'converted';
     } else if (hasSpend) {
       sourceAmount = marketingNumber(source.spend);
-      sourceCurrency = source.currency || source.rawCurrency ? nativeCurrency : convertedCurrency;
+      sourceCurrency = source.rawCurrency || source.nativeRawCurrency || source.sourceCurrency || source.accountCurrency || source.account_currency || source.currency ? nativeCurrency : convertedCurrency;
       amount = convertMarketingSpendAmount(sourceAmount, sourceCurrency, target, options.egpRate);
-      sourceKind = source.currency || source.rawCurrency ? 'raw' : 'converted';
+      sourceKind = source.rawCurrency || source.nativeRawCurrency || source.sourceCurrency || source.accountCurrency || source.account_currency || source.currency ? 'raw' : 'converted';
     } else if (hasAdSpend || hasCost) {
       sourceAmount = marketingNumber(hasAdSpend ? source.adSpend : source.cost);
       sourceCurrency = convertedCurrency;
@@ -901,6 +903,7 @@
     return {
       accountId: marketingAccountId(accountId),
       platform: platform,
+      provider: value.provider || '',
       platformLabel: platformLabel(platform),
       status: value.status || 'disconnected',
       sourceAccountId: value.sourceAccountId || '',
@@ -1626,7 +1629,11 @@
         }
         return _marketingQueuedForceLoads[loadKey];
       }
-      if (!window.api || typeof window.api.getMarketingStatus !== 'function') {
+      var useSaudiIPickNative = platform === 'snapchat' &&
+        current.provider === 'saudiipick' &&
+        window.api &&
+        typeof window.api.getSaudiIPickMarketingStatus === 'function';
+      if (!useSaudiIPickNative && (!window.api || typeof window.api.getMarketingStatus !== 'function')) {
         return Promise.resolve(current);
       }
       var requestMode = options.force ? 'force' : (options.revalidate ? 'revalidate' : 'cached');
@@ -1637,7 +1644,10 @@
       if (!options.background) this.setLoading(true, id, platform);
       var self = this;
       console.info('[Marketing][Store] status request', { accountId: id, platform: platform, mode: requestMode });
-      _marketingLoadRequests[loadKey] = window.api.getMarketingStatus(id, platform, { mode: requestMode }).then(function (response) {
+      var statusRequest = useSaudiIPickNative
+        ? window.api.getSaudiIPickMarketingStatus(id, platform, { mode: requestMode })
+        : window.api.getMarketingStatus(id, platform, { mode: requestMode });
+      _marketingLoadRequests[loadKey] = statusRequest.then(function (response) {
         console.info('[Marketing][Store] status response', marketingLogSummary(response));
         if (Number(_marketingLoadSeq[loadKey] || 0) !== requestSeq) return self.get(id, platform);
         _marketingLoadedAt[loadKey] = Date.now();
@@ -1695,7 +1705,12 @@
         range = Object.assign({}, range || {}, { sourceAccounts: sourceAccounts });
       }
       range = Object.assign({ mode: 'incremental' }, range || {});
-      if (!window.api || typeof window.api.syncMarketingData !== 'function') {
+      var currentForSync = this.get(id, platform);
+      var useSaudiIPickNativeSync = platform === 'snapchat' &&
+        currentForSync.provider === 'saudiipick' &&
+        window.api &&
+        typeof window.api.syncSaudiIPickMarketingData === 'function';
+      if (!useSaudiIPickNativeSync && (!window.api || typeof window.api.syncMarketingData !== 'function')) {
         return Promise.resolve(this.set({ ok: false, error: 'SYNC_UNAVAILABLE', platform: platform }, id, platform));
       }
       this.setLoading(true, id, platform);
@@ -1732,7 +1747,10 @@
           return self.set({ ok: false, error: error.message || String(error), platform: platform }, id, platform);
         });
       }
-      return window.api.syncMarketingData(id, platform, range || {}).then(function (response) {
+      var syncRequest = useSaudiIPickNativeSync
+        ? window.api.syncSaudiIPickMarketingData(id, platform, range || {})
+        : window.api.syncMarketingData(id, platform, range || {});
+      return syncRequest.then(function (response) {
         console.info('[Marketing][Store] sync response', marketingLogSummary(response));
         if (_marketingSyncRequests[requestKey] !== requestSeq) return self.get(id, platform);
         var next = self.set(response && response.ok ? response : Object.assign({}, response || {}, {

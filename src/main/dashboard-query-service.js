@@ -640,7 +640,7 @@ function createDashboardQueryService(options) {
         const status = marketing[platform] || {};
         const rows = status.summary && status.summary.campaignBreakdown;
         (Array.isArray(rows) ? rows : []).forEach((row, index) => {
-          const sourceCurrency = cleanCurrency(row.rawCurrency || row.currency || row.account_currency || status.summary && status.summary.currency || status.currency || "SAR", "SAR");
+          const sourceCurrency = cleanCurrency(row.rawCurrency || row.nativeRawCurrency || row.sourceCurrency || row.accountCurrency || row.account_currency || row.currency || status.summary && status.summary.currency || status.currency || "SAR", "SAR");
           const hasNativeSpend = (row.rawSpend != null && row.rawSpend !== "") || (row.spend != null && row.spend !== "");
           const sourceSpend = hasNativeSpend ? number(row.rawSpend ?? row.spend) : number(row.convertedSpend);
           const rawCurrency = hasNativeSpend ? sourceCurrency : reportingCurrency;
@@ -1556,7 +1556,7 @@ function createDashboardQueryService(options) {
           campaignCount: rows.length,
           spend: rows.reduce((sum, row) => sum + number(row.spend ?? row.convertedSpend ?? row.rawSpend), 0),
           rawSpendByCurrency: rows.reduce((out, row) => {
-            const currency = cleanCurrency(row.rawCurrency || row.currency || "SAR", "SAR");
+            const currency = cleanCurrency(row.rawCurrency || row.nativeRawCurrency || row.sourceCurrency || row.accountCurrency || row.account_currency || row.currency || "SAR", "SAR");
             out[currency] = (out[currency] || 0) + number(row.rawSpend ?? row.spend);
             return out;
           }, {}),

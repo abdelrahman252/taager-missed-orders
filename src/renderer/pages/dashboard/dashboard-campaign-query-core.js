@@ -168,7 +168,7 @@ function campaignSpendAmounts(row, reportingCurrency, egpRate, ratesOverride) {
     : 0;
   const convertedSpendValue = convertedAvailable ? number(row.convertedSpend) : 0;
   if (rawFieldsAvailable && (rawSpendValue > 0 || convertedSpendValue <= 0)) {
-    const rawCurrency = currency(row.rawCurrency || row.nativeRawCurrency || row.currency || row.account_currency || reportingCurrency || "SAR");
+    const rawCurrency = currency(row.rawCurrency || row.nativeRawCurrency || row.sourceCurrency || row.accountCurrency || row.account_currency || row.currency || reportingCurrency || "SAR");
     const rawSpend = rawSpendValue;
     return {
       hasSpend: rawSpend > 0,

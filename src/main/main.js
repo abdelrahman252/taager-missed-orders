@@ -6298,11 +6298,129 @@ function normalizeNativeSourceAccount(source, fallbackCurrency = "SAR") {
   return {
     id,
     name: String(source && (source.name || source.sourceAccountName || source.adAccountName) || id),
-    currency: String(source && (source.currency || source.rawCurrency) || fallbackCurrency || "SAR").toUpperCase(),
+    currency: String(source && (source.rawCurrency || source.nativeRawCurrency || source.sourceCurrency || source.accountCurrency || source.account_currency || source.currency) || fallbackCurrency || "SAR").toUpperCase(),
     platform: "snapchat",
     provider: "saudiipick",
     organizationName: String(source && source.organizationName || ""),
     canManageCampaigns: !!(source && source.canManageCampaigns),
+  };
+}
+
+function nativeMarketingNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeNativeMarketingSummary(summary, sourceAccounts, dashboardAccountId) {
+  if (!summary || typeof summary !== "object") return summary || null;
+  const selected = (Array.isArray(sourceAccounts) ? sourceAccounts : [])
+    .map((source) => normalizeNativeSourceAccount(source, summary.currency || "SAR"))
+    .filter(Boolean);
+  const byId = new Map(selected.map((source) => [source.id, source]));
+  const fallbackSource = selected[0] || null;
+  const fallbackCurrency = fallbackSource && fallbackSource.currency || String(summary.currency || "SAR").toUpperCase();
+
+  const campaignBreakdown = (Array.isArray(summary.campaignBreakdown) ? summary.campaignBreakdown : []).map((row) => {
+    const sourceId = String(row && (row.sourceAccountId || row.adAccountId || row.accountId) || fallbackSource && fallbackSource.id || "");
+    const source = byId.get(sourceId) || fallbackSource || {};
+    const rawCurrency = String(row && (row.rawCurrency || row.nativeRawCurrency || row.sourceCurrency || row.accountCurrency || row.account_currency || row.currency) || source.currency || fallbackCurrency).toUpperCase();
+    const rawSpend = nativeMarketingNumber(row && (row.rawSpend ?? row.nativeRawSpend ?? row.spend ?? row.adSpend ?? row.cost));
+    return {
+      ...row,
+      provider: "saudiipick",
+      platform: "snapchat",
+      dashboardAccountId: row && row.dashboardAccountId || dashboardAccountId,
+      sourceAccountId: sourceId,
+      sourceAccountName: row && row.sourceAccountName || source.name || sourceId,
+      rawSpend,
+      rawCurrency,
+      currency: rawCurrency,
+      spend: rawSpend,
+      adSpend: rawSpend,
+    };
+  });
+
+  let sourceBreakdown = (Array.isArray(summary.sourceBreakdown) ? summary.sourceBreakdown : []).map((row) => {
+    const sourceId = String(row && (row.sourceAccountId || row.id || row.adAccountId || row.accountId) || fallbackSource && fallbackSource.id || "");
+    const source = byId.get(sourceId) || fallbackSource || {};
+    const rawCurrency = String(row && (row.rawCurrency || row.nativeRawCurrency || row.sourceCurrency || row.accountCurrency || row.account_currency || row.currency) || source.currency || fallbackCurrency).toUpperCase();
+    const rawSpend = nativeMarketingNumber(row && (row.rawSpend ?? row.nativeRawSpend ?? row.spend ?? row.adSpend ?? row.cost));
+    return {
+      ...row,
+      id: sourceId,
+      name: row && row.name || row && row.sourceAccountName || source.name || sourceId,
+      provider: "saudiipick",
+      platform: "snapchat",
+      dashboardAccountId: row && row.dashboardAccountId || dashboardAccountId,
+      sourceAccountId: sourceId,
+      sourceAccountName: row && row.sourceAccountName || source.name || sourceId,
+      rawSpend,
+      rawCurrency,
+      currency: rawCurrency,
+      spend: rawSpend,
+      adSpend: rawSpend,
+    };
+  });
+
+  if (!sourceBreakdown.length && campaignBreakdown.length) {
+    const grouped = new Map();
+    campaignBreakdown.forEach((row) => {
+      const sourceId = String(row.sourceAccountId || fallbackSource && fallbackSource.id || "");
+      if (!sourceId) return;
+      const source = byId.get(sourceId) || fallbackSource || {};
+      const current = grouped.get(sourceId) || {
+        id: sourceId,
+        name: source.name || row.sourceAccountName || sourceId,
+        provider: "saudiipick",
+        platform: "snapchat",
+        dashboardAccountId,
+        sourceAccountId: sourceId,
+        sourceAccountName: source.name || row.sourceAccountName || sourceId,
+        rawSpend: 0,
+        rawCurrency: row.rawCurrency || source.currency || fallbackCurrency,
+        currency: row.rawCurrency || source.currency || fallbackCurrency,
+        spend: 0,
+        adSpend: 0,
+      };
+      current.rawSpend += nativeMarketingNumber(row.rawSpend);
+      current.spend = current.rawSpend;
+      current.adSpend = current.rawSpend;
+      grouped.set(sourceId, current);
+    });
+    sourceBreakdown = Array.from(grouped.values()).map((row) => ({
+      ...row,
+      rawSpend: Number(row.rawSpend.toFixed(2)),
+      spend: Number(row.spend.toFixed(2)),
+      adSpend: Number(row.adSpend.toFixed(2)),
+    }));
+  }
+
+  if (!sourceBreakdown.length && selected.length === 1 && nativeMarketingNumber(summary.adSpend) > 0) {
+    const source = selected[0];
+    sourceBreakdown = [{
+      id: source.id,
+      name: source.name,
+      provider: "saudiipick",
+      platform: "snapchat",
+      dashboardAccountId,
+      sourceAccountId: source.id,
+      sourceAccountName: source.name,
+      rawSpend: nativeMarketingNumber(summary.adSpend),
+      rawCurrency: source.currency || fallbackCurrency,
+      currency: source.currency || fallbackCurrency,
+      spend: nativeMarketingNumber(summary.adSpend),
+      adSpend: nativeMarketingNumber(summary.adSpend),
+    }];
+  }
+
+  return {
+    ...summary,
+    provider: "saudiipick",
+    platform: "snapchat",
+    sourceBreakdown,
+    campaignBreakdown,
+    rowCount: Number(summary.rowCount || campaignBreakdown.length || sourceBreakdown.length || 0),
+    campaignCount: Number(summary.campaignCount || campaignBreakdown.length || 0),
   };
 }
 
@@ -6367,6 +6485,21 @@ async function callSaudiIPickMarketing(action, accountId, platform = "snapchat",
     Authorization: `Bearer ${token}`,
   });
 
+  log.info("[SaudiIPick][Marketing] response", {
+    action,
+    platform,
+    dashboardAccountId,
+    ok: !!(result && result.ok),
+    status: result && result.status || "",
+    error: result && result.error || "",
+    availableAccountCount: Array.isArray(result && result.availableAccounts) ? result.availableAccounts.length : 0,
+    mappedAccountCount: Array.isArray(result && result.mappedAccounts) ? result.mappedAccounts.length : 0,
+    selectedAccountCount: Array.isArray(result && result.selectedSourceAccounts) ? result.selectedSourceAccounts.length : 0,
+    summaryAdSpend: result && result.summary ? result.summary.adSpend : null,
+    summaryCurrency: result && result.summary ? result.summary.currency : "",
+    partial: !!(result && result.partial),
+  });
+
   const merged = {
     ...result,
     provider: "saudiipick",
@@ -6378,23 +6511,44 @@ async function callSaudiIPickMarketing(action, accountId, platform = "snapchat",
     const chosen = (Array.isArray(range && range.sourceAccounts) ? range.sourceAccounts : [])
       .map((source) => normalizeNativeSourceAccount(source, merged.summary && merged.summary.currency || "SAR"))
       .filter(Boolean);
+    if (merged.summary) {
+      merged.summary = normalizeNativeMarketingSummary(merged.summary, chosen, dashboardAccountId);
+    }
     if (chosen.length) {
+      merged.status = "connected";
       merged.mappedAccounts = chosen;
       merged.selectedSourceAccounts = chosen;
+      merged.availableAccounts = Array.isArray(merged.availableAccounts) && merged.availableAccounts.length
+        ? merged.availableAccounts
+        : previous && Array.isArray(previous.availableAccounts) && previous.availableAccounts.length
+        ? previous.availableAccounts
+        : chosen;
+      merged.linkedAccounts = Array.isArray(merged.linkedAccounts) && merged.linkedAccounts.length
+        ? merged.linkedAccounts
+        : previous && Array.isArray(previous.linkedAccounts) && previous.linkedAccounts.length
+        ? previous.linkedAccounts
+        : merged.availableAccounts;
       merged.mappings = mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAccountKey, chosen);
     }
     saveCachedMarketingStatus(dashboardAccountId, platform, merged);
   }
 
   if (action === "status" && merged.ok) {
-    saveCachedMarketingStatus(dashboardAccountId, platform, {
+    const stableStatus = {
       ...merged,
       summary: previous && previous.summary || null,
       lastSyncAt: previous && previous.lastSyncAt || null,
       mappedAccounts: previous && previous.mappedAccounts && previous.mappedAccounts.length ? previous.mappedAccounts : merged.mappedAccounts,
       selectedSourceAccounts: previous && previous.selectedSourceAccounts && previous.selectedSourceAccounts.length ? previous.selectedSourceAccounts : merged.selectedSourceAccounts,
       mappings: previous && previous.mappings || merged.mappings || {},
-    });
+    };
+    if ((Array.isArray(stableStatus.selectedSourceAccounts) && stableStatus.selectedSourceAccounts.length) ||
+      (Array.isArray(stableStatus.mappedAccounts) && stableStatus.mappedAccounts.length) ||
+      stableStatus.summary) {
+      stableStatus.status = "connected";
+    }
+    saveCachedMarketingStatus(dashboardAccountId, platform, stableStatus);
+    return stableStatus;
   }
 
   return merged;
@@ -6646,9 +6800,11 @@ ipcMain.handle("get-saudiipick-marketing-token-status", async () => {
 ipcMain.handle("save-saudiipick-marketing-token", async (_, token) => {
   const clean = String(token || "").trim();
   if (!clean || !clean.startsWith("sipdt_")) {
+    log.warn("[SaudiIPick][Marketing] rejected invalid desktop token", { hasToken: !!clean, tokenPreview: maskToken(clean) });
     return { ok: false, error: "INVALID_SAUDIIPICK_TOKEN" };
   }
   dashboardStore.set("saudiIPickMarketing.desktopToken", clean);
+  log.info("[SaudiIPick][Marketing] desktop token saved", { tokenPreview: maskToken(clean) });
   return { ok: true, configured: true, tokenPreview: maskToken(clean) };
 });
 

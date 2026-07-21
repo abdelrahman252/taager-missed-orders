@@ -123,6 +123,22 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
   function displayDecimal(value, decimals) {
     return p9PctValue(value, decimals == null ? 2 : decimals);
   }
+  function displayMoneyInput(value, withCommas) {
+    var n = Number(value);
+    if (!Number.isFinite(n)) n = 0;
+    var valueText = n.toFixed(2)
+      .replace(/(\.\d*?[1-9])0+$/, '$1')
+      .replace(/\.0+$/, '');
+    if (!withCommas) return valueText;
+    var parts = valueText.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return parts.join('.');
+  }
+  function spendInputWidth(value) {
+    var text = String(value == null ? '' : value);
+    var chars = Math.max(1, text.length);
+    return Math.max(92, Math.min(190, (chars * 10) + 34));
+  }
   function aggregateProductGroup(group, members) {
     var primaryKey = skuKey(group.primarySku);
     var primary = members.find(function (product) { return skuKey(product && product.sku) === primaryKey; }) || members[0] || {};
@@ -502,10 +518,37 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
   }
 
   function campaignSpendToSar(row) {
-    var amount = Number(row && row.rawSpend || 0);
-    var currency = String(row && row.currency || 'SAR').toUpperCase();
+    row = row || {};
+    var targetCurrency = window.dashboardActiveCurrency || 'SAR';
+    if (window.DashboardMarketingSpend && typeof window.DashboardMarketingSpend.sourceSpend === 'function') {
+      var spendInfo = window.DashboardMarketingSpend.sourceSpend(row, targetCurrency, {
+        egpRate: forecastMarketingSummary && forecastMarketingSummary.egpRate || egpRate,
+        summaryCurrency: forecastMarketingSummary && forecastMarketingSummary.currency || targetCurrency,
+        sourceCurrency: row.rawCurrency || row.nativeRawCurrency || row.sourceCurrency || row.accountCurrency || row.account_currency || row.currency || targetCurrency
+      });
+      return Number(spendInfo && spendInfo.spend || 0);
+    }
+    var hasRawSpend = row.rawSpend != null && row.rawSpend !== '';
+    var hasNativeRawSpend = !hasRawSpend && row.nativeRawSpend != null && row.nativeRawSpend !== '';
+    var hasConvertedSpend = !hasRawSpend && !hasNativeRawSpend && row.convertedSpend != null && row.convertedSpend !== '';
+    var amount = Number(
+      hasRawSpend ? row.rawSpend :
+      hasNativeRawSpend ? row.nativeRawSpend :
+      hasConvertedSpend ? row.convertedSpend :
+      row.spend != null && row.spend !== '' ? row.spend :
+      row.adSpend != null && row.adSpend !== '' ? row.adSpend :
+      row.cost != null && row.cost !== '' ? row.cost :
+      0
+    );
+    var currency = String(
+      hasRawSpend ? (row.rawCurrency || row.nativeRawCurrency || row.sourceCurrency || row.accountCurrency || row.account_currency) :
+      hasNativeRawSpend ? (row.nativeRawCurrency || row.rawCurrency || row.sourceCurrency || row.accountCurrency || row.account_currency) :
+      hasConvertedSpend ? (row.targetCurrency || row.reportingCurrency || row.currency) :
+      (row.rawCurrency || row.nativeRawCurrency || row.sourceCurrency || row.accountCurrency || row.account_currency || row.currency || forecastMarketingSummary && forecastMarketingSummary.currency) ||
+      'SAR'
+    ).toUpperCase();
     if (window.TaagerCurrency && typeof window.TaagerCurrency.convert === 'function') {
-      return window.TaagerCurrency.convert(amount, currency, window.dashboardActiveCurrency || 'SAR');
+      return window.TaagerCurrency.convert(amount, currency, targetCurrency);
     }
     if (currency === 'USD') return amount * 3.75;
     if (currency === 'EGP') return (amount / egpRate) * 3.75;
@@ -1021,7 +1064,7 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
       var trStyle      = 'cursor:pointer;transition:background 0.2s;border-bottom:1px solid rgba(255,255,255,0.04);background:' + (isSel ? 'rgba(59,130,246,0.1)' : 'transparent') + ';';
       var displaySpend = s.realAdSpend === 0
         ? (s.platformSpendFiltered ? '0' : '')
-        : Math.round(toDisplay(s.realAdSpend));
+        : displayMoneyInput(toDisplay(s.realAdSpend), true);
       var spendLocked = isSpendLocked(s)
         ? ' disabled title="' + p9Txt('Filtered from marketing campaign spend', 'تمت تصفية الإنفاق من حملات التسويق') + '"'
         : '';
@@ -1042,7 +1085,7 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
         '<td class="s9-number-cell">' + valueStack(p9Num(s.realDelivered), 'delivered', 's9-table-value-stack') + '</td>' +
         '<td class="s9-number-cell">' + valueStack(formatPct(s.realNdr), 'dr', 's9-table-value-stack') + '</td>' +
         '<td class="s9-input-cell">' +
-          '<input type="text" inputmode="numeric" class="s9-spend-input" data-idx="' + absoluteIdx + '" value="' + displaySpend + '" placeholder="0" ' +
+          '<input type="text" inputmode="decimal" class="s9-spend-input" data-idx="' + absoluteIdx + '" value="' + displaySpend + '" placeholder="0" style="width:' + spendInputWidth(displaySpend) + 'px" ' +
             spendLocked + '>' +
         '</td>' +
         '<td class="s9-profit-cell ' + pClass + '" style="color:' + netProfitColor + ' !important;" dir="ltr">' +
@@ -1310,7 +1353,7 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
           '<span style="font-size:var(--type-caption);color:rgba(255,255,255,0.35);" dir="ltr">' + p9Txt('Actual: ', 'الفعلي: ') + formatMoney(s.realAdSpend, true) + '</span>' +
         '</div>' +
         '<div class="sfe-input-wrap2">' +
-          '<input type="number" class="s9-sim-spend-input sfe-input2" min="0" step="1" value="' + Math.round(toDisplay(s.adSpend)) + '" placeholder="0" style="direction:ltr;">' +
+          '<input type="number" class="s9-sim-spend-input sfe-input2" min="0" step="0.01" value="' + displayMoneyInput(toDisplay(s.adSpend)) + '" placeholder="0" style="direction:ltr;">' +
           '<span class="sfe-input-unit2">' + viewCurrency + '</span>' +
         '</div>' +
         (isSpendLocked(s) ? '<div style="font-size:var(--type-micro);color:#2dd4bf;font-weight:var(--weight-semibold);margin-top:8px">' + p9Txt('Actual spend is synced from marketing platforms for ', 'تمت مزامنة الإنفاق الفعلي من منصات التسويق للفترة ') + productSyncPeriodLabel() + '. ' + p9Txt('Edit the scenario budget above without changing the synced actual spend.', 'هذا الإنفاق مقفل لأنه جاء من منصة تسويق متصلة.') + '</div>' : '') +
@@ -1482,13 +1525,13 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
       '.s9-kpi-netprofit.s9-profit-zero     { color:var(--dash-text-muted) !important; }'
     ) +
     '.s9-sort-btn{appearance:none;background:transparent;border:0;color:inherit;font:inherit;font-weight:var(--weight-bold);padding:0;cursor:pointer;white-space:nowrap}' +
-    '.s9-products-table{width:100%;min-width:620px;border-collapse:collapse;table-layout:fixed;text-align:center}' +
+    '.s9-products-table{width:100%;min-width:820px;border-collapse:collapse;table-layout:fixed;text-align:center}' +
     '.s9-products-table th{padding:8px 5px!important;font-weight:var(--weight-bold)!important;vertical-align:middle;line-height:1.05;text-align:center}' +
     '.s9-products-table .s9-sort-btn{white-space:normal;line-height:1.05;max-width:100%;text-align:center}' +
     '.s9-products-table .s9-sort-btn--stacked{display:inline-flex;flex-direction:column;align-items:center;gap:1px}' +
     '.s9-products-table .s9-sort-subline{font-size:var(--type-micro);opacity:.8}' +
     '.s9-products-table .s9-sort-arrow{font-size:var(--type-micro);color:#60a5fa}' +
-    '.s9-col-product{width:auto}.s9-col-net{width:58px}.s9-col-confirmed{width:74px}.s9-col-delivered{width:78px}.s9-col-ndr{width:64px}.s9-col-budget{width:88px}.s9-col-profit{width:100px}' +
+    '.s9-col-product{width:auto}.s9-col-net{width:58px}.s9-col-confirmed{width:74px}.s9-col-delivered{width:78px}.s9-col-ndr{width:64px}.s9-col-budget{width:165px}.s9-col-profit{width:112px}' +
     '.s9-product-cell{padding:10px 10px!important;font-weight:var(--weight-bold);color:#fff;text-align:start;line-height:1.12;word-break:break-word}' +
     '.s9-number-cell{padding:10px 5px!important;color:rgba(255,255,255,0.66);font-size:var(--type-control);font-weight:var(--weight-semibold);text-align:center;white-space:nowrap}' +
     '.s9-number-cell--confirmed{color:#3b82f6;font-weight:var(--weight-bold)}' +
@@ -1498,7 +1541,7 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
     '.s9-card-value-stack .supposed-badge{font-size:var(--type-micro);color:#fbbf24!important;-webkit-text-fill-color:#fbbf24!important}' +
     '.s9-metric-val,.s9-forecast-kpi-value{min-width:0;max-width:100%;text-align:center}' +
     '.s9-metric-val .expected-value-stack,.s9-forecast-kpi-value .expected-value-stack{display:flex}' +
-    '.s9-input-cell{padding:8px 5px!important;text-align:center}' +
+    '.s9-input-cell{padding:8px 12px!important;text-align:center;min-width:150px;white-space:nowrap}' +
     '.s9-profit-cell{padding:10px 5px!important;font-weight:var(--weight-bold);text-align:center;white-space:nowrap}' +
     '.s9-sort-btn:hover,.s9-sort-btn.is-active{color:#60a5fa}' +
     '.s9-clear-sort{border:1px solid rgba(255,255,255,.14);background:transparent;color:rgba(255,255,255,.65);padding:5px 9px;border-radius:var(--dash-radius-sm);font:inherit;font-size:var(--type-caption);font-weight:var(--weight-semibold);cursor:pointer}' +
@@ -1561,7 +1604,7 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
     '.s9-row:hover{background:rgba(255,255,255,0.03)!important}' +
 
     // Spend input (table column)
-    '.s9-spend-input{width:68px;max-width:100%;box-sizing:border-box;padding:6px 4px;background:rgba(0,0,0,0.3)!important;border:1px solid rgba(255,255,255,0.1);border-radius:var(--dash-radius-sm);color:#fff!important;text-align:center;font-family:inherit;font-size:var(--type-control);font-weight:var(--weight-semibold);color-scheme:dark}' +
+    '.s9-spend-input{min-width:92px;max-width:min(190px,100%);box-sizing:border-box;padding:7px 10px;background:rgba(0,0,0,0.3)!important;border:1px solid rgba(255,255,255,0.1);border-radius:var(--dash-radius-sm);color:#fff!important;text-align:center;font-family:inherit;font-size:var(--type-control);font-weight:var(--weight-semibold);font-variant-numeric:tabular-nums;color-scheme:dark;transition:width .12s ease,border-color .2s,background .2s}' +
     '.s9-spend-input:focus{outline:none;border-color:#3b82f6!important;background:rgba(59,130,246,0.1)!important}' +
 
     // Layout containers
@@ -2005,7 +2048,7 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
     var ndrInput = mountEl.querySelector('.s9-ndr-input');
     if (ndrInput && document.activeElement !== ndrInput) ndrInput.value = p9RatioPctValue(s.ndr);
     var spendInput = mountEl.querySelector('.s9-sim-spend-input');
-    if (spendInput && document.activeElement !== spendInput) spendInput.value = Math.round(toDisplay(s.adSpend));
+    if (spendInput && document.activeElement !== spendInput) spendInput.value = displayMoneyInput(toDisplay(s.adSpend));
 
     // Insights feed
     var feedEl = mountEl.querySelector('.sfe-insights-feed');
@@ -2139,7 +2182,9 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
 
     // Ad Spend inputs (table column)
     eventRoot.querySelectorAll('.s9-spend-input').forEach(function (inp) {
+      inp.style.width = spendInputWidth(inp.value) + 'px';
       inp.addEventListener('input', function (e) {
+        e.target.style.width = spendInputWidth(e.target.value) + 'px';
         var idx = parseInt(e.target.getAttribute('data-idx'));
         if (isSpendLocked(simulations[idx])) return;
         var val = parseFloat(e.target.value.replace(/,/g, '')) || 0;

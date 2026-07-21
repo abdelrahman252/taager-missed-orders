@@ -58,21 +58,21 @@ function isTaagerStatus(status, key) {
 
 function taagerStatusMeta(status) {
   const ar = String(status || "").trim();
-  if (isTaagerStatus(ar, "DELIVERED")) return { ar, en: "Delivered", bucket: "delivered", ndrEligible: true, delivered: true };
-  if (isTaagerStatus(ar, "CANCELED_BY_YOU")) return { ar, en: "Canceled by you", bucket: "canceled_by_you", ndrEligible: false, delivered: false };
-  if (isTaagerStatus(ar, "DELIVERY_FAILED")) return { ar, en: "Delivery failed", bucket: "failed", ndrEligible: true, delivered: false };
-  if (isTaagerStatus(ar, "RETURN_VERIFIED")) return { ar, en: "Return verified", bucket: "return_verified", ndrEligible: true, delivered: false };
-  if (isTaagerStatus(ar, "RECEIVED")) return { ar, en: "Order received", bucket: "received", ndrEligible: true, delivered: false };
-  if (isTaagerStatus(ar, "CUSTOMER_REFUSED_CONFIRMATION")) return { ar, en: "Customer refused confirmation", bucket: "customer_refused_confirmation", ndrEligible: true, delivered: false };
-  if (isTaagerStatus(ar, "SHIPPING")) return { ar, en: "Out for delivery", bucket: "shipping", ndrEligible: true, delivered: false };
-  if (isTaagerStatus(ar, "ON_HOLD")) return { ar, en: "Temporarily suspended", bucket: "on_hold", ndrEligible: true, delivered: false };
-  if (isTaagerStatus(ar, "DELIVERY_SUSPENDED")) return { ar, en: "Delivery suspended", bucket: "delivery_suspended", ndrEligible: true, delivered: false };
-  if (isTaagerStatus(ar, "OUT_OF_STOCK")) return { ar, en: "Out of stock", bucket: "out_of_stock", ndrEligible: true, delivered: false };
-  if (isTaagerStatus(ar, "CONFIRMED")) return { ar, en: "Confirmed", bucket: "confirmed", ndrEligible: true, delivered: false };
-  if (isTaagerStatus(ar, "WAITING")) return { ar, en: "Awaiting shipment", bucket: "waiting", ndrEligible: true, delivered: false };
-  if (isTaagerStatus(ar, "AFTER_SALES_DONE")) return { ar, en: "After-sales service completed", bucket: "after_sales_done", ndrEligible: true, delivered: false };
-  if (isTaagerStatus(ar, "AFTER_SALES_PROGRESS")) return { ar, en: "After-sales service in progress", bucket: "after_sales_progress", ndrEligible: true, delivered: false };
-  return { ar, en: ar || "Unknown", bucket: "other", ndrEligible: true, delivered: false };
+  if (isTaagerStatus(ar, "DELIVERED")) return { ar, en: "Delivered", bucket: "delivered", ndrEligible: true, delivered: true, repeatAllowed: true };
+  if (isTaagerStatus(ar, "CANCELED_BY_YOU")) return { ar, en: "Canceled by you", bucket: "canceled_by_you", ndrEligible: false, delivered: false, repeatAllowed: true };
+  if (isTaagerStatus(ar, "DELIVERY_FAILED")) return { ar, en: "Delivery failed", bucket: "failed", ndrEligible: true, delivered: false, repeatAllowed: true };
+  if (isTaagerStatus(ar, "RETURN_VERIFIED")) return { ar, en: "Return verified", bucket: "return_verified", ndrEligible: true, delivered: false, repeatAllowed: false };
+  if (isTaagerStatus(ar, "RECEIVED")) return { ar, en: "Order received", bucket: "received", ndrEligible: true, delivered: false, repeatAllowed: false };
+  if (isTaagerStatus(ar, "CUSTOMER_REFUSED_CONFIRMATION")) return { ar, en: "Customer refused confirmation", bucket: "customer_refused_confirmation", ndrEligible: true, delivered: false, repeatAllowed: false };
+  if (isTaagerStatus(ar, "SHIPPING")) return { ar, en: "Out for delivery", bucket: "shipping", ndrEligible: true, delivered: false, repeatAllowed: false };
+  if (isTaagerStatus(ar, "ON_HOLD")) return { ar, en: "Temporarily suspended", bucket: "on_hold", ndrEligible: true, delivered: false, repeatAllowed: false };
+  if (isTaagerStatus(ar, "DELIVERY_SUSPENDED")) return { ar, en: "Delivery suspended", bucket: "delivery_suspended", ndrEligible: true, delivered: false, repeatAllowed: false };
+  if (isTaagerStatus(ar, "OUT_OF_STOCK")) return { ar, en: "Out of stock", bucket: "out_of_stock", ndrEligible: true, delivered: false, repeatAllowed: false };
+  if (isTaagerStatus(ar, "CONFIRMED")) return { ar, en: "Confirmed", bucket: "confirmed", ndrEligible: true, delivered: false, repeatAllowed: false };
+  if (isTaagerStatus(ar, "WAITING")) return { ar, en: "Awaiting shipment", bucket: "waiting", ndrEligible: true, delivered: false, repeatAllowed: false };
+  if (isTaagerStatus(ar, "AFTER_SALES_DONE")) return { ar, en: "After-sales service completed", bucket: "after_sales_done", ndrEligible: true, delivered: false, repeatAllowed: false };
+  if (isTaagerStatus(ar, "AFTER_SALES_PROGRESS")) return { ar, en: "After-sales service in progress", bucket: "after_sales_progress", ndrEligible: true, delivered: false, repeatAllowed: false };
+  return { ar, en: ar || "Unknown", bucket: "other", ndrEligible: true, delivered: false, repeatAllowed: false };
 }
 
 function parseExcelDate(value) {
@@ -763,13 +763,13 @@ function parseTaagerOrderKeys(buffer, country = COUNTRY) {
   const storeOrderIdx = findHeaderIndex(header, ["كود الطلب للمتجر", "Order ID on your store", "Store Order ID", "Merchant Order ID", "External Order ID"], 22);
 
   const keys = new Set();
-  const deliveredKeys = new Set();
+  const repeatAllowedKeys = new Set();
   const allKeys = new Set();
   const statusByKey = new Map();
   const sourceOrderIds = new Set();
   const phones = new Set();
   const blockingPhones = new Set();
-  const deliveredPhones = new Set();
+  const repeatAllowedPhones = new Set();
   const orderNumbers = new Set();
   let rowOrderCount = 0;
   let skipped = 0;
@@ -795,7 +795,7 @@ function parseTaagerOrderKeys(buffer, country = COUNTRY) {
       continue;
     }
     phones.add(phone);
-    if (statusMeta.delivered === true) deliveredPhones.add(phone);
+    if (statusMeta.repeatAllowed === true) repeatAllowedPhones.add(phone);
     else blockingPhones.add(phone);
     products.forEach((sku) => {
       const key = makeOrderKey(phone, sku);
@@ -810,8 +810,9 @@ function parseTaagerOrderKeys(buffer, country = COUNTRY) {
         status,
         bucket: statusMeta.bucket,
         delivered: statusMeta.delivered === true,
+        repeatAllowed: statusMeta.repeatAllowed === true,
       });
-      if (statusMeta.delivered === true) deliveredKeys.add(key);
+      if (statusMeta.repeatAllowed === true) repeatAllowedKeys.add(key);
       else keys.add(key);
     });
   }
@@ -822,13 +823,15 @@ function parseTaagerOrderKeys(buffer, country = COUNTRY) {
   keys.taagerUniquePhones = phones.size;
   keys.taagerAllPhoneSkuKeys = allKeys.size;
   keys.taagerBlockingPhoneSkuKeys = keys.size;
-  keys.taagerDeliveredOnlyPhoneSkuKeys = Array.from(deliveredKeys).filter((key) => !keys.has(key)).length;
+  keys.taagerDeliveredOnlyPhoneSkuKeys = Array.from(repeatAllowedKeys).filter((key) => !keys.has(key)).length;
+  keys.taagerRepeatAllowedOnlyPhoneSkuKeys = keys.taagerDeliveredOnlyPhoneSkuKeys;
   keys.taagerPhones = phones;
   keys.taagerBlockingPhones = blockingPhones;
-  keys.taagerDeliveredOnlyPhones = Array.from(deliveredPhones).filter((phone) => !blockingPhones.has(phone));
+  keys.taagerDeliveredOnlyPhones = Array.from(repeatAllowedPhones).filter((phone) => !blockingPhones.has(phone));
+  keys.taagerRepeatAllowedOnlyPhones = keys.taagerDeliveredOnlyPhones;
   keys.taagerStatusByKey = statusByKey;
   keys.taagerSourceOrderIds = sourceOrderIds;
-  console.log(`Taager: ${keys.taagerOrderCount} orders loaded | ${keys.size} blocking phone+SKU pairs loaded | ${keys.taagerDeliveredOnlyPhoneSkuKeys} delivered-only phone+SKU pairs allowed for repeat | ${phones.size} existing phones loaded | skipped phones:${skipped}`);
+  console.log(`Taager: ${keys.taagerOrderCount} orders loaded | ${keys.size} blocking phone+SKU pairs loaded | ${keys.taagerRepeatAllowedOnlyPhoneSkuKeys} repeat-allowed phone+SKU pairs loaded | ${phones.size} existing phones loaded | skipped phones:${skipped}`);
   return keys;
 }
 
@@ -869,36 +872,36 @@ function mergeAndDeduplicate(realOrders, resolvedMissed, existingPhones) {
     });
   }
 
-  function deliveredRepeatDecision(order, key) {
+  function repeatAllowedStatusDecision(order, key) {
     const records = existingPhones && existingPhones.taagerStatusByKey instanceof Map
       ? (existingPhones.taagerStatusByKey.get(key) || [])
       : [];
-    const deliveredRecords = records.filter((record) => record.delivered === true);
-    if (!deliveredRecords.length) return { action: "allow" };
+    const repeatAllowedRecords = records.filter((record) => record.repeatAllowed === true);
+    if (!repeatAllowedRecords.length) return { action: "allow" };
 
     const sourceId = orderSourceId(order);
     if (sourceId) {
-      if (deliveredRecords.some((record) => record.sourceOrderId && record.sourceOrderId === sourceId)) {
+      if (repeatAllowedRecords.some((record) => record.sourceOrderId && record.sourceOrderId === sourceId)) {
         return { action: "block", reason: "source_order_already_in_taager" };
       }
-      if (deliveredRecords.some((record) => record.sourceOrderId)) {
+      if (repeatAllowedRecords.some((record) => record.sourceOrderId)) {
         return { action: "allow" };
       }
     }
 
     const incomingDay = orderCreatedDay(order);
-    const deliveredDays = deliveredRecords.map((record) => record.createdDay).filter(Boolean);
-    if (incomingDay && deliveredDays.length) {
-      if (deliveredDays.includes(incomingDay)) {
-        return { action: "block", reason: "delivered_order_already_in_taager" };
+    const repeatAllowedDays = repeatAllowedRecords.map((record) => record.createdDay).filter(Boolean);
+    if (incomingDay && repeatAllowedDays.length) {
+      if (repeatAllowedDays.includes(incomingDay)) {
+        return { action: "block", reason: "repeat_allowed_order_already_in_taager" };
       }
       return { action: "allow" };
     }
 
     return {
       action: "uncertain",
-      reason: "delivered_repeat_needs_identity",
-      actionMessage: "Delivered phone+SKU history exists, but no source order ID/date proves this is a new order.",
+      reason: "repeat_allowed_status_needs_identity",
+      actionMessage: "A delivered, failed-delivery, or canceled phone+SKU history exists, but no source order ID/date proves this is a new order.",
     };
   }
 
@@ -921,17 +924,17 @@ function mergeAndDeduplicate(realOrders, resolvedMissed, existingPhones) {
 
     const existing = itemKeys.filter((entry) => existingPhones.has(entry.key));
     const duplicate = itemKeys.filter((entry) => seen.has(entry.key));
-    const deliveredDecisions = itemKeys
+    const repeatAllowedDecisions = itemKeys
       .filter((entry) => entry.key && !existingPhones.has(entry.key) && !seen.has(entry.key))
-      .map((entry) => ({ ...entry, decision: deliveredRepeatDecision(entry.order, entry.key) }))
+      .map((entry) => ({ ...entry, decision: repeatAllowedStatusDecision(entry.order, entry.key) }))
       .filter((entry) => entry.decision.action !== "allow");
-    const deliveredBlocked = deliveredDecisions.filter((entry) => entry.decision.action === "block");
-    const deliveredUncertain = deliveredDecisions.filter((entry) => entry.decision.action === "uncertain");
+    const repeatAllowedBlocked = repeatAllowedDecisions.filter((entry) => entry.decision.action === "block");
+    const repeatAllowedUncertain = repeatAllowedDecisions.filter((entry) => entry.decision.action === "uncertain");
     if (existing.length === itemKeys.length) {
       stats[`${source}InTaager`]++;
       return;
     }
-    if (deliveredBlocked.length === itemKeys.length) {
+    if (repeatAllowedBlocked.length === itemKeys.length) {
       stats[`${source}InTaager`]++;
       return;
     }
@@ -939,21 +942,21 @@ function mergeAndDeduplicate(realOrders, resolvedMissed, existingPhones) {
       stats[`${source}Dupe`]++;
       return;
     }
-    if (existing.length > 0 || duplicate.length > 0 || deliveredBlocked.length > 0 || deliveredUncertain.length > 0) {
+    if (existing.length > 0 || duplicate.length > 0 || repeatAllowedBlocked.length > 0 || repeatAllowedUncertain.length > 0) {
       stats[`${source}PartialInTaager`]++;
-      const reason = deliveredUncertain.length > 0 && existing.length === 0 && duplicate.length === 0 && deliveredBlocked.length === 0
-        ? "delivered_repeat_needs_identity"
+      const reason = repeatAllowedUncertain.length > 0 && existing.length === 0 && duplicate.length === 0 && repeatAllowedBlocked.length === 0
+        ? "repeat_allowed_status_needs_identity"
         : "partial_order_already_in_taager";
-      const blockedEntries = [...existing, ...deliveredBlocked, ...deliveredUncertain];
+      const blockedEntries = [...existing, ...repeatAllowedBlocked, ...repeatAllowedUncertain];
       skippedGroupOrder(groupedOrder, reason, {
         existingSkus: blockedEntries.map((entry) => entry.order.sku).join(", "),
         missingSkus: itemKeys.filter((entry) => {
           return !existingPhones.has(entry.key)
             && !seen.has(entry.key)
-            && !deliveredDecisions.some((blocked) => blocked.key === entry.key);
+            && !repeatAllowedDecisions.some((blocked) => blocked.key === entry.key);
         }).map((entry) => entry.order.sku).join(", "),
         duplicateSkus: duplicate.map((entry) => entry.order.sku).join(", "),
-        actionMessage: deliveredUncertain.map((entry) => entry.decision.actionMessage).filter(Boolean).join(" | "),
+        actionMessage: repeatAllowedUncertain.map((entry) => entry.decision.actionMessage).filter(Boolean).join(" | "),
       });
       return;
     }
@@ -963,8 +966,46 @@ function mergeAndDeduplicate(realOrders, resolvedMissed, existingPhones) {
     stats[`${source}New`] += mergedItems.length;
   }
 
+  function choosePreferredAmbiguousPhoneRows(list, source) {
+    const passthrough = [];
+    const byAmbiguity = new Map();
+    for (const order of list) {
+      const groupId = String(order.phoneAmbiguityGroupId || "").trim();
+      if (!groupId || Number(order.phoneCandidateCount || 1) <= 1) {
+        passthrough.push(order);
+        continue;
+      }
+      if (!byAmbiguity.has(groupId)) byAmbiguity.set(groupId, []);
+      byAmbiguity.get(groupId).push(order);
+    }
+
+    for (const items of byAmbiguity.values()) {
+      const preferred = items.filter((order) => order.phoneCorrection === "misplaced_domestic_zero");
+      if (!preferred.length) {
+        passthrough.push(...items);
+        continue;
+      }
+      passthrough.push(...preferred);
+      const alternatives = items.filter((order) => order.phoneCorrection !== "misplaced_domestic_zero");
+      const alternativeGroups = new Map();
+      for (const order of alternatives) {
+        const key = cartOrderGroupKey(order);
+        if (!alternativeGroups.has(key)) alternativeGroups.set(key, []);
+        alternativeGroups.get(key).push(order);
+      }
+      for (const alternativeItems of alternativeGroups.values()) {
+        const groupedOrder = buildGroupedCartOrders(mergeItemList(alternativeItems))[0];
+        stats[`${source}PartialInTaager`]++;
+        skippedGroupOrder(groupedOrder, "ambiguous_phone_alternative_unselected", {
+          actionMessage: "Phone had multiple valid corrections; used misplaced domestic zero candidate and left the trimmed-extra-digit candidate for manual review.",
+        });
+      }
+    }
+    return passthrough;
+  }
+
   function acceptOrders(orders, source) {
-    const list = Array.isArray(orders) ? orders : [];
+    const list = choosePreferredAmbiguousPhoneRows(Array.isArray(orders) ? orders : [], source);
     const phonesBySourceId = new Map();
     for (const order of list) {
       const sourceId = orderSourceId(order);

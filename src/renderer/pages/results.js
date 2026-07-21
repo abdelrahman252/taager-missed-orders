@@ -272,6 +272,12 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         color: var(--text);
         font-weight:var(--weight-bold);
       }
+      .failed-orders-table .failed-name {
+        direction: rtl;
+        text-align: right;
+        color: var(--text);
+        font-weight:var(--weight-semibold);
+      }
       .failed-orders-table .failed-phone {
         color: var(--text);
         font-size:var(--type-label);
@@ -283,6 +289,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         font-weight:var(--weight-semibold);
       }
       .failed-orders-table .failed-product,
+      .failed-orders-table .failed-name,
       .failed-orders-table .failed-error {
         max-width: 1px;
         overflow: hidden;
@@ -299,6 +306,36 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       [dir="rtl"] .failed-orders-table .failed-phone,
       [dir="rtl"] .failed-orders-table .failed-error {
         text-align: left;
+      }
+      .results-status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 86px;
+        max-width: 100%;
+        border-radius: var(--radius-pill);
+        padding: 3px 9px;
+        font-size: var(--type-caption);
+        font-weight: var(--weight-bold);
+        line-height: 1.25;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .results-status-pill.is-confirmed {
+        color: var(--success);
+        background: rgba(0,214,143,0.12);
+        border: 1px solid rgba(0,214,143,0.28);
+      }
+      .results-status-pill.is-failed {
+        color: var(--danger);
+        background: rgba(255,77,109,0.12);
+        border: 1px solid rgba(255,77,109,0.28);
+      }
+      .results-status-pill.is-warning {
+        color: var(--warning);
+        background: rgba(255,170,0,0.12);
+        border: 1px solid rgba(255,170,0,0.28);
       }
     `;
     document.head.appendChild(style);
@@ -462,12 +499,17 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     return row?.error || row?.failureCode || row?.actionMessage || row?.message || row?.finalStatus || row?.recoveryStatus || "";
   }
 
+  function failedOrderDisplayName(row) {
+    return row?.customerName || row?.name || row?.recipientName || row?.fullName || "";
+  }
+
   function buildFailedOrdersDetailHtmlLegacy(failedOrders) {
     const rows = failedOrders?.errorRows || [];
     if (rows.length > 0) {
       const paged = buildPagedItems(rows, (row, i, attrs) => `<tr ${attrs}>
         <td style="color:var(--text2)">${row.row || i + 1}</td>
         <td style="font-family:var(--font-mono);color:var(--accent)">${row.sku || "—"}</td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(failedOrderDisplayName(row) || "").replace(/"/g,"")}">${failedOrderDisplayName(row) || "-"}</td>
         <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(row.product || row.productName || "").replace(/"/g,"")}">${row.product || row.productName || "—"}</td>
         <td style="font-family:var(--font-mono)">${failedOrderDisplayPhone(row) || "—"}</td>
         <td style="color:var(--danger);font-weight:var(--weight-semibold)">${failedOrderDisplayError(row) || "—"}</td>
@@ -475,7 +517,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       return `<div style="overflow-x:auto">
         <table class="orders-preview-table" style="font-size:var(--type-label)">
           <thead><tr>
-            ${[t("results.row_col") || t("results.row"), t("results.sku"), t("results.product_col"), t("results.phone_col") || t("results.phone"), t("results.error_col") || t("results.error")]
+            ${[t("results.row_col") || t("results.row"), t("results.sku"), t("results.customer_name_col"), t("results.product_col"), t("results.phone_col") || t("results.phone"), t("results.error_col") || t("results.error")]
               .map(h => `<th>${h}</th>`).join("")}
           </tr></thead>
           <tbody>${paged.itemsHtml}</tbody>
@@ -510,9 +552,11 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         const product = row.product || row.productName || "";
         const phone = failedOrderDisplayPhone(row);
         const error = failedOrderDisplayError(row);
+        const name = failedOrderDisplayName(row);
         return `<tr ${attrs}>
           <td class="failed-row">${esc(row.row || i + 1)}</td>
           <td class="failed-sku" title="${esc(row.sku)}">${esc(row.sku)}</td>
+          <td class="failed-name" title="${esc(name)}">${esc(name)}</td>
           <td class="failed-product" title="${esc(product)}">${esc(product)}</td>
           <td class="failed-phone" title="${esc(phone)}">${esc(phone)}</td>
           <td class="failed-error" title="${esc(error)}">${esc(error)}</td>
@@ -522,13 +566,14 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         <table class="orders-preview-table failed-orders-table">
           <colgroup>
             <col style="width:58px">
-            <col style="width:190px">
-            <col style="width:320px">
+            <col style="width:180px">
+            <col style="width:180px">
+            <col style="width:300px">
             <col style="width:160px">
             <col style="width:212px">
           </colgroup>
           <thead><tr>
-            ${[t("results.row_col") || t("results.row"), t("results.sku"), t("results.product_col"), t("results.phone_col") || t("results.phone"), t("results.error_col") || t("results.error")]
+            ${[t("results.row_col") || t("results.row"), t("results.sku"), t("results.customer_name_col"), t("results.product_col"), t("results.phone_col") || t("results.phone"), t("results.error_col") || t("results.error")]
               .map(h => `<th>${h}</th>`).join("")}
           </tr></thead>
           <tbody>${paged.itemsHtml}</tbody>
@@ -580,7 +625,22 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     const tableUid = `orders-tbl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
     function orderCreatedAtText(o) {
-      return o.easyCreatedAt || o.createdAt || o.date || "—";
+      return o.easyCreatedAt || o.createdAt || o.date || "-";
+    }
+
+    function orderStatusInfo(o) {
+      const raw = String(o.recoveryStatus || o.finalStatus || o.status || "").trim();
+      const lower = raw.toLowerCase();
+      if (/verified|confirmed|success|ok/.test(lower)) {
+        return { text: translated(`results.reason_${raw}`, raw || translated("results.confirmed_in_taager_cart", "Confirmed in Taager")), cls: "is-confirmed" };
+      }
+      if (/failed|not_found|error|reject/.test(lower)) {
+        return { text: translated(`results.reason_${raw}`, raw || "-"), cls: "is-failed" };
+      }
+      if (/uncertain|manual|skipped|warning|review/.test(lower)) {
+        return { text: translated(`results.reason_${raw}`, raw || "-"), cls: "is-warning" };
+      }
+      return { text: raw || translated("results.confirmed_in_taager_cart", "Confirmed in Taager"), cls: "is-confirmed" };
     }
 
     function renderOrderRow(o, i, attrs) {
@@ -588,6 +648,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const destination = o.destination === "second-taager-cart"
         ? (t("results.destination_second") || "Second Cart")
         : (isLegacyMissingOrder(o) ? t("results.destination_missing") : t("results.destination_cart"));
+      const status = orderStatusInfo(o);
       return `<tr ${attrs || ""}>
         <td class="res-index">${i + 1}</td>
         <td class="res-name" title="${String(o.name || "").replace(/"/g,"")}">${o.name || "—"}</td>
@@ -595,6 +656,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         <td class="res-product" title="${(o.productName||"").replace(/"/g,"")}">${o.productName || "—"}</td>
         <td class="res-number" title="${String(o.qty || 1).replace(/"/g,"")}">${o.qty || 1}</td>
         <td class="res-number res-price" title="${String(o.subtotal || "").replace(/"/g,"")}">${o.subtotal || "—"}</td>
+        <td title="${String(status.text).replace(/"/g,"")}"><span class="results-status-pill ${status.cls}">${status.text}</span></td>
         <td class="res-destination" title="${String(destination || "").replace(/"/g,"")}">${destination || "-"}</td>
         <td class="res-date" title="${String(createdAt).replace(/"/g,"")}">${createdAt}</td>
         <td class="res-city" title="${String(o.city || "").replace(/"/g,"")}">${o.city || "—"}</td>
@@ -603,7 +665,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
     function renderOrderRows(rows) {
       if (!rows || rows.length === 0) {
-        return `<tr><td colspan="9" style="text-align:center;padding:14px;color:var(--text2);font-size:var(--type-label)">${t("results.no_orders_found") || "No orders match your search"}</td></tr>`;
+        return `<tr><td colspan="10" style="text-align:center;padding:14px;color:var(--text2);font-size:var(--type-label)">${t("results.no_orders_found") || "No orders match your search"}</td></tr>`;
       }
       return buildPagedItems(rows, renderOrderRow, `orders-${tableUid}`).itemsHtml;
     }
@@ -624,7 +686,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const pagerHost = document.getElementById(`${uid}-pager`);
       if (!tbody) return;
       if (!filtered.length) {
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:14px;color:var(--text2);font-size:var(--type-label)">${t("results.no_orders_found") || "No orders match your search"}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:14px;color:var(--text2);font-size:var(--type-label)">${t("results.no_orders_found") || "No orders match your search"}</td></tr>`;
         if (pagerHost) pagerHost.innerHTML = "";
         return;
       }
@@ -657,6 +719,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
               <col style="width:70px">
               <col style="width:90px">
               <col style="width:150px">
+              <col style="width:150px">
               <col style="width:190px">
               <col style="width:180px">
             </colgroup>
@@ -667,6 +730,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
               <th style="text-align:right">${t("results.product_col")}</th>
               <th style="text-align:right">${t("results.qty_col")}</th>
               <th style="text-align:right">${t("results.price_col")}</th>
+              <th>${t("results.status_col")}</th>
               <th>${t("results.destination_col")}</th>
               <th>${t("results.easy_created_at_col")}</th>
               <th style="text-align:right">${t("results.city_col")}</th>

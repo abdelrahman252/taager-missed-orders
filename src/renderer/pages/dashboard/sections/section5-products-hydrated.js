@@ -503,10 +503,23 @@ function renderSection5Hydrated(mountEl, data, ctx) {
   }
 
   function campaignSpendToSar(row) {
-    var amount = Number(row && row.rawSpend || row && row.convertedSpend || 0);
-    var currency = String(row && row.currency || 'SAR').toUpperCase();
+    row = row || {};
+    var targetCurrency = window.dashboardActiveCurrency || 'SAR';
+    if (window.DashboardMarketingSpend && typeof window.DashboardMarketingSpend.sourceSpend === 'function') {
+      var spendInfo = window.DashboardMarketingSpend.sourceSpend(row, targetCurrency, {
+        egpRate: productFinancialSettings && productFinancialSettings.egpRate || 52,
+        summaryCurrency: row.reportingCurrency || row.targetCurrency || targetCurrency,
+        sourceCurrency: row.rawCurrency || row.nativeRawCurrency || row.sourceCurrency || row.accountCurrency || row.account_currency || row.currency || targetCurrency
+      });
+      return Number(spendInfo && spendInfo.spend || 0);
+    }
+    var useConverted = !(row.rawSpend != null && row.rawSpend !== '') && row.convertedSpend != null && row.convertedSpend !== '';
+    var amount = Number(useConverted ? row.convertedSpend : row.rawSpend || row.nativeRawSpend || row.spend || row.adSpend || row.cost || 0);
+    var currency = String(useConverted
+      ? (row.targetCurrency || row.reportingCurrency || row.currency || targetCurrency)
+      : (row.rawCurrency || row.nativeRawCurrency || row.sourceCurrency || row.accountCurrency || row.account_currency || row.currency || 'SAR')).toUpperCase();
     if (window.TaagerCurrency && typeof window.TaagerCurrency.convert === 'function') {
-      return window.TaagerCurrency.convert(amount, currency, window.dashboardActiveCurrency || 'SAR');
+      return window.TaagerCurrency.convert(amount, currency, targetCurrency);
     }
     if (currency === 'USD') return amount * 3.75;
     if (currency === 'EGP') return (amount / (Number(productFinancialSettings.egpRate) || 52)) * 3.75;

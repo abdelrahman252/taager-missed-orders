@@ -511,7 +511,9 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     var hasRaw = source && source.rawSpend != null && source.rawSpend !== "";
     var hasConverted = source && source.convertedSpend != null && source.convertedSpend !== "";
     var sourceAmount = Number(hasRaw ? source.rawSpend : (hasConverted ? source.convertedSpend : 0));
-    var sourceCurrency = String(hasRaw ? (source.currency || source.rawCurrency || target) : (source.targetCurrency || target)).toUpperCase();
+    var sourceCurrency = String(hasRaw
+      ? (source.rawCurrency || source.nativeRawCurrency || source.sourceCurrency || source.accountCurrency || source.account_currency || source.currency || target)
+      : (source.targetCurrency || source.reportingCurrency || source.currency || target)).toUpperCase();
     var spend = convert(sourceAmount, sourceCurrency, target);
     return {
       spend: Number(spend.toFixed(2)),

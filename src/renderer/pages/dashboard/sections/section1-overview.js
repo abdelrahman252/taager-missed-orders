@@ -142,7 +142,7 @@ window.renderSection1 = function (mountEl, data, ctx) {
         if (convertedSpend > 0 && rawSpend <= 0) {
           return total + convertCurrency(convertedSpend, source.targetCurrency || marketingState.summary.currency || targetCurrency, targetCurrency);
         }
-        return total + convertCurrency(rawSpend, source.currency || source.rawCurrency || "SAR", targetCurrency);
+        return total + convertCurrency(rawSpend, source.rawCurrency || source.nativeRawCurrency || source.sourceCurrency || source.accountCurrency || source.account_currency || source.currency || "SAR", targetCurrency);
       }, 0);
       finalAdSpend = Number(convertedTotal.toFixed(2));
     }
