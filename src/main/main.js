@@ -6437,7 +6437,7 @@ function mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAcc
 async function callSaudiIPickMarketing(action, accountId, platform = "snapchat", range = {}) {
   const dashboardAccountId = marketingAccountKey(accountId, action !== "sync");
   if (!dashboardAccountId) return { ok: false, error: "SELECT_SINGLE_ACCOUNT" };
-  if (platform !== "snapchat") return { ok: false, error: "PLATFORM_NOT_AVAILABLE" };
+  if (!["snapchat", "tiktok"].includes(platform)) return { ok: false, error: "PLATFORM_NOT_AVAILABLE" };
   if (!(await isLicenseValid())) return { ok: false, error: "LICENSE_INVALID" };
 
   const token = getSaudiIPickDesktopToken();
@@ -6481,7 +6481,7 @@ async function callSaudiIPickMarketing(action, accountId, platform = "snapchat",
     token: maskToken(token),
   });
 
-  const result = await httpsJsonRequest("POST", `${SAUDIIPICK_MARKETING_API_BASE}/api/desktop/marketing/snapchat`, payload, {
+  const result = await httpsJsonRequest("POST", `${SAUDIIPICK_MARKETING_API_BASE}/api/desktop/marketing/${platform}`, payload, {
     Authorization: `Bearer ${token}`,
   });
 

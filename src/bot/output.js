@@ -5,6 +5,7 @@ const { formatPhone } = require("./phone");
 const { normalizeTaagerCountry } = require("./taager-country");
 const { groupMissingOrders } = require("./missing-orders");
 const { orderLineItems } = require("./cart-order-groups");
+const { sanitizeCustomerFields } = require("./customer-quality");
 
 const config = JSON.parse(process.env.BOT_CONFIG || "{}");
 const COUNTRY = normalizeTaagerCountry(config.taagerCountry || config.taagerCountry || "sa");
@@ -313,8 +314,12 @@ function buildOutputExcel(orders, options = {}) {
     const cityMatch = normalizeProvinceMatch(order.city, COUNTRY);
     const province = normalizeProvince(order.city, COUNTRY, { fallbackProvince: fallback.province });
     fallbackUsage[cityMatch.matched ? "provided" : fallback.tier]++;
-    const address = order.address && String(order.address).trim()
-      ? String(order.address).trim()
+    const customer = sanitizeCustomerFields({ ...order, resolvedCity: province }, {
+      country: COUNTRY,
+      cityFallback: province || cfg.defaultCity,
+    });
+    const address = customer.address && String(customer.address).trim()
+      ? String(customer.address).trim()
       : province || cfg.defaultCity;
 
     return [
@@ -322,7 +327,7 @@ function buildOutputExcel(orders, options = {}) {
       truncate(order.productName || "", 50),
       order.unitPrice || "",
       order.qty || 1,
-      truncate(order.name || "", 50),
+      truncate(customer.name || "", 50),
       province,
       address,
       ...(cfg.hasSaudiNatAddr ? [""] : []),
@@ -384,15 +389,19 @@ function buildMissingOrdersExcel(orders, options = {}) {
     const first = group[0] || {};
     const fallback = fallbackProvinceForOrder(first, options, COUNTRY, cfg.defaultProvince);
     const province = normalizeProvince(first.city, COUNTRY, { fallbackProvince: fallback.province });
+    const customer = sanitizeCustomerFields({ ...first, resolvedCity: province }, {
+      country: COUNTRY,
+      cityFallback: province || cfg.defaultCity,
+    });
     return [
-      truncate(first.name || "", 50),
+      truncate(customer.name || "", 50),
       formatPhone(first.normPhone || first.phone || "", COUNTRY) || first.phone || "",
       "",
       province,
       "",
       "",
       "",
-      first.address || first.notes || "",
+      customer.address || first.notes || "",
       group.map((order) => String(order.sku || "").trim()).join(","),
       "",
       group.map((order) => Number(order.unitPrice) || 0).join(","),

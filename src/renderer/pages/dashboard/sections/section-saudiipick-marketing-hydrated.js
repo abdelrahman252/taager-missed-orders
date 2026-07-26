@@ -123,7 +123,12 @@
     var accountOptions = listTaagerAccounts(fullData, selectedAccountId);
     var store = window.DashboardMarketingState;
     var tokenState = { configured: false, tokenPreview: '', connectUrl: 'https://saudiipick.com/dashboard/settings' };
-    var status = store && typeof store.get === 'function' ? store.get(selectedAccountId, 'snapchat') : null;
+    var activePlatform = 'snapchat';
+    var platformMeta = {
+      snapchat: { id: 'snapchat', label: 'Snapchat Ads', shortLabel: 'Snapchat', mark: 'SC', markClass: 'snap' },
+      tiktok: { id: 'tiktok', label: 'TikTok Ads', shortLabel: 'TikTok', mark: 'TT', markClass: '' }
+    };
+    var status = store && typeof store.get === 'function' ? store.get(selectedAccountId, activePlatform) : null;
     var availableAccounts = [];
     var selectedSources = [];
     var sourceQuery = '';
@@ -161,9 +166,21 @@
       return Array.isArray(value) ? value.length : 0;
     }
 
+    function currentPlatform() {
+      return platformMeta[activePlatform] || platformMeta.snapchat;
+    }
+
     function setStore(next) {
-      if (store && typeof store.set === 'function') store.set(next, selectedAccountId, 'snapchat');
+      if (store && typeof store.set === 'function') store.set(next, selectedAccountId, activePlatform);
       status = next;
+    }
+
+    function resetPlatformStateFromCache() {
+      status = store && typeof store.get === 'function' ? store.get(selectedAccountId, activePlatform) : null;
+      availableAccounts = (status && (status.availableAccounts || status.linkedAccounts) || []).map(normalizeSource).filter(Boolean);
+      selectedSources = (status && (status.selectedSourceAccounts || status.mappedAccounts) || []).map(normalizeSource).filter(Boolean);
+      sourceQuery = '';
+      sourcePage = 1;
     }
 
     function selectedIds() {
@@ -186,7 +203,7 @@
       var target = String(sourceId || '');
       var owner = null;
       accountOptions.some(function (account) {
-        var accountStatus = store && typeof store.get === 'function' ? store.get(account.id, 'snapchat') : null;
+        var accountStatus = store && typeof store.get === 'function' ? store.get(account.id, activePlatform) : null;
         var mapped = accountStatus && (accountStatus.selectedSourceAccounts || accountStatus.mappedAccounts) || [];
         var found = Array.isArray(mapped) && mapped.some(function (source) {
           return String(source && source.id || '') === target;
@@ -199,14 +216,15 @@
 
     function platformTabs() {
       var tabs = [
-        { id: 'snapchat', label: 'Snapchat Ads', active: true },
-        { id: 'tiktok', label: 'TikTok Ads', active: false },
-        { id: 'facebook', label: 'Meta Ads', active: false }
+        { id: 'snapchat', label: 'Snapchat Ads', enabled: true },
+        { id: 'tiktok', label: 'TikTok Ads', enabled: true },
+        { id: 'facebook', label: 'Meta Ads', enabled: false }
       ];
       return '<div class="marketing-tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">' +
         tabs.map(function (tab) {
-          return '<button type="button" class="' + (tab.active ? 'marketing-primary' : 'marketing-secondary') + '" data-sip-platform="' + esc(tab.id) + '"' +
-            (tab.active ? '' : ' disabled') + '>' + esc(tab.label + (tab.active ? '' : ' · planned')) + '</button>';
+          var active = tab.id === activePlatform;
+          return '<button type="button" class="' + (active ? 'marketing-primary' : 'marketing-secondary') + '" data-sip-platform="' + esc(tab.id) + '"' +
+            (tab.enabled ? '' : ' disabled') + '>' + esc(tab.label + (tab.enabled ? '' : ' - planned')) + '</button>';
         }).join('') +
       '</div>';
     }
@@ -215,7 +233,7 @@
       return '<section class="marketing-connection-guide">' +
         '<div class="marketing-guide-head">' +
           '<div><h4>' + esc(tx('Saudi iPick desktop bridge', 'ربط Saudi iPick بسطح المكتب')) + '</h4>' +
-          '<p>' + esc(tx('Create a desktop token from the website Settings page, paste it here once, then sync selected Snapchat accounts into the calculators.', 'أنشئ رمز سطح المكتب من إعدادات الموقع، والصقه هنا مرة واحدة، ثم زامن حسابات سناب شات المحددة داخل الحاسبات.')) + '</p></div>' +
+          '<p>' + esc(tx('Create a desktop token from the website Settings page, paste it here once, then sync selected Snapchat or TikTok accounts into the calculators.', 'أنشئ رمز سطح المكتب من إعدادات الموقع، والصقه هنا مرة واحدة، ثم زامن حسابات سناب شات المحددة داخل الحاسبات.')) + '</p></div>' +
           '<button type="button" class="marketing-secondary" data-sip-open-settings>' + esc(tx('Open website settings', 'فتح إعدادات الموقع')) + '</button>' +
         '</div>' +
         '<div class="marketing-token-row" style="display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:10px;margin-top:14px;">' +
@@ -345,9 +363,9 @@
     }
 
     function summaryPanel() {
+      var platform = currentPlatform();
       var summary = status && status.summary;
       var partial = status && status.partial;
-      var sourceCount = summary && Array.isArray(summary.sourceBreakdown) ? summary.sourceBreakdown.length : 0;
       var campaignCount = summary && Array.isArray(summary.campaignBreakdown) ? summary.campaignBreakdown.length : 0;
       var impressionCount = summary ? Number(summary.impressions || 0) : null;
       var clickCount = summary ? Number(summary.clicks || 0) : null;
@@ -389,7 +407,7 @@
           '</span>' +
           '<select class="marketing-source-currency" disabled><option>' + esc(source.currency || 'SAR') + '</option></select>' +
         '</label>';
-      }).join('') : '<div class="marketing-inline-warning">' + esc(availableAccounts.length ? tx('No accounts match this search.', 'No accounts match this search.') : tx('No Snapchat ad accounts were returned from Saudi iPick yet.', 'No Snapchat ad accounts were returned from Saudi iPick yet.')) + '</div>';
+      }).join('') : '<div class="marketing-inline-warning">' + esc(availableAccounts.length ? tx('No accounts match this search.', 'No accounts match this search.') : tx('No ' + platform.shortLabel + ' ad accounts were returned from Saudi iPick yet.', 'No ' + platform.shortLabel + ' ad accounts were returned from Saudi iPick yet.')) + '</div>';
       var mappingBody = '<div class="marketing-token-row" style="display:grid;grid-template-columns:' + mappingGridColumns + ';gap:10px;margin:0 0 12px;">' +
           '<input type="search" data-sip-source-search value="' + esc(sourceQuery) + '" placeholder="' + esc(tx('Search ad accounts', 'Search ad accounts')) + '" style="min-width:0;border:1px solid var(--dash-border);border-radius:8px;background:var(--dash-surface);color:var(--dash-text);padding:10px 12px;">' +
           selectVisibleButton +
@@ -397,13 +415,13 @@
         '<details class="marketing-mapping-row" open data-sip-map-row="' + esc(activeAccount.id) + '">' +
           '<summary><span class="marketing-account-label">' + esc(activeAccount.label) + '</span><span class="marketing-assigned-pill">' + esc(selectedCount + ' assigned') + '</span></summary>' +
           '<div class="marketing-mapping-choices">' + choices + '</div>' +
-          '<div class="marketing-limit-note"><strong>' + esc(tx('Assigned ', 'Assigned ') + selectedCount + ' / ' + availableAccounts.length + tx(' Snapchat accounts', ' Snapchat accounts')) + '</strong><span>' + esc(tx('You can assign multiple Snapchat accounts to this Taager account.', 'You can assign multiple Snapchat accounts to this Taager account.')) + '</span></div>' +
+          '<div class="marketing-limit-note"><strong>' + esc(tx('Assigned ', 'Assigned ') + selectedCount + ' / ' + availableAccounts.length + ' ' + platform.shortLabel + ' accounts') + '</strong><span>' + esc(tx('You can assign multiple ' + platform.shortLabel + ' accounts to this Taager account.', 'You can assign multiple ' + platform.shortLabel + ' accounts to this Taager account.')) + '</span></div>' +
           '<button class="marketing-secondary marketing-save-map-btn" type="button" data-sip-save-mapping' + (availableAccounts.length && !allMode ? '' : ' disabled') + '>' + esc(tx('Save mapping', 'Save mapping')) + '</button>' +
         '</details>' +
         paginationMarkup;
       var mappingContent = '<details class="marketing-mapping-board marketing-mapping-disclosure" open data-sip-mapping-disclosure>' +
-        '<summary><span><strong>' + esc(tx('Map Snapchat accounts to Taager accounts', 'Map Snapchat accounts to Taager accounts')) + '</strong>' +
-        '<small>' + esc(tx('One Taager account can use multiple Snapchat ad accounts. Select all that belong to each account.', 'One Taager account can use multiple Snapchat ad accounts. Select all that belong to each account.')) + '</small></span><i aria-hidden="true">&#9662;</i></summary>' +
+        '<summary><span><strong>' + esc(tx('Map ' + platform.shortLabel + ' accounts to Taager accounts', 'Map ' + platform.shortLabel + ' accounts to Taager accounts')) + '</strong>' +
+        '<small>' + esc(tx('One Taager account can use multiple ' + platform.shortLabel + ' ad accounts. Select all that belong to each account.', 'One Taager account can use multiple ' + platform.shortLabel + ' ad accounts. Select all that belong to each account.')) + '</small></span><i aria-hidden="true">&#9662;</i></summary>' +
         '<div class="marketing-mapping-disclosure-body">' + mappingBody + '</div></details>';
       var releaseOptions = selectedSources.length
         ? selectedSources.map(function (source) {
@@ -415,16 +433,16 @@
           '<button class="marketing-secondary is-danger marketing-claim-action" type="button" data-sip-release-selected>' + esc(tx('Disconnect & free slot', 'Disconnect & free slot')) + '</button>'
         : '<div class="marketing-inline-info">' + esc(tx('No assigned ad accounts to release.', 'No assigned ad accounts to release.')) + '</div>';
       var claimRelease = '<details class="marketing-mapping-board marketing-claim-source marketing-claim-disclosure">' +
-        '<summary><span><strong>' + esc(tx('Claim or release Snapchat ad account', 'Claim or release Snapchat ad account')) + '</strong>' +
+        '<summary><span><strong>' + esc(tx('Claim or release ' + platform.shortLabel + ' ad account', 'Claim or release ' + platform.shortLabel + ' ad account')) + '</strong>' +
         '<small>' + esc(tx('Use an existing website account pool or free a connection slot.', 'Use an existing website account pool or free a connection slot.')) + '</small></span><i aria-hidden="true">&#9662;</i></summary>' +
         '<div class="marketing-claim-disclosure-body">' +
           '<div class="marketing-claim-tabs">' +
-            '<input type="radio" id="marketing-claim-tab-sip-snapchat" name="sip-claim-tabs-snapchat" checked>' +
-            '<label for="marketing-claim-tab-sip-snapchat">' + esc(tx('Claim', 'Claim')) + '</label>' +
-            '<input type="radio" id="marketing-release-tab-sip-snapchat" name="sip-claim-tabs-snapchat">' +
-            '<label for="marketing-release-tab-sip-snapchat">' + esc(tx('Release', 'Release')) + '</label>' +
+            '<input type="radio" id="marketing-claim-tab-sip-' + esc(platform.id) + '" name="sip-claim-tabs-' + esc(platform.id) + '" checked>' +
+            '<label for="marketing-claim-tab-sip-' + esc(platform.id) + '">' + esc(tx('Claim', 'Claim')) + '</label>' +
+            '<input type="radio" id="marketing-release-tab-sip-' + esc(platform.id) + '" name="sip-claim-tabs-' + esc(platform.id) + '">' +
+            '<label for="marketing-release-tab-sip-' + esc(platform.id) + '">' + esc(tx('Release', 'Release')) + '</label>' +
             '<div class="marketing-claim-panel is-claim">' +
-              '<p>' + esc(tx('Paste an existing Snapchat ad account ID to connect it to this Taager account.', 'Paste an existing Snapchat ad account ID to connect it to this Taager account.')) + '</p>' +
+              '<p>' + esc(tx('Paste an existing ' + platform.shortLabel + ' ad account ID to connect it to this Taager account.', 'Paste an existing ' + platform.shortLabel + ' ad account ID to connect it to this Taager account.')) + '</p>' +
               '<div class="marketing-account-map">' +
                 '<label><span>' + esc(tx('Ad account ID', 'Ad account ID')) + '</span><input type="text" data-sip-claim-input placeholder="' + esc(tx('Paste ad account ID', 'Paste ad account ID')) + '"></label>' +
                 '<button class="marketing-secondary marketing-claim-action" type="button" data-sip-claim-account>' + esc(tx('Use existing account', 'Use existing account')) + '</button>' +
@@ -449,11 +467,11 @@
       var lastSync = status && status.lastSyncAt ? String(status.lastSyncAt).replace('T', ' ').slice(0, 19) : tx('Not synced yet', 'Not synced yet');
       var canSync = !allMode && selectedSources.length > 0 && !loading;
 
-      return '<article class="marketing-platform-card" data-marketing-platform="snapchat">' +
+      return '<article class="marketing-platform-card" data-marketing-platform="' + esc(platform.id) + '">' +
         (error ? '<div class="marketing-message is-error">' + esc(error) + '</div>' : '') +
         (loading ? '<div class="marketing-loading"><span class="dash-preloader-spinner"></span><span>' + esc(tx('Working...', 'Working...')) + '</span></div>' : '') +
         '<div class="marketing-platform-head">' +
-          '<div class="marketing-platform-brand"><span class="marketing-platform-mark snap">SC</span><div><strong>Snapchat Ads</strong><small>' + esc(tx('Available now', 'Available now')) + '</small></div></div>' +
+          '<div class="marketing-platform-brand"><span class="marketing-platform-mark ' + esc(platform.markClass) + '">' + esc(platform.mark) + '</span><div><strong>' + esc(platform.label) + '</strong><small>' + esc(tx('Available now', 'Available now')) + '</small></div></div>' +
           '<span class="marketing-status ' + (connected ? (partial ? 'is-warning' : 'is-connected') : 'is-disconnected') + '">' + esc(connected ? (partial ? tx('Partial sync', 'Partial sync') : tx('Connected', 'Connected')) : tx('Not connected', 'Not connected')) + '</span>' +
         '</div>' +
         '<div class="marketing-metric-grid">' +
@@ -468,11 +486,11 @@
         '<div class="marketing-last-sync"><span>' + esc(tx('Last sync', 'Last sync')) + '</span><strong>' + esc(lastSync) + '</strong></div>' +
         '<div class="marketing-actions">' +
           '<button type="button" class="marketing-primary" data-sip-open-settings>' + esc(tx('Add account', 'Add account')) + '</button>' +
-          '<button type="button" class="marketing-sync-btn" data-sip-sync' + (canSync ? '' : ' disabled') + '>' + esc(tx('Sync Mapped Snapchat Accounts', 'Sync Mapped Snapchat Accounts')) + '</button>' +
+          '<button type="button" class="marketing-sync-btn" data-sip-sync' + (canSync ? '' : ' disabled') + '>' + esc(tx('Sync mapped ' + platform.shortLabel + ' accounts', 'Sync mapped ' + platform.shortLabel + ' accounts')) + '</button>' +
           '<button type="button" class="marketing-secondary" data-sip-full-sync' + (canSync ? '' : ' disabled') + '>' + esc(tx('Refresh all selected dates', 'Refresh all selected dates')) + '</button>' +
           '<button type="button" class="marketing-secondary" data-sip-refresh' + (tokenState.configured ? '' : ' disabled') + '>' + esc(tx('Refresh Status', 'Refresh Status')) + '</button>' +
         '</div>' +
-        '<p class="marketing-sync-note">' + esc(tx('After renaming Snapchat campaigns or adding SKUs, synced reports may remain cached for up to 6 hours. For historical changes, refresh the campaign data, then sync again.', 'After renaming Snapchat campaigns or adding SKUs, synced reports may remain cached for up to 6 hours. For historical changes, refresh the campaign data, then sync again.')) + '</p>' +
+        '<p class="marketing-sync-note">' + esc(tx('After renaming ' + platform.shortLabel + ' campaigns or adding SKUs, synced reports may remain cached for up to 6 hours. For historical changes, refresh the campaign data, then sync again.', 'After renaming ' + platform.shortLabel + ' campaigns or adding SKUs, synced reports may remain cached for up to 6 hours. For historical changes, refresh the campaign data, then sync again.')) + '</p>' +
       '</article>';
     }
 
@@ -497,10 +515,13 @@
       mount.innerHTML = '<div class="marketing-section">' +
         '<header class="marketing-hero">' +
           '<div><p class="marketing-kicker">Saudi iPick API</p><h2>' + esc(tx('Native marketing connection', 'Native marketing connection')) + '</h2>' +
-          '<p>' + esc(tx('Use Saudi iPick as the source for Snapchat spend, campaigns, purchases, CPA, and ROAS inside this desktop dashboard.', 'Use Saudi iPick as the source for Snapchat spend, campaigns, purchases, CPA, and ROAS inside this desktop dashboard.')) + '</p></div>' +
-          '<aside class="marketing-security"><strong>' + esc(tx('No Windsor changes', 'No Windsor changes')) + '</strong><span>' + esc(tx('The old Marketing Connections section stays available. This card syncs Snapchat spend into the same calculators after you press sync.', 'The old Marketing Connections section stays available. This card syncs Snapchat spend into the same calculators after you press sync.')) + '</span></aside>' +
+          '<p>' + esc(tx('Use Saudi iPick as the source for Snapchat and TikTok spend, campaigns, purchases, CPA, and ROAS inside this desktop dashboard.', 'Use Saudi iPick as the source for Snapchat and TikTok spend, campaigns, purchases, CPA, and ROAS inside this desktop dashboard.')) + '</p></div>' +
+          '<aside class="marketing-security"><strong>' + esc(tx('Same calculators', 'Same calculators')) + '</strong><span>' + esc(tx('This card syncs the active platform into the product, account, and level calculators after you press sync.', 'This card syncs the active platform into the product, account, and level calculators after you press sync.')) + '</span></aside>' +
         '</header>' +
+        (error ? '<div class="marketing-message is-error">' + esc(error) + '</div>' : '') +
         (message ? '<div class="marketing-message">' + esc(message) + '</div>' : '') +
+        (loading ? '<div class="marketing-loading"><span class="dash-preloader-spinner"></span><span>' + esc(tx('Working...', 'Working...')) + '</span></div>' : '') +
+        platformTabs() +
         tokenPanel() +
         '<div class="marketing-platform-grid">' + summaryPanel() + '</div>' +
       '</div>';
@@ -513,8 +534,9 @@
     }
 
     function loadStatus() {
+      var platform = currentPlatform();
       if (!window.api || typeof window.api.getSaudiIPickMarketingStatus !== 'function') {
-        error = tx('Saudi iPick desktop bridge is not available in this app build.', 'ربط Saudi iPick غير متاح في هذا الإصدار من التطبيق.');
+        error = tx('Saudi iPick desktop bridge is not available in this app build.', 'Saudi iPick desktop bridge is not available in this app build.');
         updateDiagnostics({ step: 'bridge-missing', tokenConfigured: tokenState.configured, lastError: error });
         render();
         return Promise.resolve();
@@ -523,11 +545,11 @@
         step: 'status-request',
         tokenConfigured: tokenState.configured,
         accountId: selectedAccountId,
-        summary: tx('Requesting selected Snapchat accounts from Saudi iPick...', 'جارٍ طلب حسابات سناب شات المحددة من Saudi iPick...'),
+        summary: tx('Requesting selected ' + platform.shortLabel + ' accounts from Saudi iPick...', 'Requesting selected ' + platform.shortLabel + ' accounts from Saudi iPick...'),
         lastError: ''
       });
       setBusy(true);
-      return window.api.getSaudiIPickMarketingStatus(selectedAccountId, 'snapchat', { mode: 'force' }).then(function (result) {
+      return window.api.getSaudiIPickMarketingStatus(selectedAccountId, activePlatform, { mode: 'force' }).then(function (result) {
         if (!result || !result.ok) throw new Error(result && result.error || 'Saudi iPick status failed.');
         availableAccounts = (result.availableAccounts || result.linkedAccounts || []).map(normalizeSource).filter(Boolean);
         selectedSources = (result.selectedSourceAccounts || result.mappedAccounts || []).map(normalizeSource).filter(Boolean);
@@ -539,13 +561,13 @@
           selectedCount: selectedSources.length,
           mappedCount: countOf(result.mappedAccounts),
           summary: availableAccounts.length
-            ? tx('Accounts loaded. Select the ad accounts for this Taager account, then sync.', 'تم تحميل الحسابات. اختر الحسابات الإعلانية لهذا الحساب ثم ابدأ المزامنة.')
-            : tx('No selected Snapchat accounts were returned. Check the website Accounts page and make sure Snapchat ad accounts are selected.', 'لم يتم إرجاع أي حسابات سناب شات محددة. راجع صفحة الحسابات في الموقع وتأكد من تحديد الحسابات الإعلانية.'),
+            ? tx('Accounts loaded. Select the ad accounts for this Taager account, then sync.', 'Accounts loaded. Select the ad accounts for this Taager account, then sync.')
+            : tx('No selected ' + platform.shortLabel + ' accounts were returned. Check the website Accounts page and make sure ad accounts are selected.', 'No selected ' + platform.shortLabel + ' accounts were returned. Check the website Accounts page and make sure ad accounts are selected.'),
           lastError: result.error || ''
         });
         message = availableAccounts.length
-          ? tx('Loaded ', 'تم تحميل ') + availableAccounts.length + tx(' Snapchat account(s).', ' حساب/حسابات سناب شات.')
-          : tx('No selected Snapchat accounts came back from Saudi iPick. Check website account selection, then refresh.', 'لم تصل حسابات سناب شات محددة من Saudi iPick. تحقق من تحديد الحسابات في الموقع ثم حدث.');
+          ? tx('Loaded ', 'Loaded ') + availableAccounts.length + ' ' + platform.shortLabel + ' account(s).'
+          : tx('No selected ' + platform.shortLabel + ' accounts came back from Saudi iPick. Check website account selection, then refresh.', 'No selected ' + platform.shortLabel + ' accounts came back from Saudi iPick. Check website account selection, then refresh.');
         error = '';
       }).catch(function (err) {
         error = err && err.message ? err.message : String(err || '');
@@ -553,7 +575,7 @@
           step: 'status-error',
           tokenConfigured: tokenState.configured,
           lastError: error,
-          summary: tx('Could not load Snapchat accounts from Saudi iPick.', 'تعذر تحميل حسابات سناب شات من Saudi iPick.')
+          summary: tx('Could not load ' + platform.shortLabel + ' accounts from Saudi iPick.', 'Could not load ' + platform.shortLabel + ' accounts from Saudi iPick.')
         });
       }).finally(function () {
         loading = false;
@@ -576,6 +598,29 @@
       var releaseButton = mount.querySelector('[data-sip-release-selected]');
       var prevPageButton = mount.querySelector('[data-sip-page-prev]');
       var nextPageButton = mount.querySelector('[data-sip-page-next]');
+      var platformButtons = mount.querySelectorAll('[data-sip-platform]');
+
+      Array.prototype.forEach.call(platformButtons, function (button) {
+        button.addEventListener('click', function () {
+          var nextPlatform = String(button.getAttribute('data-sip-platform') || '');
+          if (!platformMeta[nextPlatform] || nextPlatform === activePlatform) return;
+          activePlatform = nextPlatform;
+          resetPlatformStateFromCache();
+          error = '';
+          message = tx('Switched to ' + currentPlatform().label + '.', 'Switched to ' + currentPlatform().label + '.');
+          updateDiagnostics({
+            step: 'platform-switch',
+            accountId: selectedAccountId,
+            availableCount: availableAccounts.length,
+            selectedCount: selectedSources.length,
+            mappedCount: countOf(status && status.mappedAccounts),
+            summary: message,
+            lastError: ''
+          });
+          if (tokenState.configured) loadStatus();
+          else render();
+        });
+      });
 
       Array.prototype.forEach.call(openButtons, function (openButton) {
         openButton.addEventListener('click', function () {
@@ -705,7 +750,7 @@
         if (!sources.length && selectedSources.length) sources = selectedSources;
         updateDiagnostics({ step: 'mapping-save', selectedCount: sources.length, summary: tx('Saving selected ad account mapping...', 'جارٍ حفظ تعيين الحسابات الإعلانية المحددة...'), lastError: '' });
         setBusy(true);
-        window.api.saveSaudiIPickMarketingMapping(selectedAccountId, 'snapchat', sources).then(function (result) {
+        window.api.saveSaudiIPickMarketingMapping(selectedAccountId, activePlatform, sources).then(function (result) {
           if (!result || !result.ok) throw new Error(result && result.error || 'Could not save mapping.');
           selectedSources = sources;
           setStore(result);
@@ -725,9 +770,9 @@
         var roi = window.DashboardRoiState ? window.DashboardRoiState.get(selectedAccountId, {}) : {};
         var sources = selectedSourceObjects();
         if (!sources.length) sources = selectedSources;
-        updateDiagnostics({ step: 'sync-request', selectedCount: sources.length, summary: tx('Syncing Snapchat spend from Saudi iPick...', 'جارٍ مزامنة إنفاق سناب شات من Saudi iPick...'), lastError: '' });
+        updateDiagnostics({ step: 'sync-request', selectedCount: sources.length, summary: tx('Syncing ' + currentPlatform().shortLabel + ' spend from Saudi iPick...', 'Syncing ' + currentPlatform().shortLabel + ' spend from Saudi iPick...'), lastError: '' });
         setBusy(true);
-        window.api.syncSaudiIPickMarketingData(selectedAccountId, 'snapchat', {
+        window.api.syncSaudiIPickMarketingData(selectedAccountId, activePlatform, {
           dateFrom: period.dateFrom,
           dateTo: period.dateTo,
           targetCurrency: roi.currency || window.dashboardActiveCurrency || 'SAR',
@@ -736,12 +781,12 @@
           if (!result || !result.ok) throw new Error(result && result.error || 'Sync failed.');
           selectedSources = (result.selectedSourceAccounts || sources).map(normalizeSource).filter(Boolean);
           setStore(result);
-          updateDiagnostics({ step: 'sync-ok', selectedCount: selectedSources.length, mappedCount: countOf(result.mappedAccounts), summary: tx('Snapchat spend synced into the calculators.', 'تمت مزامنة إنفاق سناب شات داخل الحاسبات.'), lastError: '' });
-          message = tx('Snapchat spend synced into the calculators.', 'تمت مزامنة إنفاق سناب شات داخل الحاسبات.');
+          updateDiagnostics({ step: 'sync-ok', selectedCount: selectedSources.length, mappedCount: countOf(result.mappedAccounts), summary: tx(currentPlatform().shortLabel + ' spend synced into the calculators.', currentPlatform().shortLabel + ' spend synced into the calculators.'), lastError: '' });
+          message = tx(currentPlatform().shortLabel + ' spend synced into the calculators.', currentPlatform().shortLabel + ' spend synced into the calculators.');
           if (window.DashboardRoiState && typeof window.DashboardRoiState.notify === 'function') window.DashboardRoiState.notify(selectedAccountId);
         }).catch(function (err) {
           error = err && err.message ? err.message : String(err || '');
-          updateDiagnostics({ step: 'sync-error', lastError: error, summary: tx('Could not sync Snapchat spend.', 'تعذر مزامنة إنفاق سناب شات.') });
+          updateDiagnostics({ step: 'sync-error', lastError: error, summary: tx('Could not sync ' + currentPlatform().shortLabel + ' spend.', 'Could not sync ' + currentPlatform().shortLabel + ' spend.') });
         }).finally(function () {
           loading = false;
           render();
@@ -751,6 +796,7 @@
     }
 
     function init() {
+      resetPlatformStateFromCache();
       render();
       if (!window.api || typeof window.api.getSaudiIPickMarketingTokenStatus !== 'function') return;
       window.api.getSaudiIPickMarketingTokenStatus().then(function (result) {

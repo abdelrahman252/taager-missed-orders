@@ -11,6 +11,7 @@ const {
 } = require("./chrome-launch");
 const { formatPhone, normalizePhone } = require("./phone");
 const { buildGroupedCartOrders, cartOrderItemKeys, orderLineItems } = require("./cart-order-groups");
+const { sanitizeCustomerFields } = require("./customer-quality");
 const { resolveSafeTaagerExportRange } = require("./taager-date-range");
 const {
   normalizeTaagerCountry,
@@ -2461,8 +2462,13 @@ async function createSingleOrder(page, order, orderNum) {
 async function createSingleOrderAttempt(page, order, orderNum, attempt) {
   // ── Resolve address/city ──
   console.log("PARSED CITY:", order.city);
-  const finalCity    = (order.city    && order.city.trim())    ? order.city.trim()    : DEFAULT_CITY;
-  const finalAddress = (order.address && order.address.trim()) ? order.address.trim() : finalCity;
+  const finalCity = (order.city && order.city.trim()) ? order.city.trim() : DEFAULT_CITY;
+  const customer = sanitizeCustomerFields({ ...order, resolvedCity: finalCity }, {
+    country: TAAGER_COUNTRY,
+    cityFallback: finalCity,
+  });
+  const finalName = customer.name || order.name || "\u0639\u0645\u064a\u0644";
+  const finalAddress = (customer.address && String(customer.address).trim()) ? String(customer.address).trim() : finalCity;
   console.log("FINAL CITY:", finalCity);
 
   if (attempt > 1) log(`${orderNum} ↳ [Attempt ${attempt}] city="${finalCity}"`);
@@ -2528,7 +2534,7 @@ async function createSingleOrderAttempt(page, order, orderNum, attempt) {
   const nameInput = page.locator('input#full_name');
   await nameInput.waitFor({ timeout: 10000 });
   await nameInput.click({ clickCount: 3 });
-  await nameInput.fill(order.name || "عميل");
+  await nameInput.fill(finalName);
 
   const phoneInput = page.locator('input#phone');
   await phoneInput.click({ clickCount: 3 });

@@ -6,7 +6,7 @@ const COUNTRY_CONFIG = {
   sa: { dialCode: "966", domesticPrefix: "0", startsWith: ["5"], length: 9, rescueTrailingZero: true },
   eg: { dialCode: "20", domesticPrefix: "0", startsWith: ["10", "11", "12", "15"], length: 10, rescueTrailingZero: true },
   ae: { dialCode: "971", domesticPrefix: "0", startsWith: ["5"], length: 9, rescueTrailingZero: true },
-  iq: { dialCode: "964", domesticPrefix: "0", startsWith: ["7"], length: 10, rescueTrailingZero: true },
+  iq: { dialCode: "964", domesticPrefix: "0", startsWith: ["75", "77", "78", "79"], length: 10, rescueTrailingZero: true },
   om: { dialCode: "968", domesticPrefix: "0", startsWith: [], length: 8, rescueTrailingZero: true },
 };
 
@@ -68,8 +68,11 @@ function _normalizeCore(phone, country) {
     return { digits: trailingDialCodeCandidate, uncertain: false, correction: "trailing_dial_code" };
   }
 
-  if (cc === "sa" && digits.length === 10 && digits.endsWith("0")) {
-    digits = digits.slice(0, 9);
+  if (digits.length === cfg.length + 1 && digits.endsWith("0")) {
+    const trimmed = digits.slice(0, cfg.length);
+    if (_isExactValid(trimmed, cfg)) {
+      return { digits: trimmed, uncertain: false, correction: "trailing_extra_zero" };
+    }
   }
 
   const validStart = _hasValidStart(digits, cfg);
@@ -135,6 +138,11 @@ function normalizePhoneCandidatesWithMeta(phone, country) {
   const trailingDialCodeCandidate = _trailingDialCodeCandidate(raw, cfg);
   if (trailingDialCodeCandidate) {
     add(trailingDialCodeCandidate, "trailing_dial_code");
+    if (candidates.length) return candidates;
+  }
+
+  if (excess === 1 && raw.endsWith("0")) {
+    add(raw.slice(0, cfg.length), "trailing_extra_zero");
     if (candidates.length) return candidates;
   }
 

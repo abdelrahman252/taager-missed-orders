@@ -255,6 +255,21 @@ window.renderSetup = function (onComplete, initialStep) {
           font-weight:var(--weight-semibold);
           font-size:var(--type-control);
         }
+        .sv3-affiliate-recovery-shipping-note {
+          margin: 10px 0 0;
+          padding: 10px 11px;
+          gap: 9px;
+          font-size:var(--type-caption);
+        }
+        .sv3-affiliate-recovery-shipping-note .sv3-recovery-note-badge {
+          width: 18px;
+          height: 18px;
+          font-size:var(--type-caption);
+        }
+        .sv3-affiliate-recovery-shipping-note strong {
+          margin-bottom: 2px;
+          font-size:var(--type-caption);
+        }
 
         .sv3-run-title-lockup {
           display: flex;
@@ -3444,6 +3459,13 @@ window.renderSetup = function (onComplete, initialStep) {
                   </button>
                 </div>
               </div>
+              <div id="sv3-affiliate-recovery-shipping-note" class="sv3-recovery-note sv3-affiliate-recovery-shipping-note" style="display:none">
+                <div class="sv3-recovery-note-badge">!</div>
+                <div>
+                  <strong>${esc(setupText("setup.affiliate_recovery_shipping_warning_title", "Missed orders shipping"))}</strong>
+                  <span>${esc(setupText("setup.affiliate_recovery_shipping_warning_body", "If shipping is not configured in EasyOrder settings, converted missed orders will be sent with shipping 0."))}</span>
+                </div>
+              </div>
             </div>
 
             <div class="sv3-setting-card sv3-setting-card--compact">
@@ -3827,8 +3849,10 @@ window.renderSetup = function (onComplete, initialStep) {
       const btn = document.getElementById("sv3-btn-affiliate-recovery");
       const knob = document.getElementById("sv3-affiliate-recovery-knob");
       const label = document.getElementById("sv3-affiliate-recovery-label");
+      const note = document.getElementById("sv3-affiliate-recovery-shipping-note");
       if (!btn) return;
       sv3SetSettingToggleVisual(btn, knob, label, sv3AffiliateRecoveryEnabled, "recovery");
+      if (note) note.style.display = sv3AffiliateRecoveryEnabled ? "flex" : "none";
     }
 
     document.getElementById("sv3-btn-affiliate-recovery")?.addEventListener("click", async () => {
