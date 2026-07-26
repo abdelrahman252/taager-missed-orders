@@ -256,19 +256,45 @@ window.renderSetup = function (onComplete, initialStep) {
           font-size:var(--type-control);
         }
         .sv3-affiliate-recovery-shipping-note {
-          margin: 10px 0 0;
-          padding: 10px 11px;
-          gap: 9px;
-          font-size:var(--type-caption);
+          display: none;
+          position: relative;
         }
-        .sv3-affiliate-recovery-shipping-note .sv3-recovery-note-badge {
-          width: 18px;
-          height: 18px;
-          font-size:var(--type-caption);
+        .sv3-affiliate-recovery-shipping-note.is-visible {
+          display: inline-flex;
         }
-        .sv3-affiliate-recovery-shipping-note strong {
-          margin-bottom: 2px;
+        .sv3-affiliate-recovery-shipping-note .sv3-warning-icon {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid rgba(245, 158, 11, .52);
+          background: rgba(245, 158, 11, .16);
+          color: #fbbf24;
           font-size:var(--type-caption);
+          font-weight:var(--weight-bold);
+          cursor: help;
+          box-shadow: 0 0 0 3px rgba(245, 158, 11, .08);
+        }
+        .sv3-affiliate-recovery-shipping-note .sv3-warning-icon:hover,
+        .sv3-affiliate-recovery-shipping-note .sv3-warning-icon:focus-visible {
+          background: rgba(245, 158, 11, .24);
+          border-color: rgba(245, 158, 11, .72);
+          color: #fde68a;
+          outline: none;
+          box-shadow: 0 0 0 4px rgba(245, 158, 11, .12);
+        }
+        .sv3-affiliate-recovery-shipping-note .sv3-setting-tooltip {
+          width: 260px;
+          border-color: rgba(245, 158, 11, .42);
+          background: rgba(37, 29, 16, .98);
+        }
+        .sv3-affiliate-recovery-shipping-note .sv3-warning-tooltip-title {
+          display: block;
+          margin-bottom: 4px;
+          color: #fef3c7;
+          font-weight:var(--weight-bold);
         }
 
         .sv3-run-title-lockup {
@@ -2676,6 +2702,25 @@ window.renderSetup = function (onComplete, initialStep) {
           background: rgba(124,106,247,.16);
           border-color: rgba(124,106,247,.42);
         }
+        [data-theme="light"] .sv3-affiliate-recovery-shipping-note .sv3-warning-icon {
+          color: #b45309;
+          background: rgba(245, 158, 11, .14);
+          border-color: rgba(180, 83, 9, .26);
+        }
+        [data-theme="light"] .sv3-affiliate-recovery-shipping-note .sv3-warning-icon:hover,
+        [data-theme="light"] .sv3-affiliate-recovery-shipping-note .sv3-warning-icon:focus-visible {
+          color: #92400e;
+          background: rgba(245, 158, 11, .22);
+          border-color: rgba(180, 83, 9, .42);
+        }
+        [data-theme="light"] .sv3-affiliate-recovery-shipping-note .sv3-setting-tooltip {
+          background: #fff7ed;
+          border-color: rgba(180, 83, 9, .28);
+          color: #7c2d12;
+        }
+        [data-theme="light"] .sv3-affiliate-recovery-shipping-note .sv3-warning-tooltip-title {
+          color: #92400e;
+        }
         [data-theme="light"] .sv3-run-accounts .sv3-acc-card {
           background: var(--bg);
           border-color: var(--border);
@@ -3450,6 +3495,13 @@ window.renderSetup = function (onComplete, initialStep) {
                       <button type="button" class="sv3-setting-help-btn" aria-label="${esc(setupText("welcome.affiliate_recovery_title", "Affiliate Recovery"))}" aria-describedby="sv3-affiliate-recovery-tooltip">?</button>
                       <span id="sv3-affiliate-recovery-tooltip" class="sv3-setting-tooltip" role="tooltip">${esc(setupText("welcome.affiliate_recovery_desc", "Resend missing EasyOrders real orders and convert missed orders, then verify them from Taager exports."))}</span>
                     </span>
+                    <span id="sv3-affiliate-recovery-shipping-note" class="sv3-setting-help sv3-affiliate-recovery-shipping-note">
+                      <button type="button" class="sv3-warning-icon" aria-label="${esc(setupText("setup.affiliate_recovery_shipping_warning_title", "Missed orders shipping"))}" aria-describedby="sv3-affiliate-recovery-shipping-tooltip">!</button>
+                      <span id="sv3-affiliate-recovery-shipping-tooltip" class="sv3-setting-tooltip" role="tooltip">
+                        <span class="sv3-warning-tooltip-title">${esc(setupText("setup.affiliate_recovery_shipping_warning_title", "Missed orders shipping"))}</span>
+                        ${esc(setupText("setup.affiliate_recovery_shipping_warning_body", "If shipping is not configured in EasyOrder settings, converted missed orders will be sent with shipping 0."))}
+                      </span>
+                    </span>
                   </div>
                 </div>
                 <div class="sv3-setting-control">
@@ -3457,13 +3509,6 @@ window.renderSetup = function (onComplete, initialStep) {
                   <button id="sv3-btn-affiliate-recovery" class="sv3-toggle-btn" type="button" aria-pressed="false">
                     <span id="sv3-affiliate-recovery-knob"></span>
                   </button>
-                </div>
-              </div>
-              <div id="sv3-affiliate-recovery-shipping-note" class="sv3-recovery-note sv3-affiliate-recovery-shipping-note" style="display:none">
-                <div class="sv3-recovery-note-badge">!</div>
-                <div>
-                  <strong>${esc(setupText("setup.affiliate_recovery_shipping_warning_title", "Missed orders shipping"))}</strong>
-                  <span>${esc(setupText("setup.affiliate_recovery_shipping_warning_body", "If shipping is not configured in EasyOrder settings, converted missed orders will be sent with shipping 0."))}</span>
                 </div>
               </div>
             </div>
@@ -3852,7 +3897,7 @@ window.renderSetup = function (onComplete, initialStep) {
       const note = document.getElementById("sv3-affiliate-recovery-shipping-note");
       if (!btn) return;
       sv3SetSettingToggleVisual(btn, knob, label, sv3AffiliateRecoveryEnabled, "recovery");
-      if (note) note.style.display = sv3AffiliateRecoveryEnabled ? "flex" : "none";
+      if (note) note.classList.toggle("is-visible", sv3AffiliateRecoveryEnabled);
     }
 
     document.getElementById("sv3-btn-affiliate-recovery")?.addEventListener("click", async () => {

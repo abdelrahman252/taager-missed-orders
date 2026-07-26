@@ -241,6 +241,7 @@ contextBridge.exposeInMainWorld("api", {
 
   // Auto-updater
   getAppVersion:        ()    => monitoredInvoke("get-app-version"),
+  getAppPlatform:       ()    => monitoredInvoke("get-app-platform"),
   checkForUpdates:      ()    => monitoredInvoke("check-for-updates"),
   downloadUpdate:       ()    => monitoredInvoke("download-update"),
   installUpdate:        ()    => monitoredInvoke("install-update"),

@@ -776,6 +776,7 @@
     //  AUTO-UPDATER UI
     // ══════════════════════════════════════════════════════════════════════════════════════════════════
     let _updateState = 'idle'; // idle | checking | available | downloading | downloaded | error
+    let _appPlatform = '';
 
     function _updLog(level, ...args) {
       const ts = new Date().toISOString();
@@ -831,7 +832,7 @@
       if (lbl) lbl.textContent = loading ? updText('setup.checking_updates', 'Checking...') : updText('setup.check_updates_btn', 'Check for Updates');
     }
 
-    function handleUpdateAction() {
+    async function handleUpdateAction() {
       _updLog('info', `handleUpdateAction called, state=${_updateState}`);
       if (_updateState === 'available') {
         _updLog('info', 'Starting update download…');
@@ -842,7 +843,36 @@
         window.api.downloadUpdate();
       } else if (_updateState === 'downloaded') {
         _updLog('info', 'Requesting install & restart…');
-        window.api.installUpdate();
+        const btn = document.getElementById('updateActionBtn');
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = _appPlatform === 'darwin'
+            ? updText('update.mac_preparing_action', 'Preparing...')
+            : updText('update.installing_action', 'Installing...');
+        }
+        try {
+          const res = await window.api.installUpdate();
+          if (res && res.manual && res.platform === 'darwin') {
+            _updateState = 'idle';
+            document.getElementById('updateProgressWrap').style.display = 'none';
+            document.getElementById('updateTitle').textContent = updText('update.mac_ready_title', 'Update Saved to Downloads');
+            document.getElementById('updateSub').textContent = updText('update.mac_ready_sub', 'Open the downloaded update, then drag Taager Orders to Applications and choose Replace.');
+            document.getElementById('updateActionBtn').textContent = updText('update.ok', 'OK');
+            document.getElementById('updateActionBtn').disabled = false;
+            document.getElementById('updateActionBtn').onclick = hideUpdateToast;
+          } else if (res && res.ok === false) {
+            throw new Error(res.error || updText('update.unknown_error', 'Unknown error'));
+          }
+        } catch (err) {
+          _updateState = 'error';
+          document.getElementById('updateTitle').textContent = updText('update.error_title', 'Update Error');
+          document.getElementById('updateSub').textContent = err.message || String(err);
+          document.getElementById('updateActionBtn').textContent = updText('update.dismiss', 'Dismiss');
+          document.getElementById('updateActionBtn').disabled = false;
+          document.getElementById('updateActionBtn').onclick = () => { _updateState = 'idle'; hideUpdateToast(); };
+          document.getElementById('updateProgressWrap').style.display = 'none';
+          document.getElementById('updateToast').style.display = 'block';
+        }
       } else {
         _updLog('warn', `handleUpdateAction called in unexpected state: ${_updateState}`);
       }
@@ -923,6 +953,14 @@
       }).catch(err => {
         _updLog('error', 'failed to get app version:', err);
       });
+      if (window.api.getAppPlatform) {
+        window.api.getAppPlatform().then(platform => {
+          _appPlatform = platform || '';
+          _updLog('info', `app platform=${_appPlatform || 'unknown'}`);
+        }).catch(err => {
+          _updLog('warn', 'failed to get app platform:', err);
+        });
+      }
 
       window.api.onUpdateAvailable(({ version }) => {
         _updLog('info', `onUpdateAvailable fired — version=${version}`);
@@ -970,9 +1008,15 @@
         _updLog('info', 'onUpdateDownloaded fired — update ready to install');
         _updateState = 'downloaded';
         document.getElementById('updateProgressWrap').style.display = 'none';
-        document.getElementById('updateTitle').textContent = updText('update.ready_title', 'Update Ready to Install');
-        document.getElementById('updateSub').textContent   = updText('update.ready_sub', 'Restart the app to apply the update.');
-        document.getElementById('updateActionBtn').textContent = updText('update.restart_install', 'Restart & Install');
+        document.getElementById('updateTitle').textContent = _appPlatform === 'darwin'
+          ? updText('update.mac_downloaded_title', 'Update Downloaded')
+          : updText('update.ready_title', 'Update Ready to Install');
+        document.getElementById('updateSub').textContent = _appPlatform === 'darwin'
+          ? updText('update.mac_downloaded_sub', 'Save it to Downloads, then replace the app manually.')
+          : updText('update.ready_sub', 'Restart the app to apply the update.');
+        document.getElementById('updateActionBtn').textContent = _appPlatform === 'darwin'
+          ? updText('update.show_downloads', 'Show in Downloads')
+          : updText('update.restart_install', 'Restart & Install');
         document.getElementById('updateActionBtn').disabled = false;
         document.getElementById('updateActionBtn').onclick = handleUpdateAction;
         document.getElementById('updateToast').style.display = 'block';

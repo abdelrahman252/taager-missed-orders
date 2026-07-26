@@ -3012,19 +3012,9 @@ ipcMain.handle("install-update", () => {
   // The file name matches the artifactName pattern from package.json.
   // We search for it rather than hardcode the version.
   function findDownloadedInstaller() {
-    const tmpDir = os.tmpdir();
-    try {
-      const files = fs.readdirSync(tmpDir);
-      // Match e.g. "Taager.Orders.Setup.1.0.15.exe"
-      const match = files
-        .filter(f => /^Taager\.Orders\.Setup\.\d+\.\d+\.\d+\.exe$/i.test(f))
-        .sort() // take the highest version if multiple
-        .pop();
-      if (match) return path.join(tmpDir, match);
-    } catch (_) {}
-
-    // Fallback: ask electron-updater for the cached path via its internal
-    // _downloadedUpdateHelper (works for electron-updater v6.x)
+    // Ask electron-updater for the cached path via its internal
+    // _downloadedUpdateHelper (works for electron-updater v6.x). On macOS this
+    // is usually the downloaded zip; on Windows it can be the NSIS installer.
     try {
       const helper = autoUpdater._downloadedUpdateHelper;
       if (helper && helper.downloadedFileInfo && helper.downloadedFileInfo.path) {
@@ -3032,7 +3022,33 @@ ipcMain.handle("install-update", () => {
       }
     } catch (_) {}
 
+    if (process.platform === "win32") {
+      const tmpDir = os.tmpdir();
+      try {
+        const files = fs.readdirSync(tmpDir);
+        // Match e.g. "Taager.Orders.Setup.1.0.15.exe"
+        const match = files
+          .filter(f => /^Taager\.Orders\.Setup\.\d+\.\d+\.\d+\.exe$/i.test(f))
+          .sort() // take the highest version if multiple
+          .pop();
+        if (match) return path.join(tmpDir, match);
+      } catch (_) {}
+    }
+
     return null;
+  }
+
+  function uniqueDownloadPath(filename) {
+    const downloadsDir = app.getPath("downloads") || path.join(os.homedir(), "Downloads");
+    fs.mkdirSync(downloadsDir, { recursive: true });
+    const ext = path.extname(filename);
+    const base = path.basename(filename, ext);
+    let candidate = path.join(downloadsDir, filename);
+    let i = 1;
+    while (fs.existsSync(candidate)) {
+      candidate = path.join(downloadsDir, `${base}-${i++}${ext}`);
+    }
+    return candidate;
   }
 
   function killChildProcess(child) {
@@ -3064,6 +3080,45 @@ ipcMain.handle("install-update", () => {
     });
     child.unref();
     return child;
+  }
+
+  if (process.platform === "darwin") {
+    const installerPath = findDownloadedInstaller();
+    log.info("[AutoUpdate] macOS downloaded update path:", installerPath || "NOT FOUND");
+    if (installerPath && fs.existsSync(installerPath)) {
+      try {
+        const sourceName = path.basename(installerPath);
+        const ext = path.extname(sourceName) || ".zip";
+        const targetName = /^Taager\.Orders/i.test(sourceName)
+          ? sourceName
+          : `Taager.Orders-${app.getVersion()}-mac-update${ext}`;
+        const targetPath = uniqueDownloadPath(targetName);
+        fs.copyFileSync(installerPath, targetPath);
+        shell.showItemInFolder(targetPath);
+        log.info("[AutoUpdate] macOS update copied to Downloads:", targetPath);
+        return {
+          ok: true,
+          manual: true,
+          platform: "darwin",
+          path: targetPath,
+          fileName: path.basename(targetPath),
+        };
+      } catch (copyErr) {
+        log.error("[AutoUpdate] macOS update copy failed:", copyErr.message);
+        monitoring.captureException(copyErr, { operation: "autoUpdater.macManualCopy" });
+        return { ok: false, error: copyErr.message };
+      }
+    }
+
+    try {
+      log.warn("[AutoUpdate] macOS cached update not found; falling back to quitAndInstall");
+      autoUpdater.quitAndInstall(false, true);
+      return { ok: true, fallbackQuitAndInstall: true, platform: "darwin" };
+    } catch (installErr) {
+      log.error("[AutoUpdate] macOS quitAndInstall fallback failed:", installErr.message);
+      monitoring.captureException(installErr, { operation: "autoUpdater.macQuitAndInstallFallback" });
+      return { ok: false, error: installErr.message };
+    }
   }
 
   // 1. Tear everything down
@@ -3127,6 +3182,7 @@ ipcMain.handle("install-update", () => {
 });
 
 ipcMain.handle("get-app-version", () => app.getVersion());
+ipcMain.handle("get-app-platform", () => process.platform);
 
 // ════════════════════════════════════════
 // IPC — Window
