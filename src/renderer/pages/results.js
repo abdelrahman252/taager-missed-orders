@@ -318,9 +318,9 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         font-size: var(--type-caption);
         font-weight: var(--weight-bold);
         line-height: 1.25;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        text-align: center;
       }
       .results-status-pill.is-confirmed {
         color: var(--success);
@@ -336,6 +336,11 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         color: var(--warning);
         background: rgba(255,170,0,0.12);
         border: 1px solid rgba(255,170,0,0.28);
+      }
+      .results-status-pill.is-info {
+        color: var(--accent);
+        background: rgba(79,142,247,0.12);
+        border: 1px solid rgba(79,142,247,0.28);
       }
     `;
     document.head.appendChild(style);
@@ -629,8 +634,32 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     }
 
     function orderStatusInfo(o) {
-      const raw = String(o.recoveryStatus || o.finalStatus || o.status || "").trim();
+      const raw = String(o.recoveryStatus || o.finalStatus || o.actionStatus || o.status || "").trim();
       const lower = raw.toLowerCase();
+      const friendly = {
+        verified_in_taager: translated("results.reason_verified_in_taager", "Confirmed in Taager"),
+        confirmed_in_taager: translated("results.reason_verified_in_taager", "Confirmed in Taager"),
+        failed_in_taager: translated("results.reason_failed_in_taager", "Failed in Taager"),
+        not_found_after_retry: translated("results.reason_not_found_after_retry", "Not found after retry"),
+        sent: translated("results.reason_sent", "Sent to EasyOrders"),
+        sent_unverified: translated("results.reason_sent_unverified", "Sent, awaiting Taager export"),
+        converted: translated("results.reason_converted", "Converted from missed orders"),
+        convert_error: translated("results.reason_convert_error", "Convert failed"),
+        retry_skipped: translated("results.reason_retry_skipped", "Retry skipped"),
+        skipped_manual: translated("results.reason_skipped_manual", "Manual review needed"),
+        completed_waiting_verification: translated("results.reason_completed_waiting_verification", "Already completed, verifying in Taager"),
+        already_in_real_orders_unverified: translated("results.reason_already_in_real_orders_unverified", "Already in real orders, verifying in Taager"),
+      };
+      if (friendly[lower]) {
+        const cls = /verified|confirmed/.test(lower)
+          ? "is-confirmed"
+          : /failed|error|reject/.test(lower)
+            ? "is-failed"
+            : /sent|converted/.test(lower)
+              ? "is-info"
+              : "is-warning";
+        return { text: friendly[lower], cls };
+      }
       if (/verified|confirmed|success|ok/.test(lower)) {
         return { text: translated(`results.reason_${raw}`, raw || translated("results.confirmed_in_taager_cart", "Confirmed in Taager")), cls: "is-confirmed" };
       }
@@ -710,7 +739,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <input type="text" placeholder="${t('results.search_orders_placeholder') || 'Search by name, phone or product...'}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font-size:var(--type-label);color:var(--text);outline:none" oninput="window._resOrderSearch('${tableUid}',this.value)">
         </div>
         <div class="dash-section-body no-pad results-orders-table-wrap" style="overflow-x:auto">
-          <table class="orders-preview-table results-orders-table" style="width:100%;min-width:1360px;table-layout:fixed;border-collapse:collapse">
+          <table class="orders-preview-table results-orders-table" style="width:100%;min-width:1430px;table-layout:fixed;border-collapse:collapse">
             <colgroup>
               <col style="width:46px">
               <col style="width:190px">
@@ -718,7 +747,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
               <col style="width:430px">
               <col style="width:70px">
               <col style="width:90px">
-              <col style="width:150px">
+              <col style="width:220px">
               <col style="width:150px">
               <col style="width:190px">
               <col style="width:180px">
@@ -755,7 +784,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
   function buildRecoveryUncertainHtml(recovery) {
     if (!recovery || recovery.enabled !== true) return "";
-    const rows = (recovery.manualReviewRows || []).slice(0, 60);
+    const rows = recovery.manualReviewRows || [];
     if (!rows.length) return "";
     const labelFor = (prefix, value, fallback = "-") => {
       const raw = value || fallback;
@@ -776,11 +805,11 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       return `<td${cls} title="${text}"${extra}>${text}</td>`;
     };
     const countText = translated("results.uncertain_orders_need_review", "{count} need review").replace("{count}", rows.length);
-    const rowHtml = (row) => {
+    const rowHtml = (row, i, attrs) => {
       const reasonText = labelFor("results.reason_", row.reason || row.recoveryStatus);
       const messageText = messageFor(row);
       return `
-      <tr>
+      <tr ${attrs || ""}>
         ${td(row.source || row.recoverySource)}
         ${td(row.name)}
         ${td(row.rawPhone)}
@@ -790,6 +819,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         ${td(messageText)}
       </tr>`;
     };
+    const paged = buildPagedItems(rows, rowHtml, "recovery-uncertain");
     return `
       <div class="dash-section" style="border-color:var(--warning)">
         <div class="dash-section-header">
@@ -807,8 +837,9 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
               <th>${t("results.reason_col")}</th>
               <th>${translated("results.message_col", "Message")}</th>
             </tr></thead>
-            <tbody>${rows.map(rowHtml).join("")}</tbody>
+            <tbody>${paged.itemsHtml}</tbody>
           </table>
+          ${paged.pagerHtml}
         </div>
       </div>`;
   }

@@ -293,6 +293,14 @@ function failedRowMatchesAttempt(failedRow, attempt, country = "sa") {
   return false;
 }
 
+function isAlreadyRealOrderUnverified(row) {
+  const status = cleanText(row && (row.finalStatus || row.actionStatus || row.status || row.reason)).toLowerCase();
+  const message = cleanText(row && (row.actionMessage || row.message || row.error)).toLowerCase();
+  return row?.missingConvertNeedsRealRetry === true
+    || status === "already_in_real_orders_unverified"
+    || /convert to order button not available/i.test(message);
+}
+
 function classifyRecoveryAttempts(attempts, verifiedTaagerKeys, failedRows = [], options = {}) {
   const country = options.country || "sa";
   const verified = [];
@@ -315,7 +323,12 @@ function classifyRecoveryAttempts(attempts, verifiedTaagerKeys, failedRows = [],
         failedStoreOrderCode: failedMatch.storeOrderCode || "",
       });
     } else {
-      unresolved.push({ ...attempt, finalStatus: "not_found_after_retry" });
+      unresolved.push({
+        ...attempt,
+        finalStatus: isAlreadyRealOrderUnverified(attempt)
+          ? "already_in_real_orders_unverified"
+          : "not_found_after_retry",
+      });
     }
   }
 
@@ -387,6 +400,8 @@ function buildAffiliateRecoveryResult(parts, country = "sa") {
   const verified = parts.verified || [];
   const failedInTaager = parts.failedInTaager || [];
   const unresolved = parts.unresolved || [];
+  const alreadyRealUnverified = unresolved.filter(isAlreadyRealOrderUnverified);
+  const failedUnresolved = unresolved.filter((row) => !isAlreadyRealOrderUnverified(row));
   const skippedAlready = parts.skippedAlready || [];
   const skippedCompleted = parts.skippedCompleted || [];
   const skippedManual = parts.skippedManual || [];
@@ -403,6 +418,10 @@ function buildAffiliateRecoveryResult(parts, country = "sa") {
     failedInTaagerCount: failedInTaager.length,
     unresolved,
     unresolvedCount: unresolved.length,
+    alreadyRealUnverified,
+    alreadyRealUnverifiedCount: alreadyRealUnverified.length,
+    failedUnresolved,
+    failedUnresolvedCount: failedUnresolved.length,
     skippedAlready,
     skippedAlreadyCount: skippedAlready.length,
     skippedCompleted,
@@ -414,9 +433,9 @@ function buildAffiliateRecoveryResult(parts, country = "sa") {
     validationErrors: attempted.flatMap((row) => row.validationErrors || []),
     attemptedRows: recoveryResultRows(attempted, country),
     verifiedRows: recoveryResultRows(verified, country),
-    failedRows: recoveryResultRows([...failedInTaager, ...unresolved], country),
-    skippedRows: recoveryResultRows([...skippedAlready, ...skippedCompleted, ...skippedManual], country),
-    manualReviewRows: recoveryResultRows(skippedManual, country),
+    failedRows: recoveryResultRows([...failedInTaager, ...failedUnresolved], country),
+    skippedRows: recoveryResultRows([...skippedAlready, ...skippedCompleted, ...skippedManual, ...alreadyRealUnverified], country),
+    manualReviewRows: recoveryResultRows([...skippedManual, ...alreadyRealUnverified], country),
     productSummary: recoveryProductSummary(verified),
   };
 }
@@ -432,6 +451,7 @@ module.exports = {
   normalizeAttemptRow,
   parseTaagerFailedOrders,
   classifyRecoveryAttempts,
+  isAlreadyRealOrderUnverified,
   buildAffiliateRecoveryResult,
   recoveryResultRows,
   recoveryProductSummary,

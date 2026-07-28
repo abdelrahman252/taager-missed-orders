@@ -24,9 +24,19 @@ function createEasyOrdersUiRecovery(options = {}) {
     : (page, url) => page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 }).then(() => page);
   const country = options.country || "sa";
   const stepDelayMs = Number(options.stepDelayMs || DEFAULT_STEP_DELAY_MS) || DEFAULT_STEP_DELAY_MS;
+  const onAttemptResult = typeof options.onAttemptResult === "function" ? options.onAttemptResult : () => {};
 
   function emit(stageName, status, message, extra = {}) {
     stage(stageName, status, message, extra);
+  }
+
+  function reportAttemptResult(row, recoverySource) {
+    try {
+      onAttemptResult({
+        ...(row || {}),
+        recoverySource: recoverySource || row?.recoverySource || row?.source || "",
+      });
+    } catch (_) {}
   }
 
   function isTransientEasyOrdersError(error) {
@@ -626,8 +636,16 @@ function createEasyOrdersUiRecovery(options = {}) {
     await waitForEasyOrdersDetail(page, "missed", candidate, 15000);
     const convert = page.getByRole("button", { name: /^Convert to Order$/i }).first();
     if (!(await convert.isVisible({ timeout: 5000 }).catch(() => false))) {
-      log(`EasyOrders recovery missed manual review: ${candidate.name || candidate.normPhone || ""} -> Convert to Order button not available`);
-      return { ...candidate, actionStatus: "skipped_manual", actionMessage: "Convert to Order button not available", attempts: options.attempt || 1 };
+      log(`EasyOrders recovery missed already-real check: ${candidate.name || candidate.normPhone || ""} -> Convert to Order button not available`);
+      return {
+        ...candidate,
+        detailUrl: page.url(),
+        actionStatus: "already_in_real_orders_unverified",
+        actionMessage: "Convert to Order button not available; likely already moved from missed orders to real orders",
+        retryAsReal: true,
+        missingConvertNeedsRealRetry: true,
+        attempts: options.attempt || 1,
+      };
     }
     const before = await currentToastText(page);
     await convert.click({ timeout: 10000 });
@@ -762,8 +780,10 @@ function createEasyOrdersUiRecovery(options = {}) {
             attempts: 1,
           })
         );
-        if (result.actionStatus === "skipped_manual") skippedManual.push(result);
-        else attempted.push({ ...result, recoverySource: "missed", retryAsReal: true });
+        const reportedResult = { ...result, recoverySource: "missed", retryAsReal: true };
+        if (result.actionStatus === "skipped_manual") skippedManual.push(reportedResult);
+        else attempted.push(reportedResult);
+        reportAttemptResult(reportedResult, "missed");
         await page.goBack({ waitUntil: "domcontentloaded", timeout: 30000 }).catch(async () => {
           await openList(page, "real", fromDate, toDate);
           for (let i = 1; i < pageNo; i++) await goToNextPage(page);
@@ -775,13 +795,15 @@ function createEasyOrdersUiRecovery(options = {}) {
       pageNo++;
     }
     for (const candidate of pending) {
-      skippedManual.push({
+      const pendingResult = {
         ...candidate,
         recoverySource: "missed",
         status: "Completed",
         actionStatus: "skipped_manual",
         actionMessage: "Missed row is Completed, but matching real order was not found for resend",
-      });
+      };
+      skippedManual.push(pendingResult);
+      reportAttemptResult(pendingResult, "missed");
     }
     return { attempted, skippedManual };
   }
@@ -809,7 +831,7 @@ function createEasyOrdersUiRecovery(options = {}) {
         if (pendingIndex >= 0) pending.splice(pendingIndex, 1);
         log(`EasyOrders recovery missed matched prepared order: ${candidate.name || row.name} / ${candidate.normPhone || row.phone} / ${candidate.productName || ""}`);
         if (/^completed$/i.test(cleanText(row.status))) {
-          attempted.push({
+          const completedResult = {
             ...candidate,
             status: "Completed",
             actionStatus: "completed_waiting_verification",
@@ -817,7 +839,9 @@ function createEasyOrdersUiRecovery(options = {}) {
             completedNeedsRealRetry: true,
             retryAsReal: true,
             attempts: 1,
-          });
+          };
+          attempted.push(completedResult);
+          reportAttemptResult(completedResult, "missed");
           continue;
         }
         const converted = await withEasyOrdersOrderRetry(
@@ -841,17 +865,20 @@ function createEasyOrdersUiRecovery(options = {}) {
             attempts: 1,
           })
         );
+        let reportedConverted = converted;
         if (converted.actionStatus === "skipped_completed") {
-          attempted.push({
+          reportedConverted = {
             ...converted,
             actionStatus: "completed_waiting_verification",
             actionMessage: "Missed detail is already Completed; will search real orders only if Taager verification misses it",
             completedNeedsRealRetry: true,
             retryAsReal: true,
-          });
+          };
+          attempted.push(reportedConverted);
         }
         else if (converted.actionStatus === "skipped_manual") skippedManual.push(converted);
         else attempted.push(converted);
+        reportAttemptResult(reportedConverted, "missed");
         await page.goBack({ waitUntil: "domcontentloaded", timeout: 30000 }).catch(async () => {
           await openList(page, "missed", fromDate, toDate);
           for (let i = 1; i < pageNo; i++) await goToNextPage(page);
@@ -864,10 +891,13 @@ function createEasyOrdersUiRecovery(options = {}) {
       pageNo++;
     }
     for (const candidate of pending) {
-      skippedManual.push({ ...candidate, actionStatus: "skipped_manual", actionMessage: "Prepared missed order was not found in EasyOrders missed table" });
+      const pendingResult = { ...candidate, actionStatus: "skipped_manual", actionMessage: "Prepared missed order was not found in EasyOrders missed table" };
+      skippedManual.push(pendingResult);
+      reportAttemptResult(pendingResult, "missed");
     }
     const completedWaiting = attempted.filter((row) => row.completedNeedsRealRetry).length;
-    emit("easyorders.recovery.missed", "ok", `Prepared missed attempted=${attempted.length}, completed-waiting-verification=${completedWaiting}, manual=${skippedManual.length}`);
+    const alreadyRealWaiting = attempted.filter((row) => row.missingConvertNeedsRealRetry).length;
+    emit("easyorders.recovery.missed", "ok", `Prepared missed attempted=${attempted.length}, completed-waiting-verification=${completedWaiting}, already-real-waiting-verification=${alreadyRealWaiting}, manual=${skippedManual.length}`);
     return { attempted, skippedCompleted: [], skippedManual };
   }
 
@@ -897,6 +927,7 @@ function createEasyOrdersUiRecovery(options = {}) {
         skippedManual.push(result);
       }
       else attempted.push(result);
+      reportAttemptResult(result, "real");
       if ((i + 1) % 25 === 0 && i + 1 < list.length) {
         log(`EasyOrders recovery real cooldown: processed ${i + 1}/${list.length}; pausing briefly to keep EasyOrders stable.`);
         await page.waitForTimeout(3500).catch(() => {});
@@ -909,7 +940,7 @@ function createEasyOrdersUiRecovery(options = {}) {
   async function retryAttempts(page, attempts, options = {}) {
     const retried = [];
     for (const attempt of attempts || []) {
-      if (attempt.completedNeedsRealRetry) {
+      if (attempt.completedNeedsRealRetry || attempt.missingConvertNeedsRealRetry) {
         const completedRealResult = await processCompletedMissedAsReal(page, [attempt], options.fromDate, options.toDate);
         retried.push(...completedRealResult.attempted, ...completedRealResult.skippedManual);
         continue;

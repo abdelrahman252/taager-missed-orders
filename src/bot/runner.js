@@ -5053,9 +5053,39 @@ if (config.mode === "second-taager-cart-upload") {
       log("========================================\n");
       log("Affiliate recovery uses the exact old-flow prepared orders. Only the final Taager upload action is replaced by EasyOrders edit/resend/convert.");
       emitStage("affiliate-recovery.mode", "started", "EasyOrders affiliate recovery is enabled for this account");
+      const recoveryPreparedOrders = buildGroupedCartOrders(orders);
+      if (recoveryPreparedOrders.length > 0) {
+        const recoveryPreviewRows = recoveryPreparedOrders.slice(0, 50).map(o => ({
+          productName: o.productName || "",
+          sku:         o.sku || "",
+          qty:         o.qty || 1,
+          unitPrice:   o.unitPrice || "",
+          subtotal:    o.subtotal || 0,
+          date:        o.date || "",
+          city:        o.city || "",
+          region:      o.region || "",
+          address:     o.address || "",
+          name:        o.name || "",
+          phone:       formatPhone(o.normPhone, TAAGER_COUNTRY) || "",
+          taagerCountry: TAAGER_COUNTRY,
+          uncertain:   !!o.uncertain,
+          destination: "affiliate-recovery",
+          recoverySource: o.recoverySource || o.source || "",
+        }));
+        const recoveryPreviewBuffer = buildOutputExcel(orders, provinceFallbackOptions);
+        process.send && process.send({
+          type: "preview",
+          rows: recoveryPreviewRows,
+          total: recoveryPreparedOrders.length,
+          recoveryPreview: true,
+          buffer: recoveryPreviewBuffer ? Array.from(recoveryPreviewBuffer) : null,
+        });
+        log(`Affiliate recovery preview sent to dashboard (${recoveryPreparedOrders.length} prepared orders)`);
+      }
       const recoveryFlow = createEasyOrdersAffiliateRecoveryFlow({
         log,
         stage: emitStage,
+        progress: (msg) => process.send && process.send({ type: "order-progress", mode: "affiliate-recovery", ...msg }),
         country: TAAGER_COUNTRY,
         gotoEasyOrders: async (recoveryPage, url) => {
           await gotoWithNetworkRetries(recoveryPage, url, "EasyOrders affiliate recovery", { attempts: 3, timeout: 45000, waitMs: 5000 });
@@ -5068,7 +5098,7 @@ if (config.mode === "second-taager-cart-upload") {
       });
 
       const affiliateRecovery = await recoveryFlow.run(page, {
-        preparedOrders: buildGroupedCartOrders(orders),
+        preparedOrders: recoveryPreparedOrders,
         skippedOrders: recoveryManualSkippedOrders,
         normalFlowStats: stats,
         initialTaagerKeys: taagerOrderKeys,
@@ -5084,8 +5114,7 @@ if (config.mode === "second-taager-cart-upload") {
         taagerToText: formatDataDay(taagerEndDate),
       });
       const failedRecoveryRows = [
-        ...(affiliateRecovery.failedInTaager || []),
-        ...(affiliateRecovery.unresolved || []),
+        ...(affiliateRecovery.failedRows || []),
       ];
       const skippedRecoveryRows = [
         ...(affiliateRecovery.skippedRows || []),

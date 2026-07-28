@@ -69,14 +69,17 @@ function dedupePreparedRealOrders(prepared, country = "sa") {
 function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
   const log = typeof options.log === "function" ? options.log : () => {};
   const stage = typeof options.stage === "function" ? options.stage : () => {};
+  const progress = typeof options.progress === "function" ? options.progress : () => {};
   const exportTaagerOrders = options.exportTaagerOrders;
   const parseTaagerOrderKeys = options.parseTaagerOrderKeys;
   const country = options.country || "sa";
+  let reportAttemptResult = () => {};
   const ui = createEasyOrdersUiRecovery({
     log,
     stage,
     goto: options.gotoEasyOrders,
     country,
+    onAttemptResult: (row) => reportAttemptResult(row),
   });
   const taagerFailedFlow = createTaagerFailedOrdersExportFlow({
     log,
@@ -199,9 +202,48 @@ function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
     }
     const realPrepared = prepared.filter((order) => (order.recoverySource || order.source) === "real");
     const missedPrepared = prepared.filter((order) => (order.recoverySource || order.source) === "missed");
+    let progressCurrent = 0;
+    let progressSuccess = 0;
+    let progressFailed = 0;
+    let progressTotal = prepared.length;
+    const isProgressFailure = (row) => /skipped_manual|retry_skipped|convert_error|failed/i.test(String(row?.actionStatus || row?.finalStatus || ""));
+    const progressLastOrder = (row, failed) => {
+      const first = (row?.items || [])[0] || row || {};
+      const product = row?.productName || first.productName || row?.sku || first.sku || "";
+      const rawPhone = row?.normPhone || row?.normalizedPhone || row?.phone || row?.rawPhone || first.normPhone || first.phone || "";
+      return {
+        name: row?.name || first.name || "",
+        product,
+        sku: row?.sku || first.sku || "",
+        city: row?.city || first.city || "",
+        phone: formatPhone(normalizePhone(rawPhone, country) || rawPhone, country) || rawPhone,
+        recoveryStatus: row?.actionStatus || row?.finalStatus || row?.status || "",
+        error: failed ? (row?.actionMessage || row?.error || row?.failureCode || row?.actionStatus || "Needs review") : "",
+      };
+    };
+    reportAttemptResult = (row) => {
+      progressCurrent += 1;
+      const failed = isProgressFailure(row);
+      if (failed) progressFailed += 1;
+      else progressSuccess += 1;
+      progress({
+        current: progressCurrent,
+        total: progressTotal,
+        success: progressSuccess,
+        failed: progressFailed,
+        lastOrder: progressLastOrder(row, failed),
+      });
+    };
 
     stage("affiliate-recovery.start", "started", `Starting EasyOrders affiliate recovery from normal-flow prepared orders: real=${realPrepared.length}, missed=${missedPrepared.length}`);
     log(`Affiliate recovery prepared orders from normal flow: total=${prepared.length}, real=${realPrepared.length}, missed=${missedPrepared.length}, skippedFromNormalFlow=${(skippedOrders || []).length}`);
+    progress({
+      current: 0,
+      total: progressTotal,
+      success: 0,
+      failed: 0,
+      lastOrder: { product: "Affiliate recovery queue prepared", recoveryStatus: "started" },
+    });
 
     const realResult = await ui.processRealOrders(page, realPrepared);
     const missedResult = await ui.processMissedOrders(page, missedPrepared, fromDate, toDate);
@@ -218,6 +260,14 @@ function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
     let retryAttempts = [];
     let finalVerification = firstVerification;
     if (retryTargets.length > 0) {
+      progressTotal += retryTargets.length;
+      progress({
+        current: progressCurrent,
+        total: progressTotal,
+        success: progressSuccess,
+        failed: progressFailed,
+        lastOrder: { product: `Retrying ${retryTargets.length} unresolved recovery orders`, recoveryStatus: "retry" },
+      });
       stage("affiliate-recovery.retry", "started", `Retrying ${retryTargets.length} unresolved orders once`);
       retryAttempts = await ui.retryAttempts(page, retryTargets, { fromDate, toDate });
       stage("affiliate-recovery.retry", "ok", `Retry attempted for ${retryAttempts.length} orders`);

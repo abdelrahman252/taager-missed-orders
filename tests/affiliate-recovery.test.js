@@ -123,6 +123,29 @@ const classifiedVerified = classifyRecoveryAttempts(grouped.attempted, verifiedK
 assert.strictEqual(classifiedVerified.verified.length, 1, "normal Taager export verification wins");
 assert.strictEqual(classifiedVerified.failedInTaager.length, 0);
 
+const alreadyRealAttempt = {
+  ...grouped.attempted[0],
+  actionStatus: "already_in_real_orders_unverified",
+  actionMessage: "Convert to Order button not available; likely already moved from missed orders to real orders",
+  missingConvertNeedsRealRetry: true,
+};
+const classifiedAlreadyReal = classifyRecoveryAttempts([alreadyRealAttempt], new Set(), [], { country: "sa" });
+assert.strictEqual(classifiedAlreadyReal.unresolved.length, 1, "missing Convert button should remain a verification uncertainty");
+assert.strictEqual(classifiedAlreadyReal.unresolved[0].finalStatus, "already_in_real_orders_unverified");
+
+const alreadyRealRecoveryResult = buildAffiliateRecoveryResult({
+  realAttempts: [],
+  missedAttempts: [alreadyRealAttempt],
+  verified: [],
+  failedInTaager: [],
+  unresolved: classifiedAlreadyReal.unresolved,
+  skippedAlready: [],
+  skippedCompleted: [],
+  skippedManual: [],
+}, "sa");
+assert.strictEqual(alreadyRealRecoveryResult.failedRows.length, 0, "missing Convert button should not be reported as rejected by Taager");
+assert.strictEqual(alreadyRealRecoveryResult.manualReviewRows.length, 1, "unverified already-real missed rows should appear in Uncertain Orders");
+
 const recoveryResult = buildAffiliateRecoveryResult({
   realAttempts: grouped.attempted,
   missedAttempts: [],
@@ -172,7 +195,7 @@ assert(mainSource.includes("save-settings") && mainSource.includes("easyOrdersAf
 assert(preloadSource.includes("setEasyOrdersAffiliateRecoveryEnabled"), "preload should expose affiliate recovery setup toggle");
 assert(runnerSource.includes("createEasyOrdersAffiliateRecoveryFlow"), "runner should include affiliate recovery branch");
 assert(runSource.includes("easyOrdersAffiliateRecoveryEnabled"), "run page should pass affiliate recovery toggle into runBot payload");
-assert(runnerSource.includes("preparedOrders: buildGroupedCartOrders(orders)"), "runner should pass only trusted normal-flow grouped orders into recovery");
+assert(runnerSource.includes("const recoveryPreparedOrders = buildGroupedCartOrders(orders)") && runnerSource.includes("preparedOrders: recoveryPreparedOrders"), "runner should pass only trusted normal-flow grouped orders into recovery");
 assert(runnerSource.includes("no_trusted_product_reference"), "recovery mode should move no-history products to uncertain instead of submitting them");
 assert(runnerSource.includes("taagerBlockingPhones"), "recovery uncertainty logic should still avoid phone-only duplicates that are already active in Taager");
 assert(runnerSource.includes("fallbackProvince: taagerAnalyticsMap.provinceFallback"), "runner should pass delivered-order province fallback into recovery");
@@ -197,6 +220,8 @@ assert(uiRecoverySource.includes("completedNeedsRealRetry"), "completed missed r
 assert(flowSource.includes("ui.retryAttempts(page, retryTargets, { fromDate, toDate })"), "completed missed retry lookup needs the selected EasyOrders date range");
 assert(flowSource.includes("attempt.uploadGroupKey || attempt.easyOrderUuid || attempt.detailUrl"), "retry results should merge back into the original normal-flow recovery group");
 assert(uiRecoverySource.includes("processed ${i + 1}/${list.length}; pausing briefly"), "large EasyOrders recovery batches should pause briefly for stability");
+assert(uiRecoverySource.includes("onAttemptResult"), "affiliate recovery should report per-order progress to the run page");
+assert(flowSource.includes("progressTotal") && flowSource.includes("reportAttemptResult"), "affiliate recovery should maintain progress counters across first pass and retry");
 assert(flowSource.includes("item.address || order.address || city"), "affiliate recovery prepared orders should carry address fallback from city");
 assert(flowSource.includes("fallbackCityForOrder"), "affiliate recovery should reuse delivered-order city fallback logic");
 assert(flowSource.includes("fallbackNameForOrder"), "affiliate recovery should fill empty names from phone before editing EasyOrders");
@@ -206,6 +231,8 @@ assert(failedFlowSource.includes("orders-search-button"), "failed-orders diagnos
 assert(failedFlowSource.includes("export-to-excel-button"), "failed-orders diagnosis should use the stable Taager Excel export button id");
 assert(failedFlowSource.includes('[data-day="${target}"]'), "failed-orders diagnosis should select calendar days by stable data-day");
 assert(failedFlowSource.includes("leaving to date empty"), "failed-orders diagnosis should leave the end date empty like normal Taager orders export");
+assert(runnerSource.includes("recoveryPreview: true"), "affiliate recovery should send a run-page preview table");
+assert(runnerSource.includes('mode: "affiliate-recovery"'), "affiliate recovery progress should be tagged for the run page");
 assert(setupSource.includes("sv3-btn-affiliate-recovery"), "setup should render affiliate recovery run toggle");
 assert(!setupSource.includes("sv3-affiliate-recovery-enabled"), "affiliate recovery should not be an account-form checkbox");
 assert(setupSource.indexOf("saveSettings({ easyOrdersAffiliateRecoveryEnabled") < setupSource.indexOf("setEasyOrdersAffiliateRecoveryEnabled(next)"), "setup should save via existing settings IPC before custom IPC fallback");
@@ -216,5 +243,6 @@ assert(
   "affiliate recovery toggle should sit between Auto-Confirm and Route Missed Orders"
 );
 assert(resultsSource.includes("affiliateRecovery"), "results should render affiliate recovery details");
+assert(runSource.includes("run.recovery_preview_header") && runSource.includes("run.recovery_progress_title"), "run page should label affiliate recovery preview and progress distinctly");
 
 console.log("Affiliate recovery verification passed.");

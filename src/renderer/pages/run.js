@@ -222,7 +222,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
             <div class="upload-progress-large" id="upload-progress-panel" style="display:none">
               <div class="upl-header">
                 <div>
-                  <div class="upl-title">${t("run.creating")}</div>
+                  <div class="upl-title" id="upload-progress-title">${t("run.creating")}</div>
                   <div class="upl-count"><span id="upload-ok">0</span> <span style="font-size:var(--type-subtitle);color:var(--text2);font-weight:var(--weight-regular)">/ <span id="upload-total">0</span></span></div>
                 </div>
                 <div style="text-align:right">
@@ -551,6 +551,8 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       const headerFn = t("run.preview_header");
       const headerLabel = data.secondTaagerCartUploadOnly
         ? `${data.total} orders ready - primary cart ${data.primaryCartCount || 0}, second cart missed ${data.secondTaagerCartUploadCount || 0}`
+        : data.recoveryPreview
+          ? (() => { const fn = t("run.recovery_preview_header"); return typeof fn === "function" ? fn(data.total) : (fn || `Affiliate recovery queue - ${data.total} orders`); })()
         : (typeof headerFn === "function" ? headerFn(data.total) : headerFn);
       if (headerLbl) headerLbl.textContent = headerLabel;
 
@@ -558,6 +560,11 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       const allRows = data.rows; // show ALL rows
       window._previewAllRows = allRows;
       const more = data.total > allRows.length ? `<div style="padding:8px 16px;font-size:var(--type-caption);color:var(--text2)">+ ${data.total - allRows.length} more rows not shown</div>` : "";
+      function previewDestinationLabel(row) {
+        if (row.destination === "affiliate-recovery") return "Recovery";
+        if (row.destination === "second-taager-cart") return "Second cart";
+        return "Primary cart";
+      }
 
       function buildPreviewTableHTML(rows) {
         return `
@@ -580,7 +587,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
               ${rows.map((r, i) => `
                 <tr>
                   <td class="preview-index" style="color:var(--text2)">${i + 1}</td>
-                  <td style="font-weight:var(--weight-semibold);color:${r.destination === "second-taager-cart" ? "var(--accent)" : "var(--text2)"}">${r.destination === "second-taager-cart" ? "Second cart" : "Primary cart"}</td>
+                  <td style="font-weight:var(--weight-semibold);color:${r.destination === "second-taager-cart" || r.destination === "affiliate-recovery" ? "var(--accent)" : "var(--text2)"}">${previewDestinationLabel(r)}</td>
                   <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.productName||"").replace(/"/g,"")}">${r.productName || "—"}</td>
                   <td class="preview-qty" style="font-weight:var(--weight-bold)">${r.qty}</td>
                   <td style="color:var(--success);font-weight:var(--weight-semibold)">${r.subtotal || "—"}</td>
@@ -751,6 +758,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       const _upFail    = document.getElementById("upload-fail-count");
       const _upOk      = document.getElementById("upload-ok");
       const _upTotal   = document.getElementById("upload-total");
+      const _upTitle   = document.getElementById("upload-progress-title");
       const _placeholder = document.getElementById("run-idle-placeholder");
 
       if (_upPanel) _upPanel.style.display = "block";
@@ -762,6 +770,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       if (_upTotal)   _upTotal.textContent = msg.total;
       if (_upSuccess) _upSuccess.textContent = msg.success;
       if (_upFail)    _upFail.textContent = msg.failed;
+      if (_upTitle)    _upTitle.textContent = msg.mode === "affiliate-recovery" ? (t("run.recovery_progress_title") || "Recovering Affiliate Orders") : t("run.creating");
       if (_upLast) {
         if (msg.lastOrder?.error) {
           _upLast.style.color = "var(--danger)";
@@ -771,7 +780,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
           _upLast.textContent = `↳ ${msg.lastOrder?.product || ""}`;
         }
       }
-      const uploadBadgeFn = t("run.badge_uploading");
+      const uploadBadgeFn = msg.mode === "affiliate-recovery" ? t("run.badge_recovering") : t("run.badge_uploading");
       badge.textContent = typeof uploadBadgeFn === "function" ? uploadBadgeFn(msg.current, msg.total) : uploadBadgeFn;
       badge.style.background = "rgba(0,214,143,0.12)";
       badge.style.color = "var(--success)";
@@ -953,7 +962,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     const lastColor = p.lastOrder?.error ? "var(--danger)" : "var(--text2)";
     return `<div id="acc-prog-${accId}" style="background:var(--bg2);border:1px solid var(--accent);border-radius:var(--radius);padding:14px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:var(--accent);text-transform:uppercase;letter-spacing:.06em">${t("run.creating")}</div>
+        <div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:var(--accent);text-transform:uppercase;letter-spacing:.06em">${p.mode === "affiliate-recovery" ? (t("run.recovery_progress_title") || "Recovering Affiliate Orders") : t("run.creating")}</div>
         <div style="font-size:var(--type-label);color:var(--text2)">${p.current} / ${p.total}</div>
       </div>
       <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;margin-bottom:8px">
@@ -1007,7 +1016,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
               <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:8px">
                 <div style="height:100%;width:${pct}%;background:${statusColor};transition:width 0.5s ease;border-radius:2px"></div>
               </div>
-              ${prog ? `<div style="font-size:var(--type-caption);color:var(--text2)">${typeof uploadDetailFn === "function" ? uploadDetailFn(prog.current, prog.total, prog.success, prog.failed) : uploadDetailFn}</div>` : acc.preview ? `<div style="font-size:var(--type-caption);color:var(--success);font-weight:var(--weight-semibold)">${(()=>{const fn=t("run.preview_header");return typeof fn==="function"?fn(acc.preview.total):fn;})()}</div>` : ""}
+              ${prog ? `<div style="font-size:var(--type-caption);color:var(--text2)">${typeof uploadDetailFn === "function" ? uploadDetailFn(prog.current, prog.total, prog.success, prog.failed) : uploadDetailFn}</div>` : acc.preview ? `<div style="font-size:var(--type-caption);color:var(--success);font-weight:var(--weight-semibold)">${(()=>{const fn=t(acc.preview.recoveryPreview ? "run.recovery_preview_header" : "run.preview_header");return typeof fn==="function"?fn(acc.preview.total):fn;})()}</div>` : ""}
             </div>`;
           }).join("")}
         </div>
@@ -1058,7 +1067,9 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     const previewHtml = prevData ? (() => {
       const cols = t("run.preview_cols");
       const headerFn = t("run.preview_header");
-      const headerLabel = typeof headerFn === "function" ? headerFn(prevData.total) : headerFn;
+      const headerLabel = prevData.recoveryPreview
+        ? (() => { const fn = t("run.recovery_preview_header"); return typeof fn === "function" ? fn(prevData.total) : (fn || `Affiliate recovery queue - ${prevData.total} orders`); })()
+        : (typeof headerFn === "function" ? headerFn(prevData.total) : headerFn);
       const rows = prevData.rows || [];
       const searchId = `multi-preview-search-${acc.id}`;
       const tableId  = `multi-preview-table-${acc.id}`;
@@ -1587,9 +1598,9 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
   window.api.on("bot-order-progress", (msg) => {
     const acc = accountStates.find(a => a.id === msg.accountId) || accountStates[0];
     if (!acc) return;
-    acc.progress = { current: msg.current, total: msg.total, success: msg.success, failed: msg.failed, lastOrder: msg.lastOrder };
+    acc.progress = { current: msg.current, total: msg.total, success: msg.success, failed: msg.failed, lastOrder: msg.lastOrder, mode: msg.mode || "" };
 
-    badge.textContent = t("run.badge_uploading_short");
+    badge.textContent = msg.mode === "affiliate-recovery" ? (t("run.badge_recovering_short") || "Recovering") : t("run.badge_uploading_short");
     badge.style.background = "rgba(0,214,143,0.12)";
     badge.style.color = "var(--success)";
 
@@ -1607,9 +1618,9 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
              || accountStates[0];
     if (!acc) return;
 
-    acc.preview = { rows: data.rows || [], total: data.total || 0, buffer: data.buffer || null };
+    acc.preview = { rows: data.rows || [], total: data.total || 0, buffer: data.buffer || null, recoveryPreview: data.recoveryPreview === true };
 
-    badge.textContent = t("run.orders_ready") || "Orders Ready";
+    badge.textContent = data.recoveryPreview ? (t("run.recovery_orders_ready") || "Recovery Queue Ready") : (t("run.orders_ready") || "Orders Ready");
     badge.style.background = "rgba(0,214,143,0.12)";
     badge.style.color = "var(--success)";
 
