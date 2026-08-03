@@ -3,12 +3,14 @@
 const { normalizePhone, normalizePhoneWithMeta, COUNTRY_PHONE_RULES } = require("./phone");
 const {
   cleanText,
+  quantityEditDecision,
 } = require("./easy-orders-affiliate-recovery-data");
 const { normalizeProductName, productNamesMatch } = require("./parser");
 
 const EASY_BASE = "https://app.easy-orders.net/#";
 const ROWS_PER_PAGE = 100;
 const DEFAULT_STEP_DELAY_MS = 900;
+const QUANTITY_MANUAL_REVIEW_REASONS = ["normal_flow_prepared_quantity_is_suspicious", "quantity_tier_price_not_verified"];
 
 function ymd(date) {
   const d = date instanceof Date ? date : new Date(date);
@@ -379,42 +381,58 @@ function createEasyOrdersUiRecovery(options = {}) {
         log(`EasyOrders recovery send as-is: modal item ${modalItem.index} has no trusted normal-flow reference; keeping quantity=${modalItem.qty}, price=${modalItem.price}.`);
         continue;
       }
-      const expectedQty = Number(reference.qty || 1) || 1;
-      if (expectedQty > 10) {
+      const decision = quantityEditDecision(reference, modalItem);
+      const expectedQty = decision.expectedQty;
+      if (decision.manualReview) {
+        const reviewReason = QUANTITY_MANUAL_REVIEW_REASONS.includes(decision.reason)
+          ? decision.reason
+          : "quantity_tier_price_not_verified";
         manualReview.push({
           index: modalItem.index,
           qty: expectedQty,
           priceKept: modalItem.price,
+          expectedUnitPrice: decision.expectedUnitPrice || "",
           productName: modalItem.productName || reference.productName || "",
           sku: modalItem.sku || reference.sku || "",
-          reason: "normal_flow_prepared_quantity_is_suspicious",
+          reason: reviewReason,
           referenceSource: reference.referenceSource || "",
+          quantitySource: reference.quantitySource || "",
+          quantityRepairSource: reference.quantityRepair && reference.quantityRepair.source || "",
+          priceSource: reference.priceSource || "",
         });
-        log(`EasyOrders recovery manual review: ${modalItem.sku || reference.sku || modalItem.productName || reference.productName || "item"} prepared quantity ${expectedQty} is suspicious; leaving modal untouched.`);
+        log(`EasyOrders recovery manual review: ${modalItem.sku || reference.sku || modalItem.productName || reference.productName || "item"} prepared quantity ${expectedQty} could not be safely verified (${reviewReason}); leaving modal untouched.`);
         continue;
       }
-      if (expectedQty && modalItem.qty !== expectedQty) {
+      if (decision.shouldEditQuantity) {
         await fillInputValue(page, `cart_items[${modalItem.index}].quantity`, expectedQty);
         edits.push({
           index: modalItem.index,
           field: "quantity",
           from: modalItem.qty,
           to: expectedQty,
-          reason: "matched_normal_flow_prepared_order",
+          reason: decision.reason,
           priceKept: modalItem.price,
           referenceSource: reference.referenceSource || "",
+          quantitySource: reference.quantitySource || "",
+          quantityRepairSource: reference.quantityRepair && reference.quantityRepair.source || "",
+          priceSource: reference.priceSource || "",
+          priceVerified: decision.priceVerified === true,
         });
       }
-      const expectedPrice = Number(reference.unitPrice || (reference.qty ? (Number(reference.subtotal || 0) / Number(reference.qty || 1)) : 0)) || 0;
-      if (expectedPrice > 0 && !numbersClose(modalItem.price, expectedPrice)) {
+      const expectedPrice = Number(decision.expectedUnitPrice || reference.unitPrice || (reference.qty ? (Number(reference.subtotal || 0) / Number(reference.qty || 1)) : 0)) || 0;
+      if (expectedPrice > 0 && decision.shouldEditPrice) {
         await fillInputValue(page, `cart_items[${modalItem.index}].price`, expectedPrice);
         edits.push({
           index: modalItem.index,
           field: "price",
           from: modalItem.price,
           to: expectedPrice,
-          reason: "matched_normal_flow_prepared_order",
+          reason: decision.reason,
           referenceSource: reference.referenceSource || "",
+          quantitySource: reference.quantitySource || "",
+          quantityRepairSource: reference.quantityRepair && reference.quantityRepair.source || "",
+          priceSource: reference.priceSource || "",
+          priceVerified: decision.priceVerified === true,
         });
       }
       if (!expectedQty) {

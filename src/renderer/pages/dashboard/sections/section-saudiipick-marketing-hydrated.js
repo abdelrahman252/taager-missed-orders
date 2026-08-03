@@ -123,12 +123,14 @@
     var accountOptions = listTaagerAccounts(fullData, selectedAccountId);
     var store = window.DashboardMarketingState;
     var tokenState = { configured: false, tokenPreview: '', connectUrl: 'https://saudiipick.com/dashboard/settings' };
-    var activePlatform = 'snapchat';
+    var platformCursor = 'snapchat';
+    var platformOrder = ['snapchat', 'tiktok'];
+    var platformState = {};
     var platformMeta = {
       snapchat: { id: 'snapchat', label: 'Snapchat Ads', shortLabel: 'Snapchat', mark: 'SC', markClass: 'snap' },
       tiktok: { id: 'tiktok', label: 'TikTok Ads', shortLabel: 'TikTok', mark: 'TT', markClass: '' }
     };
-    var status = store && typeof store.get === 'function' ? store.get(selectedAccountId, activePlatform) : null;
+    var status = store && typeof store.get === 'function' ? store.get(selectedAccountId, platformCursor) : null;
     var availableAccounts = [];
     var selectedSources = [];
     var sourceQuery = '';
@@ -167,24 +169,78 @@
     }
 
     function currentPlatform() {
-      return platformMeta[activePlatform] || platformMeta.snapchat;
+      return platformMeta[platformCursor] || platformMeta.snapchat;
+    }
+
+    function saveActivePlatformState() {
+      platformState[platformCursor] = {
+        status: status,
+        availableAccounts: availableAccounts.slice(),
+        selectedSources: selectedSources.slice(),
+        sourceQuery: sourceQuery,
+        sourcePage: sourcePage,
+        message: message,
+        error: error,
+        loading: loading,
+        diagnostics: Object.assign({}, diagnostics)
+      };
+    }
+
+    function restorePlatformState(platform, resetDraft) {
+      platformCursor = platformMeta[platform] ? platform : 'snapchat';
+      var cached = platformState[platformCursor];
+      if (!cached || resetDraft) {
+        status = store && typeof store.get === 'function' ? store.get(selectedAccountId, platformCursor) : null;
+        cached = {
+          status: status,
+          availableAccounts: (status && (status.availableAccounts || status.linkedAccounts) || []).map(normalizeSource).filter(Boolean),
+          selectedSources: (status && (status.selectedSourceAccounts || status.mappedAccounts) || []).map(normalizeSource).filter(Boolean),
+          sourceQuery: '',
+          sourcePage: 1,
+          message: '',
+          error: '',
+          loading: false,
+          diagnostics: Object.assign({}, diagnostics, { platform: platformCursor })
+        };
+      }
+      status = cached.status;
+      availableAccounts = (cached.availableAccounts || []).slice();
+      selectedSources = (cached.selectedSources || []).slice();
+      sourceQuery = cached.sourceQuery || '';
+      sourcePage = cached.sourcePage || 1;
+      message = cached.message || '';
+      error = cached.error || '';
+      loading = !!cached.loading;
+      diagnostics = Object.assign({}, diagnostics, cached.diagnostics || {}, { platform: platformCursor });
+      platformState[platformCursor] = cached;
+    }
+
+    function switchPlatform(platform, resetDraft) {
+      saveActivePlatformState();
+      restorePlatformState(platform, resetDraft);
     }
 
     function setStore(next) {
-      if (store && typeof store.set === 'function') store.set(next, selectedAccountId, activePlatform);
-      status = next;
+      var payload = Object.assign({ provider: 'saudiipick', platform: platformCursor }, next || {});
+      if (store && typeof store.set === 'function') store.set(payload, selectedAccountId, platformCursor);
+      status = payload;
+      saveActivePlatformState();
     }
 
     function resetPlatformStateFromCache() {
-      status = store && typeof store.get === 'function' ? store.get(selectedAccountId, activePlatform) : null;
-      availableAccounts = (status && (status.availableAccounts || status.linkedAccounts) || []).map(normalizeSource).filter(Boolean);
-      selectedSources = (status && (status.selectedSourceAccounts || status.mappedAccounts) || []).map(normalizeSource).filter(Boolean);
-      sourceQuery = '';
-      sourcePage = 1;
+      restorePlatformState(platformCursor, true);
+      saveActivePlatformState();
+    }
+
+    function platformFromElement(element) {
+      var card = element && element.closest ? element.closest('[data-marketing-platform]') : null;
+      var platform = card ? card.getAttribute('data-marketing-platform') : '';
+      return platformMeta[platform] ? platform : platformCursor;
     }
 
     function selectedIds() {
-      return Array.prototype.slice.call(mount.querySelectorAll('[data-sip-source]:checked')).map(function (input) {
+      var card = mount.querySelector('[data-marketing-platform="' + platformCursor + '"]');
+      return Array.prototype.slice.call((card || mount).querySelectorAll('[data-sip-source]:checked')).map(function (input) {
         return input.value;
       });
     }
@@ -203,7 +259,7 @@
       var target = String(sourceId || '');
       var owner = null;
       accountOptions.some(function (account) {
-        var accountStatus = store && typeof store.get === 'function' ? store.get(account.id, activePlatform) : null;
+        var accountStatus = store && typeof store.get === 'function' ? store.get(account.id, platformCursor) : null;
         var mapped = accountStatus && (accountStatus.selectedSourceAccounts || accountStatus.mappedAccounts) || [];
         var found = Array.isArray(mapped) && mapped.some(function (source) {
           return String(source && source.id || '') === target;
@@ -212,21 +268,6 @@
         return found;
       });
       return owner;
-    }
-
-    function platformTabs() {
-      var tabs = [
-        { id: 'snapchat', label: 'Snapchat Ads', enabled: true },
-        { id: 'tiktok', label: 'TikTok Ads', enabled: true },
-        { id: 'facebook', label: 'Meta Ads', enabled: false }
-      ];
-      return '<div class="marketing-tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">' +
-        tabs.map(function (tab) {
-          var active = tab.id === activePlatform;
-          return '<button type="button" class="' + (active ? 'marketing-primary' : 'marketing-secondary') + '" data-sip-platform="' + esc(tab.id) + '"' +
-            (tab.enabled ? '' : ' disabled') + '>' + esc(tab.label + (tab.enabled ? '' : ' - planned')) + '</button>';
-        }).join('') +
-      '</div>';
     }
 
     function tokenPanel() {
@@ -333,11 +374,11 @@
           '</div>' +
         '</div>' +
         '<div class="marketing-actions">' +
-          '<button type="button" class="marketing-primary" data-sip-save-mapping' + (availableAccounts.length && !allMode ? '' : ' disabled') + '>' + esc(tx('Assign to this account', 'تعيين لهذا الحساب')) + '</button>' +
+          '<button type="button" class="marketing-primary" data-sip-save-mapping' + (availableAccounts.length && selectedAccountId && !allMode ? '' : ' disabled') + '>' + esc(tx('Assign to this account', 'تعيين لهذا الحساب')) + '</button>' +
           '<button type="button" class="marketing-sync-btn" data-sip-sync' + ((selectedSources.length || (status && status.mappedAccounts && status.mappedAccounts.length)) && !allMode ? '' : ' disabled') + '>' + esc(tx('Sync Snapchat spend', 'مزامنة إنفاق سناب شات')) + '</button>' +
           '<button type="button" class="marketing-secondary" data-sip-refresh>' + esc(tx('Refresh accounts', 'تحديث الحسابات')) + '</button>' +
         '</div>' +
-        (allMode ? '<p class="marketing-sync-note">' + esc(tx('Select a single Taager account from the top bar to assign and sync accounts.', 'اختر حساب تاجر واحد من الشريط العلوي للتعيين والمزامنة.')) + '</p>' : '') +
+        ((!selectedAccountId || allMode) ? '<p class="marketing-sync-note">' + esc(tx('Select a single Taager account from the top bar to assign and sync accounts.', 'اختر حساب تاجر واحد من الشريط العلوي للتعيين والمزامنة.')) + '</p>' : '') +
       '</section>';
     }
 
@@ -367,9 +408,9 @@
       var summary = status && status.summary;
       var partial = status && status.partial;
       var campaignCount = summary && Array.isArray(summary.campaignBreakdown) ? summary.campaignBreakdown.length : 0;
-      var impressionCount = summary ? Number(summary.impressions || 0) : null;
-      var clickCount = summary ? Number(summary.clicks || 0) : null;
       var statusSources = status && (status.selectedSourceAccounts || status.mappedAccounts) || [];
+      var mappedCount = selectedSources.length || statusSources.length;
+      var roas = summary ? Number(summary.roas != null ? summary.roas : (Number(summary.adSpend || 0) ? Number(summary.purchaseValue || 0) / Number(summary.adSpend || 0) : 0)) : 0;
       var displayCurrency = commonSourceCurrency(selectedSources) || commonSourceCurrency(statusSources) || commonSourceCurrency(availableAccounts);
       var displaySummary = summary && displayCurrency ? Object.assign({}, summary, { currency: displayCurrency }) : summary;
       var connected = tokenState.configured && (availableAccounts.length > 0 || selectedSources.length > 0 || statusSources.length > 0 || !!summary);
@@ -416,7 +457,7 @@
           '<summary><span class="marketing-account-label">' + esc(activeAccount.label) + '</span><span class="marketing-assigned-pill">' + esc(selectedCount + ' assigned') + '</span></summary>' +
           '<div class="marketing-mapping-choices">' + choices + '</div>' +
           '<div class="marketing-limit-note"><strong>' + esc(tx('Assigned ', 'Assigned ') + selectedCount + ' / ' + availableAccounts.length + ' ' + platform.shortLabel + ' accounts') + '</strong><span>' + esc(tx('You can assign multiple ' + platform.shortLabel + ' accounts to this Taager account.', 'You can assign multiple ' + platform.shortLabel + ' accounts to this Taager account.')) + '</span></div>' +
-          '<button class="marketing-secondary marketing-save-map-btn" type="button" data-sip-save-mapping' + (availableAccounts.length && !allMode ? '' : ' disabled') + '>' + esc(tx('Save mapping', 'Save mapping')) + '</button>' +
+          '<button class="marketing-secondary marketing-save-map-btn" type="button" data-sip-save-mapping' + (availableAccounts.length && selectedAccountId && !allMode ? '' : ' disabled') + '>' + esc(tx('Assign to this account', 'Assign to this account')) + '</button>' +
         '</details>' +
         paginationMarkup;
       var mappingContent = '<details class="marketing-mapping-board marketing-mapping-disclosure" open data-sip-mapping-disclosure>' +
@@ -465,7 +506,7 @@
         (diagnostics.lastError ? '<p class="marketing-diagnostic-error">' + esc(diagnostics.lastError) + '</p>' : '') +
       '</details>';
       var lastSync = status && status.lastSyncAt ? String(status.lastSyncAt).replace('T', ' ').slice(0, 19) : tx('Not synced yet', 'Not synced yet');
-      var canSync = !allMode && selectedSources.length > 0 && !loading;
+      var canSync = selectedAccountId && !allMode && !loading && (selectedSources.length > 0 || statusSources.length > 0);
 
       return '<article class="marketing-platform-card" data-marketing-platform="' + esc(platform.id) + '">' +
         (error ? '<div class="marketing-message is-error">' + esc(error) + '</div>' : '') +
@@ -476,9 +517,10 @@
         '</div>' +
         '<div class="marketing-metric-grid">' +
           '<div class="marketing-spend-metric"><span>' + esc(tx('Ad spend', 'Ad spend')) + (displayCurrency ? ' (' + esc(displayCurrency) + ')' : '') + '</span><strong>' + esc(fmtSpendSummary(displaySummary)) + '</strong></div>' +
+          '<div><span>' + esc(tx('Mapped accounts', 'Mapped accounts')) + '</span><strong>' + esc(mappedCount ? fmtNumber(mappedCount, 0) : '--') + '</strong></div>' +
           '<div><span>' + esc(tx('Campaign rows', 'Campaign rows')) + '</span><strong>' + esc(summary ? fmtNumber(campaignCount || summary.campaignCount, 0) : '--') + '</strong></div>' +
-          '<div><span>' + esc(tx('Impressions', 'Impressions')) + '</span><strong>' + esc(summary ? fmtNumber(impressionCount, 0) : '--') + '</strong></div>' +
-          '<div><span>' + esc(tx('Clicks', 'Clicks')) + '</span><strong>' + esc(summary ? fmtNumber(clickCount, 0) : '--') + '</strong></div>' +
+          '<div><span>' + esc(tx('Purchases', 'Purchases')) + '</span><strong>' + esc(summary ? fmtNumber(summary.purchases, 0) : '--') + '</strong></div>' +
+          '<div><span>' + esc(tx('ROAS', 'ROAS')) + '</span><strong>' + esc(summary ? fmtNumber(roas, 2) + 'x' : '--') + '</strong></div>' +
         '</div>' +
         mappingContent +
         claimRelease +
@@ -488,7 +530,7 @@
           '<button type="button" class="marketing-primary" data-sip-open-settings>' + esc(tx('Add account', 'Add account')) + '</button>' +
           '<button type="button" class="marketing-sync-btn" data-sip-sync' + (canSync ? '' : ' disabled') + '>' + esc(tx('Sync mapped ' + platform.shortLabel + ' accounts', 'Sync mapped ' + platform.shortLabel + ' accounts')) + '</button>' +
           '<button type="button" class="marketing-secondary" data-sip-full-sync' + (canSync ? '' : ' disabled') + '>' + esc(tx('Refresh all selected dates', 'Refresh all selected dates')) + '</button>' +
-          '<button type="button" class="marketing-secondary" data-sip-refresh' + (tokenState.configured ? '' : ' disabled') + '>' + esc(tx('Refresh Status', 'Refresh Status')) + '</button>' +
+          '<button type="button" class="marketing-secondary" data-sip-refresh' + (tokenState.configured ? '' : ' disabled') + '>' + esc(tx('Refresh accounts', 'Refresh accounts')) + '</button>' +
         '</div>' +
         '<p class="marketing-sync-note">' + esc(tx('After renaming ' + platform.shortLabel + ' campaigns or adding SKUs, synced reports may remain cached for up to 6 hours. For historical changes, refresh the campaign data, then sync again.', 'After renaming ' + platform.shortLabel + ' campaigns or adding SKUs, synced reports may remain cached for up to 6 hours. For historical changes, refresh the campaign data, then sync again.')) + '</p>' +
       '</article>';
@@ -511,19 +553,28 @@
       bind();
     }
 
+    function renderPlatformCard(platform) {
+      var previous = platformCursor;
+      switchPlatform(platform, false);
+      var html = summaryPanel();
+      saveActivePlatformState();
+      restorePlatformState(previous, false);
+      return html;
+    }
+
     function render() {
+      saveActivePlatformState();
+      var activeSnapshot = platformCursor;
+      var cardMarkup = platformOrder.map(renderPlatformCard).join('');
+      restorePlatformState(activeSnapshot, false);
       mount.innerHTML = '<div class="marketing-section">' +
         '<header class="marketing-hero">' +
           '<div><p class="marketing-kicker">Saudi iPick API</p><h2>' + esc(tx('Native marketing connection', 'Native marketing connection')) + '</h2>' +
           '<p>' + esc(tx('Use Saudi iPick as the source for Snapchat and TikTok spend, campaigns, purchases, CPA, and ROAS inside this desktop dashboard.', 'Use Saudi iPick as the source for Snapchat and TikTok spend, campaigns, purchases, CPA, and ROAS inside this desktop dashboard.')) + '</p></div>' +
-          '<aside class="marketing-security"><strong>' + esc(tx('Same calculators', 'Same calculators')) + '</strong><span>' + esc(tx('This card syncs the active platform into the product, account, and level calculators after you press sync.', 'This card syncs the active platform into the product, account, and level calculators after you press sync.')) + '</span></aside>' +
+          '<aside class="marketing-security"><strong>' + esc(tx('Same calculators', 'Same calculators')) + '</strong><span>' + esc(tx('Each card syncs its own platform into the product, account, and level calculators after you press sync.', 'Each card syncs its own platform into the product, account, and level calculators after you press sync.')) + '</span></aside>' +
         '</header>' +
-        (error ? '<div class="marketing-message is-error">' + esc(error) + '</div>' : '') +
-        (message ? '<div class="marketing-message">' + esc(message) + '</div>' : '') +
-        (loading ? '<div class="marketing-loading"><span class="dash-preloader-spinner"></span><span>' + esc(tx('Working...', 'Working...')) + '</span></div>' : '') +
-        platformTabs() +
         tokenPanel() +
-        '<div class="marketing-platform-grid">' + summaryPanel() + '</div>' +
+        '<div class="marketing-platform-grid">' + cardMarkup + '</div>' +
       '</div>';
       bind();
     }
@@ -535,6 +586,7 @@
 
     function loadStatus() {
       var platform = currentPlatform();
+      var requestPlatform = platform.id;
       if (!window.api || typeof window.api.getSaudiIPickMarketingStatus !== 'function') {
         error = tx('Saudi iPick desktop bridge is not available in this app build.', 'Saudi iPick desktop bridge is not available in this app build.');
         updateDiagnostics({ step: 'bridge-missing', tokenConfigured: tokenState.configured, lastError: error });
@@ -549,7 +601,8 @@
         lastError: ''
       });
       setBusy(true);
-      return window.api.getSaudiIPickMarketingStatus(selectedAccountId, activePlatform, { mode: 'force' }).then(function (result) {
+      return window.api.getSaudiIPickMarketingStatus(selectedAccountId, requestPlatform, { mode: 'force' }).then(function (result) {
+        switchPlatform(requestPlatform, false);
         if (!result || !result.ok) throw new Error(result && result.error || 'Saudi iPick status failed.');
         availableAccounts = (result.availableAccounts || result.linkedAccounts || []).map(normalizeSource).filter(Boolean);
         selectedSources = (result.selectedSourceAccounts || result.mappedAccounts || []).map(normalizeSource).filter(Boolean);
@@ -570,6 +623,7 @@
           : tx('No selected ' + platform.shortLabel + ' accounts came back from Saudi iPick. Check website account selection, then refresh.', 'No selected ' + platform.shortLabel + ' accounts came back from Saudi iPick. Check website account selection, then refresh.');
         error = '';
       }).catch(function (err) {
+        switchPlatform(requestPlatform, false);
         error = err && err.message ? err.message : String(err || '');
         updateDiagnostics({
           step: 'status-error',
@@ -578,7 +632,9 @@
           summary: tx('Could not load ' + platform.shortLabel + ' accounts from Saudi iPick.', 'Could not load ' + platform.shortLabel + ' accounts from Saudi iPick.')
         });
       }).finally(function () {
+        switchPlatform(requestPlatform, false);
         loading = false;
+        saveActivePlatformState();
         render();
       });
     }
@@ -588,230 +644,283 @@
       var saveTokenButton = mount.querySelector('[data-sip-save-token]');
       var clearTokenButton = mount.querySelector('[data-sip-clear-token]');
       var refreshButtons = mount.querySelectorAll('[data-sip-refresh]');
-      var saveMappingButton = mount.querySelector('[data-sip-save-mapping]');
+      var saveMappingButtons = mount.querySelectorAll('[data-sip-save-mapping]');
       var syncButtons = mount.querySelectorAll('[data-sip-sync], [data-sip-full-sync]');
-      var sourceSearch = mount.querySelector('[data-sip-source-search]');
+      var sourceSearches = mount.querySelectorAll('[data-sip-source-search]');
       var sourceChecks = mount.querySelectorAll('[data-sip-source]');
-      var selectPageButton = mount.querySelector('[data-sip-select-page]');
-      var clearSelectionButton = mount.querySelector('[data-sip-clear-selection]');
-      var claimButton = mount.querySelector('[data-sip-claim-account]');
-      var releaseButton = mount.querySelector('[data-sip-release-selected]');
-      var prevPageButton = mount.querySelector('[data-sip-page-prev]');
-      var nextPageButton = mount.querySelector('[data-sip-page-next]');
-      var platformButtons = mount.querySelectorAll('[data-sip-platform]');
+      var selectPageButtons = mount.querySelectorAll('[data-sip-select-page]');
+      var clearSelectionButtons = mount.querySelectorAll('[data-sip-clear-selection]');
+      var claimButtons = mount.querySelectorAll('[data-sip-claim-account]');
+      var releaseButtons = mount.querySelectorAll('[data-sip-release-selected]');
+      var prevPageButtons = mount.querySelectorAll('[data-sip-page-prev]');
+      var nextPageButtons = mount.querySelectorAll('[data-sip-page-next]');
 
-      Array.prototype.forEach.call(platformButtons, function (button) {
-        button.addEventListener('click', function () {
-          var nextPlatform = String(button.getAttribute('data-sip-platform') || '');
-          if (!platformMeta[nextPlatform] || nextPlatform === activePlatform) return;
-          activePlatform = nextPlatform;
-          resetPlatformStateFromCache();
-          error = '';
-          message = tx('Switched to ' + currentPlatform().label + '.', 'Switched to ' + currentPlatform().label + '.');
-          updateDiagnostics({
-            step: 'platform-switch',
-            accountId: selectedAccountId,
-            availableCount: availableAccounts.length,
-            selectedCount: selectedSources.length,
-            mappedCount: countOf(status && status.mappedAccounts),
-            summary: message,
-            lastError: ''
-          });
-          if (tokenState.configured) loadStatus();
-          else render();
-        });
-      });
+      function activateFrom(element) {
+        switchPlatform(platformFromElement(element), false);
+        return currentPlatform();
+      }
 
       Array.prototype.forEach.call(openButtons, function (openButton) {
         openButton.addEventListener('click', function () {
           if (window.api && typeof window.api.openExternalUrl === 'function') window.api.openExternalUrl(tokenState.connectUrl);
         });
       });
+
       if (saveTokenButton) saveTokenButton.addEventListener('click', function () {
         var input = mount.querySelector('[data-sip-token-input]');
         var token = input ? String(input.value || '').trim() : '';
-        if (!token) { error = tx('Paste the desktop token first.', 'الصق رمز سطح المكتب أولاً.'); render(); return; }
+        if (!token) { error = tx('Paste the desktop token first.', 'الصق رمز سطح المكتب أولاً.'); saveActivePlatformState(); render(); return; }
         updateDiagnostics({ step: 'token-save', tokenConfigured: false, summary: tx('Saving desktop token locally...', 'جارٍ حفظ رمز سطح المكتب محلياً...'), lastError: '' });
         setBusy(true);
         window.api.saveSaudiIPickMarketingToken(token).then(function (result) {
           if (!result || !result.ok) throw new Error(result && result.error || 'Could not save token.');
           tokenState.configured = true;
           tokenState.tokenPreview = result.tokenPreview || '';
-          updateDiagnostics({ step: 'token-saved', tokenConfigured: true, summary: tx('Token saved. Loading Snapchat accounts now.', 'تم حفظ الرمز. جارٍ تحميل حسابات سناب شات الآن.'), lastError: '' });
-          message = tx('Token saved. Loading Snapchat accounts...', 'تم حفظ الرمز. جارٍ تحميل حسابات سناب شات...');
-          return loadStatus();
+          platformOrder.forEach(function (platform) {
+            switchPlatform(platform, false);
+            updateDiagnostics({ step: 'token-saved', tokenConfigured: true, summary: tx('Token saved. Loading account status...', 'Token saved. Loading account status...'), lastError: '' });
+            saveActivePlatformState();
+          });
+          message = tx('Token saved. Loading Snapchat and TikTok accounts...', 'Token saved. Loading Snapchat and TikTok accounts...');
+          return loadAllStatuses();
         }).catch(function (err) {
-          error = err && err.message ? err.message : String(err || '');
+          switchPlatform(platform, false);
+            error = err && err.message ? err.message : String(err || '');
           updateDiagnostics({ step: 'token-error', tokenConfigured: false, lastError: error, summary: tx('Could not save or validate the desktop token.', 'تعذر حفظ أو التحقق من رمز سطح المكتب.') });
           loading = false;
+          saveActivePlatformState();
           render();
         });
       });
+
       if (clearTokenButton) clearTokenButton.addEventListener('click', function () {
         setBusy(true);
         window.api.clearSaudiIPickMarketingToken().then(function () {
           tokenState.configured = false;
           tokenState.tokenPreview = '';
-          availableAccounts = [];
-          selectedSources = [];
-          updateDiagnostics({ step: 'token-cleared', tokenConfigured: false, availableCount: 0, selectedCount: 0, mappedCount: 0, summary: tx('Token cleared.', 'تم مسح الرمز.'), lastError: '' });
-          message = tx('Token cleared.', 'تم مسح الرمز.');
+          platformOrder.forEach(function (platform) {
+            switchPlatform(platform, false);
+            availableAccounts = [];
+            selectedSources = [];
+            updateDiagnostics({ step: 'token-cleared', tokenConfigured: false, availableCount: 0, selectedCount: 0, mappedCount: 0, summary: tx('Token cleared.', 'تم مسح الرمز.'), lastError: '' });
+            message = tx('Token cleared.', 'تم مسح الرمز.');
+            error = '';
+            loading = false;
+            saveActivePlatformState();
+          });
         }).finally(function () {
           loading = false;
+          saveActivePlatformState();
           render();
         });
       });
+
       Array.prototype.forEach.call(refreshButtons, function (button) {
-        button.addEventListener('click', loadStatus);
+        button.addEventListener('click', function () {
+          activateFrom(button);
+          loadStatus();
+        });
       });
+
       Array.prototype.forEach.call(sourceChecks, function (input) {
         input.addEventListener('change', function () {
+          activateFrom(input);
           var id = String(input.value || '');
           if (!id) return;
           if (input.checked) {
             var source = availableAccounts.filter(function (item) { return item.id === id; })[0];
-            if (source && !selectedSources.some(function (item) { return item.id === id; })) {
-              selectedSources = selectedSources.concat([source]);
-            }
+            if (source && !selectedSources.some(function (item) { return item.id === id; })) selectedSources = selectedSources.concat([source]);
           } else {
             selectedSources = selectedSources.filter(function (item) { return item.id !== id; });
           }
+          saveActivePlatformState();
           render();
         });
       });
-      if (sourceSearch) sourceSearch.addEventListener('input', function () {
-        sourceQuery = String(sourceSearch.value || '');
-        sourcePage = 1;
-        render();
-        var nextSearch = mount.querySelector('[data-sip-source-search]');
-        if (nextSearch) {
-          nextSearch.focus();
-          try { nextSearch.setSelectionRange(sourceQuery.length, sourceQuery.length); } catch (_) {}
-        }
-      });
-      if (selectPageButton) selectPageButton.addEventListener('click', function () {
-        var query = sourceQuery.toLowerCase();
-        var filtered = availableAccounts.filter(function (source) {
-          return !query || [source.name, source.id, source.organizationName, source.currency].join(' ').toLowerCase().indexOf(query) !== -1;
+
+      Array.prototype.forEach.call(sourceSearches, function (sourceSearch) {
+        sourceSearch.addEventListener('input', function () {
+          activateFrom(sourceSearch);
+          sourceQuery = String(sourceSearch.value || '');
+          sourcePage = 1;
+          saveActivePlatformState();
+          render();
+          var nextSearch = mount.querySelector('[data-marketing-platform="' + platformCursor + '"] [data-sip-source-search]');
+          if (nextSearch) {
+            nextSearch.focus();
+            try { nextSearch.setSelectionRange(sourceQuery.length, sourceQuery.length); } catch (_) {}
+          }
         });
-        var pageRows = filtered.slice((sourcePage - 1) * sourcePageSize, sourcePage * sourcePageSize);
-        var byId = {};
-        selectedSources.forEach(function (source) { byId[source.id] = source; });
-        pageRows.forEach(function (source) {
-          var owner = ownerOfSource(source.id);
-          if (!owner || owner.id === selectedAccountId) byId[source.id] = source;
+      });
+
+      Array.prototype.forEach.call(selectPageButtons, function (button) {
+        button.addEventListener('click', function () {
+          activateFrom(button);
+          var query = sourceQuery.toLowerCase();
+          var filtered = availableAccounts.filter(function (source) {
+            return !query || [source.name, source.id, source.organizationName, source.currency].join(' ').toLowerCase().indexOf(query) !== -1;
+          });
+          var pageRows = filtered.slice((sourcePage - 1) * sourcePageSize, sourcePage * sourcePageSize);
+          var byId = {};
+          selectedSources.forEach(function (source) { byId[source.id] = source; });
+          pageRows.forEach(function (source) {
+            var owner = ownerOfSource(source.id);
+            if (!owner || owner.id === selectedAccountId) byId[source.id] = source;
+          });
+          selectedSources = Object.keys(byId).map(function (id) { return byId[id]; });
+          saveActivePlatformState();
+          render();
         });
-        selectedSources = Object.keys(byId).map(function (id) { return byId[id]; });
-        render();
       });
-      if (clearSelectionButton) clearSelectionButton.addEventListener('click', function () {
-        selectedSources = [];
-        render();
-      });
-      if (claimButton) claimButton.addEventListener('click', function () {
-        var input = mount.querySelector('[data-sip-claim-input]');
-        var sourceId = input ? String(input.value || '').trim() : '';
-        var source = availableAccounts.filter(function (item) { return item.id === sourceId; })[0];
-        if (!sourceId) {
-          error = tx('Paste the ad account ID first.', 'Paste the ad account ID first.');
+
+      Array.prototype.forEach.call(clearSelectionButtons, function (button) {
+        button.addEventListener('click', function () {
+          activateFrom(button);
+          selectedSources = [];
+          saveActivePlatformState();
           render();
-          return;
-        }
-        if (!source) {
-          error = tx('This ad account is not in the Saudi iPick website account pool. Add it on the website first, then refresh status.', 'This ad account is not in the Saudi iPick website account pool. Add it on the website first, then refresh status.');
+        });
+      });
+
+      Array.prototype.forEach.call(claimButtons, function (button) {
+        button.addEventListener('click', function () {
+          activateFrom(button);
+          var card = button.closest('[data-marketing-platform]') || mount;
+          var input = card.querySelector('[data-sip-claim-input]');
+          var sourceId = input ? String(input.value || '').trim() : '';
+          var source = availableAccounts.filter(function (item) { return item.id === sourceId; })[0];
+          if (!sourceId) { error = tx('Paste the ad account ID first.', 'Paste the ad account ID first.'); saveActivePlatformState(); render(); return; }
+          if (!source) { error = tx('This ad account is not in the Saudi iPick website account pool. Add it on the website first, then refresh status.', 'This ad account is not in the Saudi iPick website account pool. Add it on the website first, then refresh status.'); saveActivePlatformState(); render(); return; }
+          if (!selectedSources.some(function (item) { return item.id === source.id; })) selectedSources = selectedSources.concat([source]);
+          error = '';
+          message = tx('Account selected. Save mapping to assign it.', 'Account selected. Save mapping to assign it.');
+          saveActivePlatformState();
           render();
-          return;
-        }
-        if (!selectedSources.some(function (item) { return item.id === source.id; })) {
-          selectedSources = selectedSources.concat([source]);
-        }
-        error = '';
-        message = tx('Account selected. Save mapping to assign it.', 'Account selected. Save mapping to assign it.');
-        render();
+        });
       });
-      if (releaseButton) releaseButton.addEventListener('click', function () {
-        var select = mount.querySelector('[data-sip-release-select]');
-        var sourceId = select ? String(select.value || '') : '';
-        if (!sourceId) return;
-        selectedSources = selectedSources.filter(function (item) { return item.id !== sourceId; });
-        message = tx('Account removed from the draft mapping. Save mapping to free the slot.', 'Account removed from the draft mapping. Save mapping to free the slot.');
-        render();
-      });
-      if (prevPageButton) prevPageButton.addEventListener('click', function () {
-        sourcePage = Math.max(1, sourcePage - 1);
-        render();
-      });
-      if (nextPageButton) nextPageButton.addEventListener('click', function () {
-        sourcePage += 1;
-        render();
-      });
-      if (saveMappingButton) saveMappingButton.addEventListener('click', function () {
-        var sources = selectedSourceObjects();
-        if (!sources.length && selectedSources.length) sources = selectedSources;
-        updateDiagnostics({ step: 'mapping-save', selectedCount: sources.length, summary: tx('Saving selected ad account mapping...', 'جارٍ حفظ تعيين الحسابات الإعلانية المحددة...'), lastError: '' });
-        setBusy(true);
-        window.api.saveSaudiIPickMarketingMapping(selectedAccountId, activePlatform, sources).then(function (result) {
-          if (!result || !result.ok) throw new Error(result && result.error || 'Could not save mapping.');
-          selectedSources = sources;
-          setStore(result);
-          updateDiagnostics({ step: 'mapping-saved', selectedCount: selectedSources.length, mappedCount: countOf(result.mappedAccounts), summary: tx('Mapping saved. You can sync now.', 'تم حفظ التعيين. يمكنك المزامنة الآن.'), lastError: '' });
-          message = tx('Mapping saved. You can sync now.', 'تم حفظ التعيين. يمكنك المزامنة الآن.');
-        }).catch(function (err) {
-          error = err && err.message ? err.message : String(err || '');
-          updateDiagnostics({ step: 'mapping-error', lastError: error, summary: tx('Could not save selected ad account mapping.', 'تعذر حفظ تعيين الحسابات الإعلانية المحددة.') });
-        }).finally(function () {
-          loading = false;
+
+      Array.prototype.forEach.call(releaseButtons, function (button) {
+        button.addEventListener('click', function () {
+          activateFrom(button);
+          var card = button.closest('[data-marketing-platform]') || mount;
+          var select = card.querySelector('[data-sip-release-select]');
+          var sourceId = select ? String(select.value || '') : '';
+          if (!sourceId) return;
+          selectedSources = selectedSources.filter(function (item) { return item.id !== sourceId; });
+          message = tx('Account removed from the draft mapping. Save mapping to free the slot.', 'Account removed from the draft mapping. Save mapping to free the slot.');
+          saveActivePlatformState();
           render();
+        });
+      });
+
+      Array.prototype.forEach.call(prevPageButtons, function (button) {
+        button.addEventListener('click', function () {
+          activateFrom(button);
+          sourcePage = Math.max(1, sourcePage - 1);
+          saveActivePlatformState();
+          render();
+        });
+      });
+
+      Array.prototype.forEach.call(nextPageButtons, function (button) {
+        button.addEventListener('click', function () {
+          activateFrom(button);
+          sourcePage += 1;
+          saveActivePlatformState();
+          render();
+        });
+      });
+
+      Array.prototype.forEach.call(saveMappingButtons, function (button) {
+        button.addEventListener('click', function () {
+          var platform = activateFrom(button).id;
+          var sources = selectedSourceObjects();
+          if (!sources.length && selectedSources.length) sources = selectedSources;
+          updateDiagnostics({ step: 'mapping-save', selectedCount: sources.length, summary: tx('Saving selected ad account mapping...', 'جارٍ حفظ تعيين الحسابات الإعلانية المحددة...'), lastError: '' });
+          setBusy(true);
+          window.api.saveSaudiIPickMarketingMapping(selectedAccountId, platform, sources).then(function (result) {
+            switchPlatform(platform, false);
+            if (!result || !result.ok) throw new Error(result && result.error || 'Could not save mapping.');
+            selectedSources = sources;
+            setStore(result);
+            updateDiagnostics({ step: 'mapping-saved', selectedCount: selectedSources.length, mappedCount: countOf(result.mappedAccounts), summary: tx('Mapping saved. You can sync now.', 'تم حفظ التعيين. يمكنك المزامنة الآن.'), lastError: '' });
+            message = tx('Mapping saved. You can sync now.', 'تم حفظ التعيين. يمكنك المزامنة الآن.');
+          }).catch(function (err) {
+            switchPlatform(platform, false);
+            error = err && err.message ? err.message : String(err || '');
+            updateDiagnostics({ step: 'mapping-error', lastError: error, summary: tx('Could not save selected ad account mapping.', 'تعذر حفظ تعيين الحسابات الإعلانية المحددة.') });
+          }).finally(function () {
+            switchPlatform(platform, false);
+            loading = false;
+            saveActivePlatformState();
+            render();
+          });
         });
       });
       Array.prototype.forEach.call(syncButtons, function (syncButton) {
         syncButton.addEventListener('click', function () {
-        var period = getPeriod(fullData);
-        var roi = window.DashboardRoiState ? window.DashboardRoiState.get(selectedAccountId, {}) : {};
-        var sources = selectedSourceObjects();
-        if (!sources.length) sources = selectedSources;
-        updateDiagnostics({ step: 'sync-request', selectedCount: sources.length, summary: tx('Syncing ' + currentPlatform().shortLabel + ' spend from Saudi iPick...', 'Syncing ' + currentPlatform().shortLabel + ' spend from Saudi iPick...'), lastError: '' });
-        setBusy(true);
-        window.api.syncSaudiIPickMarketingData(selectedAccountId, activePlatform, {
-          dateFrom: period.dateFrom,
-          dateTo: period.dateTo,
-          targetCurrency: roi.currency || window.dashboardActiveCurrency || 'SAR',
-          sourceAccounts: sources
-        }).then(function (result) {
-          if (!result || !result.ok) throw new Error(result && result.error || 'Sync failed.');
-          selectedSources = (result.selectedSourceAccounts || sources).map(normalizeSource).filter(Boolean);
-          setStore(result);
-          updateDiagnostics({ step: 'sync-ok', selectedCount: selectedSources.length, mappedCount: countOf(result.mappedAccounts), summary: tx(currentPlatform().shortLabel + ' spend synced into the calculators.', currentPlatform().shortLabel + ' spend synced into the calculators.'), lastError: '' });
-          message = tx(currentPlatform().shortLabel + ' spend synced into the calculators.', currentPlatform().shortLabel + ' spend synced into the calculators.');
-          if (window.DashboardRoiState && typeof window.DashboardRoiState.notify === 'function') window.DashboardRoiState.notify(selectedAccountId);
-        }).catch(function (err) {
-          error = err && err.message ? err.message : String(err || '');
-          updateDiagnostics({ step: 'sync-error', lastError: error, summary: tx('Could not sync ' + currentPlatform().shortLabel + ' spend.', 'Could not sync ' + currentPlatform().shortLabel + ' spend.') });
-        }).finally(function () {
-          loading = false;
-          render();
+          var platformMetaItem = activateFrom(syncButton);
+          var platform = platformMetaItem.id;
+          var period = getPeriod(fullData);
+          var roi = window.DashboardRoiState ? window.DashboardRoiState.get(selectedAccountId, {}) : {};
+          var sources = selectedSourceObjects();
+          if (!sources.length) sources = selectedSources;
+          updateDiagnostics({ step: 'sync-request', selectedCount: sources.length, summary: tx('Syncing ' + platformMetaItem.shortLabel + ' spend from Saudi iPick...', 'Syncing ' + platformMetaItem.shortLabel + ' spend from Saudi iPick...'), lastError: '' });
+          setBusy(true);
+          window.api.syncSaudiIPickMarketingData(selectedAccountId, platform, {
+            dateFrom: period.dateFrom,
+            dateTo: period.dateTo,
+            targetCurrency: roi.currency || window.dashboardActiveCurrency || 'SAR',
+            sourceAccounts: sources
+          }).then(function (result) {
+            switchPlatform(platform, false);
+            if (!result || !result.ok) throw new Error(result && result.error || 'Sync failed.');
+            selectedSources = (result.selectedSourceAccounts || sources).map(normalizeSource).filter(Boolean);
+            setStore(result);
+            updateDiagnostics({ step: 'sync-ok', selectedCount: selectedSources.length, mappedCount: countOf(result.mappedAccounts), summary: tx(platformMetaItem.shortLabel + ' spend synced into the calculators.', platformMetaItem.shortLabel + ' spend synced into the calculators.'), lastError: '' });
+            message = tx(platformMetaItem.shortLabel + ' spend synced into the calculators.', platformMetaItem.shortLabel + ' spend synced into the calculators.');
+            if (window.DashboardRoiState && typeof window.DashboardRoiState.notify === 'function') window.DashboardRoiState.notify(selectedAccountId);
+          }).catch(function (err) {
+            switchPlatform(platform, false);
+            error = err && err.message ? err.message : String(err || '');
+            updateDiagnostics({ step: 'sync-error', lastError: error, summary: tx('Could not sync ' + platformMetaItem.shortLabel + ' spend.', 'Could not sync ' + platformMetaItem.shortLabel + ' spend.') });
+          }).finally(function () {
+            switchPlatform(platform, false);
+            loading = false;
+            saveActivePlatformState();
+            render();
+          });
         });
       });
-      });
     }
-
     function init() {
-      resetPlatformStateFromCache();
+      platformOrder.forEach(function (platform) { switchPlatform(platform, true); });
+      restorePlatformState('snapchat', false);
       render();
       if (!window.api || typeof window.api.getSaudiIPickMarketingTokenStatus !== 'function') return;
       window.api.getSaudiIPickMarketingTokenStatus().then(function (result) {
         tokenState = result || tokenState;
-        updateDiagnostics({
-          step: 'token-status',
-          tokenConfigured: !!tokenState.configured,
-          summary: tokenState.configured ? tx('Saved token found. Loading account status...', 'تم العثور على رمز محفوظ. جارٍ تحميل حالة الحسابات...') : tx('No saved desktop token.', 'لا يوجد رمز سطح مكتب محفوظ.'),
-          lastError: ''
+        platformOrder.forEach(function (platform) {
+          switchPlatform(platform, false);
+          updateDiagnostics({
+            step: 'token-status',
+            tokenConfigured: !!tokenState.configured,
+            summary: tokenState.configured ? tx('Saved token found. Loading account status...', 'تم العثور على رمز محفوظ. جارٍ تحميل حالة الحسابات...') : tx('No saved desktop token.', 'لا يوجد رمز سطح مكتب محفوظ.'),
+            lastError: ''
+          });
+          saveActivePlatformState();
         });
+        restorePlatformState('snapchat', false);
         render();
-        if (tokenState.configured) loadStatus();
+        if (tokenState.configured) loadAllStatuses();
       }).catch(function (err) {
         error = err && err.message ? err.message : String(err || '');
-        updateDiagnostics({ step: 'token-status-error', lastError: error, summary: tx('Could not read saved token status.', 'تعذر قراءة حالة الرمز المحفوظ.') });
+        platformOrder.forEach(function (platform) {
+          switchPlatform(platform, false);
+          updateDiagnostics({ step: 'token-status-error', lastError: error, summary: tx('Could not read saved token status.', 'تعذر قراءة حالة الرمز المحفوظ.') });
+          saveActivePlatformState();
+        });
+        restorePlatformState('snapchat', false);
         render();
       });
     }

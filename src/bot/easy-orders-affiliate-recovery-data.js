@@ -73,6 +73,11 @@ function groupRealRecoveryCandidates(realOrders, taagerKeys, options = {}) {
       subtotal: Number(row.subtotal || 0) || 0,
       trusted: !!row.sku,
       referenceSource: "easyorders-real-export",
+      quantitySource: row.quantitySource || (row.quantityRepair ? "repaired_quantity" : "easyorders-real-export"),
+      quantityRepair: row.quantityRepair || null,
+      quantityRepairSkipped: row.quantityRepairSkipped || null,
+      priceSource: row.priceSource || "easyorders-real-export-item-price",
+      priceOptions: Array.isArray(row.priceOptions) ? row.priceOptions : [],
     });
   }
 
@@ -213,6 +218,59 @@ function quantityFromSuspiciousReference(reference, modalQty) {
   return null;
 }
 
+function priceOptionForQty(reference, qty) {
+  const targetQty = Number(qty || 0) || 0;
+  if (targetQty <= 0) return null;
+  return (Array.isArray(reference && reference.priceOptions) ? reference.priceOptions : [])
+    .map((option) => {
+      const q = Number(option && option.qty || 0) || 0;
+      const subtotal = Number(option && option.subtotal || 0) || 0;
+      const unitPrice = Number(option && option.unitPrice || 0) || (q > 0 ? subtotal / q : 0);
+      return { qty: q, subtotal, unitPrice };
+    })
+    .find((option) => option.qty === targetQty && option.subtotal > 0 && option.unitPrice > 0) || null;
+}
+
+function referenceUsesInferredQuantity(reference) {
+  const text = [
+    reference && reference.referenceSource,
+    reference && reference.quantitySource,
+    reference && reference.priceSource,
+    reference && reference.catalogSource,
+    reference && reference.quantityRepair && reference.quantityRepair.source,
+  ].filter(Boolean).join(" ").toLowerCase();
+  return !!(reference && reference.quantityRepair)
+    || /catalog|history|repair|repaired|inferred/.test(text);
+}
+
+function quantityEditDecision(reference, modalItem = {}) {
+  const expectedQty = Number(reference && reference.qty || 1) || 1;
+  const modalQty = Number(modalItem && modalItem.qty || 0) || 0;
+  const modalPrice = Number(modalItem && modalItem.price || 0) || 0;
+  const fallbackUnitPrice = Number(reference && reference.unitPrice || 0) || 0;
+  const option = priceOptionForQty(reference, expectedQty);
+  const expectedUnitPrice = option ? option.unitPrice : fallbackUnitPrice;
+  const inferredQuantity = referenceUsesInferredQuantity(reference);
+  const priceVerified = !!option && modalPrice > 0 && priceClose(modalPrice, option.unitPrice);
+
+  if (expectedQty > 10) {
+    return { expectedQty, expectedUnitPrice, priceVerified, inferredQuantity, manualReview: true, reason: "normal_flow_prepared_quantity_is_suspicious" };
+  }
+  if (expectedQty > 1 && inferredQuantity && !priceVerified) {
+    return { expectedQty, expectedUnitPrice, priceVerified, inferredQuantity, manualReview: true, reason: "quantity_tier_price_not_verified" };
+  }
+  return {
+    expectedQty,
+    expectedUnitPrice,
+    priceVerified,
+    inferredQuantity,
+    manualReview: false,
+    shouldEditQuantity: expectedQty > 0 && modalQty !== expectedQty,
+    shouldEditPrice: expectedUnitPrice > 0 && !priceClose(modalPrice, expectedUnitPrice),
+    reason: "matched_normal_flow_prepared_order",
+  };
+}
+
 function normalizeAttemptRow(candidate, action = {}) {
   const items = (candidate.items || []).map((item) => ({
     sku: cleanText(item.sku),
@@ -222,6 +280,11 @@ function normalizeAttemptRow(candidate, action = {}) {
     subtotal: Number(item.subtotal || 0) || 0,
     trusted: item.trusted === true,
     referenceSource: item.referenceSource || "",
+    quantitySource: item.quantitySource || "",
+    quantityRepair: item.quantityRepair || null,
+    quantityRepairSkipped: item.quantityRepairSkipped || null,
+    priceSource: item.priceSource || "",
+    priceOptions: Array.isArray(item.priceOptions) ? item.priceOptions : [],
   }));
   return {
     ...candidate,
@@ -301,6 +364,23 @@ function isAlreadyRealOrderUnverified(row) {
     || /convert to order button not available/i.test(message);
 }
 
+function isOrderSentAwaitingVerification(row) {
+  const status = cleanText(row && (row.finalStatus || row.actionStatus || row.status || row.reason)).toLowerCase();
+  const message = cleanText(row && (row.actionMessage || row.message || row.error)).toLowerCase();
+  return status === "sent"
+    || status === "sent_unverified"
+    || status === "converted"
+    || /\border sent\b/i.test(message)
+    || /resend clicked/i.test(message)
+    || /convert clicked/i.test(message);
+}
+
+function recoveryUncertainStatus(row) {
+  if (isAlreadyRealOrderUnverified(row)) return "already_in_real_orders_unverified";
+  if (isOrderSentAwaitingVerification(row)) return "awaiting_taager_verification";
+  return "not_found_after_retry";
+}
+
 function classifyRecoveryAttempts(attempts, verifiedTaagerKeys, failedRows = [], options = {}) {
   const country = options.country || "sa";
   const verified = [];
@@ -312,8 +392,17 @@ function classifyRecoveryAttempts(attempts, verifiedTaagerKeys, failedRows = [],
     const keys = candidateKeys(attempt, country);
     const failedMatch = (failedRows || []).find((row) => failedRowMatchesAttempt(row, attempt, country));
     const allVerified = keys.length > 0 && keys.every((key) => verifiedTaagerKeys && verifiedTaagerKeys.has && verifiedTaagerKeys.has(key));
+    const uncertainActionStatus = recoveryUncertainStatus(attempt);
+    const actionNeedsVerification = uncertainActionStatus !== "not_found_after_retry";
     if (allVerified) {
       verified.push({ ...attempt, finalStatus: "verified_in_taager" });
+    } else if (actionNeedsVerification) {
+      unresolved.push({
+        ...attempt,
+        finalStatus: uncertainActionStatus,
+        uncertain: true,
+        uploadedWithWarning: true,
+      });
     } else if (failedMatch) {
       failedInTaager.push({
         ...attempt,
@@ -325,9 +414,9 @@ function classifyRecoveryAttempts(attempts, verifiedTaagerKeys, failedRows = [],
     } else {
       unresolved.push({
         ...attempt,
-        finalStatus: isAlreadyRealOrderUnverified(attempt)
-          ? "already_in_real_orders_unverified"
-          : "not_found_after_retry",
+        finalStatus: uncertainActionStatus,
+        uncertain: true,
+        uploadedWithWarning: true,
       });
     }
   }
@@ -354,7 +443,7 @@ function recoveryResultRows(rows, country = "sa") {
     const first = (row.items || [])[0] || row;
     const rawPhone = row.rawPhone || first.rawPhone || row.phone || "";
     const normalizedPhone = row.normalizedPhone || row.normPhone || first.normPhone || normalizePhone(rawPhone, country) || "";
-    const reason = row.reason || row.actionReason || row.actionStatus || row.finalStatus || row.status || "";
+    const reason = row.reason || row.actionReason || row.finalStatus || row.actionStatus || row.status || "";
     const actionMessage = row.actionMessage || row.message || row.error || "";
     const productName = (row.items || []).map((item) => item.productName || item.sku).filter(Boolean).join(" | ") || row.productName || first.productName || "";
     return {
@@ -377,6 +466,10 @@ function recoveryResultRows(rows, country = "sa") {
       failureCode: row.failureCode || "",
       actionMessage,
       reason,
+      quantitySource: first.quantitySource || row.quantitySource || "",
+      quantityRepairSource: (first.quantityRepair && first.quantityRepair.source) || row.quantityRepairSource || "",
+      priceSource: first.priceSource || row.priceSource || "",
+      easyOrdersQtyEdited: (row.editResult && row.editResult.edits || []).some((edit) => edit.field === "quantity") ? "YES" : "NO",
       existingSkus: row.existingSkus || "",
       missingSkus: row.missingSkus || "",
       duplicateSkus: row.duplicateSkus || "",
@@ -433,9 +526,9 @@ function buildAffiliateRecoveryResult(parts, country = "sa") {
     validationErrors: attempted.flatMap((row) => row.validationErrors || []),
     attemptedRows: recoveryResultRows(attempted, country),
     verifiedRows: recoveryResultRows(verified, country),
-    failedRows: recoveryResultRows([...failedInTaager, ...failedUnresolved], country),
-    skippedRows: recoveryResultRows([...skippedAlready, ...skippedCompleted, ...skippedManual, ...alreadyRealUnverified], country),
-    manualReviewRows: recoveryResultRows([...skippedManual, ...alreadyRealUnverified], country),
+    failedRows: recoveryResultRows(failedInTaager, country),
+    skippedRows: recoveryResultRows([...skippedAlready, ...skippedCompleted, ...skippedManual, ...unresolved], country),
+    manualReviewRows: recoveryResultRows([...skippedManual, ...unresolved], country),
     productSummary: recoveryProductSummary(verified),
   };
 }
@@ -446,12 +539,14 @@ module.exports = {
   groupRealRecoveryCandidates,
   quantityFromReferencePrice,
   quantityFromSuspiciousReference,
+  quantityEditDecision,
   isSuspiciousQuantity,
   referenceItemForProduct,
   normalizeAttemptRow,
   parseTaagerFailedOrders,
   classifyRecoveryAttempts,
   isAlreadyRealOrderUnverified,
+  isOrderSentAwaitingVerification,
   buildAffiliateRecoveryResult,
   recoveryResultRows,
   recoveryProductSummary,

@@ -12,6 +12,7 @@ const {
   isSuspiciousQuantity,
   quantityFromReferencePrice,
   quantityFromSuspiciousReference,
+  quantityEditDecision,
   parseTaagerFailedOrders,
   classifyRecoveryAttempts,
   buildAffiliateRecoveryResult,
@@ -66,6 +67,31 @@ const bundleReference = {
 assert.strictEqual(quantityFromReferencePrice(bundleReference, 440), 2, "bundle subtotal 440 should infer quantity 2");
 assert.strictEqual(quantityFromReferencePrice(bundleReference, 220), 2, "bundle unit price 220 should infer quantity 2");
 assert.strictEqual(quantityFromReferencePrice(bundleReference, 999), null, "unknown modal price should not force a quantity");
+const cameraReference = {
+  sku: "CAM-4G",
+  productName: "\u0643\u0627\u0645\u064a\u0631\u0627 \u0639\u064a\u0646 \u0627\u0644\u0635\u0642\u0631 \u0627\u0644\u0634\u0645\u0633\u064a\u0629 4G - \u062a\u0639\u0645\u0644 \u0628\u062f\u0648\u0646 \u0643\u0647\u0631\u0628\u0627\u0621 | \u0634\u0631\u064a\u062d\u0629 \u0627\u062a\u0635\u0627\u0644 + \u0648\u0627\u064a \u0641\u0627\u064a + \u0631\u0624\u064a\u0629 \u0644\u064a\u0644\u064a\u0629 | \u0636\u0645\u0627\u0646 \u0633\u0646\u0629",
+  qty: 3,
+  unitPrice: 249,
+  subtotal: 747,
+  quantitySource: "repaired_quantity",
+  quantityRepair: { source: "easyorders_history", reason: "sku_product_history_min_quantity" },
+  referenceSource: "easyorders-real-export",
+};
+const unsafeCameraDecision = quantityEditDecision(cameraReference, { qty: 1, price: 249 });
+assert.strictEqual(unsafeCameraDecision.manualReview, true, "inferred camera quantity must not overwrite modal qty without tier-price proof");
+assert.strictEqual(unsafeCameraDecision.reason, "quantity_tier_price_not_verified");
+const tierVerifiedCameraDecision = quantityEditDecision({
+  ...cameraReference,
+  unitPrice: 166,
+  subtotal: 498,
+  priceOptions: [
+    { qty: 1, subtotal: 249, unitPrice: 249 },
+    { qty: 3, subtotal: 498, unitPrice: 166 },
+  ],
+}, { qty: 1, price: 166 });
+assert.strictEqual(tierVerifiedCameraDecision.manualReview, false, "verified tier unit price can allow an inferred quantity edit");
+assert.strictEqual(tierVerifiedCameraDecision.shouldEditQuantity, true);
+assert.strictEqual(tierVerifiedCameraDecision.expectedUnitPrice, 166);
 assert.strictEqual(isSuspiciousQuantity({ maxQty: 3 }, 44), true, "44 should be suspicious when known max quantity is 3");
 assert.strictEqual(isSuspiciousQuantity({ maxQty: 3 }, 8), false, "small quantities should not trip the suspicious guard");
 assert.strictEqual(
@@ -117,6 +143,18 @@ const verifiedKeys = new Set();
 const classifiedFailed = classifyRecoveryAttempts(grouped.attempted, verifiedKeys, failedRows, { country: "sa" });
 assert.strictEqual(classifiedFailed.failedInTaager.length, 1, "failed workbook UUID should classify unresolved attempts");
 assert.strictEqual(classifiedFailed.failedInTaager[0].failureCode, "price_low_error");
+const failedRecoveryOnlyResult = buildAffiliateRecoveryResult({
+  realAttempts: grouped.attempted,
+  missedAttempts: [],
+  verified: [],
+  failedInTaager: classifiedFailed.failedInTaager,
+  unresolved: [],
+  skippedAlready: [],
+  skippedCompleted: [],
+  skippedManual: [],
+}, "sa");
+assert.strictEqual(failedRecoveryOnlyResult.failedRows.length, 1, "true Taager failed export rows should still be reported as failed");
+assert.strictEqual(failedRecoveryOnlyResult.failedRows[0].failureCode, "price_low_error");
 
 verifiedKeys.add("966500000002|SKU-NEW");
 const classifiedVerified = classifyRecoveryAttempts(grouped.attempted, verifiedKeys, failedRows, { country: "sa" });
@@ -129,9 +167,34 @@ const alreadyRealAttempt = {
   actionMessage: "Convert to Order button not available; likely already moved from missed orders to real orders",
   missingConvertNeedsRealRetry: true,
 };
-const classifiedAlreadyReal = classifyRecoveryAttempts([alreadyRealAttempt], new Set(), [], { country: "sa" });
+const classifiedAlreadyReal = classifyRecoveryAttempts([alreadyRealAttempt], new Set(), failedRows, { country: "sa" });
+assert.strictEqual(classifiedAlreadyReal.failedInTaager.length, 0, "missing Convert button should not be overridden by failed export matching");
 assert.strictEqual(classifiedAlreadyReal.unresolved.length, 1, "missing Convert button should remain a verification uncertainty");
 assert.strictEqual(classifiedAlreadyReal.unresolved[0].finalStatus, "already_in_real_orders_unverified");
+
+const orderSentAttempt = {
+  ...grouped.attempted[0],
+  actionStatus: "sent",
+  actionMessage: "Order Sent",
+};
+const classifiedOrderSent = classifyRecoveryAttempts([orderSentAttempt], new Set(), failedRows, { country: "sa" });
+assert.strictEqual(classifiedOrderSent.failedInTaager.length, 0, "Order Sent should wait for Taager verification instead of being rejected");
+assert.strictEqual(classifiedOrderSent.unresolved.length, 1);
+assert.strictEqual(classifiedOrderSent.unresolved[0].finalStatus, "awaiting_taager_verification");
+const orderSentRecoveryResult = buildAffiliateRecoveryResult({
+  realAttempts: [orderSentAttempt],
+  missedAttempts: [],
+  verified: [],
+  failedInTaager: classifiedOrderSent.failedInTaager,
+  unresolved: classifiedOrderSent.unresolved,
+  skippedAlready: [],
+  skippedCompleted: [],
+  skippedManual: [],
+}, "sa");
+assert.strictEqual(orderSentRecoveryResult.failedRows.length, 0, "Order Sent should not appear in failed/rejected rows without Taager failed-export proof");
+assert.strictEqual(orderSentRecoveryResult.manualReviewRows.length, 1, "Order Sent without Taager verification should appear in Uncertain Orders");
+assert.strictEqual(orderSentRecoveryResult.manualReviewRows[0].recoveryStatus, "awaiting_taager_verification");
+assert.strictEqual(orderSentRecoveryResult.manualReviewRows[0].reason, "awaiting_taager_verification");
 
 const alreadyRealRecoveryResult = buildAffiliateRecoveryResult({
   realAttempts: [],
@@ -207,6 +270,7 @@ assert(uiRecoverySource.includes("COUNTRY_PHONE_RULES"), "affiliate recovery sho
 assert(uiRecoverySource.includes("phone_rescued_trailing_zero_rewrite"), "affiliate recovery should rewrite short EasyOrders phone values instead of treating rescued normalization as clean");
 assert(uiRecoverySource.includes("phone_display_rewrite"), "affiliate recovery should rewrite ugly-but-normalizable EasyOrders phone values before resending");
 assert(uiRecoverySource.includes("normal_flow_prepared_quantity_is_suspicious"), "affiliate recovery should stop unsafe prepared quantities for manual review");
+assert(uiRecoverySource.includes("quantity_tier_price_not_verified"), "affiliate recovery should stop inferred quantity edits when tier price is not verified");
 assert(uiRecoverySource.includes("pending prepared targets"), "missed recovery should only open prepared missed targets");
 assert(uiRecoverySource.includes("fillInputValue(page, `cart_items[${modalItem.index}].price`"), "affiliate recovery should edit price from the normal-flow prepared order");
 assert(uiRecoverySource.includes("waitForEasyOrdersDetail"), "affiliate recovery should wait for detail controls before checking action buttons");
@@ -243,6 +307,10 @@ assert(
   "affiliate recovery toggle should sit between Auto-Confirm and Route Missed Orders"
 );
 assert(resultsSource.includes("affiliateRecovery"), "results should render affiliate recovery details");
+assert(resultsSource.includes("message_awaiting_taager_verification") && resultsSource.includes("message_already_in_real_orders_unverified"), "results should label recovery uncertainty instead of rejected/failed");
 assert(runSource.includes("run.recovery_preview_header") && runSource.includes("run.recovery_progress_title"), "run page should label affiliate recovery preview and progress distinctly");
+assert(runSource.includes("progressLastOrderText"), "run page progress should show last recovery order product/customer/status details");
+assert(runSource.includes("previewDestinationLabel"), "run page preview tables should label affiliate recovery rows as Recovery");
+assert(runSource.includes('data?.accountId ? accountStates.find(a => a.id === data.accountId)') && runSource.includes('msg?.accountId ? accountStates.find(a => a.id === msg.accountId)'), "multi-account preview/progress should route by accountId before falling back");
 
 console.log("Affiliate recovery verification passed.");

@@ -73,6 +73,31 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     return (value || "account").toString().trim().replace(/[^a-zA-Z0-9@._-]/g, "_") || "account";
   }
 
+  function runHtmlEsc(value) {
+    return String(value == null || value === "" ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function previewDestinationLabel(row) {
+    if (row && row.destination === "affiliate-recovery") return "Recovery";
+    if (row && row.destination === "second-taager-cart") return "Second cart";
+    return "Primary cart";
+  }
+
+  function progressLastOrderText(lastOrder) {
+    const last = lastOrder || {};
+    const parts = [
+      last.product || last.productName || "",
+      last.name || last.customer || "",
+      last.recoveryStatus || last.status || "",
+    ].filter(Boolean);
+    const body = parts.join(" - ") || "Waiting for order activity";
+    return last.error ? body + " - " + last.error : body;
+  }
+
   function accountDisplayName(acc, fallback = "") {
     if (!acc) return fallback;
     return acc.memberName || acc.easyEmail || acc.email || acc.taagerEmail || acc.easyStore || acc.storeName || acc.label || acc.name || fallback;
@@ -772,12 +797,13 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       if (_upFail)    _upFail.textContent = msg.failed;
       if (_upTitle)    _upTitle.textContent = msg.mode === "affiliate-recovery" ? (t("run.recovery_progress_title") || "Recovering Affiliate Orders") : t("run.creating");
       if (_upLast) {
+        const lastText = progressLastOrderText(msg.lastOrder);
         if (msg.lastOrder?.error) {
           _upLast.style.color = "var(--danger)";
-          _upLast.textContent = `❌ ${msg.lastOrder.product} — ${msg.lastOrder.error}`;
+          _upLast.textContent = `Failed: ${lastText}`;
         } else {
           _upLast.style.color = "var(--text2)";
-          _upLast.textContent = `↳ ${msg.lastOrder?.product || ""}`;
+          _upLast.textContent = `Last: ${lastText}`;
         }
       }
       const uploadBadgeFn = msg.mode === "affiliate-recovery" ? t("run.badge_recovering") : t("run.badge_uploading");
@@ -958,8 +984,9 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     if (!acc || !acc.progress) return `<div id="acc-prog-${accId}" style="display:none"></div>`;
     const p = acc.progress;
     const pct = p.total > 0 ? (p.current / p.total * 100) : 0;
-    const lastTxt   = p.lastOrder?.error ? `❌ ${p.lastOrder.product} — ${p.lastOrder.error}` : `↳ ${p.lastOrder?.product || ""}`;
+    const lastTxt = progressLastOrderText(p.lastOrder);
     const lastColor = p.lastOrder?.error ? "var(--danger)" : "var(--text2)";
+    const lastPrefix = p.lastOrder?.error ? "Failed: " : "Last: ";
     return `<div id="acc-prog-${accId}" style="background:var(--bg2);border:1px solid var(--accent);border-radius:var(--radius);padding:14px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div style="font-size:var(--type-label);font-weight:var(--weight-semibold);color:var(--accent);text-transform:uppercase;letter-spacing:.06em">${p.mode === "affiliate-recovery" ? (t("run.recovery_progress_title") || "Recovering Affiliate Orders") : t("run.creating")}</div>
@@ -969,7 +996,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
         <div style="height:100%;background:var(--accent);width:${pct}%;transition:width 0.4s ease;border-radius:4px"></div>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:var(--type-caption)">
-        <div style="color:${lastColor}">${lastTxt}</div>
+        <div style="color:${lastColor}">${runHtmlEsc(lastPrefix + lastTxt)}</div>
         <div style="display:flex;gap:12px">
           <span style="color:var(--success)">✅ ${p.success}</span>
           <span style="color:var(--danger)">❌ ${p.failed}</span>
@@ -1042,7 +1069,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
       <div class="upload-progress-large">
         <div class="upl-header">
           <div>
-            <div class="upl-title">${t("run.creating")}</div>
+            <div class="upl-title">${prog.mode === "affiliate-recovery" ? (t("run.recovery_progress_title") || "Recovering Affiliate Orders") : t("run.creating")}</div>
             <div class="upl-count">${prog.current} <span style="font-size:var(--type-subtitle);color:var(--text2);font-weight:var(--weight-regular)">/ ${prog.total}</span></div>
           </div>
           <div style="text-align:right">
@@ -1057,7 +1084,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
           <div class="upl-bar-fill" style="width:${prog.total>0?Math.round(prog.current/prog.total*100):0}%"></div>
         </div>
         <div class="upl-stats">
-          <div class="upl-last">${prog.lastOrder?.error ? `❌ ${prog.lastOrder.product} — ${prog.lastOrder.error}` : `↳ ${prog.lastOrder?.product || ""}`}</div>
+          <div class="upl-last" style="color:${prog.lastOrder?.error ? "var(--danger)" : "var(--text2)"}">${runHtmlEsc((prog.lastOrder?.error ? "Failed: " : "Last: ") + progressLastOrderText(prog.lastOrder))}</div>
           <div style="color:var(--text2);font-size:var(--type-caption)">${prog.current} / ${prog.total}</div>
         </div>
       </div>` : "";
@@ -1089,14 +1116,15 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
         wrap.innerHTML = `
           <table class="orders-preview-table run-orders-preview-table" style="width:100%;min-width:1310px;table-layout:fixed;border-collapse:collapse">
             <colgroup>
-              <col style="width:46px"><col style="width:420px"><col style="width:64px">
+              <col style="width:46px"><col style="width:130px"><col style="width:420px"><col style="width:64px">
               <col style="width:90px"><col style="width:150px"><col style="width:190px">
               <col style="width:190px"><col style="width:160px">
             </colgroup>
-            <thead><tr><th>#</th>${Array.isArray(colsL)?colsL.map(c=>`<th>${c}</th>`).join(""):""}</tr></thead>
+            <thead><tr><th>#</th><th>Destination</th>${Array.isArray(colsL)?colsL.map(c=>`<th>${c}</th>`).join(""):""}</tr></thead>
             <tbody>${filtered.map((r,i)=>`<tr>
               <td style="color:var(--text2);text-align:center">${i+1}</td>
-              <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.productName||"").replace(/"/g,"")}">${r.productName||"—"}</td>
+              <td style="font-weight:var(--weight-semibold);color:${r.destination === "second-taager-cart" || r.destination === "affiliate-recovery" ? "var(--accent)" : "var(--text2)"}">${previewDestinationLabel(r)}</td>
+              <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.productName||"").replace(/"/g,"")}">${r.productName||"-"}</td>
               <td style="font-weight:var(--weight-bold);text-align:center">${r.qty||1}</td>
               <td style="color:var(--success);font-weight:var(--weight-semibold)">${r.subtotal||"—"}</td>
               <td style="color:var(--text2)">${r.date||"—"}</td>
@@ -1104,7 +1132,7 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
               <td style="direction:rtl;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name||"—"}</td>
               <td style="font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.phone||"—"}</td>
             </tr>`).join("")}
-            ${filtered.length===0?`<tr><td colspan="8" style="text-align:center;padding:14px;color:var(--text2);font-size:var(--type-label)">No orders match your search</td></tr>`:""}</tbody>
+            ${filtered.length===0?`<tr><td colspan="9" style="text-align:center;padding:14px;color:var(--text2);font-size:var(--type-label)">No orders match your search</td></tr>`:""}</tbody>
           </table>`;
       };
       return `
@@ -1119,15 +1147,16 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
         <div style="overflow:auto;max-height:300px" id="${tableId}">
           <table class="orders-preview-table run-orders-preview-table" style="width:100%;min-width:1310px;table-layout:fixed;border-collapse:collapse">
             <colgroup>
-              <col style="width:46px"><col style="width:420px"><col style="width:64px">
+              <col style="width:46px"><col style="width:130px"><col style="width:420px"><col style="width:64px">
               <col style="width:90px"><col style="width:150px"><col style="width:190px">
               <col style="width:190px"><col style="width:160px">
             </colgroup>
-            <thead><tr><th>#</th>${Array.isArray(cols)?cols.map(c=>`<th>${c}</th>`).join(""):""}</tr></thead>
+            <thead><tr><th>#</th><th>Destination</th>${Array.isArray(cols)?cols.map(c=>`<th>${c}</th>`).join(""):""}</tr></thead>
             <tbody>
               ${rows.map((r,i)=>`<tr>
                 <td style="color:var(--text2);text-align:center">${i+1}</td>
-                <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.productName||"").replace(/"/g,"")}">${r.productName||"—"}</td>
+                <td style="font-weight:var(--weight-semibold);color:${r.destination === "second-taager-cart" || r.destination === "affiliate-recovery" ? "var(--accent)" : "var(--text2)"}">${previewDestinationLabel(r)}</td>
+                <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.productName||"").replace(/"/g,"")}">${r.productName||"-"}</td>
                 <td style="font-weight:var(--weight-bold);text-align:center">${r.qty||1}</td>
                 <td style="color:var(--success);font-weight:var(--weight-semibold)">${r.subtotal||"—"}</td>
                 <td style="color:var(--text2)">${r.date||"—"}</td>
@@ -1596,7 +1625,9 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
 
   // ── ORDER PROGRESS — route by accountId (Task 3) ──
   window.api.on("bot-order-progress", (msg) => {
-    const acc = accountStates.find(a => a.id === msg.accountId) || accountStates[0];
+    const acc = (msg?.accountId ? accountStates.find(a => a.id === msg.accountId) : null)
+             || accountStates.find(a => a.status === "running")
+             || accountStates[0];
     if (!acc) return;
     acc.progress = { current: msg.current, total: msg.total, success: msg.success, failed: msg.failed, lastOrder: msg.lastOrder, mode: msg.mode || "" };
 

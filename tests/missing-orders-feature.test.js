@@ -91,11 +91,27 @@ const taagerCatalog = buildTaagerProductCatalog(XLSX.write(taagerCatalogBook, { 
 const taagerFallbackResult = resolveMissedOrders([
   { ...missedA, sku: null, qty: null, productName: "TAAGER-SKU-1" },
 ], {}, taagerCatalog);
-assert.strictEqual(taagerFallbackResult.resolved.length, 1, "missed product should resolve from Taager fallback catalog");
-assert.strictEqual(taagerFallbackResult.resolved[0].sku, "TAAGER-SKU-1");
-assert.strictEqual(taagerFallbackResult.resolved[0].qty, 2);
-assert.strictEqual(taagerFallbackResult.resolved[0].subtotal, 300);
-assert.strictEqual(taagerFallbackResult.resolved[0].catalogSource, "taager");
+assert.strictEqual(taagerFallbackResult.resolved.length, 0, "non-obvious missed product should not inherit catalog quantity > 1 automatically");
+assert.strictEqual(taagerFallbackResult.skippedOrders.length, 1);
+assert.strictEqual(taagerFallbackResult.skippedOrders[0].reason, "quantity_inference_requires_manual_review");
+assert.strictEqual(taagerFallbackResult.skippedOrders[0].sku, "TAAGER-SKU-1");
+const explicitBundleCatalog = {
+  "2 pieces TAAGER-SKU-1": {
+    sku: "TAAGER-SKU-1",
+    productName: "2 pieces TAAGER-SKU-1",
+    minQty: 2,
+    prices: { 2: 300 },
+    source: "easyorders",
+  },
+};
+const explicitCatalogResult = resolveMissedOrders([
+  { ...missedA, sku: null, qty: null, productName: "2 pieces TAAGER-SKU-1" },
+], explicitBundleCatalog, taagerCatalog);
+assert.strictEqual(explicitCatalogResult.resolved.length, 1, "explicit bundle missed product can resolve from catalog");
+assert.strictEqual(explicitCatalogResult.resolved[0].sku, "TAAGER-SKU-1");
+assert.strictEqual(explicitCatalogResult.resolved[0].qty, 2);
+assert.strictEqual(explicitCatalogResult.resolved[0].subtotal, 300);
+assert.strictEqual(explicitCatalogResult.resolved[0].catalogSource, "easyorders");
 const missingEverywhereResult = resolveMissedOrders([
   { ...missedA, sku: null, qty: null, productName: "Unknown Product" },
 ], {}, taagerCatalog);
@@ -141,6 +157,25 @@ assert.strictEqual(repairedPackageRow.qty, 2, "SKU/product history should repair
 assert.strictEqual(repairedPackageRow.unitPrice, 62.5);
 assert.strictEqual(repairedPackageRow.subtotal, 125);
 assert.strictEqual(repairedPackageRow.quantityRepair.reason, "sku_product_history_min_quantity");
+const cameraProductName = "\u0643\u0627\u0645\u064a\u0631\u0627 \u0639\u064a\u0646 \u0627\u0644\u0635\u0642\u0631 \u0627\u0644\u0634\u0645\u0633\u064a\u0629 4G - \u062a\u0639\u0645\u0644 \u0628\u062f\u0648\u0646 \u0643\u0647\u0631\u0628\u0627\u0621 | \u0634\u0631\u064a\u062d\u0629 \u0627\u062a\u0635\u0627\u0644 + \u0648\u0627\u064a \u0641\u0627\u064a + \u0631\u0624\u064a\u0629 \u0644\u064a\u0644\u064a\u0629 | \u0636\u0645\u0627\u0646 \u0633\u0646\u0629";
+const cameraHistorySheet = XLSX.utils.aoa_to_sheet([
+  realPackageHeader,
+  [1, "pending", "Camera Customer", "0537583190", "Riyadh", "Address", 277, 249, 28, "", 0, cameraProductName, "", 1, "CAM-4G", 249, "2026-07-18", "", "", "", "", "", "", "", "cod", "", "", "EO-CAM", "", ""],
+  [2, "pending", "Camera Customer 2", "0537583191", "Riyadh", "Address", 775, 747, 28, "", 0, cameraProductName, "", 3, "CAM-4G", 249, "2026-07-18", "", "", "", "", "", "", "", "cod", "", "", "EO-CAM-2", "", ""],
+  [3, "pending", "Camera Customer 3", "0537583192", "Riyadh", "Address", 775, 747, 28, "", 0, cameraProductName, "", 3, "CAM-4G", 249, "2026-07-18", "", "", "", "", "", "", "", "cod", "", "", "EO-CAM-3", "", ""],
+  [4, "pending", "Camera Customer 4", "0537583193", "Riyadh", "Address", 775, 747, 28, "", 0, cameraProductName, "", 3, "CAM-4G", 249, "2026-07-18", "", "", "", "", "", "", "", "cod", "", "", "EO-CAM-4", "", ""],
+]);
+const cameraHistoryBook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(cameraHistoryBook, cameraHistorySheet, "Sheet1");
+const cameraHistoryRows = parseRealOrders(
+  XLSX.write(cameraHistoryBook, { type: "buffer", bookType: "xlsx" }),
+  new Date(2026, 6, 1),
+  new Date(2026, 6, 19),
+);
+const cameraQtyOneRow = cameraHistoryRows.find((row) => row.orderId === "EO-CAM");
+assert.strictEqual(cameraQtyOneRow.qty, 1, "non-obvious camera title should not be repaired to dominant qty 3 from history");
+assert.strictEqual(cameraQtyOneRow.subtotal, 249);
+assert.strictEqual(cameraQtyOneRow.quantityRepairSkipped.reason, "quantity_inference_requires_manual_review");
 const taagerQuantityFallback = {
   "TAAGER-QTY-SKU": {
     sku: "TAAGER-QTY-SKU",
@@ -163,10 +198,20 @@ const taagerQuantityRepairRows = [{
   unitPrice: 60,
   subtotal: 60,
 }];
-assert.strictEqual(repairOrderQuantitiesFromCatalog(taagerQuantityRepairRows, {}, taagerQuantityFallback), 1);
-assert.strictEqual(taagerQuantityRepairRows[0].qty, 2, "Taager SKU history should repair quantity when EasyOrders history is not enough");
-assert.strictEqual(taagerQuantityRepairRows[0].subtotal, 120);
-assert.strictEqual(taagerQuantityRepairRows[0].quantityRepair.source, "taager_catalog");
+assert.strictEqual(repairOrderQuantitiesFromCatalog(taagerQuantityRepairRows, {}, taagerQuantityFallback), 0);
+assert.strictEqual(taagerQuantityRepairRows[0].qty, 1, "Taager SKU history should not repair non-obvious quantity automatically");
+assert.strictEqual(taagerQuantityRepairRows[0].subtotal, 60);
+assert.strictEqual(taagerQuantityRepairRows[0].quantityRepairSkipped.reason, "quantity_inference_requires_manual_review");
+const explicitTaagerQuantityRepairRows = [{
+  ...taagerQuantityRepairRows[0],
+  productName: "2 pieces New EasyOrders Product Name",
+  quantityRepairSkipped: null,
+}];
+assert.strictEqual(repairOrderQuantitiesFromCatalog(explicitTaagerQuantityRepairRows, {}, taagerQuantityFallback), 1);
+assert.strictEqual(explicitTaagerQuantityRepairRows[0].qty, 2, "explicit bundle quantity can repair from Taager catalog");
+assert.strictEqual(explicitTaagerQuantityRepairRows[0].subtotal, 120);
+assert.strictEqual(explicitTaagerQuantityRepairRows[0].unitPrice, 60);
+assert.strictEqual(explicitTaagerQuantityRepairRows[0].quantityRepair.source, "taager_catalog");
 const taagerExistingHeader = Array(23).fill("");
 taagerExistingHeader[0] = "Order Number";
 taagerExistingHeader[2] = "Status";

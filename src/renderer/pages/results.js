@@ -797,6 +797,18 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           "No trusted product history exists; not submitted automatically."
         );
       }
+      if (row.reason === "already_in_real_orders_unverified" || row.recoveryStatus === "already_in_real_orders_unverified") {
+        return translated(
+          "results.message_already_in_real_orders_unverified",
+          "Convert to Order was not available; verify whether it already moved to real EasyOrders orders and Taager."
+        );
+      }
+      if (row.reason === "awaiting_taager_verification" || row.recoveryStatus === "awaiting_taager_verification") {
+        return translated(
+          "results.message_awaiting_taager_verification",
+          "EasyOrders action completed; Taager verification has not confirmed the order yet."
+        );
+      }
       return row.actionMessage || row.existingSkus || row.missingSkus || "-";
     };
     const td = (value, className = "", extra = "") => {

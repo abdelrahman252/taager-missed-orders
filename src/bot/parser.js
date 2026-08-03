@@ -47,13 +47,21 @@ const TAAGER_STATUS_REAL = {
   AFTER_SALES_PROGRESS: "خدمة ما بعد البيع قيد التقدم",
 };
 
+const TAAGER_STATUS_UTF8 = {
+  DELIVERED: "\u062a\u0645 \u0627\u0644\u062a\u0648\u0635\u064a\u0644",
+  DELIVERY_FAILED: "\u0641\u0634\u0644 \u0627\u0644\u062a\u0633\u0644\u064a\u0645",
+  CANCELED_BY_YOU: "\u0637\u0644\u0628 \u0645\u0644\u063a\u064a \u0628\u0648\u0627\u0633\u0637\u062a\u0643",
+};
+
 function normalizeArabicStatusKey(status) {
   return String(status || "").trim().replace(/[\u064B-\u065F\u0670]/g, "");
 }
 
 function isTaagerStatus(status, key) {
   const ar = normalizeArabicStatusKey(status);
-  return ar === normalizeArabicStatusKey(TAAGER_STATUS_REAL[key]) || ar === normalizeArabicStatusKey(TAAGER_STATUS[key]);
+  return ar === normalizeArabicStatusKey(TAAGER_STATUS_REAL[key])
+    || ar === normalizeArabicStatusKey(TAAGER_STATUS[key])
+    || ar === normalizeArabicStatusKey(TAAGER_STATUS_UTF8[key]);
 }
 
 function taagerStatusMeta(status) {
@@ -324,6 +332,25 @@ function numbersCloseForHistory(a, b) {
   return Math.abs(left - right) <= Math.max(1, Math.abs(right) * 0.02);
 }
 
+function hasExplicitQuantityInProductName(productName, qty) {
+  const count = Number(qty || 0) || 0;
+  if (count <= 1) return true;
+  const text = normalizeDigits(productName).toLowerCase();
+  if (!text) return false;
+  const escaped = String(count).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const units = [
+    "x", "\\*", "\\u00d7",
+    "pcs?", "pieces?", "piece", "packs?", "sets?",
+    "\\u062d\\u0628\\u0647", "\\u062d\\u0628\\u0629", "\\u062d\\u0628",
+    "\\u0642\\u0637\\u0639\\u0647", "\\u0642\\u0637\\u0639\\u0629", "\\u0642\\u0637\\u0639",
+    "\\u0639\\u0628\\u0648\\u0647", "\\u0639\\u0628\\u0648\\u0629", "\\u0639\\u0628\\u0648\\u0627\\u062a",
+  ].join("|");
+  const before = "(^|[^\\p{L}\\p{N}])";
+  const after = "($|[^\\p{L}\\p{N}])";
+  return new RegExp("^\\s*" + escaped + "\\s+", "iu").test(text)
+    || new RegExp(before + escaped + "\\s*(?:" + units + ")" + after, "iu").test(text)
+    || new RegExp(before + "(?:" + units + ")\\s*" + escaped + after, "iu").test(text);
+}
 function repairRealOrderQuantitiesFromHistory(orders) {
   const groups = new Map();
   for (const order of orders || []) {
@@ -355,6 +382,25 @@ function repairRealOrderQuantitiesFromHistory(orders) {
     const dominantUnitPrice = dominantPrices.length
       ? dominantPrices.sort((a, b) => a - b)[Math.floor(dominantPrices.length / 2)]
       : 0;
+    const explicitQuantity = items.some((item) => hasExplicitQuantityInProductName(item.productName, dominant.qty));
+    if (!explicitQuantity) {
+      for (const item of items) {
+        const qty = Number(item.qty || 1) || 1;
+        if (qty >= dominant.qty) continue;
+        item.quantityRepairSkipped = {
+          from: qty,
+          to: dominant.qty,
+          reason: "quantity_inference_requires_manual_review",
+          source: "easyorders_history",
+          sampleCount: total,
+          dominantCount: dominant.count,
+          confidence: dominant.count / total,
+        };
+        item.quantitySource = item.quantitySource || "easyorders_export";
+        item.priceSource = item.priceSource || "easyorders_export_item_price";
+      }
+      continue;
+    }
     for (const item of items) {
       const qty = Number(item.qty || 1) || 1;
       const unitPrice = Number(item.unitPrice || 0) || 0;
@@ -366,10 +412,13 @@ function repairRealOrderQuantitiesFromHistory(orders) {
         from: qty,
         to: dominant.qty,
         reason: "sku_product_history_min_quantity",
+        source: "easyorders_history",
         sampleCount: total,
         dominantCount: dominant.count,
         confidence: dominant.count / total,
       };
+      item.quantitySource = "explicit_product_quantity_repaired_from_history";
+      item.priceSource = "easyorders_export_item_price";
       repaired++;
     }
   }
@@ -388,6 +437,29 @@ function findCatalogBySku(catalog, sku) {
   const cleanSku = String(sku || "").trim();
   if (!cleanSku || !catalog || typeof catalog !== "object") return null;
   return Object.values(catalog).find((entry) => String(entry && entry.sku || "").trim() === cleanSku) || null;
+}
+
+function catalogSubtotalForQty(match, qty) {
+  const prices = match && match.prices && typeof match.prices === "object" ? match.prices : {};
+  const exact = prices[String(qty)] != null ? prices[String(qty)] : prices[qty];
+  const subtotal = Number(exact || 0) || 0;
+  return subtotal > 0 ? subtotal : 0;
+}
+
+function catalogPriceOptions(match) {
+  const prices = match && match.prices && typeof match.prices === "object" ? match.prices : {};
+  return Object.entries(prices)
+    .map(([qty, subtotal]) => {
+      const q = Number(qty) || 0;
+      const total = Number(subtotal) || 0;
+      return {
+        qty: q,
+        subtotal: total,
+        unitPrice: q > 0 ? total / q : total,
+      };
+    })
+    .filter((option) => option.qty > 0 && option.subtotal > 0)
+    .sort((a, b) => a.qty - b.qty);
 }
 
 function repairOrderQuantitiesFromCatalog(orders, catalog = {}, taagerCatalog = {}) {
@@ -414,17 +486,48 @@ function repairOrderQuantitiesFromCatalog(orders, catalog = {}, taagerCatalog = 
       const targetQty = confidence.dominantQty;
       if (targetQty <= currentQty || targetQty <= 1 || targetQty > 10) continue;
       if (confidence.totalSamples < source.minSamples || confidence.confidence < source.minConfidence) continue;
+      if (!hasExplicitQuantityInProductName(order.productName || source.match.productName, targetQty)) {
+        order.quantityRepairSkipped = {
+          from: currentQty,
+          to: targetQty,
+          reason: "quantity_inference_requires_manual_review",
+          source: source.source,
+          sampleCount: confidence.totalSamples,
+          dominantCount: confidence.dominantCount,
+          confidence: confidence.confidence,
+        };
+        order.quantitySource = order.quantitySource || "easyorders_export";
+        order.priceSource = order.priceSource || "easyorders_export_item_price";
+        continue;
+      }
+      const targetSubtotal = catalogSubtotalForQty(source.match, targetQty);
+      if (targetSubtotal <= 0) {
+        order.quantityRepairSkipped = {
+          from: currentQty,
+          to: targetQty,
+          reason: "quantity_tier_price_not_verified",
+          source: source.source,
+          sampleCount: confidence.totalSamples,
+          dominantCount: confidence.dominantCount,
+          confidence: confidence.confidence,
+        };
+        continue;
+      }
       order.qty = targetQty;
-      order.subtotal = unitPrice * targetQty;
+      order.subtotal = targetSubtotal;
+      order.unitPrice = targetSubtotal / targetQty;
       order.quantityRepair = {
         from: currentQty,
         to: targetQty,
         reason: "sku_product_history_min_quantity",
         source: source.source,
+        priceSource: source.source + "_price_for_quantity",
         sampleCount: confidence.totalSamples,
         dominantCount: confidence.dominantCount,
         confidence: confidence.confidence,
       };
+      order.quantitySource = "explicit_product_quantity_repaired_from_catalog";
+      order.priceSource = source.source + "_price_for_quantity";
       repaired++;
       break;
     }
@@ -728,7 +831,32 @@ function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}) {
     }
 
     const qty = match.minQty || 1;
-    const subtotal = match.prices[qty] || match.prices[Object.keys(match.prices)[0]] || 0;
+    const subtotal = catalogSubtotalForQty(match, qty) || match.prices[Object.keys(match.prices)[0]] || 0;
+    if (qty > 1 && !hasExplicitQuantityInProductName(order.productName || match.productName, qty)) {
+      skippedNames.push(order.productName);
+      skippedOrders.push({
+        ...order,
+        source: order.source || "missed",
+        normPhone: order.normPhone || "",
+        normalizedPhone: order.normPhone || "",
+        name: order.name,
+        rawPhone: order.rawPhone,
+        productName: order.productName,
+        city: order.city,
+        address: order.address,
+        sku: match.sku,
+        qty,
+        subtotal,
+        unitPrice: qty > 0 ? Math.round(subtotal / qty) : subtotal,
+        catalogSource: match.source || "easyorders",
+        quantitySource: "catalog_min_quantity_inferred",
+        priceSource: "catalog_price_for_quantity",
+        reason: "quantity_inference_requires_manual_review",
+        actionMessage: "Catalog/history suggested quantity > 1 but the missed product title does not explicitly show a bundle quantity.",
+        uncertain: !!order.uncertain,
+      });
+      continue;
+    }
     resolved.push({
       ...order,
       sku: match.sku,
@@ -737,6 +865,9 @@ function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}) {
       subtotal,
       unitPrice: Math.round(subtotal / qty),
       catalogSource: match.source || "easyorders",
+      quantitySource: qty > 1 ? "explicit_product_quantity_from_catalog" : "catalog_min_quantity",
+      priceSource: "catalog_price_for_quantity",
+      priceOptions: catalogPriceOptions(match),
     });
     if (match.source === "taager") sourceStats.taager++;
     else sourceStats.easyorders++;
@@ -1479,6 +1610,7 @@ module.exports = {
   mergeAndDeduplicate,
   normalizeProductName,
   productNamesMatch,
+  hasExplicitQuantityInProductName,
   makeOrderKey,
   loadProductMap,
   saveProductMap,

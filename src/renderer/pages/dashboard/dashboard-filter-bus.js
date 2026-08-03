@@ -1,7 +1,7 @@
-﻿/* ══════════════════════════════════════════════════════════════════════════════
+/* ------------------------------------------------------------------------------
    dashboard-filter-bus.js  (T-13)
    Global pub/sub state manager for cross-section filter synchronisation.
-   No DOM dependencies — pure state object with subscriber notifications.
+   No DOM dependencies � pure state object with subscriber notifications.
 
    Exposed on window:
      DashboardFilterBus.getState()
@@ -9,12 +9,12 @@
      DashboardFilterBus.subscribe(fn)
      DashboardFilterBus.unsubscribe(fn)
      DashboardFilterBus.reset()
-     DashboardFilterBus.MODES  — valid mapMode values
-   ══════════════════════════════════════════════════════════════════════════════ */
+     DashboardFilterBus.MODES  � valid mapMode values
+   ------------------------------------------------------------------------------ */
 (function () {
   'use strict';
 
-  /* ── Valid map display modes ─────────────────────────────────────────────── */
+  /* -- Valid map display modes ----------------------------------------------- */
   var MODES = {
     ORDERS:  'orders',    // Dot size = order volume (default)
     NDR:     'ndr',       // Province heatmap by NDR%
@@ -23,7 +23,7 @@
     PRODUCT: 'product'    // City dots coloured by selected product's NDR
   };
 
-  /* ── Default state ───────────────────────────────────────────────────────── */
+  /* -- Default state --------------------------------------------------------- */
   var _defaultState = {
     selectedProvince: null,   // provinceId string | null
     selectedCity:     null,   // cityName string   | null
@@ -248,7 +248,7 @@
     notifyExpectedNdrRange();
   }
 
-  /* ── Internal: notify all subscribers ───────────────────────────────────── */
+  /* -- Internal: notify all subscribers ------------------------------------- */
   function _notify() {
     var snapshot = Object.assign({}, _state);
     for (var i = 0; i < _listeners.length; i++) {
@@ -257,7 +257,7 @@
     }
   }
 
-  /* ── Public API ──────────────────────────────────────────────────────────── */
+  /* -- Public API ------------------------------------------------------------ */
   window.DashboardFilterBus = {
 
     MODES: MODES,
@@ -1629,7 +1629,7 @@
         }
         return _marketingQueuedForceLoads[loadKey];
       }
-      var useSaudiIPickNative = platform === 'snapchat' &&
+      var useSaudiIPickNative = (platform === 'snapchat' || platform === 'tiktok') &&
         current.provider === 'saudiipick' &&
         window.api &&
         typeof window.api.getSaudiIPickMarketingStatus === 'function';
@@ -1706,7 +1706,7 @@
       }
       range = Object.assign({ mode: 'incremental' }, range || {});
       var currentForSync = this.get(id, platform);
-      var useSaudiIPickNativeSync = platform === 'snapchat' &&
+      var useSaudiIPickNativeSync = (platform === 'snapchat' || platform === 'tiktok') &&
         currentForSync.provider === 'saudiipick' &&
         window.api &&
         typeof window.api.syncSaudiIPickMarketingData === 'function';

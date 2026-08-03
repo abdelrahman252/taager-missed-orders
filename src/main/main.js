@@ -6348,14 +6348,14 @@ function maskToken(value) {
   return `${clean.slice(0, 7)}...${clean.slice(-4)}`;
 }
 
-function normalizeNativeSourceAccount(source, fallbackCurrency = "SAR") {
+function normalizeNativeSourceAccount(source, fallbackCurrency = "SAR", platform = "snapchat") {
   const id = String(source && (source.id || source.sourceAccountId || source.adAccountId) || "").trim();
   if (!id) return null;
   return {
     id,
     name: String(source && (source.name || source.sourceAccountName || source.adAccountName) || id),
     currency: String(source && (source.rawCurrency || source.nativeRawCurrency || source.sourceCurrency || source.accountCurrency || source.account_currency || source.currency) || fallbackCurrency || "SAR").toUpperCase(),
-    platform: "snapchat",
+    platform,
     provider: "saudiipick",
     organizationName: String(source && source.organizationName || ""),
     canManageCampaigns: !!(source && source.canManageCampaigns),
@@ -6367,10 +6367,10 @@ function nativeMarketingNumber(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function normalizeNativeMarketingSummary(summary, sourceAccounts, dashboardAccountId) {
+function normalizeNativeMarketingSummary(summary, sourceAccounts, dashboardAccountId, platform = "snapchat") {
   if (!summary || typeof summary !== "object") return summary || null;
   const selected = (Array.isArray(sourceAccounts) ? sourceAccounts : [])
-    .map((source) => normalizeNativeSourceAccount(source, summary.currency || "SAR"))
+    .map((source) => normalizeNativeSourceAccount(source, summary.currency || "SAR", platform))
     .filter(Boolean);
   const byId = new Map(selected.map((source) => [source.id, source]));
   const fallbackSource = selected[0] || null;
@@ -6384,7 +6384,7 @@ function normalizeNativeMarketingSummary(summary, sourceAccounts, dashboardAccou
     return {
       ...row,
       provider: "saudiipick",
-      platform: "snapchat",
+      platform,
       dashboardAccountId: row && row.dashboardAccountId || dashboardAccountId,
       sourceAccountId: sourceId,
       sourceAccountName: row && row.sourceAccountName || source.name || sourceId,
@@ -6406,7 +6406,7 @@ function normalizeNativeMarketingSummary(summary, sourceAccounts, dashboardAccou
       id: sourceId,
       name: row && row.name || row && row.sourceAccountName || source.name || sourceId,
       provider: "saudiipick",
-      platform: "snapchat",
+      platform,
       dashboardAccountId: row && row.dashboardAccountId || dashboardAccountId,
       sourceAccountId: sourceId,
       sourceAccountName: row && row.sourceAccountName || source.name || sourceId,
@@ -6428,7 +6428,7 @@ function normalizeNativeMarketingSummary(summary, sourceAccounts, dashboardAccou
         id: sourceId,
         name: source.name || row.sourceAccountName || sourceId,
         provider: "saudiipick",
-        platform: "snapchat",
+        platform,
         dashboardAccountId,
         sourceAccountId: sourceId,
         sourceAccountName: source.name || row.sourceAccountName || sourceId,
@@ -6457,7 +6457,7 @@ function normalizeNativeMarketingSummary(summary, sourceAccounts, dashboardAccou
       id: source.id,
       name: source.name,
       provider: "saudiipick",
-      platform: "snapchat",
+      platform,
       dashboardAccountId,
       sourceAccountId: source.id,
       sourceAccountName: source.name,
@@ -6472,7 +6472,7 @@ function normalizeNativeMarketingSummary(summary, sourceAccounts, dashboardAccou
   return {
     ...summary,
     provider: "saudiipick",
-    platform: "snapchat",
+    platform,
     sourceBreakdown,
     campaignBreakdown,
     rowCount: Number(summary.rowCount || campaignBreakdown.length || sourceBreakdown.length || 0),
@@ -6480,10 +6480,10 @@ function normalizeNativeMarketingSummary(summary, sourceAccounts, dashboardAccou
   };
 }
 
-function mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAccountKey, sourceAccounts) {
+function mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAccountKey, sourceAccounts, platform = "snapchat") {
   const mappings = previous && previous.mappings && typeof previous.mappings === "object" ? { ...previous.mappings } : {};
   const sources = (Array.isArray(sourceAccounts) ? sourceAccounts : [])
-    .map((source) => normalizeNativeSourceAccount(source))
+    .map((source) => normalizeNativeSourceAccount(source, "SAR", platform))
     .filter(Boolean);
   mappings[dashboardAccountId] = sources;
   if (dashboardAccountKey) mappings[dashboardAccountKey] = sources;
@@ -6565,10 +6565,10 @@ async function callSaudiIPickMarketing(action, accountId, platform = "snapchat",
 
   if (action === "sync" && merged.ok) {
     const chosen = (Array.isArray(range && range.sourceAccounts) ? range.sourceAccounts : [])
-      .map((source) => normalizeNativeSourceAccount(source, merged.summary && merged.summary.currency || "SAR"))
+      .map((source) => normalizeNativeSourceAccount(source, merged.summary && merged.summary.currency || "SAR", platform))
       .filter(Boolean);
     if (merged.summary) {
-      merged.summary = normalizeNativeMarketingSummary(merged.summary, chosen, dashboardAccountId);
+      merged.summary = normalizeNativeMarketingSummary(merged.summary, chosen, dashboardAccountId, platform);
     }
     if (chosen.length) {
       merged.status = "connected";
@@ -6584,7 +6584,7 @@ async function callSaudiIPickMarketing(action, accountId, platform = "snapchat",
         : previous && Array.isArray(previous.linkedAccounts) && previous.linkedAccounts.length
         ? previous.linkedAccounts
         : merged.availableAccounts;
-      merged.mappings = mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAccountKey, chosen);
+      merged.mappings = mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAccountKey, chosen, platform);
     }
     saveCachedMarketingStatus(dashboardAccountId, platform, merged);
   }
@@ -6904,7 +6904,7 @@ ipcMain.handle("save-saudiipick-marketing-mapping", async (_, accountId, platfor
   const account = getStoredAccountById(dashboardAccountId);
   const dashboardAccountKey = marketingStableAccountKey(dashboardAccountId);
   const selected = (Array.isArray(sourceAccounts) ? sourceAccounts : [])
-    .map((source) => normalizeNativeSourceAccount(source))
+    .map((source) => normalizeNativeSourceAccount(source, "SAR", platform))
     .filter(Boolean);
   const next = {
     ...previous,
@@ -6919,7 +6919,7 @@ ipcMain.handle("save-saudiipick-marketing-mapping", async (_, accountId, platfor
     selectedSourceAccountIds: selected.map((source) => source.id),
     availableAccounts: previous.availableAccounts || selected,
     linkedAccounts: previous.linkedAccounts || selected,
-    mappings: mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAccountKey, selected),
+    mappings: mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAccountKey, selected, platform),
     statusCheckedAt: new Date().toISOString(),
   };
   saveCachedMarketingStatus(dashboardAccountId, platform, next);
@@ -7673,7 +7673,16 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
         if (msg.type === "2fa-needed")     mainWindow.webContents.send("bot-2fa-needed");
         if (msg.type === "needs-confirm")  mainWindow.webContents.send("bot-needs-confirm");
         if (msg.type === "cooldown")       mainWindow.webContents.send("bot-cooldown", msg);
-        if (msg.type === "preview")        mainWindow.webContents.send("bot-preview", msg);
+        if (msg.type === "preview") {
+          mainWindow.webContents.send("bot-preview", {
+            ...msg,
+            accountId: acc.id || "__single__",
+            accountEmail: accountContactEmail(acc),
+            accountLabel: accountDisplayName(acc, "Account 1"),
+            accountIdx: 0,
+            totalAccounts: 1,
+          });
+        }
         if (msg.type === "order-progress") {
           mainWindow.webContents.send("bot-order-progress", {
             ...msg,
