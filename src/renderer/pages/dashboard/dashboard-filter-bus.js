@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------------------------
    dashboard-filter-bus.js  (T-13)
    Global pub/sub state manager for cross-section filter synchronisation.
-   No DOM dependencies — pure state object with subscriber notifications.
+   No DOM dependencies - pure state object with subscriber notifications.
 
    Exposed on window:
      DashboardFilterBus.getState()
@@ -9,7 +9,7 @@
      DashboardFilterBus.subscribe(fn)
      DashboardFilterBus.unsubscribe(fn)
      DashboardFilterBus.reset()
-     DashboardFilterBus.MODES  — valid mapMode values
+     DashboardFilterBus.MODES  - valid mapMode values
    ------------------------------------------------------------------------------ */
 (function () {
   'use strict';
@@ -929,6 +929,10 @@
       offline: !!value.offline,
       error: value.error || '',
       errorCode: value.errorCode || value.error || '',
+      partial: !!value.partial,
+      errors: Array.isArray(value.errors) ? value.errors.slice() : [],
+      accountErrors: Array.isArray(value.accountErrors) ? value.accountErrors.slice() : [],
+      accountHealth: Array.isArray(value.accountHealth) ? value.accountHealth.slice() : [],
       reconnectRequired: !!value.reconnectRequired,
       loading: !!value.loading,
       manualOverride: readManualMarketingOverride(accountId)
@@ -1699,8 +1703,16 @@
       platform = normalizeMarketingPlatform(platform);
       if (id !== '__all__' && !(range && Array.isArray(range.sourceAccounts))) {
         var currentStatus = this.get(id, platform);
-        var sourceAccounts = (currentStatus && currentStatus.selectedSourceAccounts || []).map(function (acc) {
-          return { id: acc.id, currency: acc.currency };
+        var mappedSourceAccounts = currentStatus && currentStatus.selectedSourceAccounts || [];
+        if (!mappedSourceAccounts.length && currentStatus && currentStatus.mappings) {
+          marketingMappingKeys(id).some(function (key) {
+            if (!Array.isArray(currentStatus.mappings[key]) || !currentStatus.mappings[key].length) return false;
+            mappedSourceAccounts = currentStatus.mappings[key];
+            return true;
+          });
+        }
+        var sourceAccounts = mappedSourceAccounts.map(function (acc) {
+          return { id: acc.id, name: acc.name, currency: acc.currency };
         });
         range = Object.assign({}, range || {}, { sourceAccounts: sourceAccounts });
       }

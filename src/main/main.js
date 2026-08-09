@@ -167,7 +167,7 @@ monitoring.initMainMonitoring();
 monitoring.patchIpcMonitoring();
 monitoring.registerRendererMonitoringBridge();
 
-// ════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 // [Taager Bot DEBUG] - remove once AI is confirmed working
 setTimeout(function () {
   const keyLoaded = process.env.GEMINI_API_KEY;
@@ -178,21 +178,21 @@ setTimeout(function () {
     freeTierHint: "Check getAiAdminAnalytics().gemini for attempts, successes, failures, and fallback reasons.",
   });
 }, 0);
-// ════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 
-// ════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 // STARTUP PERFORMANCE FLAGS
 // Must be set before app is ready.
-// ════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 // Disable GPU process sandbox (reduces process spawn overhead on Windows)
 app.commandLine.appendSwitch("disable-gpu-sandbox");
-// Skip GPU info collection on startup (saves ~50–150 ms)
+// Skip GPU info collection on startup (saves ~50Ã¢â‚¬â€œ150 ms)
 app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
 // Use hardware acceleration but skip slow software rasterizer fallback
 app.commandLine.appendSwitch("enable-gpu-rasterization");
 // Reduce IPC overhead on renderer startup
 app.commandLine.appendSwitch("renderer-process-limit", "1");
-// V8 code cache: reuse compiled JS across launches (saves 20–60 ms per launch)
+// V8 code cache: reuse compiled JS across launches (saves 20Ã¢â‚¬â€œ60 ms per launch)
 app.commandLine.appendSwitch("js-flags", "--max-old-space-size=256");
 
 autoUpdater.autoDownload = false;
@@ -207,21 +207,21 @@ autoUpdater.logger = {
   debug: (...a) => log.debug("[AutoUpdate]", ...a),
 };
 
-// ══════════════════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 // SUPABASE CONFIG
 // Primary source: .env file (dev) or extraResources/.env (packaged).
-// No hardcoded fallback — missing config produces a clear warning rather than
+// No hardcoded fallback Ã¢â‚¬â€ missing config produces a clear warning rather than
 // silently using stale credentials baked into the source.
-// ══════════════════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 const SUPABASE_URL             = process.env.SUPABASE_URL             || "";
 const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || "";
 const SAUDIIPICK_MARKETING_API_BASE = (process.env.SAUDIIPICK_MARKETING_API_BASE || "https://saudiipick.com").replace(/\/+$/, "");
 
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-  log.warn("[App] Supabase config missing — license checks will fail until .env is configured.");
+  log.warn("[App] Supabase config missing Ã¢â‚¬â€ license checks will fail until .env is configured.");
 }
 
-const SUPABASE_TIMEOUT_MS = 180_000; // 180 s (3 minutes) — enough for slow connections and multi-account syncs
+const SUPABASE_TIMEOUT_MS = 180_000; // 180 s (3 minutes) Ã¢â‚¬â€ enough for slow connections and multi-account syncs
 
 function buildSupabaseAuthHeaders(key) {
   const headers = { apikey: key };
@@ -369,7 +369,7 @@ function httpsJsonRequest(method, requestUrl, body, extraHeaders = {}) {
 
 function getIconPath() {
   // DEV:     assets/ is two levels up from src/main/
-  // PACKAGED: extraResources copies assets/ → resources/assets/ (real disk, outside asar)
+  // PACKAGED: extraResources copies assets/ Ã¢â€ â€™ resources/assets/ (real disk, outside asar)
   //           so nativeImage.createFromPath() can always read it on any customer's PC
   const base = app.isPackaged
     ? path.join(process.resourcesPath, "assets")
@@ -379,14 +379,14 @@ function getIconPath() {
   return path.join(base, "icon.png");
 }
 
-// ══════════════════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 // STORE ENCRYPTION KEYS
 // Derived at runtime from a stable machine UUID so each machine gets a unique
-// key — a static hardcoded string is trivially reversible once someone has the
+// key Ã¢â‚¬â€ a static hardcoded string is trivially reversible once someone has the
 // source. Two salts produce different keys for the two stores.
 // NOTE: We now use a stable, unencrypted machine-id.json to break the chicken-and-egg
 // problem where we couldn't read the UUID from the encrypted license.json.
-// ══════════════════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 let _cachedMachineUUID = "";
 
 function getStableMachineUUID() {
@@ -518,7 +518,7 @@ function createStore(options) {
   try {
     return new Store(options);
   } catch (e) {
-    // Corrupted store file — wipe it and recreate clean
+    // Corrupted store file Ã¢â‚¬â€ wipe it and recreate clean
     try {
       const filePath = path.join(app.getPath("userData"), options.name + ".json");
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
@@ -530,8 +530,8 @@ function createStore(options) {
 
 const store          = createStore({ encryptionKey: deriveStoreKey("taager-creds-v1"),   name: "credentials" });
 const licenseStore   = createStore({ encryptionKey: deriveStoreKey("taager-license-v1"), name: "license" });
-const analyticsStore = createStore({ name: "analytics" }); // unencrypted — run history only
-const dashboardStore = createStore({ name: "dashboard" }); // unencrypted — monthly snapshots
+const analyticsStore = createStore({ name: "analytics" }); // unencrypted Ã¢â‚¬â€ run history only
+const dashboardStore = createStore({ name: "dashboard" }); // unencrypted Ã¢â‚¬â€ monthly snapshots
 const RUN_RESULTS_INDEX_KEY = "runResults.index.v1";
 const RUN_RESULTS_DETAIL_DIR = "run-results";
 const AI_MIRROR_STORE_KEY = "aiMirrors.v1";
@@ -1037,7 +1037,7 @@ function installAppZoomControls(window) {
 
 let lastExportTimestamp = 0;
 
-// ── Chrome path cache — resolved once at startup so dashboard fetch skips discovery ──
+// Ã¢â€â‚¬Ã¢â€â‚¬ Chrome path cache Ã¢â‚¬â€ resolved once at startup so dashboard fetch skips discovery Ã¢â€â‚¬Ã¢â€â‚¬
 let _cachedChromePath = null;
 function getCachedChromePath() {
   if (_cachedChromePath) return _cachedChromePath;
@@ -1069,15 +1069,15 @@ function getCachedChromePath() {
 // Warm up the cache immediately on process start (non-blocking)
 setImmediate(() => { try { getCachedChromePath(); } catch {} });
 
-// ══════════════════════════════════════════════════════
-// DEVICE FINGERPRINT — stable across reboots, updates, VPN, network changes
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+// DEVICE FINGERPRINT Ã¢â‚¬â€ stable across reboots, updates, VPN, network changes
 // Uses: CPU model + platform/arch + CPU count + RAM bucket (rounded to 4 GB)
 //
 // WHY hostname was REMOVED:
 //   macOS silently renames the host after system updates or Bonjour conflicts
 //   Windows may rename after domain join/leave or certain Windows Update passes
 //   That was the #1 cause of unexpected "different device" kicks on Mac/Windows
-// ══════════════════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 function _getOrCreateMachineUUID() {
   const stableUuid = getStableMachineUUID();
   if (stableUuid) {
@@ -1117,7 +1117,7 @@ function getDeviceFingerprint() {
   }
 }
 
-// ── Account slot hash — includes account id so two accounts with identical
+// Ã¢â€â‚¬Ã¢â€â‚¬ Account slot hash Ã¢â‚¬â€ includes account id so two accounts with identical
 //    emails still get distinct hashes and count as separate slots in DB.
 function taagerLoginMethodOf(acc) {
   const method = (acc && (acc.taagerLoginMethod || acc.taagerLoginMethod) || "email").toLowerCase().trim();
@@ -1924,11 +1924,11 @@ function dashboardExactStatusBucket(row) {
   const bucket = String(row?.orderStatusBucket || row?.exactStatusBucket || row?.statusBucket || "").trim();
   if (bucket) return bucket;
   const status = String(row?.orderStatus || row?.status || "").trim();
-  if (/canceled_by_you|طلب ملغي بواسطتك/.test(status)) return "canceled_by_you";
-  if (/delivered|تم التوصيل/.test(status)) return "delivered";
-  if (/customer_refused_confirmation|رفض/.test(status)) return "customer_refused_confirmation";
-  if (/on_hold|معلق/.test(status)) return "on_hold";
-  if (/received|استلام/.test(status)) return "received";
+  if (/canceled_by_you|Ã˜Â·Ã™â€žÃ˜Â¨ Ã™â€¦Ã™â€žÃ˜ÂºÃ™Å  Ã˜Â¨Ã™Ë†Ã˜Â§Ã˜Â³Ã˜Â·Ã˜ÂªÃ™Æ’/.test(status)) return "canceled_by_you";
+  if (/delivered|Ã˜ÂªÃ™â€¦ Ã˜Â§Ã™â€žÃ˜ÂªÃ™Ë†Ã˜ÂµÃ™Å Ã™â€ž/.test(status)) return "delivered";
+  if (/customer_refused_confirmation|Ã˜Â±Ã™ÂÃ˜Â¶/.test(status)) return "customer_refused_confirmation";
+  if (/on_hold|Ã™â€¦Ã˜Â¹Ã™â€žÃ™â€š/.test(status)) return "on_hold";
+  if (/received|Ã˜Â§Ã˜Â³Ã˜ÂªÃ™â€žÃ˜Â§Ã™â€¦/.test(status)) return "received";
   return status || "other";
 }
 
@@ -2632,11 +2632,11 @@ const monthlyDataCleanupScheduler = createMonthlyCleanupScheduler({
   },
 });
 
-// ══════════════════════════════════════════════════════
-// LICENSE — server-only, random key, auto device lock
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+// LICENSE Ã¢â‚¬â€ server-only, random key, auto device lock
 // Format: TAAGER-XXXX-XXXX-XXXX-XXXX
-// ══════════════════════════════════════════════════════
-// Short-lived in-memory cache — shared by isLicenseValid() (auto-run timer)
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+// Short-lived in-memory cache Ã¢â‚¬â€ shared by isLicenseValid() (auto-run timer)
 // and the check-license IPC handler to prevent redundant Supabase calls.
 // Busted by submit-license and clear-reset-flag.
 let _licenseCache = null;
@@ -2701,9 +2701,9 @@ async function isLicenseValid() {
   }
 }
 
-// ════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 // TRAY
-// ════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 async function recordLicensePresence() {
   const key = licenseStore.get("licenseKey", "");
   if (!key) return false;
@@ -2745,7 +2745,7 @@ function createTray() {
   let icon;
   try {
     icon = nativeImage.createFromPath(iconPath);
-    if (icon.isEmpty()) console.warn("[tray] nativeImage loaded empty — check path and file validity");
+    if (icon.isEmpty()) console.warn("[tray] nativeImage loaded empty Ã¢â‚¬â€ check path and file validity");
     if (process.platform === "win32" && !icon.isEmpty()) icon = icon.resize({ width: 16, height: 16 });
   } catch (e) {
     console.error("[tray] failed to load icon:", e.message);
@@ -2767,12 +2767,12 @@ function updateTrayMenu() {
   ]));
 }
 
-// ════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 // WINDOW
-// ════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 function createWindow() {
   // Read saved theme synchronously so we can pass the correct backgroundColor
-  // before the window is shown — prevents a white/dark flash during startup.
+  // before the window is shown Ã¢â‚¬â€ prevents a white/dark flash during startup.
   const savedTheme = store.get("theme", "dark");
   const bgColor = savedTheme === "light" ? "#f0f2f7" : "#0f1117";
   const launchMinimized = store.get("launchMinimized", false) === true;
@@ -2788,7 +2788,7 @@ function createWindow() {
       nodeIntegration: false,
       // V8 snapshot: reuse compiled bytecode across launches
       v8CacheOptions: "bypassHeatCheck",
-      // Disable spell check — saves renderer init time for a non-document app
+      // Disable spell check Ã¢â‚¬â€ saves renderer init time for a non-document app
       spellcheck: false,
     },
     backgroundColor: bgColor, icon: getIconPath(), show: false,
@@ -2823,7 +2823,7 @@ function createWindow() {
       defaultId: 0, cancelId: 0, title: "Close Taager Bot?",
       message: autoRunOn ? "Auto-Run is active" : "Keep running in tray?",
       detail: autoRunOn
-        ? "Auto-Run is active — minimizing to tray keeps the bot running every " + autoRunIntervalLabel() + "."
+        ? "Auto-Run is active Ã¢â‚¬â€ minimizing to tray keeps the bot running every " + autoRunIntervalLabel() + "."
         : "The app will keep running in the system tray. Click the tray icon to reopen it.",
     });
     if (response === 0) mainWindow.hide();
@@ -2831,9 +2831,9 @@ function createWindow() {
   });
 }
 
-// ════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 // AUTO-RUN
-// ════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 function todayStr() { const d = new Date(); return [d.getFullYear(), String(d.getMonth()+1).padStart(2,"0"), String(d.getDate()).padStart(2,"0")].join("-"); }
 function autoRunIntervalLabel() {
   const m = store.get("autoRunInterval", 30);
@@ -2854,7 +2854,7 @@ function scheduleAutoRun() {
     const remaining = Math.max(0, intervalMs - (Date.now() - autoRunStartedAt));
     autoRunTimer = setTimeout(async () => {
       if (botRunning) {
-        // Bot still running — check again in 10 s without resetting the cycle
+        // Bot still running Ã¢â‚¬â€ check again in 10 s without resetting the cycle
         autoRunTimer = setTimeout(scheduleTick, 10000);
         return;
       }
@@ -2991,7 +2991,7 @@ ipcMain.handle("download-update", () => {
 ipcMain.handle("install-update", () => {
   log.info("[AutoUpdate] IPC install-update received - launching installer independently");
 
-  // ── Why quitAndInstall() alone doesn't work with a tray app ────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Why quitAndInstall() alone doesn't work with a tray app Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   // quitAndInstall() relies on Electron's app.quit() flow, which fires
   // will-quit, before-quit, window-all-closed, etc.  When the app lives in
   // the tray (window hidden, process still running) those events don't
@@ -3001,9 +3001,9 @@ ipcMain.handle("install-update", () => {
   //
   // Solution: find the already-downloaded installer in electron-updater's
   // temp cache, spawn it as a fully detached independent process, then
-  // hard-exit THIS process immediately.  The installer runs on its own —
+  // hard-exit THIS process immediately.  The installer runs on its own Ã¢â‚¬â€
   // it no longer needs this process to be alive.
-  // ─────────────────────────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
   const { spawn } = require("child_process");
   const os = require("os");
@@ -3158,7 +3158,7 @@ ipcMain.handle("install-update", () => {
 
   // 2. Try to find and launch the installer ourselves (detached, independent)
   const installerPath = findDownloadedInstaller();
-  log.info("[AutoUpdate] Installer path found:", installerPath || "NOT FOUND — falling back to quitAndInstall");
+  log.info("[AutoUpdate] Installer path found:", installerPath || "NOT FOUND Ã¢â‚¬â€ falling back to quitAndInstall");
 
   if (installerPath && fs.existsSync(installerPath)) {
     try {
@@ -3184,9 +3184,9 @@ ipcMain.handle("install-update", () => {
 ipcMain.handle("get-app-version", () => app.getVersion());
 ipcMain.handle("get-app-platform", () => process.platform);
 
-// ════════════════════════════════════════
-// IPC — Window
-// ════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+// IPC Ã¢â‚¬â€ Window
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 ipcMain.on("window-minimize", () => mainWindow.minimize());
 ipcMain.on("window-maximize", () => { if (mainWindow.isMaximized()) mainWindow.unmaximize(); else mainWindow.maximize(); });
 ipcMain.on("window-close", () => mainWindow.hide());
@@ -3195,14 +3195,14 @@ ipcMain.on("increase-app-zoom", () => stepAppZoom(1));
 ipcMain.on("decrease-app-zoom", () => stepAppZoom(-1));
 ipcMain.on("reset-app-zoom", () => applyAppZoom(DEFAULT_APP_ZOOM));
 
-// ════════════════════════════════════════
-// IPC — License (server-based, auto device lock)
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+// IPC Ã¢â‚¬â€ License (server-based, auto device lock)
 // Handlers registered below after _checkLicenseImpl is defined.
-// ════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 
-// ════════════════════════════════════════
-// IPC — Credentials — Multi-Account Edition
-// ════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+// IPC Ã¢â‚¬â€ Credentials Ã¢â‚¬â€ Multi-Account Edition
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 
 const OFFLINE_GRACE_MS = 48 * 60 * 60 * 1000;
 const STARTUP_LICENSE_FAST_PATH_MS = 6 * 60 * 60 * 1000;
@@ -3274,12 +3274,12 @@ function _scheduleAdminCommandRefresh(reason = "cached-license") {
 }
 
 function _handleForceFlush() {
-  log.warn("[License] Force flush received — wiping all local data per admin request.");
+  log.warn("[License] Force flush received Ã¢â‚¬â€ wiping all local data per admin request.");
   try { store.clear(); } catch (_) {}
   try { analyticsStore.clear(); } catch (_) {}
   try { dashboardStore.clear(); } catch (_) {}
   clearRunResultsFiles();
-  // licenseStore intentionally NOT cleared — customer can re-enter their existing key
+  // licenseStore intentionally NOT cleared Ã¢â‚¬â€ customer can re-enter their existing key
   // Bust in-memory caches
   _licenseCache = null; _licenseCacheAt = 0;
   _credCache = null; _credCacheAt = 0;
@@ -3294,7 +3294,7 @@ function _handleForceFlush() {
       .filter(f => f.startsWith("bot-profile-"))
       .forEach(f => { try { fs.rmSync(path.join(userData, f), { recursive: true, force: true }); } catch (_) {} });
   } catch (_) {}
-  // Notify renderer — it handles navigation to the license screen
+  // Notify renderer Ã¢â‚¬â€ it handles navigation to the license screen
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("force-flush");
   }
@@ -3401,7 +3401,7 @@ async function _checkLicenseImpl(bustCache) {
     }
 
     // Handle force flush: wipe local data and notify renderer.
-    // Return valid:true here so the IPC caller doesn't also trigger the expired overlay —
+    // Return valid:true here so the IPC caller doesn't also trigger the expired overlay Ã¢â‚¬â€
     // the renderer navigates to the license screen exclusively via the force-flush event.
     if (r.force_flush) {
       _handleForceFlush();
@@ -3522,7 +3522,7 @@ async function getMaxAccounts() {
   return licenseStore.get("maxAccounts", 1);
 }
 
-// Short-lived in-memory cache for get-credentials — eliminates the duplicate
+// Short-lived in-memory cache for get-credentials Ã¢â‚¬â€ eliminates the duplicate
 // Supabase request when init() and afterLicense() both call it within milliseconds.
 let _credCache = null;
 let _credCacheAt = 0;
@@ -3618,7 +3618,7 @@ function getLocalCredentialsSnapshot() {
     operationsEnabled: licenseStore.get("operationsEnabled", true),
     dashboardEnabled:  licenseStore.get("dashboardEnabled",  false),
     teamLeaderEnabled: licenseStore.get("teamLeaderEnabled", false),
-    // Only return legacy flat fields when real accounts exist — avoids ghost account resurrection
+    // Only return legacy flat fields when real accounts exist Ã¢â‚¬â€ avoids ghost account resurrection
     easyEmail:        hasAny ? store.get("easyEmail",       "") : "",
     easyStore:        hasAny ? store.get("easyStore",       "") : "",
     taagerEmail:      hasAny ? store.get("taagerEmail",     store.get("taagerEmail", "")) : "",
@@ -3707,7 +3707,7 @@ ipcMain.handle("get-credentials", async () => {
         store.set("unlockedAccountIds", unlockedAccountIds);
 
         // If DB returned zero rows but local accounts exist with credentials,
-        // it means admin used "Clear All Slots" — treat all existing accounts as locked
+        // it means admin used "Clear All Slots" Ã¢â‚¬â€ treat all existing accounts as locked
         // so they can't be edited until admin explicitly unlocks them.
         if (rows.length === 0 && accounts.length > 0) {
           lockedHashes = accounts.map(a => accountHash(a));
@@ -3747,7 +3747,7 @@ ipcMain.handle("get-credentials", async () => {
     operationsEnabled: licenseStore.get("operationsEnabled", true),
     dashboardEnabled:  licenseStore.get("dashboardEnabled",  false),
     teamLeaderEnabled: licenseStore.get("teamLeaderEnabled", false),
-    // Suppress legacy flat fields when accounts array is empty — if we still return
+    // Suppress legacy flat fields when accounts array is empty Ã¢â‚¬â€ if we still return
     // easyEmail here, the renderer's loadAccounts() will resurrect a ghost account.
     easyEmail:        accountsWithStatus.length > 0 ? store.get("easyEmail",       "") : "",
     easyStore:        accountsWithStatus.length > 0 ? store.get("easyStore",       "") : "",
@@ -4168,7 +4168,7 @@ ipcMain.handle("update-account", async (_, data = {}) => {
   return { success: true };
 });
 
-// ── NEW: save full accounts array ──
+// Ã¢â€â‚¬Ã¢â€â‚¬ NEW: save full accounts array Ã¢â€â‚¬Ã¢â€â‚¬
 ipcMain.handle("save-all-accounts", async (_, accounts) => {
   const licKey = licenseStore.get("licenseKey", "");
   const maxAccounts = await getMaxAccounts();
@@ -4192,13 +4192,13 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
     if (!validation.success) return validation;
   }
 
-  // ── Per-account lock check via license_accounts table ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Per-account lock check via license_accounts table Ã¢â€â‚¬Ã¢â€â‚¬
   if (licKey) {
     try {
       const dbRows      = await supabaseRpc("taager_get_license_accounts", { p_license_key: licKey }) || [];
       const dbHashes    = dbRows.map(r => r.account_hash);
 
-      // Build a map of accountId → old hash using the CURRENTLY stored accounts
+      // Build a map of accountId Ã¢â€ â€™ old hash using the CURRENTLY stored accounts
       // (before we overwrite them). This lets us detect when an edit changed emails.
       const oldHashById = {};
       const oldAccountById = {};
@@ -4244,7 +4244,7 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
           continue;
         }
 
-        // Case 2: this is an edit that changed the email — swap old hash for new hash
+        // Case 2: this is an edit that changed the email Ã¢â‚¬â€ swap old hash for new hash
         if (oldH && dbHashes.includes(oldH)) {
           // Preserve the unlocked state from the old row
           const oldRow   = dbRows.find(r => r.account_hash === oldH);
@@ -4265,7 +4265,7 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
           continue;
         }
 
-        // Case 3: genuinely new account — check slot limit then register
+        // Case 3: genuinely new account Ã¢â‚¬â€ check slot limit then register
         if (!dbHashes.includes(newH)) {
           const hashesNeedingInsert = new Set();
           for (const b of accounts) {
@@ -4315,7 +4315,7 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
         .filter(h => h && dbHashes.includes(h) && !newHashes.includes(h));
       const deletedHashes = storedOldHashes.filter(h => dbHashes.includes(h) && !newHashes.includes(h) && !swappedOldHashes.includes(h));
       for (const h of deletedHashes) {
-        // Server-side guard: never delete a locked account slot — only unlocked ones can be removed
+        // Server-side guard: never delete a locked account slot Ã¢â‚¬â€ only unlocked ones can be removed
         const row = dbRows.find(r => r.account_hash === h);
         if (row && !row.unlocked) return { success: false, reason: "account_locked" };
         try {
@@ -4334,7 +4334,7 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
     }
   }
 
-  // Encrypt passwords in store — store accounts without plaintext passwords, keep passwords separately keyed
+  // Encrypt passwords in store Ã¢â‚¬â€ store accounts without plaintext passwords, keep passwords separately keyed
   const nextAccountIds = new Set(accounts.map(a => a.id));
   for (const oldAccount of storedAccountsBeforeSave) {
     if (!nextAccountIds.has(oldAccount.id)) removeAccountLocalArtifacts(oldAccount.id);
@@ -4343,7 +4343,7 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
   const safeAccounts = accounts.map(safeAccountForStorage);
   store.set("accounts", safeAccounts);
 
-  // Prune local unlockedAccountIds cache — remove IDs that no longer exist
+  // Prune local unlockedAccountIds cache Ã¢â‚¬â€ remove IDs that no longer exist
   const remainingIds = accounts.map(a => a.id);
   const runnableIds = accounts.filter(a => !isStaticAccount(a)).map(a => a.id);
   const savedAutoRunIds = store.get("autoRunAccountIds", []);
@@ -4384,7 +4384,7 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
     store.set("taagerPassword", first.taagerPassword || first.taagerPassword || store.get(`pwd_taager_${first.id}`, ""));
     store.set("taagerCountry",  first.taagerCountry  || first.taagerCountry || "sa");
   } else {
-    // All accounts deleted — clear legacy flat fields so the renderer can't
+    // All accounts deleted Ã¢â‚¬â€ clear legacy flat fields so the renderer can't
     // resurrect a ghost account from stale easyEmail / taagerEmail values
     ["cmsProvider", "easyEmail", "easyPassword", "easyStore", "lightfunnelsEmail",
      "lightfunnelsPassword", "lightfunnelsAccountName", "lightfunnelsLoginMethod",
@@ -4402,14 +4402,14 @@ ipcMain.handle("save-all-accounts", async (_, accounts) => {
 });
 
 
-// ── ADMIN: unlock a single account (called when admin unlocks via panel) ──
-// The app polls this on startup — when admin sets unlocked=true in DB,
+// Ã¢â€â‚¬Ã¢â€â‚¬ ADMIN: unlock a single account (called when admin unlocks via panel) Ã¢â€â‚¬Ã¢â€â‚¬
+// The app polls this on startup Ã¢â‚¬â€ when admin sets unlocked=true in DB,
 // unlockedAccountIds is updated locally so UI re-enables edit button.
 ipcMain.handle("unlock-single-account", async (_, { accountId }) => {
   return { success: false, reason: "admin_only" };
 });
 
-// ── Re-lock after user saves new credentials for an account ──
+// Ã¢â€â‚¬Ã¢â€â‚¬ Re-lock after user saves new credentials for an account Ã¢â€â‚¬Ã¢â€â‚¬
 ipcMain.handle("relock-account", async (_, { accountId }) => {
   const accounts = store.get("accounts", []);
   const acc = accounts.find(a => a.id === accountId);
@@ -4496,7 +4496,7 @@ ipcMain.handle("kill-bot", async () => {
   return result;
 });
 
-// ── Analytics IPC Handlers ─────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Analytics IPC Handlers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function openManualGoogleLoginChrome(message, child, fallback = {}) {
   const requestId = String(message && message.requestId || "");
@@ -4577,7 +4577,7 @@ ipcMain.handle("complete-google-login", async (_, requestId) => {
 
 ipcMain.handle("save-run-analytics", async (_, payload) => {
   try {
-    // Extract taagerSnapshot before storing (don't persist it — it's only for enrichment)
+    // Extract taagerSnapshot before storing (don't persist it Ã¢â‚¬â€ it's only for enrichment)
     const { taagerSnapshot, taagerDashboardSnapshot, buffer, ...rawRunData } = payload;
     const confirmedOnlyAnalytics = rawRunData.analyticsOrdersSource === "taager-confirmed";
     if (!confirmedOnlyAnalytics && (!Array.isArray(rawRunData.orders) || rawRunData.orders.length === 0) && buffer) {
@@ -4592,10 +4592,10 @@ ipcMain.handle("save-run-analytics", async (_, payload) => {
     const alreadyExists = runs.some(r => r.runId === runData.runId);
     if (alreadyExists) return { ok: true, duplicate: true, dashboardRowsSaved };
 
-    // ── Enrichment pass: update previous stored runs with current Taager statuses ──
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Enrichment pass: update previous stored runs with current Taager statuses Ã¢â€â‚¬Ã¢â€â‚¬
     // On every new bot run, we get a fresh Taager export. Any order from a previous run
     // whose phone+SKU now appears in the Taager sheet gets its status/amounts updated.
-    // This is how "Under processing" → "Delivered" / "Failed" transitions happen.
+    // This is how "Under processing" Ã¢â€ â€™ "Delivered" / "Failed" transitions happen.
     let enrichedCount = 0;
     const taagerRows = normalizeTaagerSnapshotEntries(taagerSnapshot?.entries);
     if (taagerRows.length) {
@@ -4806,7 +4806,7 @@ const DASHBOARD_FETCH_ACCOUNT_TIMEOUT_MS = 8 * 60 * 1000;
 const DASHBOARD_FETCH_EASYORDERS_TIMEOUT_MS = 24 * 60 * 1000;
 const DASHBOARD_FETCH_IDLE_NOTICE_MS = 90 * 1000;
 
-// ── Dashboard Fetch — spawn dashboard-fetch.js (Taager + optional EasyOrders enrichment) ──
+// Ã¢â€â‚¬Ã¢â€â‚¬ Dashboard Fetch Ã¢â‚¬â€ spawn dashboard-fetch.js (Taager + optional EasyOrders enrichment) Ã¢â€â‚¬Ã¢â€â‚¬
 ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, analyticsOnly, uploadedOnly } = {}) => {
   if (!(await isLicenseValid())) return { success: false, error: "LICENSE_INVALID" };
   if (analyticsOnly) {
@@ -5223,7 +5223,7 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
   });
 });
 
-// ── Dashboard IPC Handlers ─────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Dashboard IPC Handlers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function staticDashboardAccount(accountId) {
   const accounts = store.get("accounts", []) || [];
@@ -6128,6 +6128,10 @@ function marketingRevisionValue(status) {
     availableAccounts: status && status.availableAccounts || [],
     mappings,
     reconnectRequired: !!(status && status.reconnectRequired),
+    partial: !!(status && status.partial),
+    errors: status && status.errors || [],
+    accountErrors: status && status.accountErrors || [],
+    accountHealth: status && status.accountHealth || [],
   }));
 }
 
@@ -6176,6 +6180,10 @@ function saveCachedMarketingStatus(accountId, platform, status) {
     limits: status.limits || null,
     mappings: preservePreviousPayload ? previous.mappings || {} : status.mappings || {},
     cache: status.cache || null,
+    partial: !!status.partial,
+    errors: Array.isArray(status.errors) ? status.errors.slice() : [],
+    accountErrors: Array.isArray(status.accountErrors) ? status.accountErrors.slice() : [],
+    accountHealth: Array.isArray(status.accountHealth) ? status.accountHealth.slice() : [],
     stale: !!status.stale,
   };
   accounts[accountId].marketing[platform] = next;
@@ -6351,13 +6359,21 @@ function maskToken(value) {
 function normalizeNativeSourceAccount(source, fallbackCurrency = "SAR", platform = "snapchat") {
   const id = String(source && (source.id || source.sourceAccountId || source.adAccountId) || "").trim();
   if (!id) return null;
+  const health = source && source.connectionHealth && typeof source.connectionHealth === "object" ? source.connectionHealth : null;
+  const fallback = platform === "tiktok" ? "UNKNOWN" : fallbackCurrency || "SAR";
   return {
     id,
     name: String(source && (source.name || source.sourceAccountName || source.adAccountName) || id),
-    currency: String(source && (source.rawCurrency || source.nativeRawCurrency || source.sourceCurrency || source.accountCurrency || source.account_currency || source.currency) || fallbackCurrency || "SAR").toUpperCase(),
+    currency: String(source && (source.rawCurrency || source.nativeRawCurrency || source.sourceCurrency || source.accountCurrency || source.account_currency || source.currency) || fallback).toUpperCase(),
     platform,
     provider: "saudiipick",
     organizationName: String(source && source.organizationName || ""),
+    connectionId: String(source && (source.connectionId || source.connection_id) || ""),
+    connectionStatus: String(source && (source.connectionStatus || source.connection_status) || health && health.status || ""),
+    connectionHealth: health,
+    usable: health ? health.usable !== false : !(source && source.usable === false),
+    error: source && source.error || "",
+    errorDescription: source && (source.errorDescription || source.error_description) || health && health.message || "",
     canManageCampaigns: !!(source && source.canManageCampaigns),
   };
 }
@@ -6365,6 +6381,86 @@ function normalizeNativeSourceAccount(source, fallbackCurrency = "SAR", platform
 function nativeMarketingNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+function nativeMarketingSourceId(value) {
+  return String(value && (value.accountId || value.id || value.sourceAccountId || value.adAccountId || value.advertiserId) || "").trim();
+}
+
+function nativeMarketingUsableAccountIds(result) {
+  const ids = new Set();
+  ["selectedSourceAccounts", "mappedAccounts", "linkedAccounts", "availableAccounts", "accounts"].forEach((key) => {
+    (Array.isArray(result && result[key]) ? result[key] : []).forEach((source) => {
+      const id = nativeMarketingSourceId(source);
+      if (id && !(source && source.usable === false)) ids.add(id);
+    });
+  });
+  const summary = result && result.summary || {};
+  ["sourceBreakdown", "campaignBreakdown"].forEach((key) => {
+    (Array.isArray(summary[key]) ? summary[key] : []).forEach((row) => {
+      const id = nativeMarketingSourceId(row);
+      if (id) ids.add(id);
+    });
+  });
+  return ids;
+}
+
+function nativeMarketingSanitizeAccountHealth(result) {
+  if (!result || typeof result !== "object") return result;
+  const usableIds = nativeMarketingUsableAccountIds(result);
+  const isStaleConnectionError = (error) => {
+    const id = nativeMarketingSourceId(error);
+    return !!(id && usableIds.has(id) && String(error && error.endpoint || "") === "connection");
+  };
+  const originalAccountErrors = Array.isArray(result.accountErrors) ? result.accountErrors : [];
+  const originalErrors = Array.isArray(result.errors) ? result.errors : [];
+  const accountErrors = originalAccountErrors.filter((error) => !isStaleConnectionError(error));
+  const errors = originalErrors.filter((error) => !isStaleConnectionError(error));
+  const healthById = new Map();
+  (Array.isArray(result.accountHealth) ? result.accountHealth : []).forEach((health) => {
+    const id = nativeMarketingSourceId(health);
+    if (!id) return;
+    const current = healthById.get(id);
+    if (!current || current.usable === false && health.usable !== false) healthById.set(id, health);
+  });
+  const next = {
+    ...result,
+    accountErrors,
+    errors,
+    accountHealth: Array.from(healthById.values()),
+  };
+  if (result.partial && originalAccountErrors.length && !accountErrors.length && !errors.length && !(result.diagnostics && result.diagnostics.accountSpendFallbackUsed)) {
+    next.partial = false;
+  } else if (accountErrors.length || errors.length) {
+    next.partial = true;
+  }
+  return next;
+}
+
+function nativeMarketingCurrency(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function nativeMarketingRowCurrency(row, source, fallbackCurrency, sourceMatched) {
+  const sourceCurrency = sourceMatched ? nativeMarketingCurrency(source && source.currency) : "";
+  const rowCurrency = nativeMarketingCurrency(row && (row.rawCurrency || row.nativeRawCurrency || row.sourceCurrency || row.accountCurrency || row.account_currency || row.currency));
+  const fallback = nativeMarketingCurrency(fallbackCurrency);
+  return sourceCurrency || rowCurrency || (fallback && fallback !== "MIXED" ? fallback : "SAR");
+}
+
+function nativeMarketingRawSpendByCurrency(sourceBreakdown, fallbackCurrency = "") {
+  const totals = {};
+  (Array.isArray(sourceBreakdown) ? sourceBreakdown : []).forEach((row) => {
+    const currency = nativeMarketingCurrency(row && (row.rawCurrency || row.currency) || fallbackCurrency);
+    if (!currency || currency === "MIXED") return;
+    const amount = nativeMarketingNumber(row && (row.rawSpend ?? row.nativeRawSpend ?? row.spend ?? row.adSpend));
+    if (amount <= 0) return;
+    totals[currency] = nativeMarketingNumber(totals[currency]) + amount;
+  });
+  Object.keys(totals).forEach((currency) => {
+    totals[currency] = Number(totals[currency].toFixed(2));
+  });
+  return totals;
 }
 
 function normalizeNativeMarketingSummary(summary, sourceAccounts, dashboardAccountId, platform = "snapchat") {
@@ -6379,7 +6475,8 @@ function normalizeNativeMarketingSummary(summary, sourceAccounts, dashboardAccou
   const campaignBreakdown = (Array.isArray(summary.campaignBreakdown) ? summary.campaignBreakdown : []).map((row) => {
     const sourceId = String(row && (row.sourceAccountId || row.adAccountId || row.accountId) || fallbackSource && fallbackSource.id || "");
     const source = byId.get(sourceId) || fallbackSource || {};
-    const rawCurrency = String(row && (row.rawCurrency || row.nativeRawCurrency || row.sourceCurrency || row.accountCurrency || row.account_currency || row.currency) || source.currency || fallbackCurrency).toUpperCase();
+    const sourceMatched = byId.has(sourceId);
+    const rawCurrency = nativeMarketingRowCurrency(row, source, fallbackCurrency, sourceMatched);
     const rawSpend = nativeMarketingNumber(row && (row.rawSpend ?? row.nativeRawSpend ?? row.spend ?? row.adSpend ?? row.cost));
     return {
       ...row,
@@ -6399,7 +6496,8 @@ function normalizeNativeMarketingSummary(summary, sourceAccounts, dashboardAccou
   let sourceBreakdown = (Array.isArray(summary.sourceBreakdown) ? summary.sourceBreakdown : []).map((row) => {
     const sourceId = String(row && (row.sourceAccountId || row.id || row.adAccountId || row.accountId) || fallbackSource && fallbackSource.id || "");
     const source = byId.get(sourceId) || fallbackSource || {};
-    const rawCurrency = String(row && (row.rawCurrency || row.nativeRawCurrency || row.sourceCurrency || row.accountCurrency || row.account_currency || row.currency) || source.currency || fallbackCurrency).toUpperCase();
+    const sourceMatched = byId.has(sourceId);
+    const rawCurrency = nativeMarketingRowCurrency(row, source, fallbackCurrency, sourceMatched);
     const rawSpend = nativeMarketingNumber(row && (row.rawSpend ?? row.nativeRawSpend ?? row.spend ?? row.adSpend ?? row.cost));
     return {
       ...row,
@@ -6433,8 +6531,8 @@ function normalizeNativeMarketingSummary(summary, sourceAccounts, dashboardAccou
         sourceAccountId: sourceId,
         sourceAccountName: source.name || row.sourceAccountName || sourceId,
         rawSpend: 0,
-        rawCurrency: row.rawCurrency || source.currency || fallbackCurrency,
-        currency: row.rawCurrency || source.currency || fallbackCurrency,
+        rawCurrency: nativeMarketingRowCurrency(row, source, fallbackCurrency, byId.has(sourceId)),
+        currency: nativeMarketingRowCurrency(row, source, fallbackCurrency, byId.has(sourceId)),
         spend: 0,
         adSpend: 0,
       };
@@ -6469,10 +6567,20 @@ function normalizeNativeMarketingSummary(summary, sourceAccounts, dashboardAccou
     }];
   }
 
+  const normalizedRawSpendByCurrency = nativeMarketingRawSpendByCurrency(sourceBreakdown, fallbackCurrency);
+  const normalizedCurrencies = Object.keys(normalizedRawSpendByCurrency);
+  const normalizedCurrency = normalizedCurrencies.length === 1
+    ? normalizedCurrencies[0]
+    : (normalizedCurrencies.length > 1 ? "MIXED" : nativeMarketingCurrency(summary.currency || fallbackCurrency || "SAR"));
+
   return {
     ...summary,
     provider: "saudiipick",
     platform,
+    currency: normalizedCurrency,
+    sourceCurrency: normalizedCurrency,
+    currencyMixed: normalizedCurrency === "MIXED",
+    rawSpendByCurrency: normalizedCurrencies.length ? normalizedRawSpendByCurrency : (summary.rawSpendByCurrency || {}),
     sourceBreakdown,
     campaignBreakdown,
     rowCount: Number(summary.rowCount || campaignBreakdown.length || sourceBreakdown.length || 0),
@@ -6556,35 +6664,53 @@ async function callSaudiIPickMarketing(action, accountId, platform = "snapchat",
     partial: !!(result && result.partial),
   });
 
-  const merged = {
+  const merged = nativeMarketingSanitizeAccountHealth({
     ...result,
     provider: "saudiipick",
     platform,
     mappings: result.mappings && Object.keys(result.mappings).length ? result.mappings : previous && previous.mappings || {},
-  };
+  });
 
   if (action === "sync" && merged.ok) {
-    const chosen = (Array.isArray(range && range.sourceAccounts) ? range.sourceAccounts : [])
+    const requestedSources = (Array.isArray(range && range.sourceAccounts) ? range.sourceAccounts : [])
       .map((source) => normalizeNativeSourceAccount(source, merged.summary && merged.summary.currency || "SAR", platform))
       .filter(Boolean);
+    const responseSources = (Array.isArray(merged.selectedSourceAccounts) && merged.selectedSourceAccounts.length
+      ? merged.selectedSourceAccounts
+      : Array.isArray(merged.mappedAccounts) && merged.mappedAccounts.length
+      ? merged.mappedAccounts
+      : Array.isArray(merged.linkedAccounts) && merged.linkedAccounts.length
+      ? merged.linkedAccounts
+      : [])
+      .map((source) => normalizeNativeSourceAccount(source, merged.summary && merged.summary.currency || "SAR", platform))
+      .filter((source) => source && source.usable !== false);
+    const summarySources = responseSources.length ? responseSources : requestedSources.filter((source) => source.usable !== false);
     if (merged.summary) {
-      merged.summary = normalizeNativeMarketingSummary(merged.summary, chosen, dashboardAccountId, platform);
+      const summaryRatePayload = {
+        ...merged.summary,
+        targetCurrency: range && range.targetCurrency || merged.summary.targetCurrency || null,
+        egpRate: Number(range && range.egpRate) || merged.summary.egpRate || 52,
+        exchangeRates: range && range.exchangeRates && typeof range.exchangeRates === "object"
+          ? normalizeMarketingRates(range.exchangeRates, range.egpRate)
+          : merged.summary.exchangeRates || null,
+      };
+      merged.summary = normalizeNativeMarketingSummary(summaryRatePayload, summarySources, dashboardAccountId, platform);
     }
-    if (chosen.length) {
-      merged.status = "connected";
-      merged.mappedAccounts = chosen;
-      merged.selectedSourceAccounts = chosen;
+    if (requestedSources.length || responseSources.length) {
+      merged.status = responseSources.length || merged.summary ? "connected" : "disconnected";
+      merged.mappedAccounts = responseSources;
+      merged.selectedSourceAccounts = responseSources;
       merged.availableAccounts = Array.isArray(merged.availableAccounts) && merged.availableAccounts.length
         ? merged.availableAccounts
         : previous && Array.isArray(previous.availableAccounts) && previous.availableAccounts.length
         ? previous.availableAccounts
-        : chosen;
+        : responseSources.length ? responseSources : requestedSources;
       merged.linkedAccounts = Array.isArray(merged.linkedAccounts) && merged.linkedAccounts.length
         ? merged.linkedAccounts
         : previous && Array.isArray(previous.linkedAccounts) && previous.linkedAccounts.length
         ? previous.linkedAccounts
         : merged.availableAccounts;
-      merged.mappings = mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAccountKey, chosen, platform);
+      merged.mappings = mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAccountKey, requestedSources, platform);
     }
     saveCachedMarketingStatus(dashboardAccountId, platform, merged);
   }
@@ -6598,6 +6724,12 @@ async function callSaudiIPickMarketing(action, accountId, platform = "snapchat",
       selectedSourceAccounts: previous && previous.selectedSourceAccounts && previous.selectedSourceAccounts.length ? previous.selectedSourceAccounts : merged.selectedSourceAccounts,
       mappings: previous && previous.mappings || merged.mappings || {},
     };
+    const stableSources = Array.isArray(stableStatus.selectedSourceAccounts) && stableStatus.selectedSourceAccounts.length
+      ? stableStatus.selectedSourceAccounts
+      : (Array.isArray(stableStatus.mappedAccounts) ? stableStatus.mappedAccounts : []);
+    if (stableStatus.summary) {
+      stableStatus.summary = normalizeNativeMarketingSummary(stableStatus.summary, stableSources, dashboardAccountId, platform);
+    }
     if ((Array.isArray(stableStatus.selectedSourceAccounts) && stableStatus.selectedSourceAccounts.length) ||
       (Array.isArray(stableStatus.mappedAccounts) && stableStatus.mappedAccounts.length) ||
       stableStatus.summary) {
@@ -6931,9 +7063,13 @@ ipcMain.handle("sync-saudiipick-marketing-data", async (_, accountId, platform =
   if (!dashboardAccountId) return { ok: false, error: "SELECT_SINGLE_ACCOUNT" };
   try {
     const previous = getCachedMarketingStatus(dashboardAccountId, platform) || {};
-    const sourceAccounts = Array.isArray(range && range.sourceAccounts) && range.sourceAccounts.length
+    const dashboardAccountKey = marketingStableAccountKey(dashboardAccountId);
+    let sourceAccounts = Array.isArray(range && range.sourceAccounts) && range.sourceAccounts.length
       ? range.sourceAccounts
       : previous.selectedSourceAccounts || previous.mappedAccounts || [];
+    if (!sourceAccounts.length && previous.mappings && typeof previous.mappings === "object") {
+      sourceAccounts = previous.mappings[dashboardAccountId] || previous.mappings[dashboardAccountKey] || [];
+    }
     const result = await callSaudiIPickMarketing("sync", dashboardAccountId, platform, {
       ...(range || {}),
       sourceAccounts,
@@ -7154,12 +7290,12 @@ ipcMain.handle("dashboard-ai-query", async (event, payload) => {
   const _ctxBytes = payload && payload.context ? Buffer.byteLength(JSON.stringify(payload.context), "utf8") : 0;
   log.info("[TaagerAI] gateway state:", getAiGatewayState());
   const _ctxKB    = (_ctxBytes / 1024).toFixed(1);
-  log.info("[TaagerAI-Debug] dashboard-ai-query → command:", _cmd);
+  log.info("[TaagerAI-Debug] dashboard-ai-query Ã¢â€ â€™ command:", _cmd);
   log.info("[TaagerAI-Debug] context payload size:", _ctxKB + " KB (" + _ctxBytes + " bytes)");
   if (_ctxBytes > 150000) {
-    log.warn("[TaagerAI-Debug] ⚠️  Context is VERY LARGE (" + _ctxKB + " KB) — likely to hit Gemini input token limit!");
+    log.warn("[TaagerAI-Debug] Ã¢Å¡Â Ã¯Â¸Â  Context is VERY LARGE (" + _ctxKB + " KB) Ã¢â‚¬â€ likely to hit Gemini input token limit!");
   }
-  // ─────────────────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   try {
     const validation = validateDashboardAiPayload(payload || {});
     if (!validation.ok) {
@@ -7211,7 +7347,7 @@ ipcMain.handle("debug-gemini-ping", async () => {
   return debugGeminiPing();
 });
 
-// ───────────────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 if (!app.isPackaged || process.env.SENTRY_ENABLE_TESTS === "1") {
   ipcMain.handle("sentry-test-main-error", async () => {
@@ -7224,7 +7360,7 @@ if (!app.isPackaged || process.env.SENTRY_ENABLE_TESTS === "1") {
 
 ipcMain.handle("clear-all-data", () => {
   store.clear(); clearAutoRun();
-  // licenseStore NOT cleared — device lock and key survive reset
+  // licenseStore NOT cleared Ã¢â‚¬â€ device lock and key survive reset
   // Clear all bot profiles (single legacy + all per-account profiles)
   const userData = app.getPath("userData");
   const legacy = path.join(userData, "bot-profile");
@@ -7257,10 +7393,10 @@ ipcMain.handle("save-output-file", async (_, { buffer, filename }) => {
   return { saved: false };
 });
 
-// ════════════════════════════════════════
-// IPC — Bot runner (license-gated)
-// ════════════════════════════════════════
-// ── Helper: spawn one bot child for one account ──
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+// IPC Ã¢â‚¬â€ Bot runner (license-gated)
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+// Ã¢â€â‚¬Ã¢â€â‚¬ Helper: spawn one bot child for one account Ã¢â€â‚¬Ã¢â€â‚¬
 function spawnBotChild(creds) {
   const { fork } = require("child_process");
   const botPath = path.join(__dirname, "../bot/runner.js");
@@ -7352,7 +7488,7 @@ async function stopRunningBots() {
   };
 }
 
-// ── Helper: auto-save failed orders xlsx to %APPDATA%/taager-order-bot/failed-orders/{easyEmail}/ ──
+// Ã¢â€â‚¬Ã¢â€â‚¬ Helper: auto-save failed orders xlsx to %APPDATA%/taager-order-bot/failed-orders/{easyEmail}/ Ã¢â€â‚¬Ã¢â€â‚¬
 function saveFailedOrdersFile(easyEmail, buffer) {
   try {
     // Sanitise the email so it's safe as a folder name (replace @ and special chars)
@@ -7436,7 +7572,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
     };
   };
 
-  // ── Build account list to run ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Build account list to run Ã¢â€â‚¬Ã¢â€â‚¬
   const allAccounts = store.get("accounts", null);
   let accountsToRun = [];
 
@@ -7488,7 +7624,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
     return { success: false, error: "STATIC_ACCOUNTS_CANNOT_RUN" };
   }
 
-  // ── Single account: original flow ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Single account: original flow Ã¢â€â‚¬Ã¢â€â‚¬
   const merchantIdMissingMessage = (acc) => {
     const label = accountDisplayName(acc, acc.id || "Account");
     return `Taager merchant ID missing for ${label}. Re-save this account and add the merchant ID from Taager profile.`;
@@ -7609,9 +7745,9 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
         const m = d.toString().trim(); if (!m) return;
         if (m.includes("CHROME_NOT_FOUND")) {
           runLog.write("ERR: " + m);
-          mainWindow.webContents.send("bot-log", "❌ Google Chrome غير مثبت على جهازك.");
-          mainWindow.webContents.send("bot-log", "👉 حمّل Chrome من: https://www.google.com/chrome");
-          mainWindow.webContents.send("bot-log", "✅ بعد التثبيت افتح البرنامج من جديد.");
+          mainWindow.webContents.send("bot-log", "Ã¢ÂÅ’ Google Chrome Ã˜ÂºÃ™Å Ã˜Â± Ã™â€¦Ã˜Â«Ã˜Â¨Ã˜Âª Ã˜Â¹Ã™â€žÃ™â€° Ã˜Â¬Ã™â€¡Ã˜Â§Ã˜Â²Ã™Æ’.");
+          mainWindow.webContents.send("bot-log", "Ã°Å¸â€˜â€° Ã˜Â­Ã™â€¦Ã™â€˜Ã™â€ž Chrome Ã™â€¦Ã™â€ : https://www.google.com/chrome");
+          mainWindow.webContents.send("bot-log", "Ã¢Å“â€¦ Ã˜Â¨Ã˜Â¹Ã˜Â¯ Ã˜Â§Ã™â€žÃ˜ÂªÃ˜Â«Ã˜Â¨Ã™Å Ã˜Âª Ã˜Â§Ã™ÂÃ˜ÂªÃ˜Â­ Ã˜Â§Ã™â€žÃ˜Â¨Ã˜Â±Ã™â€ Ã˜Â§Ã™â€¦Ã˜Â¬ Ã™â€¦Ã™â€  Ã˜Â¬Ã˜Â¯Ã™Å Ã˜Â¯.");
         } else { runLog.write("ERR: " + m); mainWindow.webContents.send("bot-log", "ERR: " + m); }
       });
       child.on("message", (msg) => {
@@ -7768,7 +7904,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
   // Multiple accounts use a fixed 6-minute start stagger. A later account can run
   // while the previous account is still finishing non-export work.
   mainWindow.webContents.send("bot-log",
-    `🚀 تشغيل ${accountsToRun.length} حسابات بشكل تسلسلي — حساب واحد في كل مرة...`);
+    `Ã°Å¸Å¡â‚¬ Ã˜ÂªÃ˜Â´Ã˜ÂºÃ™Å Ã™â€ž ${accountsToRun.length} Ã˜Â­Ã˜Â³Ã˜Â§Ã˜Â¨Ã˜Â§Ã˜Âª Ã˜Â¨Ã˜Â´Ã™Æ’Ã™â€ž Ã˜ÂªÃ˜Â³Ã™â€žÃ˜Â³Ã™â€žÃ™Å  Ã¢â‚¬â€ Ã˜Â­Ã˜Â³Ã˜Â§Ã˜Â¨ Ã™Ë†Ã˜Â§Ã˜Â­Ã˜Â¯ Ã™ÂÃ™Å  Ã™Æ’Ã™â€ž Ã™â€¦Ã˜Â±Ã˜Â©...`);
 
   const accountExportTimestamps = new Array(accountsToRun.length).fill(0);
   mainWindow.webContents.send("bot-log", "Multi-account mode: account starts are staggered by 6 minutes to stay beyond the EasyOrders 5-minute limit; later phases may overlap.");
@@ -7818,9 +7954,9 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
         if (!m) return;
         runLog.write(prefix + "ERR: " + m);
         if (m.includes("CHROME_NOT_FOUND")) {
-          mainWindow.webContents.send("bot-log", prefix + "❌ Google Chrome غير مثبت على جهازك.");
-          mainWindow.webContents.send("bot-log", prefix + "👉 حمّل Chrome من: https://www.google.com/chrome");
-          mainWindow.webContents.send("bot-log", prefix + "✅ بعد التثبيت افتح البرنامج من جديد.");
+          mainWindow.webContents.send("bot-log", prefix + "Ã¢ÂÅ’ Google Chrome Ã˜ÂºÃ™Å Ã˜Â± Ã™â€¦Ã˜Â«Ã˜Â¨Ã˜Âª Ã˜Â¹Ã™â€žÃ™â€° Ã˜Â¬Ã™â€¡Ã˜Â§Ã˜Â²Ã™Æ’.");
+          mainWindow.webContents.send("bot-log", prefix + "Ã°Å¸â€˜â€° Ã˜Â­Ã™â€¦Ã™â€˜Ã™â€ž Chrome Ã™â€¦Ã™â€ : https://www.google.com/chrome");
+          mainWindow.webContents.send("bot-log", prefix + "Ã¢Å“â€¦ Ã˜Â¨Ã˜Â¹Ã˜Â¯ Ã˜Â§Ã™â€žÃ˜ÂªÃ˜Â«Ã˜Â¨Ã™Å Ã˜Âª Ã˜Â§Ã™ÂÃ˜ÂªÃ˜Â­ Ã˜Â§Ã™â€žÃ˜Â¨Ã˜Â±Ã™â€ Ã˜Â§Ã™â€¦Ã˜Â¬ Ã™â€¦Ã™â€  Ã˜Â¬Ã˜Â¯Ã™Å Ã˜Â¯.");
         } else {
           mainWindow.webContents.send("bot-log", prefix + "ERR: " + m);
         }
@@ -7959,7 +8095,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
       if (remainingMs > 0) {
         let remainingSec = Math.ceil(remainingMs / 1000);
         mainWindow.webContents.send("bot-log",
-          `\n⏸️  [Account schedule] Waiting ${Math.floor(remainingSec / 60)} min ${remainingSec % 60}s before starting ${label} after ${previousLabel}...`);
+          `\nÃ¢ÂÂ¸Ã¯Â¸Â  [Account schedule] Waiting ${Math.floor(remainingSec / 60)} min ${remainingSec % 60}s before starting ${label} after ${previousLabel}...`);
 
         let nextLogAt = Date.now() + INTER_ACCOUNT_COOLDOWN_LOG_INTERVAL_MS;
         while (remainingMs > 0 && botRunning) {
@@ -7975,7 +8111,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
             while (nextLogAt <= now) nextLogAt += INTER_ACCOUNT_COOLDOWN_LOG_INTERVAL_MS;
             const remSec = Math.max(0, Math.ceil(remainingMs / 1000));
             mainWindow.webContents.send("bot-log",
-              `⏸️  [Account schedule] Waiting ${Math.floor(remSec / 60)} min ${remSec % 60}s before starting ${label}...`);
+              `Ã¢ÂÂ¸Ã¯Â¸Â  [Account schedule] Waiting ${Math.floor(remSec / 60)} min ${remSec % 60}s before starting ${label}...`);
           }
         }
       }
@@ -7983,7 +8119,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
     }
 
     mainWindow.webContents.send("bot-log",
-      `\n⏳  [${label}] في انتظار تصدير الحساب السابق قبل بدء العد التنازلي...`);
+      `\nÃ¢ÂÂ³  [${label}] Ã™ÂÃ™Å  Ã˜Â§Ã™â€ Ã˜ÂªÃ˜Â¸Ã˜Â§Ã˜Â± Ã˜ÂªÃ˜ÂµÃ˜Â¯Ã™Å Ã˜Â± Ã˜Â§Ã™â€žÃ˜Â­Ã˜Â³Ã˜Â§Ã˜Â¨ Ã˜Â§Ã™â€žÃ˜Â³Ã˜Â§Ã˜Â¨Ã™â€š Ã™â€šÃ˜Â¨Ã™â€ž Ã˜Â¨Ã˜Â¯Ã˜Â¡ Ã˜Â§Ã™â€žÃ˜Â¹Ã˜Â¯ Ã˜Â§Ã™â€žÃ˜ÂªÃ™â€ Ã˜Â§Ã˜Â²Ã™â€žÃ™Å ...`);
 
     let previousFinished = false;
     previousResultPromise.finally(() => { previousFinished = true; }).catch(() => {});
@@ -8008,7 +8144,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
         let remainingMs = INTER_ACCOUNT_COOLDOWN_MS;
         let remainingSec = Math.ceil(remainingMs / 1000);
         mainWindow.webContents.send("bot-log",
-          `\n⏸️  [تجنب حد التصدير] ${previousLabel} فشل قبل التصدير بسبب الشبكة — الانتظار ${Math.floor(remainingSec / 60)} دقيقة و ${remainingSec % 60} ثانية قبل بدء ${label}...`);
+          `\nÃ¢ÂÂ¸Ã¯Â¸Â  [Ã˜ÂªÃ˜Â¬Ã™â€ Ã˜Â¨ Ã˜Â­Ã˜Â¯ Ã˜Â§Ã™â€žÃ˜ÂªÃ˜ÂµÃ˜Â¯Ã™Å Ã˜Â±] ${previousLabel} Ã™ÂÃ˜Â´Ã™â€ž Ã™â€šÃ˜Â¨Ã™â€ž Ã˜Â§Ã™â€žÃ˜ÂªÃ˜ÂµÃ˜Â¯Ã™Å Ã˜Â± Ã˜Â¨Ã˜Â³Ã˜Â¨Ã˜Â¨ Ã˜Â§Ã™â€žÃ˜Â´Ã˜Â¨Ã™Æ’Ã˜Â© Ã¢â‚¬â€ Ã˜Â§Ã™â€žÃ˜Â§Ã™â€ Ã˜ÂªÃ˜Â¸Ã˜Â§Ã˜Â± ${Math.floor(remainingSec / 60)} Ã˜Â¯Ã™â€šÃ™Å Ã™â€šÃ˜Â© Ã™Ë† ${remainingSec % 60} Ã˜Â«Ã˜Â§Ã™â€ Ã™Å Ã˜Â© Ã™â€šÃ˜Â¨Ã™â€ž Ã˜Â¨Ã˜Â¯Ã˜Â¡ ${label}...`);
 
         let nextLogAt = Date.now() + INTER_ACCOUNT_COOLDOWN_LOG_INTERVAL_MS;
         while (remainingMs > 0 && botRunning) {
@@ -8021,14 +8157,14 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
             while (nextLogAt <= now) nextLogAt += INTER_ACCOUNT_COOLDOWN_LOG_INTERVAL_MS;
             const remSec = Math.ceil(remainingMs / 1000);
             mainWindow.webContents.send("bot-log",
-              `⏸️  [تجنب حد التصدير] الانتظار لمدة ${Math.floor(remSec / 60)} دقيقة و ${remSec % 60} ثانية قبل بدء ${label}...`);
+              `Ã¢ÂÂ¸Ã¯Â¸Â  [Ã˜ÂªÃ˜Â¬Ã™â€ Ã˜Â¨ Ã˜Â­Ã˜Â¯ Ã˜Â§Ã™â€žÃ˜ÂªÃ˜ÂµÃ˜Â¯Ã™Å Ã˜Â±] Ã˜Â§Ã™â€žÃ˜Â§Ã™â€ Ã˜ÂªÃ˜Â¸Ã˜Â§Ã˜Â± Ã™â€žÃ™â€¦Ã˜Â¯Ã˜Â© ${Math.floor(remSec / 60)} Ã˜Â¯Ã™â€šÃ™Å Ã™â€šÃ˜Â© Ã™Ë† ${remSec % 60} Ã˜Â«Ã˜Â§Ã™â€ Ã™Å Ã˜Â© Ã™â€šÃ˜Â¨Ã™â€ž Ã˜Â¨Ã˜Â¯Ã˜Â¡ ${label}...`);
           }
         }
         return;
       }
 
       mainWindow.webContents.send("bot-log",
-        `\n[${label}] ${previousLabel} انتهى قبل التصدير؛ بدء الحساب التالي بدون انتظار تصدير.`);
+        `\n[${label}] ${previousLabel} Ã˜Â§Ã™â€ Ã˜ÂªÃ™â€¡Ã™â€° Ã™â€šÃ˜Â¨Ã™â€ž Ã˜Â§Ã™â€žÃ˜ÂªÃ˜ÂµÃ˜Â¯Ã™Å Ã˜Â±Ã˜â€º Ã˜Â¨Ã˜Â¯Ã˜Â¡ Ã˜Â§Ã™â€žÃ˜Â­Ã˜Â³Ã˜Â§Ã˜Â¨ Ã˜Â§Ã™â€žÃ˜ÂªÃ˜Â§Ã™â€žÃ™Å  Ã˜Â¨Ã˜Â¯Ã™Ë†Ã™â€  Ã˜Â§Ã™â€ Ã˜ÂªÃ˜Â¸Ã˜Â§Ã˜Â± Ã˜ÂªÃ˜ÂµÃ˜Â¯Ã™Å Ã˜Â±.`);
       return;
     }
 
@@ -8036,7 +8172,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
     if (remainingMs > 0) {
       const remainingSec = Math.ceil(remainingMs / 1000);
       mainWindow.webContents.send("bot-log",
-        `\n⏸️  [تجنب حد التصدير] الانتظار لمدة ${Math.floor(remainingSec / 60)} دقيقة و ${remainingSec % 60} ثانية قبل بدء ${label}...`);
+        `\nÃ¢ÂÂ¸Ã¯Â¸Â  [Ã˜ÂªÃ˜Â¬Ã™â€ Ã˜Â¨ Ã˜Â­Ã˜Â¯ Ã˜Â§Ã™â€žÃ˜ÂªÃ˜ÂµÃ˜Â¯Ã™Å Ã˜Â±] Ã˜Â§Ã™â€žÃ˜Â§Ã™â€ Ã˜ÂªÃ˜Â¸Ã˜Â§Ã˜Â± Ã™â€žÃ™â€¦Ã˜Â¯Ã˜Â© ${Math.floor(remainingSec / 60)} Ã˜Â¯Ã™â€šÃ™Å Ã™â€šÃ˜Â© Ã™Ë† ${remainingSec % 60} Ã˜Â«Ã˜Â§Ã™â€ Ã™Å Ã˜Â© Ã™â€šÃ˜Â¨Ã™â€ž Ã˜Â¨Ã˜Â¯Ã˜Â¡ ${label}...`);
 
       let nextLogAt = Date.now() + INTER_ACCOUNT_COOLDOWN_LOG_INTERVAL_MS;
       while (remainingMs > 0 && botRunning) {
@@ -8052,7 +8188,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
           while (nextLogAt <= now) nextLogAt += INTER_ACCOUNT_COOLDOWN_LOG_INTERVAL_MS;
           const remSec = Math.ceil(remainingMs / 1000);
           mainWindow.webContents.send("bot-log",
-            `⏸️  [تجنب حد التصدير] الانتظار لمدة ${Math.floor(remSec / 60)} دقيقة و ${remSec % 60} ثانية قبل بدء ${label}...`);
+            `Ã¢ÂÂ¸Ã¯Â¸Â  [Ã˜ÂªÃ˜Â¬Ã™â€ Ã˜Â¨ Ã˜Â­Ã˜Â¯ Ã˜Â§Ã™â€žÃ˜ÂªÃ˜ÂµÃ˜Â¯Ã™Å Ã˜Â±] Ã˜Â§Ã™â€žÃ˜Â§Ã™â€ Ã˜ÂªÃ˜Â¸Ã˜Â§Ã˜Â± Ã™â€žÃ™â€¦Ã˜Â¯Ã˜Â© ${Math.floor(remSec / 60)} Ã˜Â¯Ã™â€šÃ™Å Ã™â€šÃ˜Â© Ã™Ë† ${remSec % 60} Ã˜Â«Ã˜Â§Ã™â€ Ã™Å Ã˜Â© Ã™â€šÃ˜Â¨Ã™â€ž Ã˜Â¨Ã˜Â¯Ã˜Â¡ ${label}...`);
         }
       }
     }
@@ -8071,13 +8207,13 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
     }
 
     mainWindow.webContents.send("bot-log",
-      `\n▶️  [${i + 1}/${accountsToRun.length}] بدء الحساب: ${label}`);
+      `\nÃ¢â€“Â¶Ã¯Â¸Â  [${i + 1}/${accountsToRun.length}] Ã˜Â¨Ã˜Â¯Ã˜Â¡ Ã˜Â§Ã™â€žÃ˜Â­Ã˜Â³Ã˜Â§Ã˜Â¨: ${label}`);
 
     accountExportTimestamps[i] = Date.now();
 
     const promise = runOneAccount(acc, i).then(result => {
       mainWindow.webContents.send("bot-log",
-        `✅ [${i + 1}/${accountsToRun.length}] انتهى الحساب: ${label} — ${result.success ? "نجح" : "فشل"}`);
+        `Ã¢Å“â€¦ [${i + 1}/${accountsToRun.length}] Ã˜Â§Ã™â€ Ã˜ÂªÃ™â€¡Ã™â€° Ã˜Â§Ã™â€žÃ˜Â­Ã˜Â³Ã˜Â§Ã˜Â¨: ${label} Ã¢â‚¬â€ ${result.success ? "Ã™â€ Ã˜Â¬Ã˜Â­" : "Ã™ÂÃ˜Â´Ã™â€ž"}`);
       return result;
     });
     resultPromises.push(promise);
