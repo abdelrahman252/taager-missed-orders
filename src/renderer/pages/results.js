@@ -443,6 +443,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       delivered_order_already_in_taager: t("results.reason_delivered_order_already_in_taager"),
       delivered_repeat_needs_identity: t("results.reason_delivered_repeat_needs_identity"),
       quantity_above_safe_limit: translated("results.reason_quantity_above_safe_limit", "Quantity above safe limit"),
+      invalid_customer_data: translated("results.reason_invalid_customer_data", "Customer data looks fake or invalid"),
       ambiguous_sku_price_tier: translated("results.reason_ambiguous_sku_price_tier", "Ambiguous SKU price tier"),
       subtotal_not_in_sku_tiers: translated("results.reason_subtotal_not_in_sku_tiers", "Subtotal not in trusted SKU tiers"),
       missing_sku_tier_profile: translated("results.reason_missing_sku_tier_profile", "Missing SKU tier profile"),

@@ -3,6 +3,7 @@
 const XLSX = require("xlsx");
 const { normalizePhone, normalizePhoneCandidatesWithMeta } = require("./phone");
 const { normalizeTaagerCountry } = require("./taager-country");
+const { assessCustomerOrder } = require("./customer-quality");
 const { normalizeProvinceMatch } = require("./output");
 const { buildGroupedCartOrders, cartOrderGroupKey, mergeItemList } = require("./cart-order-groups");
 
@@ -349,6 +350,21 @@ function explodeRealOrderRow(row, phoneMeta) {
   }
 
   return [...bySku.values()];
+}
+
+function applyCustomerIdentityReview(order) {
+  const assessment = assessCustomerOrder(order, { country: COUNTRY });
+  if (!assessment.ok) {
+    order.manualReview = true;
+    order.uncertain = true;
+    order.reason = "invalid_customer_data";
+    order.actionMessage = assessment.message;
+    order.customerQuality = {
+      ...(order.customerQuality || {}),
+      identity: assessment,
+    };
+  }
+  return order;
 }
 
 function realOrderHistoryKey(order) {
@@ -994,7 +1010,7 @@ function parseRealOrders(buffer, dateFrom, dateTo) {
         phoneCandidateCount: phoneMetas.length,
       });
       explodedCount += exploded.length;
-      orders.push(...exploded);
+      orders.push(...exploded.map((order) => applyCustomerIdentityReview(order)));
     });
     if (!explodedCount) skipped.sku++;
   }
@@ -1091,7 +1107,7 @@ function parseMissedOrders(buffer, dateFrom, dateTo) {
       ].map((value) => String(value || "").trim()).join("|");
 
       missedProductNamesFromCell(productText).forEach((productName) => {
-        orders.push({ ...baseOrder, productName });
+        orders.push(applyCustomerIdentityReview({ ...baseOrder, productName }));
       });
     });
   }
@@ -1263,6 +1279,25 @@ function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}) {
   const tierProfiles = buildSkuTierProfiles(catalog, taagerCatalog);
 
   for (const order of missedOrders) {
+    if (order && order.manualReview === true) {
+      skippedNames.push(order.productName);
+      skippedOrders.push({
+        ...order,
+        source: order.source || "missed",
+        normPhone: order.normPhone || "",
+        normalizedPhone: order.normPhone || "",
+        name: order.name,
+        rawPhone: order.rawPhone,
+        productName: order.productName,
+        city: order.city,
+        address: order.address,
+        sku: order.sku || order.skuFromUtm || "",
+        reason: order.reason || "invalid_customer_data",
+        actionMessage: order.actionMessage || "Customer data looks fake or invalid. Manual review required.",
+        uncertain: true,
+      });
+      continue;
+    }
     const productMatch = findProductInCatalog(order.productName, catalog);
     const fallbackProductMatch = productMatch || findProductInCatalog(order.productName, taagerCatalog);
     const productSku = normalizeSku(productMatch && productMatch.sku);

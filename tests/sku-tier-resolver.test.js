@@ -106,10 +106,10 @@ assert.strictEqual(tooHigh.uncertain, true);
 assert.strictEqual(tooHigh.reason, "quantity_above_safe_limit");
 
 const currentMonthRange = resolveMonthlyTaagerExportRange({ today: new Date(2026, 7, 20) });
-assert.strictEqual(formatDataDay(currentMonthRange.exportDateFrom), "2026-08-01");
+assert.strictEqual(formatDataDay(currentMonthRange.exportDateFrom), "2026-07-30");
 assert.strictEqual(formatDataDay(currentMonthRange.exportDateTo), "2026-08-20");
 const previousMonthRange = resolveMonthlyTaagerExportRange({ today: new Date(2026, 8, 1) });
-assert.strictEqual(formatDataDay(previousMonthRange.exportDateFrom), "2026-08-01");
+assert.strictEqual(formatDataDay(previousMonthRange.exportDateFrom), "2026-07-30");
 assert.strictEqual(formatDataDay(previousMonthRange.exportDateTo), "2026-08-31");
 
 console.log("SKU tier resolver verification passed.");

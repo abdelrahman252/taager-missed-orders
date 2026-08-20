@@ -35,11 +35,44 @@ function uniqueCharRatio(value) {
   return new Set(Array.from(compact)).size / compact.length;
 }
 
+function digitVariety(value) {
+  const digits = digitsOnly(value);
+  return digits ? new Set(Array.from(digits)).size : 0;
+}
+
 function hasRepeatedGarbage(value, minRun = 4) {
   const compact = compactText(value);
   if (!compact) return false;
   const re = new RegExp(`(.)\\1{${Math.max(1, minRun - 1)},}`, "u");
   return re.test(compact);
+}
+
+function hasRepeatedDigits(value, minRun = 7) {
+  const digits = digitsOnly(value);
+  if (!digits) return false;
+  const re = new RegExp(`(\\d)\\1{${Math.max(1, minRun - 1)},}`);
+  return re.test(digits);
+}
+
+function isSequentialDigits(value) {
+  const digits = digitsOnly(value);
+  if (digits.length < 9) return false;
+  return "01234567890123456789".includes(digits) || "98765432109876543210".includes(digits);
+}
+
+function looksLikeLatinKeyboardSmash(value) {
+  const compact = compactText(value).toLowerCase();
+  if (!/^[a-z]+$/i.test(compact) || compact.length < 8) return false;
+  const vowels = (compact.match(/[aeiou]/g) || []).length;
+  const consonants = compact.length - vowels;
+  return consonants / compact.length >= 0.72 && uniqueCharRatio(compact) < 0.75;
+}
+
+function looksLikeLongSingleTokenGarbage(value) {
+  const text = normalizeText(value);
+  const compact = compactText(text);
+  if (!compact || compact.length < 12 || /\s/.test(text)) return false;
+  return uniqueCharRatio(compact) < 0.62;
 }
 
 function hasUnsafeSymbols(value) {
@@ -53,8 +86,8 @@ function hasEmoji(value) {
 function isPlaceholder(value) {
   const text = normalizeText(value).toLowerCase();
   const compact = compactText(value).toLowerCase();
-  return /^(test|testing|asdf|qwerty|xxx|none|null|na|n\/a|no name|noname|no address|لا|لا يوجد|لايوجد|مافي|مفيش)$/.test(text) ||
-    /^(test|testing|asdf|qwerty|xxx|none|null|na|noname|noaddress|لا|لايوجد|مافي|مفيش)$/.test(compact);
+  return /^(test|testing|test user|test customer|asdf|qwerty|xxx|none|null|na|n\/a|no name|noname|no address|لا|لا يوجد|لايوجد|مافي|مفيش)$/.test(text) ||
+    /^(test|testing|testuser|testcustomer|asdf|qwerty|xxx|none|null|na|noname|noaddress|لا|لايوجد|مافي|مفيش)$/.test(compact);
 }
 
 function textContainsPhone(value, rawPhone, normPhone) {
@@ -86,6 +119,8 @@ function assessCustomerName(value, options = {}) {
   if (hasUnsafeSymbols(text)) strong.push("unsafe_symbols");
   if (hasEmoji(text)) strong.push("emoji");
   if (hasRepeatedGarbage(text, 4)) strong.push("repeated_chars");
+  if (looksLikeLatinKeyboardSmash(text)) strong.push("latin_keyboard_smash");
+  if (looksLikeLongSingleTokenGarbage(text)) strong.push("long_single_token_low_variety");
 
   const letters = letterCount(text);
   const digits = digitCount(text);
@@ -102,6 +137,57 @@ function assessCustomerName(value, options = {}) {
     ok: !bad,
     issues: [...strong, ...issues],
     severity: strong.length ? "strong" : (issues.length ? "weak" : "ok"),
+  };
+}
+
+function assessCustomerPhone(rawPhone, normPhone) {
+  const rawDigits = digitsOnly(rawPhone);
+  const normalized = digitsOnly(normPhone);
+  const candidate = normalized || rawDigits;
+  const issues = [];
+
+  if (!candidate) issues.push("missing");
+  if (candidate.length >= 7 && digitVariety(candidate) <= 1) issues.push("repeated_digit_phone");
+  else if (candidate.length >= 8 && hasRepeatedDigits(candidate, 7)) issues.push("repeated_digit_run");
+  if (candidate.length >= 9 && isSequentialDigits(candidate)) issues.push("sequential_digits");
+
+  return {
+    ok: issues.length === 0,
+    issues,
+    severity: issues.length ? "strong" : "ok",
+  };
+}
+
+function assessCustomerOrder(order, options = {}) {
+  const rawName = normalizeText(order && order.name);
+  const rawPhone = order && (order.rawPhone || order.phone);
+  const normPhone = order && order.normPhone;
+  const phoneQuality = assessCustomerPhone(rawPhone, normPhone);
+  const nameQuality = assessCustomerName(rawName, { rawPhone, normPhone });
+  const blockingNameIssues = new Set([
+    "placeholder",
+    "unsafe_symbols",
+    "emoji",
+    "repeated_chars",
+    "mostly_digits",
+    "phone_like",
+    "too_long",
+    "latin_keyboard_smash",
+    "long_single_token_low_variety",
+  ]);
+  const nameIssues = (nameQuality.issues || []).filter((issue) => blockingNameIssues.has(issue));
+  const issues = [
+    ...phoneQuality.issues.map((issue) => `phone:${issue}`),
+    ...nameIssues.map((issue) => `name:${issue}`),
+  ];
+  const ok = issues.length === 0;
+  return {
+    ok,
+    reason: ok ? "" : "invalid_customer_data",
+    issues,
+    phone: phoneQuality,
+    name: nameQuality,
+    message: ok ? "" : `Customer data looks fake or invalid: ${issues.join(", ")}`,
   };
 }
 
@@ -180,6 +266,8 @@ module.exports = {
   compactText,
   assessCustomerName,
   assessCustomerAddress,
+  assessCustomerPhone,
+  assessCustomerOrder,
   phoneNameFallback,
   sanitizeCustomerFields,
 };
