@@ -32,8 +32,8 @@ assert(
 );
 
 assert(
-  main.includes('bucket === "waiting" ||\n    bucket === "on_hold" ||\n    bucket === "after_sales_progress"') &&
-    !main.includes('bucket === "customer_refused_confirmation" ||\n    bucket === "on_hold" ||\n    bucket === "out_of_stock"'),
+  /bucket === "waiting" \|\|\r?\n    bucket === "on_hold" \|\|\r?\n    bucket === "after_sales_progress"/.test(main) &&
+    !/bucket === "customer_refused_confirmation" \|\|\r?\n    bucket === "on_hold" \|\|\r?\n    bucket === "out_of_stock"/.test(main),
   "Main summary buckets should treat on_hold as incoming"
 );
 

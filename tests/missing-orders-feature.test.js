@@ -201,6 +201,30 @@ const productPrimaryResult = resolveMissedOrders([
 ], productPrimaryCatalog, {});
 assert.strictEqual(productPrimaryResult.resolved.length, 1, "missed product text should resolve SKU from real EasyOrders product name");
 assert.strictEqual(productPrimaryResult.resolved[0].sku, "SKU-FROM-PRODUCT");
+const trustedProductName = "عرض 2 حبه من لعبة الكرة الطائرة السحرية";
+const trustedMissedResult = resolveMissedOrders([
+  { ...missedA, skuFromUtm: "", productName: trustedProductName },
+], {}, {}, {
+  "persisted:SA050301IA0099": {
+    sku: "SA050301IA0099",
+    productName: trustedProductName,
+    productNames: [trustedProductName],
+    minQty: 2,
+    maxQty: 4,
+    prices: { 2: 130, 4: 170 },
+    qtyCounts: { 2: 6, 4: 1 },
+    totalSamples: 7,
+    dominantQty: 2,
+    dominantQtyCount: 6,
+    dominantQtyConfidence: 6 / 7,
+    source: "persistent_catalog",
+  },
+});
+assert.strictEqual(trustedMissedResult.resolved.length, 1, "missed product should resolve from persisted product-name catalog when current sheets have no match");
+assert.strictEqual(trustedMissedResult.resolved[0].sku, "SA050301IA0099");
+assert.strictEqual(trustedMissedResult.resolved[0].qty, 2);
+assert.strictEqual(trustedMissedResult.resolved[0].subtotal, 130);
+assert.strictEqual(trustedMissedResult.resolved[0].catalogSource, "persistent_catalog");
 const utmFallbackCatalog = {
   "SKU-FROM-UTM": {
     sku: "SKU-FROM-UTM",
@@ -307,6 +331,21 @@ const cameraQtyOneRow = cameraHistoryRows.find((row) => row.orderId === "EO-CAM"
 assert.strictEqual(cameraQtyOneRow.qty, 1, "non-obvious camera title should not be repaired to dominant qty 3 from history");
 assert.strictEqual(cameraQtyOneRow.subtotal, 249);
 assert.strictEqual(cameraQtyOneRow.quantityRepairSkipped, undefined);
+const bundleTierSheet = XLSX.utils.aoa_to_sheet([
+  realPackageHeader,
+  [1, "pending", "Bundle Tier Customer", "0537583290", "Riyadh", "Address", 198, 170, 28, "", 0, "عرض 2 حبه من لعبة الكرة الطائرة السحرية", "", 4, "SA050301IA0099", 65, "2026-07-18", "", "", "", "", "", "", "", "cod", "", "", "EO-BUNDLE-TIER", "", ""],
+]);
+const bundleTierBook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(bundleTierBook, bundleTierSheet, "Sheet1");
+const bundleTierRows = parseRealOrders(
+  XLSX.write(bundleTierBook, { type: "buffer", bookType: "xlsx" }),
+  new Date(2026, 6, 1),
+  new Date(2026, 6, 19),
+);
+assert.strictEqual(bundleTierRows[0].qty, 4);
+assert.strictEqual(bundleTierRows[0].subtotal, 170, "real EasyOrders rows must trust Product Cost instead of multiplying Item Price by Quantity");
+assert.strictEqual(bundleTierRows[0].unitPrice, 42.5);
+assert.strictEqual(bundleTierRows[0].priceSource, "easyorders_export_product_cost");
 const taagerQuantityFallback = {
   "TAAGER-QTY-SKU": {
     sku: "TAAGER-QTY-SKU",

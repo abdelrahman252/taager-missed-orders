@@ -276,12 +276,33 @@ function stripProductBrackets(rawProducts) {
   return bracketMatch ? bracketMatch[1].trim() : raw.replace(/^\[|\]$/g, "").trim();
 }
 
+function realOrderLineSubtotal(row, productCosts, itemIndex, itemCount, itemPrice, qty) {
+  const lineProductCost = parseMoney(productCosts[itemIndex]);
+  if (productCosts.length >= itemCount && lineProductCost > 0) {
+    return { subtotal: lineProductCost, source: "easyorders_export_product_cost" };
+  }
+
+  const rowProductCost = parseMoney(row["Product Cost"]);
+  if (itemCount === 1 && rowProductCost > 0) {
+    return { subtotal: rowProductCost, source: "easyorders_export_product_cost" };
+  }
+
+  const computed = itemPrice > 0 && qty > 0 ? itemPrice * qty : 0;
+  if (computed > 0) return { subtotal: computed, source: "easyorders_export_item_price" };
+
+  const totalCost = parseMoney(row["Total Cost"]);
+  const shippingCost = parseMoney(row["Shipping Cost"] || "28") || 28;
+  const fallback = Math.max(totalCost - shippingCost, 0);
+  return { subtotal: fallback, source: fallback > 0 ? "easyorders_export_total_minus_shipping" : "" };
+}
+
 function explodeRealOrderRow(row, phoneMeta) {
   const productNames = splitCellLines(row["Product Name"]);
   const skus = splitCellLines(row["SKU"]);
   const qtys = splitCellLines(row["Quantity"]);
   const prices = splitCellLines(row["Item Price"]);
-  const itemCount = Math.max(productNames.length, skus.length, qtys.length, prices.length, 1);
+  const productCosts = splitCellLines(row["Product Cost"]);
+  const itemCount = Math.max(productNames.length, skus.length, qtys.length, prices.length, productCosts.length, 1);
   const rawCity = String(row["City"] || row["Government"] || "").trim();
 
   const base = {
@@ -326,15 +347,15 @@ function explodeRealOrderRow(row, phoneMeta) {
 
     const qty = parseQty(qtys[i] || qtys[0]);
     const itemPrice = parseMoney(prices[i] || prices[0]);
-    const totalCost = parseMoney(row["Total Cost"]);
-    const shippingCost = parseMoney(row["Shipping Cost"] || "28") || 28;
-    const subtotal = itemPrice > 0 ? itemPrice * qty : Math.max(totalCost - shippingCost, 0);
+    const subtotalMeta = realOrderLineSubtotal(row, productCosts, i, itemCount, itemPrice, qty);
+    const subtotal = subtotalMeta.subtotal;
     const existing = bySku.get(sku);
 
     if (existing) {
       existing.qty += qty;
       existing.subtotal += subtotal;
       existing.unitPrice = Math.round(existing.subtotal / existing.qty);
+      existing.priceSource = existing.priceSource || subtotalMeta.source;
       if (!existing.productName.includes(productName)) existing.productName += ` + ${productName}`;
       continue;
     }
@@ -345,7 +366,9 @@ function explodeRealOrderRow(row, phoneMeta) {
       productName,
       qty,
       subtotal,
-      unitPrice: itemPrice > 0 ? itemPrice : Math.round(subtotal / qty),
+      unitPrice: qty > 0 && subtotal > 0 ? subtotal / qty : itemPrice,
+      priceSource: subtotalMeta.source,
+      quantitySource: "easyorders_export",
     });
   }
 
@@ -519,7 +542,26 @@ function priceCloseForTier(a, b) {
   return Math.abs(left - right) <= Math.max(0.01, Math.abs(right) * 0.005);
 }
 
-function buildSkuTierProfiles(catalog = {}, taagerCatalog = {}) {
+function skuTierPriceSource(source) {
+  if (source === "taager") return "taager_sku_subtotal_tier";
+  if (source === "persistent_catalog") return "persistent_catalog_sku_subtotal_tier";
+  return "easyorders_sku_subtotal_tier";
+}
+
+function skuTierQuantitySource(source, mode = "subtotal") {
+  if (mode === "dominant") {
+    if (source === "taager") return "taager_sku_dominant_tier";
+    if (source === "persistent_catalog") return "persistent_catalog_sku_dominant_tier";
+    return "easyorders_sku_dominant_tier";
+  }
+  return "sku_subtotal_tier";
+}
+
+function isTrustedSkuTierSource(source) {
+  return source === "taager" || source === "persistent_catalog" || source === "easyorders";
+}
+
+function buildSkuTierProfiles(catalog = {}, taagerCatalog = {}, trustedCatalog = {}) {
   const profiles = new Map();
   function addEntry(entry, source) {
     const sku = normalizeSku(entry && entry.sku);
@@ -529,18 +571,21 @@ function buildSkuTierProfiles(catalog = {}, taagerCatalog = {}) {
         sku,
         tiers: [],
         productNames: new Set(),
-        sourceCounts: { taager: 0, easyorders: 0 },
+        sourceCounts: { taager: 0, easyorders: 0, persistent_catalog: 0 },
       });
     }
     const profile = profiles.get(sku);
     if (entry.productName) profile.productNames.add(normalizeProductName(entry.productName));
     const prices = entry && entry.prices && typeof entry.prices === "object" ? entry.prices : {};
     const qtyCounts = entry && entry.qtyCounts && typeof entry.qtyCounts === "object" ? entry.qtyCounts : {};
+    const priceCounts = entry && entry.priceCounts && typeof entry.priceCounts === "object" ? entry.priceCounts : {};
     for (const [qtyText, subtotalValue] of Object.entries(prices)) {
       const qty = Number(qtyText) || 0;
       const subtotal = Number(subtotalValue) || 0;
       if (qty <= 0 || subtotal <= 0) continue;
-      const sampleCount = Math.max(1, Number(qtyCounts[qtyText] || qtyCounts[qty] || 0) || 0);
+      const subtotalKey = String(subtotal);
+      const qtyPriceCounts = priceCounts[qtyText] || priceCounts[qty] || {};
+      const sampleCount = Math.max(1, Number(qtyPriceCounts[subtotalKey] || qtyPriceCounts[subtotal] || qtyCounts[qtyText] || qtyCounts[qty] || 0) || 0);
       const tierSource = source || entry.source || "catalog";
       profile.tiers.push({
         qty,
@@ -550,10 +595,12 @@ function buildSkuTierProfiles(catalog = {}, taagerCatalog = {}) {
         source: tierSource,
       });
       if (tierSource === "taager") profile.sourceCounts.taager += sampleCount;
+      else if (tierSource === "persistent_catalog") profile.sourceCounts.persistent_catalog += sampleCount;
       else profile.sourceCounts.easyorders += sampleCount;
     }
   }
   for (const entry of Object.values(catalog || {})) addEntry(entry, entry && entry.source || "easyorders");
+  for (const entry of Object.values(trustedCatalog || {})) addEntry(entry, "persistent_catalog");
   for (const entry of Object.values(taagerCatalog || {})) addEntry(entry, "taager");
   for (const profile of profiles.values()) {
     profile.totalSamples = profile.tiers.reduce((sum, tier) => sum + tier.sampleCount, 0);
@@ -579,7 +626,9 @@ function findSkuProfile(tierProfiles, sku) {
 function dominantTierFromProfile(profile, options = {}) {
   if (!profile || !Array.isArray(profile.tiers) || !profile.tiers.length) return null;
   const taagerTiers = profile.tiers.filter((tier) => tier.source === "taager");
-  const tiers = taagerTiers.length ? taagerTiers : profile.tiers;
+  const persistentTiers = profile.tiers.filter((tier) => tier.source === "persistent_catalog");
+  const tierSource = taagerTiers.length ? "taager" : (persistentTiers.length ? "persistent_catalog" : "");
+  const tiers = taagerTiers.length ? taagerTiers : (persistentTiers.length ? persistentTiers : profile.tiers);
   const qtyCounts = new Map();
   const tierModes = new Map();
   for (const tier of tiers) {
@@ -638,13 +687,15 @@ function dominantTierFromProfile(profile, options = {}) {
     unitPrice: mode.subtotal / winner.qty,
     confidence: winner.confidence,
     sampleCount: winner.count,
-    priceSource: taagerTiers.length ? "taager_sku_subtotal_tier" : "easyorders_sku_subtotal_tier",
-    quantitySource: taagerTiers.length ? "taager_sku_dominant_tier" : "easyorders_sku_dominant_tier",
+    priceSource: skuTierPriceSource(tierSource),
+    quantitySource: skuTierQuantitySource(tierSource, "dominant"),
   };
 }
 
 function tierDominanceForMatches(profile, matches) {
-  const source = matches.find((tier) => tier && tier.source === "taager") ? "taager" : (matches[0] && matches[0].source || "");
+  const source = matches.find((tier) => tier && tier.source === "taager")
+    ? "taager"
+    : (matches.find((tier) => tier && tier.source === "persistent_catalog") ? "persistent_catalog" : (matches[0] && matches[0].source || ""));
   const sourceTiers = (profile.tiers || []).filter((tier) => !source || tier.source === source);
   const qtyCounts = new Map();
   for (const tier of sourceTiers) {
@@ -668,7 +719,7 @@ function tierDominanceForMatches(profile, matches) {
     topSamples: top.count,
     topConfidence: top.confidence,
     confidence,
-    trusted: source === "taager" && (matchedSamples >= 3 || (top.qty === matchedQty && top.confidence >= 0.60)),
+    trusted: isTrustedSkuTierSource(source) && (matchedSamples >= 3 || (top.qty === matchedQty && top.confidence >= 0.60)),
   };
 }
 
@@ -737,6 +788,10 @@ function resolveSkuPriceTier(input = {}) {
     let matches = profile.tiers.filter((tier) => priceCloseForTier(subtotal, tier.subtotal));
     const taagerMatches = matches.filter((tier) => tier.source === "taager");
     if (taagerMatches.length) matches = taagerMatches;
+    else {
+      const persistentMatches = matches.filter((tier) => tier.source === "persistent_catalog");
+      if (persistentMatches.length) matches = persistentMatches;
+    }
     const qtys = [...new Set(matches.map((tier) => tier.qty))];
     if (qtys.length > 1) {
       return {
@@ -760,11 +815,11 @@ function resolveSkuPriceTier(input = {}) {
           subtotal,
           unitPrice: subtotal / qty,
           reason: "sku_tier_profile_too_weak",
-          message: `Subtotal ${subtotal} matched SKU ${sku}, but Taager tier confidence is not strong enough for automatic upload.`,
+          message: `Subtotal ${subtotal} matched SKU ${sku}, but trusted tier confidence is not strong enough for automatic upload.`,
           sampleCount,
           confidence: dominance.confidence,
-          priceSource: matches[0].source === "taager" ? "taager_sku_subtotal_tier" : "easyorders_sku_subtotal_tier",
-          quantitySource: "sku_subtotal_tier",
+          priceSource: skuTierPriceSource(matches[0] && matches[0].source),
+          quantitySource: skuTierQuantitySource(matches[0] && matches[0].source),
         };
       }
       if (qty > MAX_SAFE_AUTO_QUANTITY) {
@@ -792,8 +847,8 @@ function resolveSkuPriceTier(input = {}) {
           : `Subtotal ${subtotal} verified for SKU ${sku}.`,
         confidence: dominance.confidence,
         sampleCount,
-        priceSource: matches[0].source === "taager" ? "taager_sku_subtotal_tier" : "easyorders_sku_subtotal_tier",
-        quantitySource: "sku_subtotal_tier",
+        priceSource: skuTierPriceSource(matches[0] && matches[0].source),
+        quantitySource: skuTierQuantitySource(matches[0] && matches[0].source),
       };
     }
     return {
@@ -892,9 +947,9 @@ function applyTierDecisionToOrder(order, decision, options = {}) {
   }
 }
 
-function repairOrderQuantitiesFromCatalog(orders, catalog = {}, taagerCatalog = {}) {
+function repairOrderQuantitiesFromCatalog(orders, catalog = {}, taagerCatalog = {}, trustedCatalog = {}) {
   let repaired = 0;
-  const tierProfiles = buildSkuTierProfiles(catalog, taagerCatalog);
+  const tierProfiles = buildSkuTierProfiles(catalog, taagerCatalog, trustedCatalog);
   for (const order of orders || []) {
     const currentQty = Number(order && order.qty || 1) || 1;
     if (!order || currentQty <= 0) continue;
@@ -920,8 +975,10 @@ function repairOrderQuantitiesFromCatalog(orders, catalog = {}, taagerCatalog = 
       ? productMatch
       : null;
     const taagerMatch = findCatalogBySku(taagerCatalog, order.sku);
+    const trustedMatch = findCatalogBySku(trustedCatalog, order.sku);
     const sources = [
       { match: easyMatch, source: "easyorders_catalog", minSamples: 4, minConfidence: 0.65 },
+      { match: trustedMatch, source: "persistent_catalog", minSamples: 3, minConfidence: 0.60 },
       { match: taagerMatch, source: "taager_catalog", minSamples: 5, minConfidence: 0.85 },
     ];
 
@@ -1128,6 +1185,7 @@ function buildProductCatalog(realOrders) {
     const entry = catalog[key];
     const qty = order.qty || 1;
     if (order.manualReview || qty > MAX_SAFE_AUTO_QUANTITY) continue;
+    if (order.priceSource === "easyorders_export_item_price") continue;
     const price = Math.round(order.subtotal || 0);
     entry.qtyCounts[qty] = (entry.qtyCounts[qty] || 0) + 1;
     if (!entry.prices[qty]) entry.prices[qty] = [];
@@ -1138,6 +1196,7 @@ function buildProductCatalog(realOrders) {
   for (const [name, entry] of Object.entries(catalog)) {
     const qtys = Object.keys(entry.qtyCounts).map(Number).sort((a, b) => a - b);
     const prices = {};
+    const priceCounts = {};
     for (const [qty, samples] of Object.entries(entry.prices)) {
       const freq = {};
       for (const sample of Array.isArray(samples) ? samples : []) {
@@ -1146,6 +1205,7 @@ function buildProductCatalog(realOrders) {
       }
       const entries = Object.entries(freq).sort((a, b) => b[1] - a[1]);
       prices[qty] = entries.length ? Number(entries[0][0]) : 0;
+      priceCounts[qty] = Object.fromEntries(Object.entries(freq).map(([subtotal, count]) => [String(Number(subtotal)), count]));
     }
     const totalSamples = Object.values(entry.qtyCounts).reduce((sum, count) => sum + (Number(count) || 0), 0);
     const dominant = Object.entries(entry.qtyCounts)
@@ -1158,6 +1218,7 @@ function buildProductCatalog(realOrders) {
       minQty: qtys[0] || 1,
       maxQty: qtys[qtys.length - 1] || 1,
       prices,
+      priceCounts,
       qtyCounts: { ...entry.qtyCounts },
       totalSamples,
       dominantQty: dominant.qty,
@@ -1214,6 +1275,7 @@ function buildTaagerProductCatalog(buffer, country = COUNTRY) {
     for (const [name, entry] of Object.entries(catalog)) {
       const qtys = Object.keys(entry.qtyCounts).map(Number).sort((a, b) => a - b);
       const prices = {};
+      const priceCounts = {};
       for (const [qty, samples] of Object.entries(entry.prices)) {
         const freq = {};
         for (const sample of Array.isArray(samples) ? samples : []) {
@@ -1222,6 +1284,7 @@ function buildTaagerProductCatalog(buffer, country = COUNTRY) {
         }
         const entries = Object.entries(freq).sort((a, b) => b[1] - a[1]);
         prices[qty] = entries.length ? Number(entries[0][0]) : 0;
+        priceCounts[qty] = Object.fromEntries(Object.entries(freq).map(([subtotal, count]) => [String(Number(subtotal)), count]));
       }
       const totalSamples = Object.values(entry.qtyCounts).reduce((sum, count) => sum + (Number(count) || 0), 0);
       const dominant = Object.entries(entry.qtyCounts)
@@ -1234,6 +1297,7 @@ function buildTaagerProductCatalog(buffer, country = COUNTRY) {
         minQty: qtys[0] || 1,
         maxQty: qtys[qtys.length - 1] || 1,
         prices,
+        priceCounts,
         qtyCounts: { ...entry.qtyCounts },
         totalSamples,
         dominantQty: dominant.qty,
@@ -1258,6 +1322,12 @@ function findProductInCatalog(productName, catalog) {
   const lower = clean.toLowerCase();
   for (const [name, value] of Object.entries(catalog)) {
     if (productNamesMatch(lower, name)) return value;
+    if (value && value.productName && productNamesMatch(lower, value.productName)) return value;
+    if (value && Array.isArray(value.productNames)) {
+      for (const storedName of value.productNames) {
+        if (productNamesMatch(lower, storedName)) return value;
+      }
+    }
   }
   return null;
 }
@@ -1271,12 +1341,12 @@ function missedOrderDisplayProductName(order, productMatch, match) {
   return matchedName || "";
 }
 
-function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}) {
+function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}, trustedCatalog = {}) {
   const resolved = [];
   const skippedOrders = [];
   const skippedNames = [];
-  const sourceStats = { easyorders: 0, taager: 0 };
-  const tierProfiles = buildSkuTierProfiles(catalog, taagerCatalog);
+  const sourceStats = { easyorders: 0, taager: 0, persistent_catalog: 0 };
+  const tierProfiles = buildSkuTierProfiles(catalog, taagerCatalog, trustedCatalog);
 
   for (const order of missedOrders) {
     if (order && order.manualReview === true) {
@@ -1298,7 +1368,7 @@ function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}) {
       });
       continue;
     }
-    const productMatch = findProductInCatalog(order.productName, catalog);
+    const productMatch = findProductInCatalog(order.productName, catalog) || findProductInCatalog(order.productName, trustedCatalog);
     const fallbackProductMatch = productMatch || findProductInCatalog(order.productName, taagerCatalog);
     const productSku = normalizeSku(productMatch && productMatch.sku);
     const utmSku = normalizeSku(order.skuFromUtm || "");
@@ -1325,7 +1395,7 @@ function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}) {
     }
     const explicitSku = productSku || utmSku || normalizeSku(order.sku);
     const match = explicitSku
-      ? (findCatalogBySku(taagerCatalog, explicitSku) || findCatalogBySku(catalog, explicitSku) || fallbackProductMatch)
+      ? (findCatalogBySku(taagerCatalog, explicitSku) || findCatalogBySku(trustedCatalog, explicitSku) || findCatalogBySku(catalog, explicitSku) || fallbackProductMatch)
       : fallbackProductMatch;
     const displayProductName = missedOrderDisplayProductName(order, productMatch, match);
     if (!match) {
@@ -1412,6 +1482,7 @@ function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}) {
         priceOptions: tierDecision.priceOptions || catalogPriceOptions(match),
       });
       if (match.source === "taager") sourceStats.taager++;
+      else if (match.source === "persistent_catalog") sourceStats.persistent_catalog++;
       else sourceStats.easyorders++;
       continue;
     }
@@ -1459,13 +1530,14 @@ function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}) {
       priceOptions: catalogPriceOptions(match),
     });
     if (match.source === "taager") sourceStats.taager++;
+    else if (match.source === "persistent_catalog") sourceStats.persistent_catalog++;
     else sourceStats.easyorders++;
   }
 
   if (skippedNames.length > 0) {
     console.log(`Missed orders skipped (not found in EasyOrders sheet or Taager sheet): ${[...new Set(skippedNames)].join(", ")}`);
   }
-  console.log(`Missed orders resolved: ${resolved.length} SKU-backed items (EasyOrders:${sourceStats.easyorders}, Taager:${sourceStats.taager})`);
+  console.log(`Missed orders resolved: ${resolved.length} SKU-backed items (EasyOrders:${sourceStats.easyorders}, trusted:${sourceStats.persistent_catalog}, Taager:${sourceStats.taager})`);
   return { resolved, skippedOrders };
 }
 

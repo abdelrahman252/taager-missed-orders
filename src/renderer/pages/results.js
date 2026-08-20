@@ -125,7 +125,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       .orders-preview-table tbody tr:hover { background: rgba(79,142,247,0.05); }
       .orders-preview-table tbody tr:last-child td { border-bottom: none; }
       .orders-preview-table.skipped-orders-table {
-        min-width: 1120px;
+        min-width: 960px;
         table-layout: fixed;
       }
       .skipped-orders-table th,
@@ -142,6 +142,12 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       .skipped-orders-table .skip-outcome {
         font-family:var(--font-mono);
         font-size:var(--type-caption);
+        font-weight:var(--weight-bold);
+      }
+      .skipped-orders-table .skip-source {
+        font-family:var(--font-mono);
+        font-size:var(--type-caption);
+        color: var(--text2);
         font-weight:var(--weight-bold);
       }
       .skipped-orders-table .skip-name,
@@ -170,11 +176,13 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       }
       .skipped-orders-table col.skip-col-index { width: 36px; }
       .skipped-orders-table col.skip-col-outcome { width: 112px; }
-      .skipped-orders-table col.skip-col-name { width: 15%; }
-      .skipped-orders-table col.skip-col-raw { width: 12%; }
-      .skipped-orders-table col.skip-col-normalized { width: 13%; }
-      .skipped-orders-table col.skip-col-product { width: 25%; }
-      .skipped-orders-table col.skip-col-reason { width: 27%; }
+      .skipped-orders-table col.skip-col-source { width: 78px; }
+      .skipped-orders-table col.skip-col-name { width: 14%; }
+      .skipped-orders-table col.skip-col-phone { width: 12%; }
+      .skipped-orders-table col.skip-col-sku { width: 13%; }
+      .skipped-orders-table col.skip-col-product { width: 24%; }
+      .skipped-orders-table col.skip-col-number { width: 76px; }
+      .skipped-orders-table col.skip-col-reason { width: 22%; }
       .skipped-orders-table col.skip-col-alert { width: 44px; }
       .orders-preview-table.results-orders-table {
         width: 100%;
@@ -431,7 +439,24 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   function buildSkippedOrdersHtml(skippedOrders) {
     if (!skippedOrders || !skippedOrders.count) return "";
     const rows = skippedOrders.rows || [];
-    const showAlertColumn = rows.some((row) => row && row.uncertain);
+    const showAlertColumn = rows.some((row) => row && row.uploadedWithWarning);
+    const manualReviewReasons = new Set([
+      "quantity_above_safe_limit",
+      "invalid_customer_data",
+      "ambiguous_sku_price_tier",
+      "subtotal_not_in_sku_tiers",
+      "missing_sku_tier_profile",
+      "missing_easyorders_subtotal",
+      "sku_tier_profile_too_weak",
+      "missing_sku_for_missed_product",
+      "utm_product_sku_conflict",
+      "quantity_inference_requires_manual_review",
+      "quantity_tier_price_not_verified",
+      "no_trusted_product_reference",
+      "normal_flow_prepared_quantity_is_suspicious",
+      "duplicate_easyorders_uuid_conflicting_phone",
+      "skipped_manual",
+    ]);
     const reasonLabels = {
       phone_parse_failed: t("results.reason_phone_parse_failed"),
       phone_uncertain_zero_appended: t("results.reason_phone_uncertain_zero_appended"),
@@ -451,74 +476,82 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       sku_tier_profile_too_weak: translated("results.reason_sku_tier_profile_too_weak", "SKU tier profile too weak"),
       missing_sku_for_missed_product: translated("results.reason_missing_sku_for_missed_product", "Missing SKU for missed product"),
       utm_product_sku_conflict: translated("results.reason_utm_product_sku_conflict", "Product SKU conflicts with UTM SKU"),
+      quantity_inference_requires_manual_review: translated("results.reason_quantity_inference_requires_manual_review", "Quantity needs manual review"),
+      quantity_tier_price_not_verified: translated("results.reason_quantity_tier_price_not_verified", "Quantity tier price not verified"),
+      no_trusted_product_reference: translated("results.reason_no_trusted_product_reference", "No trusted product reference"),
+      normal_flow_prepared_quantity_is_suspicious: translated("results.reason_normal_flow_prepared_quantity_is_suspicious", "Suspicious prepared quantity"),
+      duplicate_easyorders_uuid_conflicting_phone: translated("results.reason_duplicate_easyorders_uuid_conflicting_phone", "Same EasyOrders order has conflicting phone candidates"),
+      skipped_manual: translated("results.reason_skipped_manual", "Manual review"),
     };
     const paged = buildPagedItems(rows, (row, i, attrs) => {
       const reasonKey = row.uncertain && row.reason === "phone_parse_failed" ? "phone_uncertain_zero_appended" : row.reason;
       const reasonText = reasonLabels[reasonKey] || reasonKey || "—";
-      const outcomeText = row.uploadedWithWarning ? t("results.warning_uploaded") : t("results.warning_skipped");
-      const outcomeColor = (row.uploadedWithWarning || row.uncertain) ? "var(--warning)" : "var(--danger)";
+      const isManualReview = row.manualReview === true || (row.uncertain && manualReviewReasons.has(String(reasonKey || "")));
+      const outcomeText = row.uploadedWithWarning
+        ? t("results.warning_uploaded")
+        : (isManualReview ? translated("results.manual_review_status", "Manual Review") : t("results.warning_skipped"));
+      const reviewColor = isManualReview ? "#f97316" : "var(--warning)";
+      const outcomeColor = row.uploadedWithWarning ? "var(--warning)" : (isManualReview ? "#f97316" : "var(--danger)");
       const title = (value) => String(value || "").replace(/"/g,"");
-      const confidence = row.confidence || row.skuTierDecision?.confidence || "";
-      const sampleCount = row.sampleCount || row.skuTierDecision?.sampleCount || "";
       const message = row.actionMessage || row.message || row.skuTierDecision?.message || "";
-      return `<tr ${attrs} style="${row.uncertain ? "background:rgba(255,170,0,0.05)" : ""}">
-        <td class="skip-index">${i + 1}</td>
+      const phone = row.normalizedPhone || row.normPhone || row.phone || row.rawPhone || "—";
+      const qty = row.suggestedQty || row.qty || row.easyOrdersQty || "—";
+      const subtotal = row.suggestedSubtotal || row.subtotal || row.easyOrdersSubtotal || "—";
+      return `<tr ${attrs} style="${isManualReview ? "background:rgba(249,115,22,0.07)" : (row.uncertain ? "background:rgba(255,170,0,0.05)" : "")}">
         <td class="skip-outcome" style="color:${outcomeColor}" title="${outcomeText}">${outcomeText}</td>
+        <td class="skip-source" title="${title(row.source)}">${row.source || "—"}</td>
         <td class="skip-name" title="${title(row.name)}">${row.name || "—"}</td>
-        <td class="skip-phone" style="color:${outcomeColor}" title="${title(row.rawPhone)}">${row.rawPhone || "—"}</td>
-        <td class="skip-phone" style="color:var(--text)" title="${title(row.normalizedPhone || row.normPhone)}">${row.normalizedPhone || row.normPhone || "—"}</td>
-        <td class="skip-phone" title="${title(row.sku)}">${row.sku || "—"}</td>
+        <td class="skip-phone" style="color:var(--text)" title="${title(phone)}">${phone}</td>
+        <td class="skip-phone" title="${title(row.sku)}">${row.sku || row.suggestedSku || "—"}</td>
         <td class="skip-product" title="${title(row.productName)}">${row.productName || "—"}</td>
-        <td class="skip-phone">${row.qty || row.easyOrdersQty || "—"}</td>
-        <td class="skip-phone">${row.subtotal || row.easyOrdersSubtotal || "—"}</td>
-        <td class="skip-phone">${row.suggestedQty || "—"}</td>
-        <td class="skip-phone">${row.suggestedSubtotal || "—"}</td>
-        <td class="skip-phone">${confidence ? Math.round(Number(confidence) * 100) + "%" : "—"}${sampleCount ? ` / ${sampleCount}` : ""}</td>
-        <td class="skip-reason" title="${title(reasonText)}">${reasonText}</td>
+        <td class="skip-phone">${qty}</td>
+        <td class="skip-phone">${subtotal}</td>
+        <td class="skip-reason" style="color:${reviewColor}" title="${title(reasonText)}">${reasonText}</td>
         <td class="skip-reason" title="${title(message)}">${message || "—"}</td>
         ${showAlertColumn ? `<td class="skip-alert">${row.uncertain ? `<span title="${t("results.phone_rescued_verify")}" style="color:var(--warning)">⚠️</span>` : ""}</td>` : ""}
       </tr>`;
     }, "skipped");
+    const hasManualReview = rows.some((row) => {
+      const reasonKey = row && row.uncertain && row.reason === "phone_parse_failed" ? "phone_uncertain_zero_appended" : row && row.reason;
+      return row && (row.manualReview === true || (row.uncertain && manualReviewReasons.has(String(reasonKey || ""))));
+    });
+    const sectionColor = hasManualReview ? "#f97316" : "var(--warning)";
+    const sectionBg = hasManualReview ? "rgba(249,115,22,0.08)" : "rgba(255,170,0,0.06)";
+    const sectionTitle = hasManualReview
+      ? translated("results.manual_review_title", "Needs Manual Review")
+      : (typeof t("results.couldnt_process_title") === "function" ? t("results.couldnt_process_title")(skippedOrders.count) : t("results.couldnt_process_title"));
     return `
-      <div class="dash-section" style="border-color:var(--warning);margin-top:12px">
-        <div class="dash-section-header" style="background:rgba(255,170,0,0.06)">
-          <div class="dash-section-title" style="color:var(--warning)">
-            <span>⚠️</span> ${typeof t("results.couldnt_process_title") === "function" ? t("results.couldnt_process_title")(skippedOrders.count) : t("results.couldnt_process_title")}
+      <div class="dash-section" style="border-color:${sectionColor};margin-top:12px">
+        <div class="dash-section-header" style="background:${sectionBg}">
+          <div class="dash-section-title" style="color:${sectionColor}">
+            <span>⚠️</span> ${sectionTitle}
           </div>
-          <div style="font-size:var(--type-caption);color:var(--text2)">${t("results.skipped_followup")}</div>
+          <div style="font-size:var(--type-caption);color:var(--text2)">${hasManualReview ? translated("results.manual_review_need_review", "{count} need manual review").replace("{count}", skippedOrders.count) : t("results.skipped_followup")}</div>
         </div>
         <div class="dash-section-body no-pad" style="overflow-x:auto">
           <table class="orders-preview-table skipped-orders-table">
             <colgroup>
-              <col class="skip-col-index">
               <col class="skip-col-outcome">
+              <col class="skip-col-source">
               <col class="skip-col-name">
-              <col class="skip-col-raw">
-              <col class="skip-col-normalized">
-              <col class="skip-col-normalized">
+              <col class="skip-col-phone">
+              <col class="skip-col-sku">
               <col class="skip-col-product">
-              <col class="skip-col-index">
-              <col class="skip-col-index">
-              <col class="skip-col-index">
-              <col class="skip-col-index">
-              <col class="skip-col-reason">
+              <col class="skip-col-number">
+              <col class="skip-col-number">
               <col class="skip-col-reason">
               <col class="skip-col-reason">
               ${showAlertColumn ? `<col class="skip-col-alert">` : ""}
             </colgroup>
             <thead><tr>
-              <th>#</th>
               <th>${t("results.warning_status_col")}</th>
+              <th>${t("results.source_col")}</th>
               <th>${t("results.customer_name_col")}</th>
-              <th>${t("results.raw_phone_col")}</th>
-              <th>${t("results.normalized_phone_col")}</th>
+              <th>${t("results.phone_col") || "Phone"}</th>
               <th>${t("results.sku") || "SKU"}</th>
               <th>${t("results.product_col")}</th>
-              <th>EO Qty</th>
-              <th>EO Subtotal</th>
-              <th>Suggested Qty</th>
-              <th>Suggested Subtotal</th>
-              <th>Confidence</th>
+              <th>${translated("results.qty_col", "Qty")}</th>
+              <th>${translated("results.subtotal_col", "Subtotal")}</th>
               <th>${t("results.reason_col")}</th>
               <th>${translated("results.message_col", "Message")}</th>
               ${showAlertColumn ? `<th>⚠️</th>` : ""}

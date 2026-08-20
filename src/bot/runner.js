@@ -14,6 +14,14 @@ const { buildGroupedCartOrders, cartOrderItemKeys, orderLineItems } = require(".
 const { sanitizeCustomerFields } = require("./customer-quality");
 const { resolveMonthlyTaagerExportRange } = require("./taager-date-range");
 const {
+  buildCatalogScope,
+  loadTrustedSkuTierCatalog,
+  saveTrustedSkuTierCatalog,
+  trustedCatalogStats,
+  trustedCatalogToParserCatalog,
+  updateTrustedSkuTierCatalog,
+} = require("./sku-tier-catalog-store");
+const {
   normalizeTaagerCountry,
   taagerUrl,
   TAAGER_COUNTRY_CART_CODES,
@@ -4920,11 +4928,19 @@ if (config.mode === "second-taager-cart-upload") {
       parseMissedOrders(missedBuffer, dateFrom, dateTo);
     let catalog         = buildProductCatalog(realOrders);
     const taagerCatalog   = buildTaagerProductCatalog(taagerBuffer);
+    const tierCatalogScope = buildCatalogScope(config, TAAGER_COUNTRY);
+    let trustedTierState = loadTrustedSkuTierCatalog(tierCatalogScope, { baseDir: config.profilePath });
+    if (trustedTierState.loadError) {
+      log(`Trusted SKU tier catalog: could not read saved catalog (${trustedTierState.loadError}); starting fresh for this account.`);
+    }
+    let trustedTierCatalog = trustedCatalogToParserCatalog(trustedTierState);
+    const loadedTierStats = trustedCatalogStats(trustedTierState);
+    log(`Trusted SKU tier catalog loaded: ${loadedTierStats.entries} SKUs, ${loadedTierStats.tiers} tiers, ${loadedTierStats.samples} samples.`);
     const catalogQuantityRepairs = typeof repairOrderQuantitiesFromCatalog === "function"
-      ? repairOrderQuantitiesFromCatalog(realOrders, catalog, taagerCatalog)
+      ? repairOrderQuantitiesFromCatalog(realOrders, catalog, taagerCatalog, trustedTierCatalog)
       : 0;
     if (catalogQuantityRepairs > 0) {
-      log(`Real orders quantity repaired from EasyOrders/Taager history: ${catalogQuantityRepairs}`);
+      log(`Real orders quantity repaired from EasyOrders/Taager/trusted history: ${catalogQuantityRepairs}`);
       catalog = buildProductCatalog(realOrders);
     }
     const realTierManualRows = realOrders.filter((order) => order && order.manualReview === true).map((order) => ({
@@ -4946,8 +4962,21 @@ if (config.mode === "second-taager-cart-upload") {
       log(`SKU tier resolver: ${realTierManualRows.length} real EasyOrders rows require Uncertain review and will not be uploaded automatically.`);
       catalog = buildProductCatalog(realOrders);
     }
+    try {
+      trustedTierState = updateTrustedSkuTierCatalog(trustedTierState, {
+        scope: tierCatalogScope,
+        easyordersCatalog: catalog,
+        taagerCatalog,
+      });
+      const savedTierPath = saveTrustedSkuTierCatalog(trustedTierState, tierCatalogScope, { baseDir: config.profilePath });
+      trustedTierCatalog = trustedCatalogToParserCatalog(trustedTierState);
+      const savedTierStats = trustedCatalogStats(trustedTierState);
+      log(`Trusted SKU tier catalog saved: ${savedTierStats.entries} SKUs, ${savedTierStats.tiers} tiers, ${savedTierStats.samples} samples (${savedTierPath}).`);
+    } catch (err) {
+      log(`Trusted SKU tier catalog: save skipped (${err && err.message || err}).`);
+    }
     const { resolved: resolvedMissedAll, skippedOrders: catalogFailedOrders } =
-      resolveMissedOrders(missedOrders, catalog, taagerCatalog);
+      resolveMissedOrders(missedOrders, catalog, taagerCatalog, trustedTierCatalog);
 
     let missedOrdersDestination = normalizeMissedOrdersDestination(config.missedOrdersDestination, {
       legacyEnabled: config.missingOrdersUploadEnabled === true,

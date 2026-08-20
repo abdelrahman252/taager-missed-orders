@@ -36,10 +36,11 @@ function resolveMonthlyTaagerExportRange(options = {}) {
   const today = localDay(options.today || new Date());
   if (!today) throw new Error("A valid current date is required for Taager monthly export.");
   const lookbackDays = Number.isFinite(options.lookbackDays) ? options.lookbackDays : 2;
-  if (today.getDate() === 1) {
+  const previousMonthThroughDay = Number.isFinite(options.previousMonthThroughDay) ? options.previousMonthThroughDay : 5;
+  if (today.getDate() <= previousMonthThroughDay) {
     const previousMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
     const exportDateFrom = addLocalDays(previousMonthStart, -lookbackDays);
-    const exportDateTo = new Date(today.getFullYear(), today.getMonth(), 0);
+    const exportDateTo = today;
     return { exportDateFrom, exportDateTo };
   }
 
