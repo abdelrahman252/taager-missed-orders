@@ -883,49 +883,54 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const cls = className ? ` class="${className}"` : "";
       return `<td${cls} title="${text}"${extra}>${text}</td>`;
     };
-    const countText = translated("results.uncertain_orders_need_review", "{count} need review").replace("{count}", rows.length);
+    const countText = translated("results.manual_review_need_review", "{count} need manual review").replace("{count}", rows.length);
     const rowHtml = (row, i, attrs) => {
       const reasonText = labelFor("results.reason_", row.reason || row.recoveryStatus);
       const messageText = messageFor(row);
+      const phone = row.phone || row.normalizedPhone || row.normPhone || row.rawPhone;
+      const qty = row.suggestedQty || row.easyOrdersQty || row.qty;
+      const subtotal = row.suggestedSubtotal || row.easyOrdersSubtotal || row.subtotal;
       return `
-      <tr ${attrs || ""}>
+      <tr ${attrs || ""} style="background:rgba(249,115,22,0.06)">
         ${td(row.source || row.recoverySource)}
         ${td(row.name)}
-        ${td(row.rawPhone)}
-        ${td(row.phone || row.normalizedPhone)}
+        ${td(phone, "skip-phone")}
         ${td(row.sku)}
         ${td(row.productName)}
-        ${td(row.easyOrdersQty || row.qty)}
-        ${td(row.easyOrdersSubtotal || row.subtotal)}
-        ${td(row.suggestedQty)}
-        ${td(row.suggestedSubtotal)}
-        ${td(row.confidence ? Math.round(Number(row.confidence) * 100) + "%" : "")}${td(row.sampleCount)}
-        ${td(reasonText, "", ` style="color:var(--warning);font-weight:var(--weight-semibold)"`)}
+        ${td(qty, "skip-phone")}
+        ${td(subtotal, "skip-phone")}
+        ${td(reasonText, "", ` style="color:#f97316;font-weight:var(--weight-semibold)"`)}
         ${td(messageText)}
       </tr>`;
     };
     const paged = buildPagedItems(rows, rowHtml, "recovery-uncertain");
     return `
-      <div class="dash-section" style="border-color:var(--warning)">
-        <div class="dash-section-header">
-          <div class="dash-section-title"><span>⚠️</span> ${translated("results.uncertain_orders_title", "Uncertain Orders")}</div>
+      <div class="dash-section" style="border-color:#f97316">
+        <div class="dash-section-header" style="background:rgba(249,115,22,0.08)">
+          <div class="dash-section-title" style="color:#f97316"><span>⚠️</span> ${translated("results.manual_review_title", "Needs Manual Review")}</div>
           <div style="font-size:var(--type-caption);color:var(--text2)">${countText}</div>
         </div>
         <div class="dash-section-body no-pad" style="overflow-x:auto">
-          <table class="orders-preview-table" style="font-size:var(--type-label);width:100%;min-width:1380px">
+          <table class="orders-preview-table skipped-orders-table" style="font-size:var(--type-label);width:100%;min-width:980px">
+            <colgroup>
+              <col class="skip-col-source">
+              <col class="skip-col-name">
+              <col class="skip-col-phone">
+              <col class="skip-col-sku">
+              <col class="skip-col-product">
+              <col class="skip-col-number">
+              <col class="skip-col-number">
+              <col class="skip-col-reason">
+              <col class="skip-col-reason">
+            </colgroup>
             <thead><tr>
               <th>${translated("results.source_col", "Source")}</th>
               <th>${t("results.customer_name_col")}</th>
-              <th>${t("results.raw_phone_col")}</th>
               <th>${t("results.phone_col") || t("results.phone")}</th>
               <th>${t("results.sku") || "SKU"}</th>
               <th>${t("results.product_col")}</th>
-              <th>EO Qty</th>
-              <th>EO Subtotal</th>
-              <th>Suggested Qty</th>
-              <th>Suggested Subtotal</th>
-              <th>Confidence</th>
-              <th>Samples</th>
+              <th>${translated("results.qty_col", "Qty")}</th>
+              <th>${translated("results.subtotal_col", "Subtotal")}</th>
               <th>${t("results.reason_col")}</th>
               <th>${translated("results.message_col", "Message")}</th>
             </tr></thead>
