@@ -20,8 +20,17 @@ const {
 assert.strictEqual(assessCustomerPhone("0555555555", "555555555").ok, false);
 assert(assessCustomerName("sfhsdfasdfsdf").issues.includes("latin_keyboard_smash"));
 assert(assessCustomerName("منبتسيابنتسيابمش").issues.includes("long_single_token_low_variety"));
+assert(assessCustomerName("Yghggb").issues.includes("short_latin_keyboard_smash"));
+assert(assessCustomerName("AB AB").issues.includes("repeated_short_token"));
 assert.strictEqual(assessCustomerOrder({ name: "أحمد محمد علي", rawPhone: "0536679002", normPhone: "536679002" }).ok, true);
 assert.strictEqual(assessCustomerOrder({ name: "Test User", rawPhone: "0536679002", normPhone: "536679002" }).ok, false);
+assert.strictEqual(assessCustomerOrder({ name: "Mitch Jefferson", rawPhone: "0501234567", normPhone: "501234567" }).ok, false);
+assert(assessCustomerOrder({ name: "Mitch Jefferson", rawPhone: "0501234567", normPhone: "501234567" }).issues.includes("phone:sequential_digit_run"));
+assert.strictEqual(assessCustomerOrder({ name: "Yghggb", rawPhone: "555635999", normPhone: "555635999" }).ok, false);
+assert.strictEqual(assessCustomerOrder({ name: "تب", rawPhone: "956236585665", normPhone: "562365856" }).ok, true);
+assert.strictEqual(assessCustomerOrder({ name: "مساء الخير", rawPhone: "05488484584", normPhone: "548848458" }).ok, true);
+assert.strictEqual(assessCustomerOrder({ name: "Wad elamin ود الأمين", rawPhone: "0534439785", normPhone: "534439785" }).ok, true);
+assert.strictEqual(assessCustomerOrder({ name: "جازم محمد علي", rawPhone: "0540635590", normPhone: "540635590" }).ok, true);
 
 const realHeader = [
   "ID", "Status", "FullName", "Phone", "City", "Address", "Total Cost", "Product Cost", "Shipping Cost", "Coupon",

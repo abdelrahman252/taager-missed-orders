@@ -60,6 +60,18 @@ function isSequentialDigits(value) {
   return "01234567890123456789".includes(digits) || "98765432109876543210".includes(digits);
 }
 
+function hasSequentialDigitRun(value, minRun = 8) {
+  const digits = digitsOnly(value);
+  if (digits.length < minRun) return false;
+  const forward = "01234567890123456789";
+  const backward = "98765432109876543210";
+  for (let i = 0; i <= digits.length - minRun; i++) {
+    const slice = digits.slice(i, i + minRun);
+    if (forward.includes(slice) || backward.includes(slice)) return true;
+  }
+  return false;
+}
+
 function looksLikeLatinKeyboardSmash(value) {
   const compact = compactText(value).toLowerCase();
   if (!/^[a-z]+$/i.test(compact) || compact.length < 8) return false;
@@ -68,11 +80,31 @@ function looksLikeLatinKeyboardSmash(value) {
   return consonants / compact.length >= 0.72 && uniqueCharRatio(compact) < 0.75;
 }
 
+function looksLikeShortLatinKeyboardSmash(value) {
+  const compact = compactText(value).toLowerCase();
+  if (!/^[a-z]+$/i.test(compact) || compact.length < 5 || compact.length > 7) return false;
+  const vowels = (compact.match(/[aeiou]/g) || []).length;
+  return vowels <= 1 && (hasRepeatedGarbage(compact, 2) || uniqueCharRatio(compact) <= 0.72);
+}
+
 function looksLikeLongSingleTokenGarbage(value) {
   const text = normalizeText(value);
   const compact = compactText(text);
   if (!compact || compact.length < 12 || /\s/.test(text)) return false;
   return uniqueCharRatio(compact) < 0.62;
+}
+
+function hasRepeatedShortTokenName(value) {
+  const tokens = normalizeText(value)
+    .toLowerCase()
+    .split(/\s+/)
+    .map((token) => token.replace(/[^\p{L}\p{N}]+/gu, ""))
+    .filter(Boolean);
+  if (tokens.length < 2 || tokens.length > 4) return false;
+  const unique = new Set(tokens);
+  if (unique.size !== 1) return false;
+  const token = tokens[0] || "";
+  return token.length <= 3 || /^[a-z]{1,5}$/i.test(token);
 }
 
 function hasUnsafeSymbols(value) {
@@ -120,7 +152,9 @@ function assessCustomerName(value, options = {}) {
   if (hasEmoji(text)) strong.push("emoji");
   if (hasRepeatedGarbage(text, 4)) strong.push("repeated_chars");
   if (looksLikeLatinKeyboardSmash(text)) strong.push("latin_keyboard_smash");
+  if (looksLikeShortLatinKeyboardSmash(text)) strong.push("short_latin_keyboard_smash");
   if (looksLikeLongSingleTokenGarbage(text)) strong.push("long_single_token_low_variety");
+  if (hasRepeatedShortTokenName(text)) strong.push("repeated_short_token");
 
   const letters = letterCount(text);
   const digits = digitCount(text);
@@ -150,6 +184,7 @@ function assessCustomerPhone(rawPhone, normPhone) {
   if (candidate.length >= 7 && digitVariety(candidate) <= 1) issues.push("repeated_digit_phone");
   else if (candidate.length >= 8 && hasRepeatedDigits(candidate, 7)) issues.push("repeated_digit_run");
   if (candidate.length >= 9 && isSequentialDigits(candidate)) issues.push("sequential_digits");
+  else if (hasSequentialDigitRun(rawDigits || candidate, 8) || hasSequentialDigitRun(candidate, 8)) issues.push("sequential_digit_run");
 
   return {
     ok: issues.length === 0,
@@ -173,7 +208,9 @@ function assessCustomerOrder(order, options = {}) {
     "phone_like",
     "too_long",
     "latin_keyboard_smash",
+    "short_latin_keyboard_smash",
     "long_single_token_low_variety",
+    "repeated_short_token",
   ]);
   const nameIssues = (nameQuality.issues || []).filter((issue) => blockingNameIssues.has(issue));
   const issues = [
