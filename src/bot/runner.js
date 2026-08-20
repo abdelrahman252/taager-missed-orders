@@ -51,6 +51,7 @@ const {
   tryAutomatedGooglePopupLogin,
   waitForManualGoogleLogin,
 } = require("./google-login-handshake");
+const { isRetryableNetworkError } = require("./network-retry");
 
 const config = JSON.parse(process.env.BOT_CONFIG || "{}");
 const log = (msg) => process.stdout.write(msg + "\n");
@@ -252,10 +253,7 @@ async function withSessionGuard(page, actionFn, reloginFn, siteName) {
 }
 
 function isNetworkNavigationError(error) {
-  const message = String(error && error.message || error || "");
-  return message.includes("ERR_CONNECTION") ||
-    message.includes("net::") ||
-    message.toLowerCase().includes("timeout");
+  return isRetryableNetworkError(error);
 }
 
 async function gotoWithNetworkRetries(page, url, label, options = {}) {

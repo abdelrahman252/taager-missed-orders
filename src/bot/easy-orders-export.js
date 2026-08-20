@@ -2,6 +2,7 @@
 
 const os = require("os");
 const path = require("path");
+const { isRetryableNetworkError } = require("./network-retry");
 
 function parseEasyOrdersIdentityFromDocument() {
   // IMPORTANT FOR FUTURE MAINTENANCE:
@@ -275,10 +276,7 @@ function createEasyOrdersExportFlow(options = {}) {
   }
 
   function isNetworkNavigationError(error) {
-    const message = String(error && error.message || error || "");
-    return message.includes("ERR_CONNECTION") ||
-      message.includes("net::") ||
-      message.toLowerCase().includes("timeout");
+    return isRetryableNetworkError(error);
   }
 
   async function debugScreenshot(page, label) {

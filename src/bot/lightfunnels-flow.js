@@ -2,6 +2,7 @@
 
 const os = require("os");
 const path = require("path");
+const { isRetryableNetworkError } = require("./network-retry");
 
 const LIGHTFUNNELS_AUTH_URL = "https://app.lightfunnels.com/admin/auth";
 const LIGHTFUNNELS_CHOOSE_ACCOUNT_URL = "https://app.lightfunnels.com/admin/choose-account";
@@ -57,10 +58,7 @@ function createLightFunnelsFlow(options = {}) {
   }
 
   function isNetworkNavigationError(error) {
-    const message = String(error && error.message || error || "");
-    return message.includes("ERR_CONNECTION") ||
-      message.includes("net::") ||
-      message.toLowerCase().includes("timeout");
+    return isRetryableNetworkError(error);
   }
 
   async function debugScreenshot(page, label) {
