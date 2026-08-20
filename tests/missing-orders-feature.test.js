@@ -29,8 +29,10 @@ const {
 const {
   buildTaagerProductCatalog,
   parseRealOrders,
+  parseMissedOrders,
   repairOrderQuantitiesFromCatalog,
   resolveMissedOrders,
+  extractSkuFromText,
   parseTaagerOrderKeys,
   mergeAndDeduplicate,
 } = require("../src/bot/parser");
@@ -77,6 +79,36 @@ assert.deepStrictEqual(secondRoute.legacyMissingOrders, []);
 assert.deepStrictEqual(secondRoute.secondTaagerCartOrders, [missedA]);
 assert.strictEqual(destinationForOrder(missedA, "second_taager_cart"), "second-taager-cart");
 
+const pipeProductHeader = ["Is Completed", "Created At", "Products", "Phone", "Full Name", "Government", "Address", "UTM Campaign"];
+const pipeProducts = [
+  "مروحة سقف بإنارة LED مع ريموت | 3 سرعات | 3 ألوان إضاءة",
+  "كاميرا داش كام للسيارة | تسجيل قيادة HD | تشغيل تلقائي",
+  "كاميرا عين الصقر الشمسية 4G - تعمل بدون كهرباء | شريحة اتصال + واي فاي + رؤية ليلية | ضمان سنة",
+];
+const pipeProductSheet = XLSX.utils.aoa_to_sheet([
+  pipeProductHeader,
+  ...pipeProducts.map((product, index) => [
+    "false",
+    "2026-07-06",
+    `[${product}]`,
+    `05000000${10 + index}`,
+    `Pipe Product Customer ${index + 1}`,
+    "Riyadh",
+    "Address",
+    "SA030109RTB199-منظف-standard-man-",
+  ]),
+]);
+const pipeProductBook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(pipeProductBook, pipeProductSheet, "Missed");
+const pipeProductResult = parseMissedOrders(
+  XLSX.write(pipeProductBook, { type: "buffer", bookType: "xlsx" }),
+  new Date(2026, 6, 1),
+  new Date(2026, 6, 19),
+);
+assert.strictEqual(pipeProductResult.orders.length, 3, "pipe-delimited product descriptions should stay one missed row each");
+assert.deepStrictEqual(pipeProductResult.orders.map((order) => order.productName), pipeProducts);
+assert(pipeProductResult.orders.every((order) => order.skuFromUtm === "SA030109RTB199"), "UTM SKU fallback should be preserved while product text remains unsplit");
+
 const taagerCatalogHeader = Array(19).fill("");
 taagerCatalogHeader[16] = "Products";
 taagerCatalogHeader[17] = "Quantity";
@@ -95,6 +127,94 @@ assert.strictEqual(taagerFallbackResult.resolved.length, 0, "non-obvious missed 
 assert.strictEqual(taagerFallbackResult.skippedOrders.length, 1);
 assert.strictEqual(taagerFallbackResult.skippedOrders[0].reason, "quantity_inference_requires_manual_review");
 assert.strictEqual(taagerFallbackResult.skippedOrders[0].sku, "TAAGER-SKU-1");
+assert.strictEqual(extractSkuFromText("SA030109RTB199-منظف-standard-man-"), "SA030109RTB199");
+assert.strictEqual(extractSkuFromText("SA050301IA0099_foo"), "SA050301IA0099");
+const tierCatalogHeader = Array(19).fill("");
+tierCatalogHeader[16] = "المنتجات";
+tierCatalogHeader[17] = "الكميات";
+tierCatalogHeader[18] = "الأسعار";
+const tierCatalogSheet = XLSX.utils.aoa_to_sheet([
+  tierCatalogHeader,
+  [...Array(16).fill(""), "SA030109RTB199", "2", "130"],
+  [...Array(16).fill(""), "SA030109RTB199", "2", "130"],
+  [...Array(16).fill(""), "SA030109RTB199", "0", "130"],
+  [...Array(16).fill(""), "SA030109RTB199", "1", "80"],
+]);
+const tierCatalogBook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(tierCatalogBook, tierCatalogSheet, "Orders");
+const skuTierCatalog = buildTaagerProductCatalog(XLSX.write(tierCatalogBook, { type: "buffer", bookType: "xlsx" }));
+const missedSkuTierResult = resolveMissedOrders([
+  { ...missedA, sku: "SA030109RTB199", skuSource: "utm_campaign", qty: null, subtotal: null, productName: "Missed sheet product text" },
+], {}, skuTierCatalog);
+assert.strictEqual(missedSkuTierResult.resolved.length, 0, "missed SKU without subtotal or explicit bundle title should not infer multi-quantity");
+assert.strictEqual(missedSkuTierResult.skippedOrders[0].reason, "quantity_inference_requires_manual_review");
+const missedExplicitSkuTierResult = resolveMissedOrders([
+  { ...missedA, sku: "SA030109RTB199", skuSource: "utm_campaign", qty: null, subtotal: null, productName: "2 pieces Missed sheet product text" },
+], {}, skuTierCatalog);
+assert.strictEqual(missedExplicitSkuTierResult.resolved.length, 1, "missed order with SKU in UTM and explicit bundle title should resolve from dominant SKU subtotal tier");
+assert.strictEqual(missedExplicitSkuTierResult.resolved[0].qty, 2);
+assert.strictEqual(missedExplicitSkuTierResult.resolved[0].subtotal, 130);
+const realSkuTierRows = [{
+  source: "real",
+  normPhone: "500000011",
+  sku: "SA030109RTB199",
+  productName: "EasyOrders product text",
+  qty: 1,
+  unitPrice: 130,
+  subtotal: 130,
+}];
+assert.strictEqual(repairOrderQuantitiesFromCatalog(realSkuTierRows, {}, skuTierCatalog), 1);
+assert.strictEqual(realSkuTierRows[0].qty, 2, "SKU subtotal 130 should resolve to verified Taager qty 2");
+assert.strictEqual(realSkuTierRows[0].subtotal, 130);
+assert.strictEqual(realSkuTierRows[0].priceSource, "taager_sku_subtotal_tier");
+assert(!realSkuTierRows[0].skuTierDecision.uncertain, "Taager qty 0 at subtotal 130 must not create an ambiguous qty 1 tier");
+const unsafeQtyRows = [{
+  source: "real",
+  normPhone: "500000012",
+  sku: "SA030109RTB199",
+  productName: "Bad EasyOrders qty",
+  qty: 97,
+  unitPrice: 1,
+  subtotal: 97,
+}];
+repairOrderQuantitiesFromCatalog(unsafeQtyRows, {}, skuTierCatalog);
+assert.strictEqual(unsafeQtyRows[0].manualReview, true, "qty above 12 should be blocked before upload");
+assert.strictEqual(unsafeQtyRows[0].reason, "quantity_above_safe_limit");
+const productPrimaryCatalog = {
+  "Matched Product": {
+    sku: "SKU-FROM-PRODUCT",
+    productName: "Matched Product",
+    minQty: 1,
+    prices: { 1: 99 },
+    qtyCounts: { 1: 4 },
+    source: "easyorders",
+  },
+};
+const productPrimaryResult = resolveMissedOrders([
+  { ...missedA, skuFromUtm: "", productName: "[ Matched Product ]" },
+], productPrimaryCatalog, {});
+assert.strictEqual(productPrimaryResult.resolved.length, 1, "missed product text should resolve SKU from real EasyOrders product name");
+assert.strictEqual(productPrimaryResult.resolved[0].sku, "SKU-FROM-PRODUCT");
+const utmFallbackCatalog = {
+  "SKU-FROM-UTM": {
+    sku: "SKU-FROM-UTM",
+    productName: "SKU-FROM-UTM",
+    minQty: 1,
+    prices: { 1: 88 },
+    qtyCounts: { 1: 4 },
+    source: "taager",
+  },
+};
+const utmFallbackResult = resolveMissedOrders([
+  { ...missedA, skuFromUtm: "SKU-FROM-UTM", productName: "No catalog name match" },
+], {}, utmFallbackCatalog);
+assert.strictEqual(utmFallbackResult.resolved.length, 1, "UTM SKU should be fallback when product-name match is unavailable");
+assert.strictEqual(utmFallbackResult.resolved[0].sku, "SKU-FROM-UTM");
+const skuConflictResult = resolveMissedOrders([
+  { ...missedA, skuFromUtm: "OTHER-SKU", productName: "Matched Product" },
+], productPrimaryCatalog, {});
+assert.strictEqual(skuConflictResult.resolved.length, 0);
+assert.strictEqual(skuConflictResult.skippedOrders[0].reason, "utm_product_sku_conflict");
 const explicitBundleCatalog = {
   "2 pieces TAAGER-SKU-1": {
     sku: "TAAGER-SKU-1",
@@ -106,7 +226,7 @@ const explicitBundleCatalog = {
 };
 const explicitCatalogResult = resolveMissedOrders([
   { ...missedA, sku: null, qty: null, productName: "2 pieces TAAGER-SKU-1" },
-], explicitBundleCatalog, taagerCatalog);
+], explicitBundleCatalog, {});
 assert.strictEqual(explicitCatalogResult.resolved.length, 1, "explicit bundle missed product can resolve from catalog");
 assert.strictEqual(explicitCatalogResult.resolved[0].sku, "TAAGER-SKU-1");
 assert.strictEqual(explicitCatalogResult.resolved[0].qty, 2);
@@ -153,10 +273,10 @@ const realPackageRows = parseRealOrders(
 );
 assert.strictEqual(realPackageRows.length, 4);
 const repairedPackageRow = realPackageRows.find((row) => row.orderId === "EO-BUNDLE");
-assert.strictEqual(repairedPackageRow.qty, 2, "SKU/product history should repair exported quantity=1 when the same item is consistently sold as quantity 2");
+assert.strictEqual(repairedPackageRow.qty, 1, "SKU/product title/history alone must not repair exported quantity");
 assert.strictEqual(repairedPackageRow.unitPrice, 62.5);
-assert.strictEqual(repairedPackageRow.subtotal, 125);
-assert.strictEqual(repairedPackageRow.quantityRepair.reason, "sku_product_history_min_quantity");
+assert.strictEqual(repairedPackageRow.subtotal, 62.5);
+assert.strictEqual(repairedPackageRow.quantityRepair, undefined);
 const cameraProductName = "\u0643\u0627\u0645\u064a\u0631\u0627 \u0639\u064a\u0646 \u0627\u0644\u0635\u0642\u0631 \u0627\u0644\u0634\u0645\u0633\u064a\u0629 4G - \u062a\u0639\u0645\u0644 \u0628\u062f\u0648\u0646 \u0643\u0647\u0631\u0628\u0627\u0621 | \u0634\u0631\u064a\u062d\u0629 \u0627\u062a\u0635\u0627\u0644 + \u0648\u0627\u064a \u0641\u0627\u064a + \u0631\u0624\u064a\u0629 \u0644\u064a\u0644\u064a\u0629 | \u0636\u0645\u0627\u0646 \u0633\u0646\u0629";
 const cameraHistorySheet = XLSX.utils.aoa_to_sheet([
   realPackageHeader,
@@ -175,7 +295,7 @@ const cameraHistoryRows = parseRealOrders(
 const cameraQtyOneRow = cameraHistoryRows.find((row) => row.orderId === "EO-CAM");
 assert.strictEqual(cameraQtyOneRow.qty, 1, "non-obvious camera title should not be repaired to dominant qty 3 from history");
 assert.strictEqual(cameraQtyOneRow.subtotal, 249);
-assert.strictEqual(cameraQtyOneRow.quantityRepairSkipped.reason, "quantity_inference_requires_manual_review");
+assert.strictEqual(cameraQtyOneRow.quantityRepairSkipped, undefined);
 const taagerQuantityFallback = {
   "TAAGER-QTY-SKU": {
     sku: "TAAGER-QTY-SKU",
@@ -201,17 +321,16 @@ const taagerQuantityRepairRows = [{
 assert.strictEqual(repairOrderQuantitiesFromCatalog(taagerQuantityRepairRows, {}, taagerQuantityFallback), 0);
 assert.strictEqual(taagerQuantityRepairRows[0].qty, 1, "Taager SKU history should not repair non-obvious quantity automatically");
 assert.strictEqual(taagerQuantityRepairRows[0].subtotal, 60);
-assert.strictEqual(taagerQuantityRepairRows[0].quantityRepairSkipped.reason, "quantity_inference_requires_manual_review");
+assert.strictEqual(taagerQuantityRepairRows[0].manualReview, true, "subtotal mismatch should route to uncertain instead of repairing from history");
+assert.strictEqual(taagerQuantityRepairRows[0].reason, "subtotal_not_in_sku_tiers");
 const explicitTaagerQuantityRepairRows = [{
   ...taagerQuantityRepairRows[0],
   productName: "2 pieces New EasyOrders Product Name",
   quantityRepairSkipped: null,
 }];
-assert.strictEqual(repairOrderQuantitiesFromCatalog(explicitTaagerQuantityRepairRows, {}, taagerQuantityFallback), 1);
-assert.strictEqual(explicitTaagerQuantityRepairRows[0].qty, 2, "explicit bundle quantity can repair from Taager catalog");
-assert.strictEqual(explicitTaagerQuantityRepairRows[0].subtotal, 120);
-assert.strictEqual(explicitTaagerQuantityRepairRows[0].unitPrice, 60);
-assert.strictEqual(explicitTaagerQuantityRepairRows[0].quantityRepair.source, "taager_catalog");
+assert.strictEqual(repairOrderQuantitiesFromCatalog(explicitTaagerQuantityRepairRows, {}, taagerQuantityFallback), 0);
+assert.strictEqual(explicitTaagerQuantityRepairRows[0].manualReview, true, "explicit title still cannot repair when subtotal does not match a verified tier");
+assert.strictEqual(explicitTaagerQuantityRepairRows[0].reason, "subtotal_not_in_sku_tiers");
 const taagerExistingHeader = Array(23).fill("");
 taagerExistingHeader[0] = "Order Number";
 taagerExistingHeader[2] = "Status";
@@ -348,11 +467,10 @@ const partialDedupeResult = mergeAndDeduplicate([
 ], [], partialExisting);
 assert.strictEqual(partialDedupeResult.orders.length, 0, "partial existing grouped order should not create another shipping order");
 assert.strictEqual(partialDedupeResult.skippedOrders[0].reason, "partial_order_already_in_taager");
-assert.strictEqual(missingEverywhereResult.skippedOrders[0].reason, "product_not_in_easyorders_or_taager");
+assert.strictEqual(missingEverywhereResult.skippedOrders[0].reason, "missing_sku_for_missed_product");
 const skippedWorkbook = XLSX.read(buildSkippedExcel(missingEverywhereResult.skippedOrders), { type: "buffer" });
-const skippedRows = XLSX.utils.sheet_to_json(skippedWorkbook.Sheets["Warnings & Skipped"], { header: 1, defval: "" });
-assert.strictEqual(skippedRows[1][10], "product_not_in_easyorders_or_taager");
-assert.strictEqual(skippedRows[1][11], "المنتج غير موجود في شيت EasyOrders أو شيت Taager");
+const skippedRows = XLSX.utils.sheet_to_json(skippedWorkbook.Sheets["Uncertain Orders"], { header: 1, defval: "" });
+assert.strictEqual(skippedRows[1][18], "missing_sku_for_missed_product");
 
 const workbook = XLSX.read(buildMissingOrdersExcel([missedA, missedB]), { type: "buffer" });
 assert.deepStrictEqual(workbook.SheetNames, ["Missing Orders"]);

@@ -32,8 +32,23 @@ function resolveSafeTaagerExportRange(dateFrom, dateTo, options = {}) {
   return { exportDateFrom, exportDateTo };
 }
 
+function resolveMonthlyTaagerExportRange(options = {}) {
+  const today = localDay(options.today || new Date());
+  if (!today) throw new Error("A valid current date is required for Taager monthly export.");
+  if (today.getDate() === 1) {
+    const exportDateFrom = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const exportDateTo = new Date(today.getFullYear(), today.getMonth(), 0);
+    return { exportDateFrom, exportDateTo };
+  }
+
+  const exportDateFrom = new Date(today.getFullYear(), today.getMonth(), 1);
+  const exportDateTo = today;
+  return { exportDateFrom, exportDateTo };
+}
+
 module.exports = {
   addLocalDays,
   formatDataDay,
+  resolveMonthlyTaagerExportRange,
   resolveSafeTaagerExportRange,
 };

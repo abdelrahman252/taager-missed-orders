@@ -505,20 +505,37 @@ function buildSkippedExcel(skippedOrders) {
   reasonLabels.duplicate_easyorders_uuid_conflicting_phone = "\u0646\u0641\u0633 \u0637\u0644\u0628 EasyOrders \u0644\u0647 \u0623\u0631\u0642\u0627\u0645 \u0647\u0627\u062a\u0641 \u0645\u062a\u0639\u0627\u0631\u0636\u0629";
   reasonLabels.quantity_inference_requires_manual_review = "\u0627\u0644\u0643\u0645\u064a\u0629 \u0623\u0643\u0628\u0631 \u0645\u0646 1 \u0645\u0633\u062a\u0646\u062a\u062c\u0629 \u0645\u0646 \u0627\u0644\u0643\u062a\u0627\u0644\u0648\u062c/\u0627\u0644\u062a\u0627\u0631\u064a\u062e \u0648\u062a\u062d\u062a\u0627\u062c \u0645\u0631\u0627\u062c\u0639\u0629";
   reasonLabels.quantity_tier_price_not_verified = "\u0644\u0645 \u064a\u062a\u0645 \u062a\u0623\u0643\u064a\u062f \u0633\u0639\u0631 \u0639\u0631\u0636 \u0627\u0644\u0643\u0645\u064a\u0629 \u0642\u0628\u0644 \u062a\u0639\u062f\u064a\u0644\u0647\u0627";
+  reasonLabels.quantity_above_safe_limit = "\u0627\u0644\u0643\u0645\u064a\u0629 \u0623\u0639\u0644\u0649 \u0645\u0646 \u062d\u062f \u0627\u0644\u0631\u0641\u0639 \u0627\u0644\u0622\u0645\u0646";
+  reasonLabels.ambiguous_sku_price_tier = "\u0633\u0639\u0631 SKU \u064a\u0637\u0627\u0628\u0642 \u0623\u0643\u062b\u0631 \u0645\u0646 \u0643\u0645\u064a\u0629 \u0623\u0648 \u0644\u0627 \u064a\u0648\u062c\u062f \u0646\u0645\u0637 \u0648\u0627\u0636\u062d";
+  reasonLabels.subtotal_not_in_sku_tiers = "\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0645\u0646\u062a\u062c \u063a\u064a\u0631 \u0645\u0648\u062c\u0648\u062f \u0641\u064a \u0637\u0628\u0642\u0627\u062a SKU \u0627\u0644\u0645\u0648\u062b\u0648\u0642\u0629";
+  reasonLabels.missing_sku_tier_profile = "\u0644\u0627 \u064a\u0648\u062c\u062f \u062a\u0627\u0631\u064a\u062e \u0633\u0639\u0631/\u0643\u0645\u064a\u0629 \u0645\u0648\u062b\u0648\u0642 \u0644\u0647\u0630\u0627 SKU";
+  reasonLabels.missing_easyorders_subtotal = "\u064a\u062d\u062a\u0627\u062c \u0627\u0644\u0637\u0644\u0628 \u0625\u062c\u0645\u0627\u0644\u064a \u0645\u0646\u062a\u062c \u0623\u0648 \u0637\u0628\u0642\u0629 SKU \u0645\u0647\u064a\u0645\u0646\u0629";
+  reasonLabels.sku_tier_profile_too_weak = "\u0639\u064a\u0646\u0627\u062a SKU \u063a\u064a\u0631 \u0643\u0627\u0641\u064a\u0629 \u0644\u0644\u0631\u0641\u0639 \u0627\u0644\u062a\u0644\u0642\u0627\u0626\u064a";
+  reasonLabels.missing_sku_for_missed_product = "\u0644\u0645 \u064a\u062a\u0645 \u062a\u062d\u062f\u064a\u062f SKU \u0645\u0648\u062b\u0648\u0642 \u0644\u0637\u0644\u0628 \u0641\u0627\u0626\u062a";
+  reasonLabels.utm_product_sku_conflict = "\u062a\u0639\u0627\u0631\u0636 \u0628\u064a\u0646 SKU \u0645\u0646 \u0627\u0633\u0645 \u0627\u0644\u0645\u0646\u062a\u062c \u0648 SKU \u0645\u0646 UTM";
 
   const headers = [
     "Outcome / الحالة",
     "Account Email / بريد الحساب",
     "Account Label / اسم الحساب",
     "Taager Country / دولة تاجر",
+    "Source / المصدر",
     "Full Name / الاسم الكامل",
     "Raw Phone / الهاتف الأصلي",
     "Normalized Phone / الهاتف بعد التعديل",
+    "SKU",
     "Product / المنتج",
+    "EasyOrders Qty / كمية EasyOrders",
+    "EasyOrders Subtotal / إجمالي EasyOrders",
+    "Suggested Qty / الكمية المقترحة",
+    "Suggested Subtotal / الإجمالي المقترح",
+    "Confidence / الثقة",
+    "Sample Count / عدد العينات",
     "City / المدينة",
     "Address / العنوان",
     "Reason / السبب",
     "Reason (AR) / السبب بالعربي",
+    "Message / الرسالة",
     "Uncertain / غير مؤكد",
   ];
 
@@ -531,14 +548,23 @@ function buildSkippedExcel(skippedOrders) {
       order.accountEmail || "",
       order.accountLabel || "",
       order.taagerCountry || order.taagerCountry || COUNTRY,
+      order.source || "",
       order.name || "",
       order.rawPhone || "",
       order.normalizedPhone || "",
+      order.sku || "",
       order.productName || "",
+      order.easyOrdersQty || order.originalQty || order.qty || "",
+      order.easyOrdersSubtotal || order.originalSubtotal || order.subtotal || "",
+      order.suggestedQty || "",
+      order.suggestedSubtotal || "",
+      order.confidence || (order.skuTierDecision && order.skuTierDecision.confidence) || "",
+      order.sampleCount || (order.skuTierDecision && order.skuTierDecision.sampleCount) || "",
       order.city || "",
       order.address || "",
       reasonKey || "",
       reasonLabels[reasonKey] || reasonKey || "",
+      order.actionMessage || order.message || "",
       order.uncertain ? "YES" : "NO",
     ];
   });
@@ -546,14 +572,16 @@ function buildSkippedExcel(skippedOrders) {
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   ws["!cols"] = [
     { wch: 22 }, { wch: 30 }, { wch: 18 }, { wch: 14 },
-    { wch: 28 }, { wch: 18 }, { wch: 20 }, { wch: 40 },
+    { wch: 12 }, { wch: 28 }, { wch: 18 }, { wch: 20 },
+    { wch: 22 }, { wch: 40 }, { wch: 16 }, { wch: 18 },
+    { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 14 },
     { wch: 22 }, { wch: 35 }, { wch: 30 },
-    { wch: 38 }, { wch: 12 },
+    { wch: 38 }, { wch: 60 }, { wch: 12 },
   ];
   ws["!autofilter"] = { ref: ws["!ref"] };
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Warnings & Skipped");
+  XLSX.utils.book_append_sheet(wb, ws, "Uncertain Orders");
   return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 }
 

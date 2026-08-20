@@ -8,6 +8,7 @@ const { buildGroupedCartOrders, cartOrderGroupKey, mergeItemList } = require("./
 
 const config = JSON.parse(process.env.BOT_CONFIG || "{}");
 const COUNTRY = normalizeTaagerCountry(config.taagerCountry || config.taagerCountry || "sa");
+const MAX_SAFE_AUTO_QUANTITY = 12;
 
 // Taager dashboard/status/NDR migration:
 // Taager exports Arabic statuses, SKU-only products, order profit, and tax profit.
@@ -177,6 +178,24 @@ function parseQty(value) {
   return parseInt(String(value || "1").replace(/[^\d]/g, ""), 10) || 1;
 }
 
+function parseOptionalQty(value) {
+  const text = normalizeDigits(value).trim();
+  if (text === "") return null;
+  const parsed = parseInt(text.replace(/[^\d]/g, ""), 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeSku(value) {
+  return String(value == null ? "" : value).trim().replace(/[-_.]+$/g, "");
+}
+
+function extractSkuFromText(value) {
+  const text = normalizeSku(value).toUpperCase();
+  if (!text) return "";
+  const match = text.match(/([A-Z]{2}\d{4,}[A-Z]{1,}\d{2,})/i);
+  return match ? normalizeSku(match[1].toUpperCase()) : "";
+}
+
 function splitCellLines(value) {
   return String(value == null ? "" : value)
     .split(/\r?\n/)
@@ -192,9 +211,22 @@ function normalizeProductName(name) {
     .replace(/\s+/g, " ");
 }
 
+function normalizeProductLookupName(name) {
+  return normalizeProductName(stripProductBrackets(name))
+    .normalize("NFKC")
+    .replace(/[\u064B-\u065F\u0670]/g, "")
+    .replace(/\u0640/g, "")
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 function productNamesMatch(nameA, nameB) {
-  const a = normalizeProductName(nameA).toLowerCase();
-  const b = normalizeProductName(nameB).toLowerCase();
+  const a = normalizeProductLookupName(nameA);
+  const b = normalizeProductLookupName(nameB);
   if (!a || !b) return false;
   return a === b || (a.length >= 4 && b.includes(a)) || (b.length >= 4 && a.includes(b));
 }
@@ -337,6 +369,8 @@ function hasExplicitQuantityInProductName(productName, qty) {
   if (count <= 1) return true;
   const text = normalizeDigits(productName).toLowerCase();
   if (!text) return false;
+  if (count === 2 && /(?:حبتين|حبتان|قطعتين|قطعتان|عبوتين|عبوتان|اثنين|إثنين)/i.test(text)) return true;
+  if (count === 3 && /(?:ثلاث|ثلاثه|ثلاثة|3\s*(?:حبه|حبة|حب|قطع|قطعه|قطعة|عبوه|عبوة|عبوات))/i.test(text)) return true;
   const escaped = String(count).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const units = [
     "x", "\\*", "\\u00d7",
@@ -462,11 +496,406 @@ function catalogPriceOptions(match) {
     .sort((a, b) => a.qty - b.qty);
 }
 
+function priceCloseForTier(a, b) {
+  const left = Number(a);
+  const right = Number(b);
+  if (!Number.isFinite(left) || !Number.isFinite(right) || left <= 0 || right <= 0) return false;
+  return Math.abs(left - right) <= Math.max(0.01, Math.abs(right) * 0.005);
+}
+
+function buildSkuTierProfiles(catalog = {}, taagerCatalog = {}) {
+  const profiles = new Map();
+  function addEntry(entry, source) {
+    const sku = normalizeSku(entry && entry.sku);
+    if (!sku) return;
+    if (!profiles.has(sku)) {
+      profiles.set(sku, {
+        sku,
+        tiers: [],
+        productNames: new Set(),
+        sourceCounts: { taager: 0, easyorders: 0 },
+      });
+    }
+    const profile = profiles.get(sku);
+    if (entry.productName) profile.productNames.add(normalizeProductName(entry.productName));
+    const prices = entry && entry.prices && typeof entry.prices === "object" ? entry.prices : {};
+    const qtyCounts = entry && entry.qtyCounts && typeof entry.qtyCounts === "object" ? entry.qtyCounts : {};
+    for (const [qtyText, subtotalValue] of Object.entries(prices)) {
+      const qty = Number(qtyText) || 0;
+      const subtotal = Number(subtotalValue) || 0;
+      if (qty <= 0 || subtotal <= 0) continue;
+      const sampleCount = Math.max(1, Number(qtyCounts[qtyText] || qtyCounts[qty] || 0) || 0);
+      const tierSource = source || entry.source || "catalog";
+      profile.tiers.push({
+        qty,
+        subtotal,
+        unitPrice: subtotal / qty,
+        sampleCount,
+        source: tierSource,
+      });
+      if (tierSource === "taager") profile.sourceCounts.taager += sampleCount;
+      else profile.sourceCounts.easyorders += sampleCount;
+    }
+  }
+  for (const entry of Object.values(catalog || {})) addEntry(entry, entry && entry.source || "easyorders");
+  for (const entry of Object.values(taagerCatalog || {})) addEntry(entry, "taager");
+  for (const profile of profiles.values()) {
+    profile.totalSamples = profile.tiers.reduce((sum, tier) => sum + tier.sampleCount, 0);
+    profile.priceOptions = profile.tiers
+      .map((tier) => ({
+        qty: tier.qty,
+        subtotal: tier.subtotal,
+        unitPrice: tier.unitPrice,
+        sampleCount: tier.sampleCount,
+        source: tier.source,
+      }))
+      .sort((a, b) => (a.qty - b.qty) || (a.subtotal - b.subtotal));
+  }
+  return profiles;
+}
+
+function findSkuProfile(tierProfiles, sku) {
+  const cleanSku = normalizeSku(sku);
+  if (!cleanSku || !(tierProfiles instanceof Map)) return null;
+  return tierProfiles.get(cleanSku) || null;
+}
+
+function dominantTierFromProfile(profile, options = {}) {
+  if (!profile || !Array.isArray(profile.tiers) || !profile.tiers.length) return null;
+  const taagerTiers = profile.tiers.filter((tier) => tier.source === "taager");
+  const tiers = taagerTiers.length ? taagerTiers : profile.tiers;
+  const qtyCounts = new Map();
+  const tierModes = new Map();
+  for (const tier of tiers) {
+    const qty = Number(tier.qty || 0) || 0;
+    const subtotal = Number(tier.subtotal || 0) || 0;
+    if (qty <= 0 || subtotal <= 0) continue;
+    qtyCounts.set(qty, (qtyCounts.get(qty) || 0) + (Number(tier.sampleCount || 1) || 1));
+    const modeKey = `${qty}|${subtotal}`;
+    tierModes.set(modeKey, (tierModes.get(modeKey) || 0) + (Number(tier.sampleCount || 1) || 1));
+  }
+  const totalSamples = Array.from(qtyCounts.values()).reduce((sum, count) => sum + count, 0);
+  const winners = Array.from(qtyCounts.entries())
+    .map(([qty, count]) => ({ qty, count, confidence: totalSamples > 0 ? count / totalSamples : 0 }))
+    .sort((a, b) => (b.count - a.count) || (a.qty - b.qty));
+  const winner = winners[0];
+  if (!winner) return null;
+  if (winners[1] && winners[1].count === winner.count && winners[1].qty !== winner.qty) {
+    return {
+      uncertain: true,
+      reason: "ambiguous_sku_price_tier",
+      message: `SKU ${profile.sku} has conflicting dominant quantity tiers.`,
+      sampleCount: totalSamples,
+      confidence: winner.confidence,
+    };
+  }
+  if (!options.allowSingleSampleDominance && totalSamples < 2) {
+    return {
+      uncertain: true,
+      reason: "sku_tier_profile_too_weak",
+      message: `SKU ${profile.sku} needs more subtotal-tier history before automatic upload.`,
+      sampleCount: totalSamples,
+      confidence: winner.confidence,
+    };
+  }
+  if (winner.confidence < 0.65) {
+    return {
+      uncertain: true,
+      reason: "ambiguous_sku_price_tier",
+      message: `SKU ${profile.sku} does not have a dominant quantity tier.`,
+      sampleCount: totalSamples,
+      confidence: winner.confidence,
+    };
+  }
+  const subtotalModes = Array.from(tierModes.entries())
+    .map(([key, count]) => {
+      const [qtyText, subtotalText] = key.split("|");
+      return { qty: Number(qtyText) || 0, subtotal: Number(subtotalText) || 0, count };
+    })
+    .filter((tier) => tier.qty === winner.qty && tier.subtotal > 0)
+    .sort((a, b) => b.count - a.count);
+  const mode = subtotalModes[0];
+  if (!mode) return null;
+  return {
+    qty: winner.qty,
+    subtotal: mode.subtotal,
+    unitPrice: mode.subtotal / winner.qty,
+    confidence: winner.confidence,
+    sampleCount: winner.count,
+    priceSource: taagerTiers.length ? "taager_sku_subtotal_tier" : "easyorders_sku_subtotal_tier",
+    quantitySource: taagerTiers.length ? "taager_sku_dominant_tier" : "easyorders_sku_dominant_tier",
+  };
+}
+
+function tierDominanceForMatches(profile, matches) {
+  const source = matches.find((tier) => tier && tier.source === "taager") ? "taager" : (matches[0] && matches[0].source || "");
+  const sourceTiers = (profile.tiers || []).filter((tier) => !source || tier.source === source);
+  const qtyCounts = new Map();
+  for (const tier of sourceTiers) {
+    const qty = Number(tier.qty || 0) || 0;
+    if (qty <= 0) continue;
+    qtyCounts.set(qty, (qtyCounts.get(qty) || 0) + (Number(tier.sampleCount || 1) || 1));
+  }
+  const total = Array.from(qtyCounts.values()).reduce((sum, count) => sum + count, 0);
+  const matchedQty = Number(matches[0] && matches[0].qty || 0) || 0;
+  const matchedSamples = matches.reduce((sum, tier) => sum + (Number(tier.sampleCount || 1) || 1), 0);
+  const top = Array.from(qtyCounts.entries())
+    .map(([qty, count]) => ({ qty, count, confidence: total > 0 ? count / total : 0 }))
+    .sort((a, b) => (b.count - a.count) || (a.qty - b.qty))[0] || { qty: 0, count: 0, confidence: 0 };
+  const confidence = total > 0 ? (qtyCounts.get(matchedQty) || matchedSamples) / total : 0;
+  return {
+    source,
+    matchedQty,
+    matchedSamples,
+    total,
+    topQty: top.qty,
+    topSamples: top.count,
+    topConfidence: top.confidence,
+    confidence,
+    trusted: source === "taager" && (matchedSamples >= 3 || (top.qty === matchedQty && top.confidence >= 0.60)),
+  };
+}
+
+function resolveSkuPriceTier(input = {}) {
+  const sku = normalizeSku(input.sku);
+  const profile = input.profile || findSkuProfile(input.tierProfiles, sku);
+  const easyQty = Number(input.easyQty || 0) || 0;
+  const subtotal = Number(input.subtotal || 0) || 0;
+  const sourceType = input.sourceType || "";
+  const base = {
+    resolved: false,
+    uncertain: false,
+    qty: easyQty || null,
+    subtotal: subtotal || null,
+    unitPrice: easyQty > 0 && subtotal > 0 ? subtotal / easyQty : null,
+    reason: "",
+    message: "",
+    confidence: 0,
+    sampleCount: 0,
+    priceSource: "",
+    quantitySource: "",
+    sku,
+    priceOptions: profile && profile.priceOptions || [],
+  };
+  if (easyQty > MAX_SAFE_AUTO_QUANTITY) {
+    return {
+      ...base,
+      uncertain: true,
+      reason: "quantity_above_safe_limit",
+      message: `Quantity ${easyQty} is above safe auto-upload limit ${MAX_SAFE_AUTO_QUANTITY}. Manual review required.`,
+      quantitySource: "easyorders_export",
+      priceSource: "easyorders_export_item_price",
+    };
+  }
+  if (!sku) {
+    return {
+      ...base,
+      uncertain: true,
+      reason: "missing_sku_for_tier_resolution",
+      message: "No SKU is available for subtotal-tier resolution.",
+    };
+  }
+  if (!profile || !profile.tiers.length) {
+    if (sourceType === "real" && easyQty > 0) {
+      return {
+        ...base,
+        resolved: true,
+        qty: easyQty,
+        subtotal,
+        unitPrice: easyQty > 0 && subtotal > 0 ? subtotal / easyQty : base.unitPrice,
+        reason: "easyorders_quantity_without_sku_tier_profile",
+        message: "No SKU tier profile exists; kept EasyOrders quantity and price.",
+        quantitySource: "easyorders_export",
+        priceSource: "easyorders_export_item_price",
+      };
+    }
+    return {
+      ...base,
+      uncertain: true,
+      reason: "missing_sku_tier_profile",
+      message: `No trusted subtotal-tier profile exists for SKU ${sku}.`,
+    };
+  }
+
+  if (subtotal > 0) {
+    let matches = profile.tiers.filter((tier) => priceCloseForTier(subtotal, tier.subtotal));
+    const taagerMatches = matches.filter((tier) => tier.source === "taager");
+    if (taagerMatches.length) matches = taagerMatches;
+    const qtys = [...new Set(matches.map((tier) => tier.qty))];
+    if (qtys.length > 1) {
+      return {
+        ...base,
+        uncertain: true,
+        reason: "ambiguous_sku_price_tier",
+        message: `Subtotal ${subtotal} maps to multiple quantities for SKU ${sku}.`,
+        sampleCount: matches.reduce((sum, tier) => sum + (Number(tier.sampleCount || 1) || 1), 0),
+        confidence: 0,
+      };
+    }
+    if (qtys.length === 1) {
+      const qty = qtys[0];
+      const sampleCount = matches.reduce((sum, tier) => sum + (Number(tier.sampleCount || 1) || 1), 0);
+      const dominance = tierDominanceForMatches(profile, matches);
+      if (!dominance.trusted) {
+        return {
+          ...base,
+          uncertain: true,
+          qty,
+          subtotal,
+          unitPrice: subtotal / qty,
+          reason: "sku_tier_profile_too_weak",
+          message: `Subtotal ${subtotal} matched SKU ${sku}, but Taager tier confidence is not strong enough for automatic upload.`,
+          sampleCount,
+          confidence: dominance.confidence,
+          priceSource: matches[0].source === "taager" ? "taager_sku_subtotal_tier" : "easyorders_sku_subtotal_tier",
+          quantitySource: "sku_subtotal_tier",
+        };
+      }
+      if (qty > MAX_SAFE_AUTO_QUANTITY) {
+        return {
+          ...base,
+          uncertain: true,
+          qty,
+          subtotal,
+          unitPrice: subtotal / qty,
+          reason: "quantity_above_safe_limit",
+          message: `Quantity ${qty} is above safe auto-upload limit ${MAX_SAFE_AUTO_QUANTITY}. Manual review required.`,
+          sampleCount,
+          confidence: profile.totalSamples > 0 ? sampleCount / profile.totalSamples : 1,
+        };
+      }
+      return {
+        ...base,
+        resolved: true,
+        qty,
+        subtotal,
+        unitPrice: subtotal / qty,
+        reason: easyQty && easyQty !== qty ? "sku_subtotal_tier_overrode_easyorders_quantity" : "sku_subtotal_tier_verified",
+        message: easyQty && easyQty !== qty
+          ? `Subtotal ${subtotal} maps to quantity ${qty} for SKU ${sku}; EasyOrders quantity ${easyQty} was not used.`
+          : `Subtotal ${subtotal} verified for SKU ${sku}.`,
+        confidence: dominance.confidence,
+        sampleCount,
+        priceSource: matches[0].source === "taager" ? "taager_sku_subtotal_tier" : "easyorders_sku_subtotal_tier",
+        quantitySource: "sku_subtotal_tier",
+      };
+    }
+    return {
+      ...base,
+      uncertain: true,
+      reason: "subtotal_not_in_sku_tiers",
+      message: `Subtotal ${subtotal} was not found in trusted tiers for SKU ${sku}.`,
+      quantitySource: easyQty ? "easyorders_export" : "",
+      priceSource: "easyorders_export_item_price",
+      sampleCount: profile.totalSamples || 0,
+    };
+  }
+
+  if (input.allowDominantTierWithoutSubtotal) {
+    const dominant = dominantTierFromProfile(profile, { allowSingleSampleDominance: input.allowSingleSampleDominance === true });
+    if (dominant && dominant.uncertain) return { ...base, ...dominant, uncertain: true };
+    if (dominant && dominant.qty > 0 && dominant.subtotal > 0) {
+      if (dominant.qty > 1 && !hasExplicitQuantityInProductName(input.productText || "", dominant.qty)) {
+        return {
+          ...base,
+          ...dominant,
+          uncertain: true,
+          reason: "quantity_inference_requires_manual_review",
+          message: `SKU ${sku} has a dominant quantity tier, but the order has no subtotal and the product title does not clearly state quantity ${dominant.qty}.`,
+        };
+      }
+      if (dominant.qty > MAX_SAFE_AUTO_QUANTITY) {
+        return {
+          ...base,
+          ...dominant,
+          uncertain: true,
+          reason: "quantity_above_safe_limit",
+          message: `Quantity ${dominant.qty} is above safe auto-upload limit ${MAX_SAFE_AUTO_QUANTITY}. Manual review required.`,
+        };
+      }
+      return {
+        ...base,
+        ...dominant,
+        resolved: true,
+        uncertain: false,
+        reason: "sku_dominant_tier_without_easyorders_subtotal",
+        message: `SKU ${sku} resolved from dominant subtotal tier.`,
+      };
+    }
+  }
+
+  return {
+    ...base,
+    uncertain: true,
+    reason: "missing_easyorders_subtotal",
+    message: `SKU ${sku} needs an EasyOrders subtotal or a dominant trusted tier before automatic upload.`,
+    sampleCount: profile.totalSamples || 0,
+  };
+}
+
+function applyTierDecisionToOrder(order, decision, options = {}) {
+  if (!order || !decision) return;
+  order.skuTierDecision = {
+    resolved: decision.resolved === true,
+    uncertain: decision.uncertain === true,
+    reason: decision.reason || "",
+    message: decision.message || "",
+    confidence: Number(decision.confidence || 0) || 0,
+    sampleCount: Number(decision.sampleCount || 0) || 0,
+    priceSource: decision.priceSource || "",
+    quantitySource: decision.quantitySource || "",
+  };
+  order.priceOptions = Array.isArray(decision.priceOptions) ? decision.priceOptions : order.priceOptions || [];
+  order.suggestedQty = decision.qty || "";
+  order.suggestedSubtotal = decision.subtotal || "";
+  order.confidence = Number(decision.confidence || 0) || 0;
+  order.sampleCount = Number(decision.sampleCount || 0) || 0;
+  if (decision.uncertain) {
+    order.manualReview = true;
+    order.uncertain = true;
+    order.reason = decision.reason || order.reason || "sku_tier_resolution_uncertain";
+    order.actionMessage = decision.message || order.actionMessage || "";
+    return;
+  }
+  if (decision.resolved && options.mutate !== false) {
+    order.qty = decision.qty || order.qty;
+    order.subtotal = decision.subtotal || order.subtotal;
+    order.unitPrice = decision.unitPrice || order.unitPrice;
+    order.quantitySource = decision.quantitySource || order.quantitySource;
+    order.priceSource = decision.priceSource || order.priceSource;
+    if (decision.reason === "sku_subtotal_tier_overrode_easyorders_quantity") {
+      order.quantityRepair = {
+        from: options.previousQty || order.qty,
+        to: decision.qty,
+        reason: decision.reason,
+        source: decision.priceSource || "sku_subtotal_tier",
+        sampleCount: decision.sampleCount || 0,
+        confidence: decision.confidence || 0,
+      };
+    }
+  }
+}
+
 function repairOrderQuantitiesFromCatalog(orders, catalog = {}, taagerCatalog = {}) {
   let repaired = 0;
+  const tierProfiles = buildSkuTierProfiles(catalog, taagerCatalog);
   for (const order of orders || []) {
     const currentQty = Number(order && order.qty || 1) || 1;
-    if (!order || currentQty <= 0 || currentQty > 10) continue;
+    if (!order || currentQty <= 0) continue;
+    const decision = resolveSkuPriceTier({
+      sku: order.sku,
+      easyQty: currentQty,
+      subtotal: order.subtotal,
+      sourceType: "real",
+      tierProfiles,
+    });
+    applyTierDecisionToOrder(order, decision, { previousQty: currentQty });
+    if (decision && decision.uncertain) continue;
+    if (decision && decision.resolved) {
+      if (Number(decision.qty || 0) !== currentQty) repaired++;
+      continue;
+    }
+    if (currentQty > 10) continue;
     const unitPrice = Number(order.unitPrice || 0) || 0;
     if (unitPrice <= 0) continue;
 
@@ -570,12 +999,22 @@ function parseRealOrders(buffer, dateFrom, dateTo) {
     if (!explodedCount) skipped.sku++;
   }
 
-  const repairedQuantities = repairRealOrderQuantitiesFromHistory(orders);
+  const repairedQuantities = 0;
   console.log(`Real orders: ${orders.length} valid items | skipped date:${skipped.date} phone:${skipped.phone} status:${skipped.status} sku:${skipped.sku}`);
   if (repairedQuantities > 0) console.log(`Real orders quantity repaired from SKU/product history: ${repairedQuantities}`);
   if (uncertainPhones > 0) console.log(`Real orders uncertain phones rescued with trailing 0: ${uncertainPhones}`);
   if (ambiguousPhones > 0) console.log(`Real orders expanded from ambiguous phones: ${ambiguousPhones}`);
   return orders;
+}
+
+function missedProductNamesFromCell(productText) {
+  const clean = String(productText || "").trim();
+  if (!clean) return [];
+  const lines = clean.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length > 1 && lines.every((line) => /^(?:[-*•]|\d+[.)-])\s+/.test(line))) {
+    return lines.map((line) => line.replace(/^(?:[-*•]|\d+[.)-])\s+/, "").trim()).filter(Boolean);
+  }
+  return [clean];
 }
 
 function parseMissedOrders(buffer, dateFrom, dateTo) {
@@ -598,6 +1037,7 @@ function parseMissedOrders(buffer, dateFrom, dateTo) {
 
     const rawProducts = String(row["Products"] || "").trim();
     const productText = stripProductBrackets(rawProducts) || rawProducts;
+    const skuFromUtm = extractSkuFromText(row["UTM Campaign"] || row["Utm Campaign"] || row["Campaign"] || "");
     const phoneMetas = normalizePhoneCandidatesWithMeta(row["Phone"], COUNTRY);
     if (!phoneMetas.length) {
       skipped.phone++;
@@ -634,6 +1074,8 @@ function parseMissedOrders(buffer, dateFrom, dateTo) {
         createdAt: createdDate,
         easyCreatedAt,
         sku: null,
+        skuFromUtm,
+        skuSource: skuFromUtm ? "utm_campaign" : "",
         qty: null,
         subtotal: null,
         unitPrice: null,
@@ -648,7 +1090,7 @@ function parseMissedOrders(buffer, dateFrom, dateTo) {
         baseOrder.phoneCandidateIndex || "",
       ].map((value) => String(value || "").trim()).join("|");
 
-      productText.split("|").map((part) => part.trim()).filter(Boolean).forEach((productName) => {
+      missedProductNamesFromCell(productText).forEach((productName) => {
         orders.push({ ...baseOrder, productName });
       });
     });
@@ -669,6 +1111,7 @@ function buildProductCatalog(realOrders) {
     if (!catalog[key]) catalog[key] = { sku: order.sku, productName: key, prices: {}, qtyCounts: {}, source: "easyorders" };
     const entry = catalog[key];
     const qty = order.qty || 1;
+    if (order.manualReview || qty > MAX_SAFE_AUTO_QUANTITY) continue;
     const price = Math.round(order.subtotal || 0);
     entry.qtyCounts[qty] = (entry.qtyCounts[qty] || 0) + 1;
     if (!entry.prices[qty]) entry.prices[qty] = [];
@@ -723,9 +1166,9 @@ function buildTaagerProductCatalog(buffer, country = COUNTRY) {
     }
 
     const header = rows[0] || [];
-    const productsIdx = findHeaderIndex(header, ["Ø§Ù„Ù…Ù†ØªØ¬Ø§Øª", "Products", "SKU"], 16);
-    const qtyIdx = findHeaderIndex(header, ["Ø§Ù„ÙƒÙ…ÙŠØ§Øª", "Quantity", "Qty"], 17);
-    const priceIdx = findHeaderIndex(header, ["Ø§Ù„Ø£Ø³Ø¹Ø§Ø±", "Prices", "Price"], 18);
+    const productsIdx = findHeaderIndex(header, ["المنتجات", "Ø§Ù„Ù…Ù†ØªØ¬Ø§Øª", "Products", "SKU"], 16);
+    const qtyIdx = findHeaderIndex(header, ["الكميات", "Ø§Ù„ÙƒÙ…ÙŠØ§Øª", "Quantity", "Qty"], 17);
+    const priceIdx = findHeaderIndex(header, ["الأسعار", "Ø§Ù„Ø£Ø³Ø¹Ø§Ø±", "Prices", "Price"], 18);
     const catalog = {};
 
     for (let i = 1; i < rows.length; i++) {
@@ -742,9 +1185,9 @@ function buildTaagerProductCatalog(buffer, country = COUNTRY) {
           catalog[key] = { sku: productToken, productName: key, prices: {}, qtyCounts: {}, source: "taager" };
         }
         const entry = catalog[key];
-        const qty = parseQty(qtys[idx] || qtys[0]);
-        const unitPrice = parseMoney(prices[idx] || prices[0]);
-        const subtotal = unitPrice > 0 ? unitPrice * qty : 0;
+        const qty = parseOptionalQty(qtys[idx] != null && String(qtys[idx]).trim() !== "" ? qtys[idx] : qtys[0]);
+        if (!qty || qty <= 0) return;
+        const subtotal = parseMoney(prices[idx] || prices[0]);
         entry.qtyCounts[qty] = (entry.qtyCounts[qty] || 0) + 1;
         if (!entry.prices[qty]) entry.prices[qty] = [];
         entry.prices[qty].push(Math.round(subtotal));
@@ -808,10 +1251,38 @@ function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}) {
   const skippedOrders = [];
   const skippedNames = [];
   const sourceStats = { easyorders: 0, taager: 0 };
+  const tierProfiles = buildSkuTierProfiles(catalog, taagerCatalog);
 
   for (const order of missedOrders) {
-    const match = findProductInCatalog(order.productName, catalog)
-      || findProductInCatalog(order.productName, taagerCatalog);
+    const productMatch = findProductInCatalog(order.productName, catalog);
+    const fallbackProductMatch = productMatch || findProductInCatalog(order.productName, taagerCatalog);
+    const productSku = normalizeSku(productMatch && productMatch.sku);
+    const utmSku = normalizeSku(order.skuFromUtm || "");
+    if (productSku && utmSku && productSku !== utmSku) {
+      skippedNames.push(order.productName);
+      skippedOrders.push({
+        ...order,
+        source: order.source || "missed",
+        normPhone: order.normPhone || "",
+        normalizedPhone: order.normPhone || "",
+        name: order.name,
+        rawPhone: order.rawPhone,
+        productName: order.productName,
+        city: order.city,
+        address: order.address,
+        sku: productSku,
+        utmSku,
+        suggestedSku: productSku,
+        reason: "utm_product_sku_conflict",
+        actionMessage: `Missed product matched SKU ${productSku}, but UTM Campaign contains SKU ${utmSku}. Manual review required.`,
+        uncertain: true,
+      });
+      continue;
+    }
+    const explicitSku = productSku || utmSku || normalizeSku(order.sku);
+    const match = explicitSku
+      ? (findCatalogBySku(taagerCatalog, explicitSku) || findCatalogBySku(catalog, explicitSku) || fallbackProductMatch)
+      : fallbackProductMatch;
     if (!match) {
       skippedNames.push(order.productName);
       skippedOrders.push({
@@ -824,9 +1295,77 @@ function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}) {
         productName: order.productName,
         city: order.city,
         address: order.address,
-        reason: "product_not_in_easyorders_or_taager",
-        uncertain: !!order.uncertain,
+        sku: explicitSku || "",
+        reason: "missing_sku_for_missed_product",
+        actionMessage: explicitSku
+          ? `SKU ${explicitSku} was found on the missed row, but no trusted Taager/EasyOrders tier profile exists.`
+          : "Missed product name did not match EasyOrders real orders and no clean SKU was found in UTM Campaign.",
+        uncertain: true,
       });
+      continue;
+    }
+
+    const tierDecision = explicitSku
+      ? resolveSkuPriceTier({
+          sku: explicitSku,
+          easyQty: order.qty,
+          subtotal: order.subtotal,
+          sourceType: "missed",
+          tierProfiles,
+          allowDominantTierWithoutSubtotal: true,
+          allowSingleSampleDominance: true,
+          productText: order.productName || "",
+        })
+      : null;
+    if (tierDecision && tierDecision.uncertain) {
+      skippedNames.push(order.productName);
+      skippedOrders.push({
+        ...order,
+        source: order.source || "missed",
+        normPhone: order.normPhone || "",
+        normalizedPhone: order.normPhone || "",
+        name: order.name,
+        rawPhone: order.rawPhone,
+        productName: order.productName,
+        city: order.city,
+        address: order.address,
+        sku: explicitSku || match.sku,
+        qty: order.qty || "",
+        subtotal: order.subtotal || "",
+        suggestedQty: tierDecision.qty || "",
+        suggestedSubtotal: tierDecision.subtotal || "",
+        unitPrice: tierDecision.unitPrice || "",
+        catalogSource: match.source || "easyorders",
+        quantitySource: tierDecision.quantitySource || "",
+        priceSource: tierDecision.priceSource || "",
+        reason: tierDecision.reason || "sku_tier_resolution_uncertain",
+        actionMessage: tierDecision.message || "",
+        confidence: tierDecision.confidence || 0,
+        sampleCount: tierDecision.sampleCount || 0,
+        uncertain: true,
+      });
+      continue;
+    }
+    if (tierDecision && tierDecision.resolved) {
+      resolved.push({
+        ...order,
+        sku: explicitSku || match.sku,
+        skuSource: productSku ? "product_name" : (utmSku ? "utm_campaign" : order.skuSource || ""),
+        productName: match.productName || order.productName,
+        qty: tierDecision.qty,
+        subtotal: tierDecision.subtotal,
+        unitPrice: tierDecision.unitPrice,
+        suggestedQty: tierDecision.qty,
+        suggestedSubtotal: tierDecision.subtotal,
+        catalogSource: match.source || "easyorders",
+        quantitySource: tierDecision.quantitySource,
+        priceSource: tierDecision.priceSource,
+        confidence: tierDecision.confidence || 0,
+        sampleCount: tierDecision.sampleCount || 0,
+        priceOptions: tierDecision.priceOptions || catalogPriceOptions(match),
+      });
+      if (match.source === "taager") sourceStats.taager++;
+      else sourceStats.easyorders++;
       continue;
     }
 
@@ -853,13 +1392,14 @@ function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}) {
         priceSource: "catalog_price_for_quantity",
         reason: "quantity_inference_requires_manual_review",
         actionMessage: "Catalog/history suggested quantity > 1 but the missed product title does not explicitly show a bundle quantity.",
-        uncertain: !!order.uncertain,
+        uncertain: true,
       });
       continue;
     }
     resolved.push({
       ...order,
       sku: match.sku,
+      skuSource: productSku ? "product_name" : (utmSku ? "utm_campaign" : order.skuSource || ""),
       productName: match.productName,
       qty,
       subtotal,
@@ -1605,11 +2145,14 @@ module.exports = {
   parseMissedOrders,
   buildProductCatalog,
   buildTaagerProductCatalog,
+  buildSkuTierProfiles,
+  resolveSkuPriceTier,
   repairOrderQuantitiesFromCatalog,
   resolveMissedOrders,
   mergeAndDeduplicate,
   normalizeProductName,
   productNamesMatch,
+  extractSkuFromText,
   hasExplicitQuantityInProductName,
   makeOrderKey,
   loadProductMap,

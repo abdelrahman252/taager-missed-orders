@@ -4,6 +4,7 @@ const XLSX = require("xlsx");
 const { normalizePhone, formatPhone } = require("./phone");
 const { orderLineItems } = require("./cart-order-groups");
 const { makeOrderKey, normalizeProductName, productNamesMatch } = require("./parser");
+const MAX_SAFE_AUTO_QUANTITY = 12;
 
 function cleanText(value) {
   return String(value == null ? "" : value).replace(/\s+/g, " ").trim();
@@ -196,7 +197,7 @@ function quantityFromReferencePrice(reference, modalPrice) {
 
 function suspiciousQuantityLimit(reference) {
   const maxKnownQty = Math.max(0, Number(reference && reference.maxQty || 0) || 0);
-  return Math.max(10, maxKnownQty > 0 ? maxKnownQty * 3 : 10);
+  return Math.max(MAX_SAFE_AUTO_QUANTITY, maxKnownQty > 0 ? maxKnownQty * 3 : MAX_SAFE_AUTO_QUANTITY);
 }
 
 function isSuspiciousQuantity(reference, modalQty) {
@@ -253,7 +254,7 @@ function quantityEditDecision(reference, modalItem = {}) {
   const inferredQuantity = referenceUsesInferredQuantity(reference);
   const priceVerified = !!option && modalPrice > 0 && priceClose(modalPrice, option.unitPrice);
 
-  if (expectedQty > 10) {
+  if (expectedQty > MAX_SAFE_AUTO_QUANTITY) {
     return { expectedQty, expectedUnitPrice, priceVerified, inferredQuantity, manualReview: true, reason: "normal_flow_prepared_quantity_is_suspicious" };
   }
   if (expectedQty > 1 && inferredQuantity && !priceVerified) {
@@ -456,6 +457,12 @@ function recoveryResultRows(rows, country = "sa") {
       qty: (row.items || []).reduce((sum, item) => sum + (Number(item.qty || 1) || 1), 0) || first.qty || 1,
       unitPrice: first.unitPrice || "",
       subtotal: (row.items || []).reduce((sum, item) => sum + (Number(item.subtotal || 0) || 0), 0) || first.subtotal || "",
+      easyOrdersQty: row.easyOrdersQty || row.originalQty || first.easyOrdersQty || first.originalQty || first.qty || "",
+      easyOrdersSubtotal: row.easyOrdersSubtotal || row.originalSubtotal || first.easyOrdersSubtotal || first.originalSubtotal || first.subtotal || "",
+      suggestedQty: row.suggestedQty || first.suggestedQty || "",
+      suggestedSubtotal: row.suggestedSubtotal || first.suggestedSubtotal || "",
+      confidence: row.confidence || first.confidence || "",
+      sampleCount: row.sampleCount || first.sampleCount || "",
       city: row.city || "",
       address: row.address || "",
       date: row.date || row.createdAt || "",

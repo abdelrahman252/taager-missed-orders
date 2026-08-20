@@ -442,20 +442,39 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       source_order_already_in_taager: t("results.reason_source_order_already_in_taager"),
       delivered_order_already_in_taager: t("results.reason_delivered_order_already_in_taager"),
       delivered_repeat_needs_identity: t("results.reason_delivered_repeat_needs_identity"),
+      quantity_above_safe_limit: translated("results.reason_quantity_above_safe_limit", "Quantity above safe limit"),
+      ambiguous_sku_price_tier: translated("results.reason_ambiguous_sku_price_tier", "Ambiguous SKU price tier"),
+      subtotal_not_in_sku_tiers: translated("results.reason_subtotal_not_in_sku_tiers", "Subtotal not in trusted SKU tiers"),
+      missing_sku_tier_profile: translated("results.reason_missing_sku_tier_profile", "Missing SKU tier profile"),
+      missing_easyorders_subtotal: translated("results.reason_missing_easyorders_subtotal", "Missing EasyOrders subtotal"),
+      sku_tier_profile_too_weak: translated("results.reason_sku_tier_profile_too_weak", "SKU tier profile too weak"),
+      missing_sku_for_missed_product: translated("results.reason_missing_sku_for_missed_product", "Missing SKU for missed product"),
+      utm_product_sku_conflict: translated("results.reason_utm_product_sku_conflict", "Product SKU conflicts with UTM SKU"),
     };
     const paged = buildPagedItems(rows, (row, i, attrs) => {
       const reasonKey = row.uncertain && row.reason === "phone_parse_failed" ? "phone_uncertain_zero_appended" : row.reason;
       const reasonText = reasonLabels[reasonKey] || reasonKey || "—";
       const outcomeText = row.uploadedWithWarning ? t("results.warning_uploaded") : t("results.warning_skipped");
-      const outcomeColor = row.uploadedWithWarning ? "var(--warning)" : "var(--danger)";
+      const outcomeColor = (row.uploadedWithWarning || row.uncertain) ? "var(--warning)" : "var(--danger)";
+      const title = (value) => String(value || "").replace(/"/g,"");
+      const confidence = row.confidence || row.skuTierDecision?.confidence || "";
+      const sampleCount = row.sampleCount || row.skuTierDecision?.sampleCount || "";
+      const message = row.actionMessage || row.message || row.skuTierDecision?.message || "";
       return `<tr ${attrs} style="${row.uncertain ? "background:rgba(255,170,0,0.05)" : ""}">
         <td class="skip-index">${i + 1}</td>
         <td class="skip-outcome" style="color:${outcomeColor}" title="${outcomeText}">${outcomeText}</td>
-        <td class="skip-name" title="${String(row.name || "").replace(/"/g,"")}">${row.name || "—"}</td>
-        <td class="skip-phone" style="color:${outcomeColor}" title="${String(row.rawPhone || "").replace(/"/g,"")}">${row.rawPhone || "—"}</td>
-        <td class="skip-phone" style="color:var(--text)" title="${String(row.normalizedPhone || "").replace(/"/g,"")}">${row.normalizedPhone || "—"}</td>
-        <td class="skip-product" title="${String(row.productName || "").replace(/"/g,"")}">${row.productName || "—"}</td>
-        <td class="skip-reason" title="${String(reasonText).replace(/"/g,"")}">${reasonText}</td>
+        <td class="skip-name" title="${title(row.name)}">${row.name || "—"}</td>
+        <td class="skip-phone" style="color:${outcomeColor}" title="${title(row.rawPhone)}">${row.rawPhone || "—"}</td>
+        <td class="skip-phone" style="color:var(--text)" title="${title(row.normalizedPhone || row.normPhone)}">${row.normalizedPhone || row.normPhone || "—"}</td>
+        <td class="skip-phone" title="${title(row.sku)}">${row.sku || "—"}</td>
+        <td class="skip-product" title="${title(row.productName)}">${row.productName || "—"}</td>
+        <td class="skip-phone">${row.qty || row.easyOrdersQty || "—"}</td>
+        <td class="skip-phone">${row.subtotal || row.easyOrdersSubtotal || "—"}</td>
+        <td class="skip-phone">${row.suggestedQty || "—"}</td>
+        <td class="skip-phone">${row.suggestedSubtotal || "—"}</td>
+        <td class="skip-phone">${confidence ? Math.round(Number(confidence) * 100) + "%" : "—"}${sampleCount ? ` / ${sampleCount}` : ""}</td>
+        <td class="skip-reason" title="${title(reasonText)}">${reasonText}</td>
+        <td class="skip-reason" title="${title(message)}">${message || "—"}</td>
         ${showAlertColumn ? `<td class="skip-alert">${row.uncertain ? `<span title="${t("results.phone_rescued_verify")}" style="color:var(--warning)">⚠️</span>` : ""}</td>` : ""}
       </tr>`;
     }, "skipped");
@@ -475,7 +494,14 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
               <col class="skip-col-name">
               <col class="skip-col-raw">
               <col class="skip-col-normalized">
+              <col class="skip-col-normalized">
               <col class="skip-col-product">
+              <col class="skip-col-index">
+              <col class="skip-col-index">
+              <col class="skip-col-index">
+              <col class="skip-col-index">
+              <col class="skip-col-reason">
+              <col class="skip-col-reason">
               <col class="skip-col-reason">
               ${showAlertColumn ? `<col class="skip-col-alert">` : ""}
             </colgroup>
@@ -485,8 +511,15 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
               <th>${t("results.customer_name_col")}</th>
               <th>${t("results.raw_phone_col")}</th>
               <th>${t("results.normalized_phone_col")}</th>
+              <th>${t("results.sku") || "SKU"}</th>
               <th>${t("results.product_col")}</th>
+              <th>EO Qty</th>
+              <th>EO Subtotal</th>
+              <th>Suggested Qty</th>
+              <th>Suggested Subtotal</th>
+              <th>Confidence</th>
               <th>${t("results.reason_col")}</th>
+              <th>${translated("results.message_col", "Message")}</th>
               ${showAlertColumn ? `<th>⚠️</th>` : ""}
             </tr></thead>
             <tbody>${paged.itemsHtml}</tbody>
@@ -826,7 +859,13 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         ${td(row.name)}
         ${td(row.rawPhone)}
         ${td(row.phone || row.normalizedPhone)}
-        ${td(row.sku || row.productName)}
+        ${td(row.sku)}
+        ${td(row.productName)}
+        ${td(row.easyOrdersQty || row.qty)}
+        ${td(row.easyOrdersSubtotal || row.subtotal)}
+        ${td(row.suggestedQty)}
+        ${td(row.suggestedSubtotal)}
+        ${td(row.confidence ? Math.round(Number(row.confidence) * 100) + "%" : "")}${td(row.sampleCount)}
         ${td(reasonText, "", ` style="color:var(--warning);font-weight:var(--weight-semibold)"`)}
         ${td(messageText)}
       </tr>`;
@@ -839,13 +878,20 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <div style="font-size:var(--type-caption);color:var(--text2)">${countText}</div>
         </div>
         <div class="dash-section-body no-pad" style="overflow-x:auto">
-          <table class="orders-preview-table" style="font-size:var(--type-label);width:100%;min-width:980px">
+          <table class="orders-preview-table" style="font-size:var(--type-label);width:100%;min-width:1380px">
             <thead><tr>
               <th>${translated("results.source_col", "Source")}</th>
               <th>${t("results.customer_name_col")}</th>
               <th>${t("results.raw_phone_col")}</th>
               <th>${t("results.phone_col") || t("results.phone")}</th>
-              <th>${translated("results.sku_product_col", "SKU/Product")}</th>
+              <th>${t("results.sku") || "SKU"}</th>
+              <th>${t("results.product_col")}</th>
+              <th>EO Qty</th>
+              <th>EO Subtotal</th>
+              <th>Suggested Qty</th>
+              <th>Suggested Subtotal</th>
+              <th>Confidence</th>
+              <th>Samples</th>
               <th>${t("results.reason_col")}</th>
               <th>${translated("results.message_col", "Message")}</th>
             </tr></thead>

@@ -12,7 +12,7 @@ const {
 const { formatPhone, normalizePhone } = require("./phone");
 const { buildGroupedCartOrders, cartOrderItemKeys, orderLineItems } = require("./cart-order-groups");
 const { sanitizeCustomerFields } = require("./customer-quality");
-const { resolveSafeTaagerExportRange } = require("./taager-date-range");
+const { resolveMonthlyTaagerExportRange } = require("./taager-date-range");
 const {
   normalizeTaagerCountry,
   taagerUrl,
@@ -4701,7 +4701,7 @@ if (config.mode === "second-taager-cart-upload") {
   const dateFrom       = parseDate(config.dateFrom);
   const dateTo         = parseDate(config.dateTo);
   const exportFromDate = subtractDay(dateFrom); // -1 day so Easy-Orders export catches late-night orders and builds full product catalog
-  const taagerExportRange = resolveSafeTaagerExportRange(dateFrom, dateTo);
+  const taagerExportRange = resolveMonthlyTaagerExportRange();
   const taagerStartDate = taagerExportRange.exportDateFrom;
   const taagerEndDate = taagerExportRange.exportDateTo;
 
@@ -4927,6 +4927,25 @@ if (config.mode === "second-taager-cart-upload") {
       log(`Real orders quantity repaired from EasyOrders/Taager history: ${catalogQuantityRepairs}`);
       catalog = buildProductCatalog(realOrders);
     }
+    const realTierManualRows = realOrders.filter((order) => order && order.manualReview === true).map((order) => ({
+      ...order,
+      source: order.source || "real",
+      normPhone: order.normPhone || "",
+      normalizedPhone: order.normPhone || "",
+      rawPhone: order.rawPhone || order.phone || "",
+      reason: order.reason || (order.skuTierDecision && order.skuTierDecision.reason) || "sku_tier_resolution_uncertain",
+      actionMessage: order.actionMessage || (order.skuTierDecision && order.skuTierDecision.message) || "",
+      uploadedWithWarning: false,
+      uncertain: true,
+      accountEmail: config.easyEmail || "",
+      accountLabel: config.label || "",
+      taagerCountry: TAAGER_COUNTRY,
+    }));
+    const uploadRealOrders = realOrders.filter((order) => !(order && order.manualReview === true));
+    if (realTierManualRows.length > 0) {
+      log(`SKU tier resolver: ${realTierManualRows.length} real EasyOrders rows require Uncertain review and will not be uploaded automatically.`);
+      catalog = buildProductCatalog(realOrders);
+    }
     const { resolved: resolvedMissedAll, skippedOrders: catalogFailedOrders } =
       resolveMissedOrders(missedOrders, catalog, taagerCatalog);
 
@@ -4945,7 +4964,7 @@ if (config.mode === "second-taager-cart-upload") {
       log("Missing Orders audit: local machine registry is ignored; routing uses this run's EasyOrders export plus Taager online duplicate checks.");
     }
 
-    const baseSkippedOrders = [...phoneFailedOrders, ...catalogFailedOrders].map(o => ({
+    const baseSkippedOrders = [...phoneFailedOrders, ...catalogFailedOrders, ...realTierManualRows].map(o => ({
       ...o,
       accountEmail: config.easyEmail || "",
       accountLabel: config.label || "",
@@ -4955,7 +4974,7 @@ if (config.mode === "second-taager-cart-upload") {
     // Cross-reference Taager and Easy-Orders rows for analytics enrichment.
     // Saves learned pairs to disk — grows over time, never cleared.
     // If the file doesn't exist yet (first run or deleted) → starts fresh and works normally.
-    const dedupeResult = mergeAndDeduplicate(realOrders, resolvedMissed, taagerOrderKeys);
+    const dedupeResult = mergeAndDeduplicate(uploadRealOrders, resolvedMissed, taagerOrderKeys);
     let orders = dedupeResult.orders;
     const stats = dedupeResult.stats;
     const dedupeSkippedOrders = (dedupeResult.skippedOrders || []).map(o => ({
