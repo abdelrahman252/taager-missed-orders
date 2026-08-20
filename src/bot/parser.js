@@ -1246,6 +1246,15 @@ function findProductInCatalog(productName, catalog) {
   return null;
 }
 
+function missedOrderDisplayProductName(order, productMatch, match) {
+  const original = normalizeProductName(order && order.productName);
+  if (original) return original;
+  const easyOrdersName = normalizeProductName(productMatch && productMatch.productName);
+  if (easyOrdersName) return easyOrdersName;
+  const matchedName = normalizeProductName(match && match.productName);
+  return matchedName || "";
+}
+
 function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}) {
   const resolved = [];
   const skippedOrders = [];
@@ -1283,6 +1292,7 @@ function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}) {
     const match = explicitSku
       ? (findCatalogBySku(taagerCatalog, explicitSku) || findCatalogBySku(catalog, explicitSku) || fallbackProductMatch)
       : fallbackProductMatch;
+    const displayProductName = missedOrderDisplayProductName(order, productMatch, match);
     if (!match) {
       skippedNames.push(order.productName);
       skippedOrders.push({
@@ -1351,7 +1361,9 @@ function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}) {
         ...order,
         sku: explicitSku || match.sku,
         skuSource: productSku ? "product_name" : (utmSku ? "utm_campaign" : order.skuSource || ""),
-        productName: match.productName || order.productName,
+        productName: displayProductName,
+        matchedProductName: match.productName || "",
+        originalProductName: order.productName || "",
         qty: tierDecision.qty,
         subtotal: tierDecision.subtotal,
         unitPrice: tierDecision.unitPrice,
@@ -1400,7 +1412,9 @@ function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}) {
       ...order,
       sku: match.sku,
       skuSource: productSku ? "product_name" : (utmSku ? "utm_campaign" : order.skuSource || ""),
-      productName: match.productName,
+      productName: displayProductName || match.productName,
+      matchedProductName: match.productName || "",
+      originalProductName: order.productName || "",
       qty,
       subtotal,
       unitPrice: Math.round(subtotal / qty),

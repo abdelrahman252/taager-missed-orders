@@ -154,6 +154,12 @@ const missedExplicitSkuTierResult = resolveMissedOrders([
 assert.strictEqual(missedExplicitSkuTierResult.resolved.length, 1, "missed order with SKU in UTM and explicit bundle title should resolve from dominant SKU subtotal tier");
 assert.strictEqual(missedExplicitSkuTierResult.resolved[0].qty, 2);
 assert.strictEqual(missedExplicitSkuTierResult.resolved[0].subtotal, 130);
+assert.strictEqual(
+  missedExplicitSkuTierResult.resolved[0].productName,
+  "2 pieces Missed sheet product text",
+  "Taager SKU tier resolution must preserve the EasyOrders/missed product title for recovery modal matching",
+);
+assert.strictEqual(missedExplicitSkuTierResult.resolved[0].matchedProductName, "SA030109RTB199");
 const realSkuTierRows = [{
   source: "real",
   normPhone: "500000011",
@@ -210,6 +216,11 @@ const utmFallbackResult = resolveMissedOrders([
 ], {}, utmFallbackCatalog);
 assert.strictEqual(utmFallbackResult.resolved.length, 1, "UTM SKU should be fallback when product-name match is unavailable");
 assert.strictEqual(utmFallbackResult.resolved[0].sku, "SKU-FROM-UTM");
+assert.strictEqual(
+  utmFallbackResult.resolved[0].productName,
+  "No catalog name match",
+  "UTM/Taager fallback must not replace the EasyOrders modal product title with the SKU",
+);
 const skuConflictResult = resolveMissedOrders([
   { ...missedA, skuFromUtm: "OTHER-SKU", productName: "Matched Product" },
 ], productPrimaryCatalog, {});
