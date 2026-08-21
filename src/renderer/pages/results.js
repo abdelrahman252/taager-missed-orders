@@ -58,6 +58,62 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
   const RESULTS_PAGE_SIZE = 10;
   let resultsPagerSeq = 0;
+  let tableDownloadSeq = 0;
+  window._resTableDownloads = {};
+
+  function paginationStatusText(current, total) {
+    return translated("results.pagination_status", "Page {current} / {total}")
+      .replace("{current}", current)
+      .replace("{total}", total);
+  }
+
+  function csvEscape(value) {
+    const text = String(value == null || value === "" ? "" : value).replace(/\r?\n/g, " ").trim();
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  }
+
+  function tableRowsToCsv(rows, columns) {
+    const header = columns.map((col) => csvEscape(col.header)).join(",");
+    const body = (rows || []).map((row, index) => columns.map((col) => {
+      try {
+        const value = typeof col.value === "function" ? col.value(row, index) : row?.[col.value];
+        return csvEscape(value);
+      } catch {
+        return "";
+      }
+    }).join(","));
+    return `\uFEFF${[header, ...body].join("\r\n")}`;
+  }
+
+  function registerTableDownload(rows, columns, filenameBase) {
+    const cleanRows = Array.isArray(rows) ? rows : [];
+    if (!cleanRows.length) return "";
+    const id = `res-table-download-${++tableDownloadSeq}`;
+    const dateTag = String(dateFrom || "results").replace(/-/g, "");
+    window._resTableDownloads[id] = {
+      rows: cleanRows,
+      columns,
+      filename: `${safeFilenamePart(filenameBase || "results-table")}-${dateTag}-${_runTimeTag}.csv`,
+    };
+    return id;
+  }
+
+  window._resDownloadTable = async function (id) {
+    const item = window._resTableDownloads && window._resTableDownloads[id];
+    if (!item || !window.api?.saveOutputFile) return;
+    const csv = tableRowsToCsv(item.rows, item.columns);
+    const buffer = Array.from(new TextEncoder().encode(csv));
+    const result = await window.api.saveOutputFile({ buffer, filename: item.filename });
+    if (result && result.saved) {
+      const fn = t("results.toast_saved");
+      showToast(typeof fn === "function" ? fn(result.path) : fn);
+    }
+  };
+
+  function tableDownloadButton(downloadId) {
+    if (!downloadId) return "";
+    return `<button type="button" class="btn res-table-download" onclick="window._resDownloadTable('${downloadId}')">⬇️ ${translated("results.download_table", "Download Table")}</button>`;
+  }
 
   function ensureResultsPaginationStyle() {
     if (document.getElementById("results-pagination-style")) return;
@@ -99,6 +155,13 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         font-weight:var(--weight-semibold);
         color: var(--text2);
         white-space: nowrap;
+      }
+      .res-table-download {
+        font-size: var(--type-caption);
+        padding: 5px 10px;
+        background: rgba(79,142,247,0.08);
+        border-color: rgba(79,142,247,0.28);
+        color: var(--accent);
       }
       .orders-preview-table { border-collapse: collapse; width: 100%; table-layout: fixed; }
       .orders-preview-table th,
@@ -378,7 +441,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         item.hidden = Number(item.dataset.resPage) !== nextPage;
       });
       const status = controls.querySelector("[data-res-page-status]");
-      if (status) status.textContent = `${nextPage} / ${pageCount}`;
+      if (status) status.textContent = paginationStatusText(nextPage, pageCount);
       controls.querySelectorAll("[data-res-page-dir]").forEach(controlBtn => {
         const dir = Number(controlBtn.dataset.resPageDir || 0);
         controlBtn.disabled = dir < 0 ? nextPage === 1 : nextPage === pageCount;
@@ -393,7 +456,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     return `
       <div class="res-pagination" data-res-controls="${pagerId}" data-res-page-count="${pageCount}" data-res-current-page="1">
         <button type="button" class="res-pagination-btn" data-res-page-target="${pagerId}" data-res-page-dir="-1" disabled aria-label="Previous page">‹</button>
-        <span class="res-pagination-status" data-res-page-status>1 / ${pageCount}</span>
+        <span class="res-pagination-status" data-res-page-status>${paginationStatusText(1, pageCount)}</span>
         <button type="button" class="res-pagination-btn" data-res-page-target="${pagerId}" data-res-page-dir="1" aria-label="Next page">›</button>
       </div>`;
   }
@@ -483,20 +546,45 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       duplicate_easyorders_uuid_conflicting_phone: translated("results.reason_duplicate_easyorders_uuid_conflicting_phone", "Same EasyOrders order has conflicting phone candidates"),
       skipped_manual: translated("results.reason_skipped_manual", "Manual review"),
     };
+    const title = (value) => String(value || "").replace(/"/g,"");
+    const reasonKeyFor = (row) => row?.uncertain && row.reason === "phone_parse_failed" ? "phone_uncertain_zero_appended" : row?.reason;
+    const reasonTextFor = (row) => {
+      const reasonKey = reasonKeyFor(row);
+      return reasonLabels[reasonKey] || reasonKey || "—";
+    };
+    const isManualReviewRow = (row) => {
+      const reasonKey = reasonKeyFor(row);
+      return row && (row.manualReview === true || (row.uncertain && manualReviewReasons.has(String(reasonKey || ""))));
+    };
+    const messageFor = (row) => row?.actionMessage || row?.message || row?.skuTierDecision?.message || "";
+    const phoneFor = (row) => row?.normalizedPhone || row?.normPhone || row?.phone || row?.rawPhone || "—";
+    const qtyFor = (row) => row?.suggestedQty || row?.qty || row?.easyOrdersQty || "—";
+    const subtotalFor = (row) => row?.suggestedSubtotal || row?.subtotal || row?.easyOrdersSubtotal || "—";
+    const outcomeFor = (row) => row?.uploadedWithWarning
+      ? t("results.warning_uploaded")
+      : (isManualReviewRow(row) ? translated("results.manual_review_status", "Manual Review") : t("results.warning_skipped"));
+    const downloadId = registerTableDownload(rows, [
+      { header: t("results.warning_status_col"), value: outcomeFor },
+      { header: t("results.source_col"), value: "source" },
+      { header: t("results.customer_name_col"), value: "name" },
+      { header: t("results.phone_col") || "Phone", value: phoneFor },
+      { header: t("results.sku") || "SKU", value: (row) => row?.sku || row?.suggestedSku || "" },
+      { header: t("results.product_col"), value: "productName" },
+      { header: translated("results.qty_col", "Qty"), value: qtyFor },
+      { header: translated("results.subtotal_col", "Subtotal"), value: subtotalFor },
+      { header: t("results.reason_col"), value: reasonTextFor },
+      { header: translated("results.message_col", "Message"), value: messageFor },
+    ], "warnings-skipped-orders");
     const paged = buildPagedItems(rows, (row, i, attrs) => {
-      const reasonKey = row.uncertain && row.reason === "phone_parse_failed" ? "phone_uncertain_zero_appended" : row.reason;
-      const reasonText = reasonLabels[reasonKey] || reasonKey || "—";
-      const isManualReview = row.manualReview === true || (row.uncertain && manualReviewReasons.has(String(reasonKey || "")));
-      const outcomeText = row.uploadedWithWarning
-        ? t("results.warning_uploaded")
-        : (isManualReview ? translated("results.manual_review_status", "Manual Review") : t("results.warning_skipped"));
+      const reasonText = reasonTextFor(row);
+      const isManualReview = isManualReviewRow(row);
+      const outcomeText = outcomeFor(row);
       const reviewColor = isManualReview ? "#f97316" : "var(--warning)";
       const outcomeColor = row.uploadedWithWarning ? "var(--warning)" : (isManualReview ? "#f97316" : "var(--danger)");
-      const title = (value) => String(value || "").replace(/"/g,"");
-      const message = row.actionMessage || row.message || row.skuTierDecision?.message || "";
-      const phone = row.normalizedPhone || row.normPhone || row.phone || row.rawPhone || "—";
-      const qty = row.suggestedQty || row.qty || row.easyOrdersQty || "—";
-      const subtotal = row.suggestedSubtotal || row.subtotal || row.easyOrdersSubtotal || "—";
+      const message = messageFor(row);
+      const phone = phoneFor(row);
+      const qty = qtyFor(row);
+      const subtotal = subtotalFor(row);
       return `<tr ${attrs} style="${isManualReview ? "background:rgba(249,115,22,0.07)" : (row.uncertain ? "background:rgba(255,170,0,0.05)" : "")}">
         <td class="skip-outcome" style="color:${outcomeColor}" title="${outcomeText}">${outcomeText}</td>
         <td class="skip-source" title="${title(row.source)}">${row.source || "—"}</td>
@@ -511,10 +599,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         ${showAlertColumn ? `<td class="skip-alert">${row.uncertain ? `<span title="${t("results.phone_rescued_verify")}" style="color:var(--warning)">⚠️</span>` : ""}</td>` : ""}
       </tr>`;
     }, "skipped");
-    const hasManualReview = rows.some((row) => {
-      const reasonKey = row && row.uncertain && row.reason === "phone_parse_failed" ? "phone_uncertain_zero_appended" : row && row.reason;
-      return row && (row.manualReview === true || (row.uncertain && manualReviewReasons.has(String(reasonKey || ""))));
-    });
+    const hasManualReview = rows.some(isManualReviewRow);
     const sectionColor = hasManualReview ? "#f97316" : "var(--warning)";
     const sectionBg = hasManualReview ? "rgba(249,115,22,0.08)" : "rgba(255,170,0,0.06)";
     const sectionTitle = hasManualReview
@@ -526,7 +611,10 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <div class="dash-section-title" style="color:${sectionColor}">
             <span>⚠️</span> ${sectionTitle}
           </div>
-          <div style="font-size:var(--type-caption);color:var(--text2)">${hasManualReview ? translated("results.manual_review_need_review", "{count} need manual review").replace("{count}", skippedOrders.count) : t("results.skipped_followup")}</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div style="font-size:var(--type-caption);color:var(--text2)">${hasManualReview ? translated("results.manual_review_need_review", "{count} need manual review").replace("{count}", skippedOrders.count) : t("results.skipped_followup")}</div>
+            ${tableDownloadButton(downloadId)}
+          </div>
         </div>
         <div class="dash-section-body no-pad" style="overflow-x:auto">
           <table class="orders-preview-table skipped-orders-table">
@@ -669,6 +757,28 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     return `<div style="padding:12px 18px;font-size:var(--type-label);color:var(--text2)">${t("results.no_error_info")}</div>`;
   }
 
+  function registerFailedOrdersDownload(failedOrders, filenameBase) {
+    const rows = failedOrders?.errorRows || [];
+    if (rows.length > 0) {
+      return registerTableDownload(rows, [
+        { header: t("results.row_col") || t("results.row"), value: (row, index) => row?.row || index + 1 },
+        { header: t("results.sku"), value: "sku" },
+        { header: t("results.customer_name_col"), value: failedOrderDisplayName },
+        { header: t("results.product_col"), value: (row) => row?.product || row?.productName || "" },
+        { header: t("results.phone_col") || t("results.phone"), value: failedOrderDisplayPhone },
+        { header: t("results.error_col") || t("results.error"), value: failedOrderDisplayError },
+      ], filenameBase || "failed-orders");
+    }
+    const summary = failedOrders?.summary || [];
+    if (summary.length > 0) {
+      return registerTableDownload(summary, [
+        { header: t("results.product_col"), value: (row) => row?.productName || row?.product || row?.sku || "" },
+        { header: t("results.orders_col"), value: (row) => row?.count || 1 },
+      ], filenameBase || "failed-orders-summary");
+    }
+    return "";
+  }
+
   function addFailedProductCounts(target, failedOrders) {
     const errorRows = failedOrders?.errorRows || [];
     if (errorRows.length > 0) {
@@ -795,12 +905,30 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     window._resOrderRows[tableUid] = orderRows;
     window._resOrderRenderers[tableUid] = renderOrderRow;
     const initialPagedOrders = buildPagedItems(orderRows, renderOrderRow, `orders-${tableUid}`);
+    const destinationText = (o) => o?.destination === "second-taager-cart"
+      ? (t("results.destination_second") || "Second Cart")
+      : (isLegacyMissingOrder(o) ? t("results.destination_missing") : t("results.destination_cart"));
+    const downloadId = registerTableDownload(orderRows, [
+      { header: "#", value: (row, index) => index + 1 },
+      { header: t("results.customer_name_col"), value: "name" },
+      { header: t("results.phone_col"), value: "phone" },
+      { header: t("results.product_col"), value: "productName" },
+      { header: t("results.qty_col"), value: (row) => row?.qty || 1 },
+      { header: t("results.price_col"), value: (row) => row?.subtotal || "" },
+      { header: t("results.status_col"), value: (row) => orderStatusInfo(row).text },
+      { header: t("results.destination_col"), value: destinationText },
+      { header: t("results.easy_created_at_col"), value: orderCreatedAtText },
+      { header: t("results.city_col"), value: "city" },
+    ], label || "orders-table");
 
     return `
       <div class="dash-section">
         <div class="dash-section-header">
           <div class="dash-section-title"><span>📋</span> ${label || t("results.all_orders_label")} <span style="font-size:var(--type-caption);font-weight:var(--weight-regular);color:var(--text2);margin-left:6px">${typeof ordersCountFn === "function" ? ordersCountFn(orderRows.length) : ordersCountFn}</span></div>
-          <div style="font-size:var(--type-caption);color:var(--text2)">${t("run.click_to_copy")}</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div style="font-size:var(--type-caption);color:var(--text2)">${t("run.click_to_copy")}</div>
+            ${tableDownloadButton(downloadId)}
+          </div>
         </div>
         <div style="padding:8px 12px;border-bottom:1px solid var(--border);background:rgba(0,0,0,0.04)">
           <input type="text" placeholder="${t('results.search_orders_placeholder') || 'Search by name, phone or product...'}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font-size:var(--type-label);color:var(--text);outline:none" oninput="window._resOrderSearch('${tableUid}',this.value)">
@@ -883,13 +1011,27 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const cls = className ? ` class="${className}"` : "";
       return `<td${cls} title="${text}"${extra}>${text}</td>`;
     };
+    const phoneFor = (row) => row?.phone || row?.normalizedPhone || row?.normPhone || row?.rawPhone || "";
+    const qtyFor = (row) => row?.suggestedQty || row?.easyOrdersQty || row?.qty || "";
+    const subtotalFor = (row) => row?.suggestedSubtotal || row?.easyOrdersSubtotal || row?.subtotal || "";
+    const downloadId = registerTableDownload(rows, [
+      { header: translated("results.source_col", "Source"), value: (row) => row?.source || row?.recoverySource || "" },
+      { header: t("results.customer_name_col"), value: "name" },
+      { header: t("results.phone_col") || t("results.phone"), value: phoneFor },
+      { header: t("results.sku") || "SKU", value: "sku" },
+      { header: t("results.product_col"), value: "productName" },
+      { header: translated("results.qty_col", "Qty"), value: qtyFor },
+      { header: translated("results.subtotal_col", "Subtotal"), value: subtotalFor },
+      { header: t("results.reason_col"), value: (row) => labelFor("results.reason_", row?.reason || row?.recoveryStatus) },
+      { header: translated("results.message_col", "Message"), value: messageFor },
+    ], "needs-manual-review");
     const countText = translated("results.manual_review_need_review", "{count} need manual review").replace("{count}", rows.length);
     const rowHtml = (row, i, attrs) => {
       const reasonText = labelFor("results.reason_", row.reason || row.recoveryStatus);
       const messageText = messageFor(row);
-      const phone = row.phone || row.normalizedPhone || row.normPhone || row.rawPhone;
-      const qty = row.suggestedQty || row.easyOrdersQty || row.qty;
-      const subtotal = row.suggestedSubtotal || row.easyOrdersSubtotal || row.subtotal;
+      const phone = phoneFor(row);
+      const qty = qtyFor(row);
+      const subtotal = subtotalFor(row);
       return `
       <tr ${attrs || ""} style="background:rgba(249,115,22,0.06)">
         ${td(row.source || row.recoverySource)}
@@ -908,7 +1050,10 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       <div class="dash-section" style="border-color:#f97316">
         <div class="dash-section-header" style="background:rgba(249,115,22,0.08)">
           <div class="dash-section-title" style="color:#f97316"><span>⚠️</span> ${translated("results.manual_review_title", "Needs Manual Review")}</div>
-          <div style="font-size:var(--type-caption);color:var(--text2)">${countText}</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div style="font-size:var(--type-caption);color:var(--text2)">${countText}</div>
+            ${tableDownloadButton(downloadId)}
+          </div>
         </div>
         <div class="dash-section-body no-pad" style="overflow-x:auto">
           <table class="orders-preview-table skipped-orders-table" style="font-size:var(--type-label);width:100%;min-width:980px">
@@ -1159,9 +1304,15 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         <td style="text-align:right"><span class="badge badge-success">${p.count}</span></td>
         <td style="text-align:right;font-weight:var(--weight-bold);color:var(--accent)">${p.totalQty}</td>
       </tr>`, "uploaded-products");
+      const uploadedProductsDownloadId = registerTableDownload(products, [
+        { header: t("results.product_col"), value: "productName" },
+        { header: t("results.orders_col"), value: "count" },
+        { header: t("results.total_qty_col"), value: "totalQty" },
+      ], `uploaded-orders-${resultAccountTag(r.accountLabel || r.accountId)}`);
 
       const failTitleFn = t("results.fail_title");
       const failTitle   = typeof failTitleFn === "function" ? failTitleFn(failedOrders.count) : failTitleFn;
+      const failedDownloadId = registerFailedOrdersDownload(failedOrders, `failed-orders-${resultAccountTag(r.accountLabel || r.accountId)}`);
 
       const productSplitRows = buildProductSplit(products, failedOrders);
       const errorRowsHtml    = buildErrorRowsHtml(failedOrders);
@@ -1298,7 +1449,10 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
             <div class="dash-section">
               <div class="dash-section-header">
                 <div class="dash-section-title"><span style="color:var(--success)">✅</span> ${uploadedOrdersTitle}</div>
-                <div style="font-size:var(--type-caption);color:var(--text2)">${t("run.click_to_copy")}</div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <div style="font-size:var(--type-caption);color:var(--text2)">${t("run.click_to_copy")}</div>
+                  ${tableDownloadButton(uploadedProductsDownloadId)}
+                </div>
               </div>
               <div class="dash-section-body no-pad" style="overflow-x:auto">
                 <table class="orders-preview-table" style="font-size:var(--type-label)">
@@ -1327,6 +1481,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
             <div class="dash-section-title" style="color:var(--danger)"><span>❌</span> ${failTitle}</div>
             <div style="display:flex;gap:8px;align-items:center">
               <div style="font-size:var(--type-caption);color:var(--text2)">${t("results.fail_saved")}</div>
+              ${tableDownloadButton(failedDownloadId)}
               ${failedOrders.failedDir ? `<button id="acc-btn-open-failed-${r.accountId}" class="btn btn-danger" style="font-size:var(--type-caption);padding:5px 12px">${t("results.open_folder")}</button>` : ""}
             </div>
           </div>
@@ -1534,6 +1689,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   const title   = typeof titleFn === "function" ? titleFn(dateDisplay) : titleFn;
   const failTitleFn = t("results.fail_title");
   const failTitle   = typeof failTitleFn === "function" ? failTitleFn(failedOrders.count) : failTitleFn;
+  const failedDownloadId = registerFailedOrdersDownload(failedOrders, `failed-orders-${resultAccountTag(data._accountLabel)}`);
 
   // Build per-product success/fail split
   const failedByProduct = failedProductCounts(failedOrders);
@@ -1556,6 +1712,11 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     <td style="text-align:right"><span class="badge badge-success">${p.count}</span></td>
     <td style="text-align:right;font-weight:var(--weight-bold);color:var(--accent)">${p.totalQty}</td>
   </tr>`, "uploaded-products");
+  const uploadedProductsDownloadId = registerTableDownload(products, [
+    { header: t("results.product_col"), value: "productName" },
+    { header: t("results.orders_col"), value: "count" },
+    { header: t("results.total_qty_col"), value: "totalQty" },
+  ], `uploaded-orders-${resultAccountTag(data._accountLabel)}`);
 
   const errorRowsHtml = buildFailedOrdersDetailHtml(failedOrders);
 
@@ -1704,7 +1865,10 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <div class="dash-section">
             <div class="dash-section-header">
               <div class="dash-section-title"><span style="color:var(--success)">✅</span> ${uploadedOrdersTitle}</div>
-              <div style="font-size:var(--type-caption);color:var(--text2)">${t("run.click_cells_copy")}</div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <div style="font-size:var(--type-caption);color:var(--text2)">${t("run.click_cells_copy")}</div>
+                ${tableDownloadButton(uploadedProductsDownloadId)}
+              </div>
             </div>
             <div class="dash-section-body no-pad" style="overflow-x:auto">
               <table class="orders-preview-table" style="font-size:var(--type-label)">
@@ -1735,6 +1899,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <div class="dash-section-title" style="color:var(--danger)"><span>❌</span> ${failTitle}</div>
           <div style="display:flex;gap:8px;align-items:center">
             <div style="font-size:var(--type-caption);color:var(--text2)">${t("results.fail_saved")}</div>
+            ${tableDownloadButton(failedDownloadId)}
             ${failedOrders.failedDir ? `<button id="btn-open-failed-folder" class="btn btn-danger" style="font-size:var(--type-caption);padding:5px 12px">${t("results.open_folder")}</button>` : ""}
           </div>
         </div>

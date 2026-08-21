@@ -7388,7 +7388,11 @@ ipcMain.handle("clear-reset-flag", async () => {
 });
 ipcMain.handle("get-profile-path", () => path.join(app.getPath("userData"), "bot-profile"));
 ipcMain.handle("save-output-file", async (_, { buffer, filename }) => {
-  const { filePath } = await dialog.showSaveDialog(mainWindow, { defaultPath: filename, filters: [{ name: "Excel", extensions: ["xlsx"] }] });
+  const ext = path.extname(String(filename || "")).toLowerCase();
+  const filters = ext === ".csv"
+    ? [{ name: "CSV", extensions: ["csv"] }, { name: "All Files", extensions: ["*"] }]
+    : [{ name: "Excel", extensions: ["xlsx"] }, { name: "All Files", extensions: ["*"] }];
+  const { filePath } = await dialog.showSaveDialog(mainWindow, { defaultPath: filename, filters });
   if (filePath) { fs.writeFileSync(filePath, Buffer.from(buffer)); return { saved: true, path: filePath }; }
   return { saved: false };
 });
