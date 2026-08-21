@@ -7,6 +7,7 @@ const { COUNTRY_CONFIG, normalizeProvince } = require("./output");
 const {
   buildAffiliateRecoveryResult,
   classifyRecoveryAttempts,
+  filterFailedRowsForAttempts,
 } = require("./easy-orders-affiliate-recovery-data");
 
 function mergeItems(existingItems, nextItems) {
@@ -312,8 +313,14 @@ function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
         ...(missedResult.skippedManual || []),
       ],
     }, country);
+    const failedDiagnosticRows = failedExport.rows || [];
+    const matchedFailedDiagnosticRows = filterFailedRowsForAttempts(failedDiagnosticRows, finalAttempts, { country });
     recovery.failedOrdersDiagnostic = {
-      rows: failedExport.rows || [],
+      rows: matchedFailedDiagnosticRows,
+      matchedRows: matchedFailedDiagnosticRows,
+      matchedRowCount: matchedFailedDiagnosticRows.length,
+      rawRowCount: failedDiagnosticRows.length,
+      rawRows: failedDiagnosticRows,
       buffer: failedExport.buffer ? Array.from(failedExport.buffer) : null,
       error: failedExport.error || "",
     };

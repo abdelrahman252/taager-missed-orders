@@ -15,6 +15,7 @@ const {
   quantityEditDecision,
   parseTaagerFailedOrders,
   classifyRecoveryAttempts,
+  filterFailedRowsForAttempts,
   buildAffiliateRecoveryResult,
 } = require("../src/bot/easy-orders-affiliate-recovery-data");
 
@@ -145,6 +146,14 @@ const verifiedKeys = new Set();
 const classifiedFailed = classifyRecoveryAttempts(grouped.attempted, verifiedKeys, failedRows, { country: "sa" });
 assert.strictEqual(classifiedFailed.failedInTaager.length, 1, "failed workbook UUID should classify unresolved attempts");
 assert.strictEqual(classifiedFailed.failedInTaager[0].failureCode, "price_low_error");
+const matchedFailedRows = filterFailedRowsForAttempts(failedRows, grouped.attempted, { country: "sa" });
+assert.strictEqual(matchedFailedRows.length, 1, "failed diagnosis rows should be filterable to the current attempted orders");
+const unmatchedFailedRows = filterFailedRowsForAttempts(failedRows, [{
+  recoverySource: "missed",
+  normPhone: "966599999999",
+  items: [{ sku: "SKU-OTHER" }],
+}], { country: "sa" });
+assert.strictEqual(unmatchedFailedRows.length, 0, "raw Taager failed history must not appear as current-run diagnosis when it does not match attempts");
 const failedRecoveryOnlyResult = buildAffiliateRecoveryResult({
   realAttempts: grouped.attempted,
   missedAttempts: [],
@@ -194,9 +203,10 @@ const orderSentRecoveryResult = buildAffiliateRecoveryResult({
   skippedManual: [],
 }, "sa");
 assert.strictEqual(orderSentRecoveryResult.failedRows.length, 0, "Order Sent should not appear in failed/rejected rows without Taager failed-export proof");
-assert.strictEqual(orderSentRecoveryResult.manualReviewRows.length, 1, "Order Sent without Taager verification should appear in Uncertain Orders");
-assert.strictEqual(orderSentRecoveryResult.manualReviewRows[0].recoveryStatus, "awaiting_taager_verification");
-assert.strictEqual(orderSentRecoveryResult.manualReviewRows[0].reason, "awaiting_taager_verification");
+assert.strictEqual(orderSentRecoveryResult.manualReviewRows.length, 0, "Order Sent without Taager verification should not inflate manual-review rows");
+assert.strictEqual(orderSentRecoveryResult.unresolvedRows.length, 1, "Order Sent without Taager verification should appear in unresolved attempted rows");
+assert.strictEqual(orderSentRecoveryResult.unresolvedRows[0].recoveryStatus, "awaiting_taager_verification");
+assert.strictEqual(orderSentRecoveryResult.unresolvedRows[0].reason, "awaiting_taager_verification");
 
 const alreadyRealRecoveryResult = buildAffiliateRecoveryResult({
   realAttempts: [],
@@ -209,7 +219,8 @@ const alreadyRealRecoveryResult = buildAffiliateRecoveryResult({
   skippedManual: [],
 }, "sa");
 assert.strictEqual(alreadyRealRecoveryResult.failedRows.length, 0, "missing Convert button should not be reported as rejected by Taager");
-assert.strictEqual(alreadyRealRecoveryResult.manualReviewRows.length, 1, "unverified already-real missed rows should appear in Uncertain Orders");
+assert.strictEqual(alreadyRealRecoveryResult.manualReviewRows.length, 0, "unverified already-real missed rows should not inflate manual-review rows");
+assert.strictEqual(alreadyRealRecoveryResult.unresolvedRows.length, 1, "unverified already-real missed rows should appear in unresolved attempted rows");
 
 const recoveryResult = buildAffiliateRecoveryResult({
   realAttempts: grouped.attempted,
@@ -243,6 +254,7 @@ assert.strictEqual(recoveryResult.sentAsIsCount, 0);
 assert.strictEqual(recoveryResult.skippedCompletedCount, 1);
 assert(recoveryResult.skippedRows.some((row) => row.rawPhone === "0500000004" && row.normalizedPhone === "966500000004" && row.reason === "normal_flow_prepared_quantity_is_suspicious"), "skipped recovery rows should preserve raw phone, normalized phone, and reason");
 assert(recoveryResult.manualReviewRows.some((row) => row.normalizedPhone === "966500000003" && row.reason === "no_trusted_product_reference"), "no-history products should appear in uncertain/manual recovery rows");
+assert.strictEqual(recoveryResult.blockedReviewRows.length, 2, "blocked manual-review rows should be exposed separately from unresolved attempted rows");
 
 const root = path.join(__dirname, "..");
 const mainSource = fs.readFileSync(path.join(root, "src", "main", "main.js"), "utf8");
@@ -310,6 +322,9 @@ assert(
 );
 assert(resultsSource.includes("affiliateRecovery"), "results should render affiliate recovery details");
 assert(resultsSource.includes("message_awaiting_taager_verification") && resultsSource.includes("message_already_in_real_orders_unverified"), "results should label recovery uncertainty instead of rejected/failed");
+assert(resultsSource.includes("buildRecoveryUnresolvedHtml") && resultsSource.includes("blockedReviewRows"), "results should split unresolved attempted rows from blocked manual-review rows");
+assert(resultsSource.includes("rawRowCount") && resultsSource.includes("matchedRows"), "failed-order diagnosis should display matched current-run rows without losing raw download/count context");
+assert(resultsSource.includes("recovery_verification_rate") && resultsSource.includes("recovery_pending_title"), "affiliate recovery results should not show 100% uploaded while orders are still unresolved");
 assert(runSource.includes("run.recovery_preview_header") && runSource.includes("run.recovery_progress_title"), "run page should label affiliate recovery preview and progress distinctly");
 assert(runSource.includes("progressLastOrderText"), "run page progress should show last recovery order product/customer/status details");
 assert(runSource.includes("previewDestinationLabel"), "run page preview tables should label affiliate recovery rows as Recovery");

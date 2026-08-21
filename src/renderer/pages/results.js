@@ -33,6 +33,19 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     return (Array.isArray(rows) ? rows : []).filter(isLegacyMissingOrder).length;
   }
 
+  function recoveryMetricsFor(sourceData, totalNew, failedOrders) {
+    const recovery = sourceData?.affiliateRecovery;
+    if (!recovery || recovery.enabled !== true) return null;
+    const attempted = Number(recovery.attemptedCount || 0) || (Array.isArray(sourceData?.attemptedOrderRows) ? sourceData.attemptedOrderRows.length : 0);
+    const verified = Number(recovery.verifiedCount || 0) || Number(totalNew || 0) || 0;
+    const failed = Number(recovery.failedInTaagerCount || 0) || Number(failedOrders?.count || 0) || 0;
+    const unresolved = Number(recovery.unresolvedCount || 0) || 0;
+    const blockedReview = Number(recovery.blockedReviewCount || recovery.skippedManualCount || 0) || 0;
+    const totalAttempted = Math.max(attempted, verified + failed + unresolved);
+    if (totalAttempted <= 0) return null;
+    return { attempted: totalAttempted, verified, failed, unresolved, blockedReview };
+  }
+
   function translated(key, fallback) {
     const value = t(key);
     return value === key ? fallback : value;
@@ -977,34 +990,122 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       .replace(/"/g, "&quot;");
   }
 
+  function recoveryStatusMessage(row) {
+    if (row.reason === "no_trusted_product_reference") {
+      return translated(
+        "results.message_no_trusted_product_reference",
+        "No trusted product history exists; not submitted automatically."
+      );
+    }
+    if (row.reason === "already_in_real_orders_unverified" || row.recoveryStatus === "already_in_real_orders_unverified") {
+      return translated(
+        "results.message_already_in_real_orders_unverified",
+        "Convert to Order was not available; verify whether it already moved to real EasyOrders orders and Taager."
+      );
+    }
+    if (row.reason === "awaiting_taager_verification" || row.recoveryStatus === "awaiting_taager_verification") {
+      return translated(
+        "results.message_awaiting_taager_verification",
+        "EasyOrders action completed; Taager verification has not confirmed the order yet."
+      );
+    }
+    return row.actionMessage || row.existingSkus || row.missingSkus || "-";
+  }
+
+  function buildRecoveryUnresolvedHtml(recovery) {
+    if (!recovery || recovery.enabled !== true) return "";
+    const rows = recovery.unresolvedRows || [];
+    if (!rows.length) return "";
+    const labelFor = (prefix, value, fallback = "-") => {
+      const raw = value || fallback;
+      return translated(`${prefix}${raw}`, raw);
+    };
+    const td = (value, className = "", extra = "") => {
+      const text = affiliateHtmlEsc(value);
+      const cls = className ? ` class="${className}"` : "";
+      return `<td${cls} title="${text}"${extra}>${text}</td>`;
+    };
+    const phoneFor = (row) => row?.phone || row?.normalizedPhone || row?.normPhone || row?.rawPhone || "";
+    const qtyFor = (row) => row?.qty || row?.easyOrdersQty || row?.suggestedQty || "";
+    const subtotalFor = (row) => row?.subtotal || row?.easyOrdersSubtotal || row?.suggestedSubtotal || "";
+    const downloadId = registerTableDownload(rows, [
+      { header: translated("results.source_col", "Source"), value: (row) => row?.source || row?.recoverySource || "" },
+      { header: t("results.customer_name_col"), value: "name" },
+      { header: t("results.phone_col") || t("results.phone"), value: phoneFor },
+      { header: t("results.sku") || "SKU", value: "sku" },
+      { header: t("results.product_col"), value: "productName" },
+      { header: translated("results.qty_col", "Qty"), value: qtyFor },
+      { header: translated("results.subtotal_col", "Subtotal"), value: subtotalFor },
+      { header: t("results.reason_col"), value: (row) => labelFor("results.reason_", row?.recoveryStatus || row?.reason) },
+      { header: translated("results.message_col", "Message"), value: recoveryStatusMessage },
+    ], "attempted-not-verified");
+    const countText = translated("results.unresolved_attempted_count", "{count} attempted orders need Taager verification").replace("{count}", rows.length);
+    const rowHtml = (row, i, attrs) => {
+      const reasonText = labelFor("results.reason_", row.recoveryStatus || row.reason);
+      return `
+      <tr ${attrs || ""} style="background:rgba(255,170,0,0.05)">
+        ${td(row.source || row.recoverySource)}
+        ${td(row.name)}
+        ${td(phoneFor(row), "skip-phone")}
+        ${td(row.sku)}
+        ${td(row.productName)}
+        ${td(qtyFor(row), "skip-phone")}
+        ${td(subtotalFor(row), "skip-phone")}
+        ${td(reasonText, "", ` style="color:var(--warning);font-weight:var(--weight-semibold)"`)}
+        ${td(recoveryStatusMessage(row))}
+      </tr>`;
+    };
+    const paged = buildPagedItems(rows, rowHtml, "recovery-unresolved");
+    return `
+      <div class="dash-section" style="border-color:var(--warning)">
+        <div class="dash-section-header" style="background:rgba(255,170,0,0.06)">
+          <div class="dash-section-title" style="color:var(--warning)"><span>⚠️</span> ${translated("results.unresolved_attempted_title", "Attempted / Not Verified")}</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div style="font-size:var(--type-caption);color:var(--text2)">${countText}</div>
+            ${tableDownloadButton(downloadId)}
+          </div>
+        </div>
+        <div class="dash-section-body no-pad" style="overflow-x:auto">
+          <table class="orders-preview-table skipped-orders-table" style="font-size:var(--type-label);width:100%;min-width:980px">
+            <colgroup>
+              <col class="skip-col-source">
+              <col class="skip-col-name">
+              <col class="skip-col-phone">
+              <col class="skip-col-sku">
+              <col class="skip-col-product">
+              <col class="skip-col-number">
+              <col class="skip-col-number">
+              <col class="skip-col-reason">
+              <col class="skip-col-reason">
+            </colgroup>
+            <thead><tr>
+              <th>${translated("results.source_col", "Source")}</th>
+              <th>${t("results.customer_name_col")}</th>
+              <th>${t("results.phone_col") || t("results.phone")}</th>
+              <th>${t("results.sku") || "SKU"}</th>
+              <th>${t("results.product_col")}</th>
+              <th>${translated("results.qty_col", "Qty")}</th>
+              <th>${translated("results.subtotal_col", "Subtotal")}</th>
+              <th>${t("results.reason_col")}</th>
+              <th>${translated("results.message_col", "Message")}</th>
+            </tr></thead>
+            <tbody>${paged.itemsHtml}</tbody>
+          </table>
+          ${paged.pagerHtml}
+        </div>
+      </div>`;
+  }
+
   function buildRecoveryUncertainHtml(recovery) {
     if (!recovery || recovery.enabled !== true) return "";
-    const rows = recovery.manualReviewRows || [];
+    const rows = recovery.blockedReviewRows || recovery.manualReviewRows || [];
     if (!rows.length) return "";
     const labelFor = (prefix, value, fallback = "-") => {
       const raw = value || fallback;
       return translated(`${prefix}${raw}`, raw);
     };
     const messageFor = (row) => {
-      if (row.reason === "no_trusted_product_reference") {
-        return translated(
-          "results.message_no_trusted_product_reference",
-          "No trusted product history exists; not submitted automatically."
-        );
-      }
-      if (row.reason === "already_in_real_orders_unverified" || row.recoveryStatus === "already_in_real_orders_unverified") {
-        return translated(
-          "results.message_already_in_real_orders_unverified",
-          "Convert to Order was not available; verify whether it already moved to real EasyOrders orders and Taager."
-        );
-      }
-      if (row.reason === "awaiting_taager_verification" || row.recoveryStatus === "awaiting_taager_verification") {
-        return translated(
-          "results.message_awaiting_taager_verification",
-          "EasyOrders action completed; Taager verification has not confirmed the order yet."
-        );
-      }
-      return row.actionMessage || row.existingSkus || row.missingSkus || "-";
+      return recoveryStatusMessage(row);
     };
     const td = (value, className = "", extra = "") => {
       const text = affiliateHtmlEsc(value);
@@ -1104,11 +1205,15 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   function buildRecoveryFailedDiagnosticHtml(recovery) {
     if (!recovery || recovery.enabled !== true) return "";
     const diagnostic = recovery.failedOrdersDiagnostic || {};
-    const rows = Array.isArray(diagnostic.rows) ? diagnostic.rows : [];
+    const rows = Array.isArray(diagnostic.matchedRows)
+      ? diagnostic.matchedRows
+      : (Array.isArray(diagnostic.rows) ? diagnostic.rows : []);
+    const rawRows = Array.isArray(diagnostic.rawRows) ? diagnostic.rawRows : rows;
+    const rawRowCount = Number(diagnostic.rawRowCount || 0) || rawRows.length || rows.length;
     const errorText = diagnostic.error || "";
-    if (!rows.length && !errorText) return "";
+    if (!rows.length && !errorText && !rawRowCount) return "";
     const valueList = (value) => Array.isArray(value) ? value.join(" | ") : (value || "");
-    const downloadId = registerTableDownload(rows, [
+    const columns = [
       { header: t("results.row_col") || "Row", value: "row" },
       { header: t("results.customer_name_col"), value: "name" },
       { header: t("results.phone_col") || "Phone", value: (row) => row?.formattedPhone || row?.phone || "" },
@@ -1119,7 +1224,11 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       { header: translated("results.failure_reason_col", "Failure Reason"), value: (row) => recoveryFailureLabel(row?.failureCode || row?.error) },
       { header: translated("results.store_order_col", "Store Order"), value: "storeOrderCode" },
       { header: translated("results.created_at_col", "Created"), value: "createdAt" },
-    ], "taager-failed-orders-diagnosis");
+    ];
+    const downloadId = registerTableDownload(rows, columns, "taager-failed-orders-diagnosis");
+    const rawDownloadId = rawRows.length > rows.length
+      ? registerTableDownload(rawRows, columns, "taager-failed-orders-raw-diagnosis")
+      : "";
     const td = (value, className = "") => {
       const text = affiliateHtmlEsc(valueList(value));
       return `<td${className ? ` class="${className}"` : ""} title="${text}">${text}</td>`;
@@ -1137,16 +1246,26 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         ${td(row.storeOrderCode, "failed-product")}
         ${td(row.createdAt, "failed-date")}
       </tr>`, "recovery-failed-diagnostic");
+    const countText = rows.length
+      ? translated("results.failed_diagnosis_matched_count", "{count} matched failed rows").replace("{count}", rows.length)
+      : translated("results.failed_diagnosis_no_matches", "0 matched this run");
+    const rawCountText = rawRowCount
+      ? translated("results.failed_diagnosis_raw_count", "{count} raw failed rows downloaded").replace("{count}", rawRowCount)
+      : "";
+    const sectionColor = rows.length ? "var(--danger)" : "var(--accent)";
+    const sectionBg = rows.length ? "rgba(255,77,109,0.06)" : "rgba(79,142,247,0.07)";
     return `
-      <div class="dash-section" style="border-color:var(--danger);margin-top:12px">
-        <div class="dash-section-header" style="background:rgba(255,77,109,0.06)">
-          <div class="dash-section-title" style="color:var(--danger)"><span>❌</span> ${translated("results.failed_diagnosis_title", "Taager Failed Orders Diagnosis")}</div>
+      <div class="dash-section" style="border-color:${sectionColor};margin-top:12px">
+        <div class="dash-section-header" style="background:${sectionBg}">
+          <div class="dash-section-title" style="color:${sectionColor}"><span>${rows.length ? "❌" : "ℹ️"}</span> ${translated("results.failed_diagnosis_title", "Taager Failed Orders Diagnosis")}</div>
           <div style="display:flex;gap:8px;align-items:center">
-            <div style="font-size:var(--type-caption);color:var(--text2)">${rows.length ? translated("results.failed_diagnosis_count", "{count} failed rows loaded").replace("{count}", rows.length) : affiliateHtmlEsc(errorText)}</div>
+            <div style="font-size:var(--type-caption);color:var(--text2)">${affiliateHtmlEsc(countText)}${rawCountText ? ` · ${affiliateHtmlEsc(rawCountText)}` : ""}</div>
             ${tableDownloadButton(downloadId)}
+            ${tableDownloadButton(rawDownloadId)}
           </div>
         </div>
         ${errorText ? `<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:var(--type-label);color:var(--warning)">${affiliateHtmlEsc(errorText)}</div>` : ""}
+        ${!rows.length && rawRowCount ? `<div style="padding:10px 12px;border-bottom:1px solid var(--border);font-size:var(--type-label);color:var(--text2)">${affiliateHtmlEsc(translated("results.failed_diagnosis_no_match_body", "Taager failed-order history was downloaded, but none of its rows matched the orders attempted in this run."))}</div>` : ""}
         ${rows.length ? `
         <div class="dash-section-body no-pad" style="overflow-x:auto">
           <table class="orders-preview-table failed-orders-table" style="width:100%;min-width:1320px">
@@ -1368,7 +1487,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const hasSkipped   = skippedOrders.count > 0;
       const totalInTaager  = getTaagerOrderCount(stats);
       const totalDupes   = (stats.realDupe||0) + (stats.missedDupe||0);
-      const totalAttempt = totalNew + failedOrders.count;
+      const recoveryMetrics = recoveryMetricsFor(accData, totalNew, failedOrders);
+      const totalAttempt = recoveryMetrics ? recoveryMetrics.attempted : totalNew + failedOrders.count;
       const successRate  = totalAttempt > 0 ? Math.round(totalNew / totalAttempt * 100) : 100;
       const attemptedRows = accData.attemptedOrderRows || accData.orderRows || [];
       const successfulRows = accData.orderRows || [];
@@ -1382,12 +1502,19 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           legacyMissingSubmittedCount
         )
         : translated("results.confirmed_in_taager_cart", "Confirmed in Taager cart");
-      const successRateTitle = legacyMissingSubmittedCount > 0
+      const successRateTitle = recoveryMetrics
+        ? translated("results.recovery_verification_rate", "Recovery Verification Rate")
+        : legacyMissingSubmittedCount > 0
         ? translated("results.submission_success_rate", "Submission Success Rate")
         : t("results.upload_success_rate");
-      const successCountText = legacyMissingSubmittedCount > 0
+      const successCountText = recoveryMetrics
+        ? translated("results.recovery_verified_count", "{count} verified in Taager").replace("{count}", recoveryMetrics.verified)
+        : legacyMissingSubmittedCount > 0
         ? successSubtext
         : callTranslation("results.succeeded", (n) => `OK ${n} succeeded`, totalNew);
+      const totalAttemptText = recoveryMetrics
+        ? translated("results.recovery_total_attempted", "{count} recovery attempted").replace("{count}", recoveryMetrics.attempted)
+        : (()=>{const fn=t("results.total_attempted");return typeof fn==="function"?fn(totalAttempt):fn;})();
       const uploadedOrdersTitle = legacyMissingSubmittedCount > 0
         ? translated("results.uploaded_or_submitted_orders_title", "Uploaded / Submitted Orders")
         : t("results.uploaded_orders_title");
@@ -1480,8 +1607,9 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
             </div>
             <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:var(--type-label);color:var(--text2)">
               <span>${successCountText}</span>
-              <span>${(()=>{const fn=t("results.total_attempted");return typeof fn==="function"?fn(totalAttempt):fn;})()}</span>
-              ${hasFailed ? `<span style="color:var(--danger)">❌ ${failedOrders.count} ${t("results.failed")}</span>` : ""}
+              <span>${totalAttemptText}</span>
+              ${recoveryMetrics?.unresolved ? `<span style="color:var(--warning)">⚠️ ${translated("results.recovery_awaiting_count", "{count} awaiting verification").replace("{count}", recoveryMetrics.unresolved)}</span>` : ""}
+              ${hasFailed || recoveryMetrics?.failed ? `<span style="color:var(--danger)">❌ ${recoveryMetrics?.failed || failedOrders.count} ${t("results.failed")}</span>` : ""}
             </div>
           </div>
         </div>` : ""}
@@ -1580,16 +1708,26 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
               ${failedOrders.failedDir ? `<button id="acc-btn-open-failed-${r.accountId}" class="btn btn-danger" style="font-size:var(--type-caption);padding:5px 12px">${t("results.open_folder")}</button>` : ""}
             </div>
           </div>
-          <div class="dash-section-body no-pad">${errorRowsHtml}</div>
-        </div>` : `
-        <div class="notice-box info">
-          <span class="notice-icon">✅</span>
-          <div class="notice-text">${t("results.all_ok")}</div>
-        </div>`}
+        <div class="dash-section-body no-pad">${errorRowsHtml}</div>
+      </div>` : `
+      ${recoveryMetrics?.unresolved ? `
+      <div class="notice-box warn" style="border-color:var(--warning);background:rgba(255,170,0,0.08)">
+        <span class="notice-icon">⚠️</span>
+        <div class="notice-text">
+          <strong>${translated("results.recovery_pending_title", "Some recovery orders still need verification")}</strong>
+          <div style="font-size:var(--type-label);color:var(--text2);margin-top:3px">${translated("results.recovery_pending_body", "{count} attempted orders were not found in Taager real orders or failed orders yet.").replace("{count}", recoveryMetrics.unresolved)}</div>
+        </div>
+      </div>` : `
+      <div class="notice-box info">
+        <span class="notice-icon">✅</span>
+        <div class="notice-text">${t("results.all_ok")}</div>
+      </div>`}`}
 
-        ${buildRecoveryFailedDiagnosticHtml(accData.affiliateRecovery)}
+      ${buildRecoveryFailedDiagnosticHtml(accData.affiliateRecovery)}
 
-        ${buildRecoveryUncertainHtml(accData.affiliateRecovery)}
+      ${buildRecoveryUnresolvedHtml(accData.affiliateRecovery)}
+
+      ${buildRecoveryUncertainHtml(accData.affiliateRecovery)}
 
         ${buildSkippedOrdersHtml(skippedOrders)}
 
@@ -1755,7 +1893,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   const totalDupes     = (stats.realDupe     || 0) + (stats.missedDupe     || 0);
   const hasFailed      = failedOrders.count > 0;
   const hasSkipped     = skippedOrders.count > 0;
-  const totalUploaded  = totalNew + failedOrders.count;
+  const recoveryMetrics = recoveryMetricsFor(data, totalNew, failedOrders);
+  const totalUploaded  = recoveryMetrics ? recoveryMetrics.attempted : totalNew + failedOrders.count;
   const successRate    = totalUploaded > 0 ? Math.round(totalNew / totalUploaded * 100) : 100;
   const attemptedRows = data.attemptedOrderRows || data.orderRows || [];
   const successfulRows = data.orderRows || [];
@@ -1769,12 +1908,19 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       legacyMissingSubmittedCount
     )
     : translated("results.confirmed_in_taager_cart", "Confirmed in Taager cart");
-  const successRateTitle = legacyMissingSubmittedCount > 0
+  const successRateTitle = recoveryMetrics
+    ? translated("results.recovery_verification_rate", "Recovery Verification Rate")
+    : legacyMissingSubmittedCount > 0
     ? translated("results.submission_success_rate", "Submission Success Rate")
     : t("results.upload_success_rate");
-  const successCountText = legacyMissingSubmittedCount > 0
+  const successCountText = recoveryMetrics
+    ? translated("results.recovery_verified_count", "{count} verified in Taager").replace("{count}", recoveryMetrics.verified)
+    : legacyMissingSubmittedCount > 0
     ? successSubtext
     : callTranslation("results.succeeded", (n) => `OK ${n} succeeded`, totalNew);
+  const totalAttemptText = recoveryMetrics
+    ? translated("results.recovery_total_attempted", "{count} recovery attempted").replace("{count}", recoveryMetrics.attempted)
+    : (()=>{const fn=t("results.total_attempted");return typeof fn==="function"?fn(totalUploaded):fn;})();
   const uploadedOrdersTitle = legacyMissingSubmittedCount > 0
     ? translated("results.uploaded_or_submitted_orders_title", "Uploaded / Submitted Orders")
     : t("results.uploaded_orders_title");
@@ -1898,8 +2044,9 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           </div>
           <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:var(--type-label);color:var(--text2)">
             <span>${successCountText}</span>
-            <span>${(()=>{const fn=t("results.total_attempted");return typeof fn==="function"?fn(totalUploaded):fn;})()}</span>
-            ${hasFailed ? `<span style="color:var(--danger)">❌ ${failedOrders.count} ${t("results.failed")}</span>` : ""}
+            <span>${totalAttemptText}</span>
+            ${recoveryMetrics?.unresolved ? `<span style="color:var(--warning)">⚠️ ${translated("results.recovery_awaiting_count", "{count} awaiting verification").replace("{count}", recoveryMetrics.unresolved)}</span>` : ""}
+            ${hasFailed || recoveryMetrics?.failed ? `<span style="color:var(--danger)">❌ ${recoveryMetrics?.failed || failedOrders.count} ${t("results.failed")}</span>` : ""}
           </div>
         </div>
       </div>` : ""}
@@ -2002,12 +2149,22 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         </div>
         <div class="dash-section-body no-pad">${errorRowsHtml}</div>
       </div>` : `
+      ${recoveryMetrics?.unresolved ? `
+      <div class="notice-box warn" style="border-color:var(--warning);background:rgba(255,170,0,0.08)">
+        <span class="notice-icon">⚠️</span>
+        <div class="notice-text">
+          <strong>${translated("results.recovery_pending_title", "Some recovery orders still need verification")}</strong>
+          <div style="font-size:var(--type-label);color:var(--text2);margin-top:3px">${translated("results.recovery_pending_body", "{count} attempted orders were not found in Taager real orders or failed orders yet.").replace("{count}", recoveryMetrics.unresolved)}</div>
+        </div>
+      </div>` : `
       <div class="notice-box info">
         <span class="notice-icon">✅</span>
         <div class="notice-text">${t("results.all_ok")}</div>
-      </div>`}
+      </div>`}`}
 
       ${buildRecoveryFailedDiagnosticHtml(data.affiliateRecovery)}
+
+      ${buildRecoveryUnresolvedHtml(data.affiliateRecovery)}
 
       ${buildRecoveryUncertainHtml(data.affiliateRecovery)}
 

@@ -442,6 +442,13 @@ function classifyRecoveryAttempts(attempts, verifiedTaagerKeys, failedRows = [],
   return { verified, failedInTaager, unresolved };
 }
 
+function filterFailedRowsForAttempts(failedRows = [], attempts = [], options = {}) {
+  const country = options.country || "sa";
+  return (failedRows || []).filter((failedRow) =>
+    (attempts || []).some((attempt) => failedRowMatchesAttempt(failedRow, attempt, country))
+  );
+}
+
 function recoveryProductSummary(rows) {
   const summary = new Map();
   for (const row of rows || []) {
@@ -522,6 +529,7 @@ function buildAffiliateRecoveryResult(parts, country = "sa") {
   const skippedAlready = parts.skippedAlready || [];
   const skippedCompleted = parts.skippedCompleted || [];
   const skippedManual = parts.skippedManual || [];
+  const blockedReview = skippedManual;
   const sentAsIs = attempted.filter((row) => row.sentAsIs);
   return {
     enabled: true,
@@ -545,14 +553,19 @@ function buildAffiliateRecoveryResult(parts, country = "sa") {
     skippedCompletedCount: skippedCompleted.length,
     skippedManual,
     skippedManualCount: skippedManual.length,
+    blockedReview,
+    blockedReviewCount: blockedReview.length,
     sentAsIs,
     sentAsIsCount: sentAsIs.length,
     validationErrors: attempted.flatMap((row) => row.validationErrors || []),
     attemptedRows: recoveryResultRows(attempted, country),
     verifiedRows: recoveryResultRows(verified, country),
     failedRows: recoveryResultRows(failedInTaager, country),
+    unresolvedRows: recoveryResultRows(unresolved, country),
+    blockedReviewRows: recoveryResultRows(blockedReview, country),
     skippedRows: recoveryResultRows([...skippedAlready, ...skippedCompleted, ...skippedManual, ...unresolved], country),
-    manualReviewRows: recoveryResultRows([...skippedManual, ...unresolved], country),
+    manualReviewRows: recoveryResultRows(blockedReview, country),
+    reviewRows: recoveryResultRows([...blockedReview, ...unresolved], country),
     productSummary: recoveryProductSummary(verified),
   };
 }
@@ -569,6 +582,7 @@ module.exports = {
   normalizeAttemptRow,
   parseTaagerFailedOrders,
   classifyRecoveryAttempts,
+  filterFailedRowsForAttempts,
   isAlreadyRealOrderUnverified,
   isOrderSentAwaitingVerification,
   buildAffiliateRecoveryResult,
