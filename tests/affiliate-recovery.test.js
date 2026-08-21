@@ -124,19 +124,21 @@ const failedHeader = [];
 failedHeader[0] = "اسم المستلم";
 failedHeader[6] = "رقم الهاتف";
 failedHeader[8] = "كود سبب الفشل";
+failedHeader[9] = "المنتجات في الطلب";
 failedHeader[10] = "المنتجات";
 failedHeader[11] = "الكميات";
 failedHeader[12] = "الأسعار";
 failedHeader[14] = "كود الطلب للمتجر";
 const failedSheet = XLSX.utils.aoa_to_sheet([
   failedHeader,
-  ["Customer", "", "", "", "", "", "0500000002", "", "price_low_error", "", "SKU-NEW", "44", "62.5", "", "1944783_b7c804a2-80fe-4ae9-961a-0fb2aec74e74"],
+  ["Customer", "", "", "", "", "", "0500000002", "", "price_low_error", "المنتج: SKU-WRONG - الكمية: 1", "SKU-NEW", "44", "62.5", "", "1944783_b7c804a2-80fe-4ae9-961a-0fb2aec74e74"],
 ]);
 const failedBook = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(failedBook, failedSheet, "الطلبات");
 const failedRows = parseTaagerFailedOrders(XLSX.write(failedBook, { type: "buffer", bookType: "xlsx" }), "sa");
 assert.strictEqual(failedRows.length, 1);
 assert.strictEqual(failedRows[0].failureCode, "price_low_error");
+assert.deepStrictEqual(failedRows[0].skus, ["SKU-NEW"]);
 assert.strictEqual(failedRows[0].easyOrderUuid, "b7c804a2-80fe-4ae9-961a-0fb2aec74e74");
 
 const verifiedKeys = new Set();

@@ -3,7 +3,7 @@
 const XLSX = require("xlsx");
 const { normalizePhone, formatPhone } = require("./phone");
 const { orderLineItems } = require("./cart-order-groups");
-const { makeOrderKey, normalizeProductName, productNamesMatch } = require("./parser");
+const { makeOrderKey, normalizeProductName, productNamesMatch, extractSkuFromText } = require("./parser");
 const MAX_SAFE_AUTO_QUANTITY = 12;
 
 function cleanText(value) {
@@ -15,6 +15,13 @@ function splitTokens(value) {
     .split(/\r?\n|[,|]/)
     .map((part) => cleanText(part))
     .filter(Boolean);
+}
+
+function splitSkuTokens(value) {
+  return [...new Set(splitTokens(value)
+    .map((part) => extractSkuFromText(part) || part)
+    .map((part) => cleanText(part))
+    .filter(Boolean))];
 }
 
 function recoveryOrderId(order) {
@@ -313,9 +320,19 @@ function parseTaagerFailedOrders(buffer, country = "sa") {
     }
     return fallback;
   };
+  const findExact = (tests, fallback) => {
+    for (const test of tests) {
+      const idx = header.findIndex((name) => test(name));
+      if (idx >= 0) return idx;
+    }
+    return fallback;
+  };
   const phoneIdx = find([/phone/i, /رقم.*هاتف|الهاتف/], 6);
   const codeIdx = find([/failure|error|reason/i, /كود.*فشل/], 8);
-  const skuIdx = find([/products|sku/i, /المنتجات/], 10);
+  const skuIdx = findExact([
+    (name) => /^(sku|product id|products?)$/i.test(name),
+    (name) => name === "المنتجات",
+  ], 10);
   const qtyIdx = find([/quantit/i, /الكميات/], 11);
   const priceIdx = find([/prices?/i, /الأسعار/], 12);
   const storeOrderIdx = find([/store.*order|merchant.*order/i, /كود.*الطلب.*المتجر/], 14);
@@ -326,7 +343,7 @@ function parseTaagerFailedOrders(buffer, country = "sa") {
     const storeOrderCode = cleanText(row[storeOrderIdx]);
     const uuidMatch = storeOrderCode.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
     const phone = normalizePhone(row[phoneIdx], country);
-    const skus = splitTokens(row[skuIdx]);
+    const skus = splitSkuTokens(row[skuIdx]);
     return {
       row: index + 2,
       name: cleanText(row[nameIdx]),

@@ -1086,6 +1086,101 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       </div>`;
   }
 
+  function recoveryFailureLabel(code) {
+    const key = String(code || "").trim();
+    const labels = {
+      invalid_phone_number: translated("results.failed_reason_invalid_phone_number", "Invalid phone number"),
+      price_high_error: translated("results.failed_reason_price_high_error", "Price is too high"),
+      price_low_error: translated("results.failed_reason_price_low_error", "Price is too low"),
+      price_error: translated("results.failed_reason_price_error", "Price mismatch"),
+      product_not_available: translated("results.failed_reason_product_not_available", "Product not available"),
+      product_stock_not_available: translated("results.failed_reason_product_stock_not_available", "Product out of stock"),
+      invalid_address: translated("results.failed_reason_invalid_address", "Invalid address"),
+      unknown_error: translated("results.failed_reason_unknown_error", "Unknown error"),
+    };
+    return labels[key] || key || "-";
+  }
+
+  function buildRecoveryFailedDiagnosticHtml(recovery) {
+    if (!recovery || recovery.enabled !== true) return "";
+    const diagnostic = recovery.failedOrdersDiagnostic || {};
+    const rows = Array.isArray(diagnostic.rows) ? diagnostic.rows : [];
+    const errorText = diagnostic.error || "";
+    if (!rows.length && !errorText) return "";
+    const valueList = (value) => Array.isArray(value) ? value.join(" | ") : (value || "");
+    const downloadId = registerTableDownload(rows, [
+      { header: t("results.row_col") || "Row", value: "row" },
+      { header: t("results.customer_name_col"), value: "name" },
+      { header: t("results.phone_col") || "Phone", value: (row) => row?.formattedPhone || row?.phone || "" },
+      { header: t("results.sku") || "SKU", value: (row) => valueList(row?.skus) },
+      { header: translated("results.qty_col", "Qty"), value: (row) => valueList(row?.qtys) },
+      { header: translated("results.price_col", "Price"), value: (row) => valueList(row?.prices) },
+      { header: translated("results.failure_code_col", "Failure Code"), value: "failureCode" },
+      { header: translated("results.failure_reason_col", "Failure Reason"), value: (row) => recoveryFailureLabel(row?.failureCode || row?.error) },
+      { header: translated("results.store_order_col", "Store Order"), value: "storeOrderCode" },
+      { header: translated("results.created_at_col", "Created"), value: "createdAt" },
+    ], "taager-failed-orders-diagnosis");
+    const td = (value, className = "") => {
+      const text = affiliateHtmlEsc(valueList(value));
+      return `<td${className ? ` class="${className}"` : ""} title="${text}">${text}</td>`;
+    };
+    const paged = buildPagedItems(rows, (row, i, attrs) => `
+      <tr ${attrs || ""}>
+        ${td(row.row || i + 1, "failed-row")}
+        ${td(row.name, "failed-name")}
+        ${td(row.formattedPhone || row.phone, "failed-phone")}
+        ${td(row.skus, "failed-sku")}
+        ${td(row.qtys, "failed-phone")}
+        ${td(row.prices, "failed-phone")}
+        ${td(row.failureCode || row.error, "failed-error")}
+        ${td(recoveryFailureLabel(row.failureCode || row.error), "failed-error")}
+        ${td(row.storeOrderCode, "failed-product")}
+        ${td(row.createdAt, "failed-date")}
+      </tr>`, "recovery-failed-diagnostic");
+    return `
+      <div class="dash-section" style="border-color:var(--danger);margin-top:12px">
+        <div class="dash-section-header" style="background:rgba(255,77,109,0.06)">
+          <div class="dash-section-title" style="color:var(--danger)"><span>❌</span> ${translated("results.failed_diagnosis_title", "Taager Failed Orders Diagnosis")}</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div style="font-size:var(--type-caption);color:var(--text2)">${rows.length ? translated("results.failed_diagnosis_count", "{count} failed rows loaded").replace("{count}", rows.length) : affiliateHtmlEsc(errorText)}</div>
+            ${tableDownloadButton(downloadId)}
+          </div>
+        </div>
+        ${errorText ? `<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:var(--type-label);color:var(--warning)">${affiliateHtmlEsc(errorText)}</div>` : ""}
+        ${rows.length ? `
+        <div class="dash-section-body no-pad" style="overflow-x:auto">
+          <table class="orders-preview-table failed-orders-table" style="width:100%;min-width:1320px">
+            <colgroup>
+              <col style="width:60px">
+              <col style="width:170px">
+              <col style="width:150px">
+              <col style="width:210px">
+              <col style="width:80px">
+              <col style="width:90px">
+              <col style="width:170px">
+              <col style="width:170px">
+              <col style="width:280px">
+              <col style="width:140px">
+            </colgroup>
+            <thead><tr>
+              <th>${t("results.row_col") || "Row"}</th>
+              <th>${t("results.customer_name_col")}</th>
+              <th>${t("results.phone_col") || "Phone"}</th>
+              <th>${t("results.sku") || "SKU"}</th>
+              <th>${translated("results.qty_col", "Qty")}</th>
+              <th>${translated("results.price_col", "Price")}</th>
+              <th>${translated("results.failure_code_col", "Failure Code")}</th>
+              <th>${translated("results.failure_reason_col", "Failure Reason")}</th>
+              <th>${translated("results.store_order_col", "Store Order")}</th>
+              <th>${translated("results.created_at_col", "Created")}</th>
+            </tr></thead>
+            <tbody>${paged.itemsHtml}</tbody>
+          </table>
+          ${paged.pagerHtml}
+        </div>` : ""}
+      </div>`;
+  }
+
   // ─────────────────────────────────────
   // MULTI-ACCOUNT — sidebar + rich dashboard per account
   // ─────────────────────────────────────
@@ -1491,6 +1586,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <span class="notice-icon">✅</span>
           <div class="notice-text">${t("results.all_ok")}</div>
         </div>`}
+
+        ${buildRecoveryFailedDiagnosticHtml(accData.affiliateRecovery)}
 
         ${buildRecoveryUncertainHtml(accData.affiliateRecovery)}
 
@@ -1909,6 +2006,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         <span class="notice-icon">✅</span>
         <div class="notice-text">${t("results.all_ok")}</div>
       </div>`}
+
+      ${buildRecoveryFailedDiagnosticHtml(data.affiliateRecovery)}
 
       ${buildRecoveryUncertainHtml(data.affiliateRecovery)}
 

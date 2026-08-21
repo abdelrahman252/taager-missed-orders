@@ -83,35 +83,56 @@ function createTaagerFailedOrdersExportFlow(options = {}) {
       .waitFor({ state: "visible", timeout: 10000 });
   }
 
-  async function calendarVisibleMonth(page) {
-    return page.evaluate(() => {
-      const cells = Array.from(document.querySelectorAll('[role="dialog"] [data-day][data-month]'));
-      const inside = cells.find((cell) => !cell.hasAttribute("data-outside"));
-      return inside ? String(inside.getAttribute("data-month") || "") : "";
-    }).catch(() => "");
+  async function clickMonthNav(page, direction) {
+    const visibleDialog = page.locator('[role="dialog"]:has([role="grid"])').last();
+    const exactSelector = direction === "previous"
+      ? 'button[name="previous-month"], button[aria-label*="Previous Month"], button[aria-label*="Previous"], button[aria-label*="السابق"]'
+      : 'button[name="next-month"], button[aria-label*="Next Month"], button[aria-label*="Next"], button[aria-label*="التالي"]';
+    const exact = visibleDialog.locator(exactSelector).first();
+    if ((await exact.count()) > 0) {
+      await exact.click({ timeout: 10000 });
+      return;
+    }
+
+    const navButtons = visibleDialog.locator("nav button");
+    const count = await navButtons.count().catch(() => 0);
+    if (count >= 2) {
+      await (direction === "previous" ? navButtons.first() : navButtons.nth(count - 1)).click({ timeout: 10000 });
+      return;
+    }
+
+    throw new Error(`TAAGER_FAILED_ORDERS_MONTH_NAV_NOT_FOUND: ${direction}`);
   }
 
   async function clickCalendarDate(page, dateText, label) {
     const target = ymd(dateText);
     if (!target) throw new Error(`TAAGER_FAILED_ORDERS_INVALID_DATE: ${label}=${dateText || ""}`);
-    const targetMonth = target.slice(0, 7);
-    for (let attempt = 0; attempt < 18; attempt++) {
-      const day = page.locator(`[role="dialog"] [data-day="${target}"] button:not([disabled])`).first();
-      if (await day.isVisible({ timeout: 700 }).catch(() => false)) {
+    for (let attempt = 0; attempt < 24; attempt++) {
+      const visibleDialog = page.locator('[role="dialog"]:has([role="grid"])').last();
+      const day = visibleDialog
+        .locator(`[role="gridcell"][data-day="${target}"]:not([data-outside]):not([data-disabled]) button:not([disabled])`)
+        .first();
+      if ((await day.count()) > 0) {
         await day.click({ timeout: 10000 });
         await page.waitForTimeout(400);
         return target;
       }
-      const visibleMonth = await calendarVisibleMonth(page);
-      const direction = visibleMonth && visibleMonth > targetMonth ? "previous" : "next";
-      const navSelector = direction === "previous"
-        ? '[role="dialog"] button[aria-label*="Previous"], [role="dialog"] button[aria-label*="Previous Month"]'
-        : '[role="dialog"] button[aria-label*="Next"], [role="dialog"] button[aria-label*="Next Month"]';
-      const nav = page.locator(navSelector).first();
-      if (!(await nav.isVisible({ timeout: 1000 }).catch(() => false))) break;
-      await nav.click({ timeout: 10000 });
+
+      const inMonthCells = visibleDialog.locator('[role="gridcell"][data-day]:not([data-outside])');
+      const firstCell = await inMonthCells.first().getAttribute("data-day").catch(() => null);
+      const lastCell = await inMonthCells.last().getAttribute("data-day").catch(() => null);
+      if (!firstCell || !lastCell) break;
+
+      const goBack = target < firstCell;
+      if (!goBack && target <= lastCell) break;
+      await clickMonthNav(page, goBack ? "previous" : "next");
       await page.waitForTimeout(350);
     }
+    const visibleDialog = page.locator('[role="dialog"]:has([role="grid"])').last();
+    const disabledTarget = await visibleDialog
+      .locator(`[role="gridcell"][data-day="${target}"][data-disabled], [role="gridcell"][data-day="${target}"] button[disabled]`)
+      .count().catch(() => 0);
+    if (disabledTarget > 0) throw new Error(`TAAGER_FAILED_ORDERS_DATE_DISABLED: ${label} ${target}`);
     throw new Error(`TAAGER_FAILED_ORDERS_DATE_NOT_FOUND: ${label} ${target}`);
   }
 
