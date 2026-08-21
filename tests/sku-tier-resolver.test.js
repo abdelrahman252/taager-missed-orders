@@ -52,8 +52,9 @@ const weak = resolveSkuPriceTier({
   sourceType: "real",
   tierProfiles: weakProfiles,
 });
-assert.strictEqual(weak.uncertain, true);
-assert.strictEqual(weak.reason, "sku_tier_profile_too_weak");
+assert.strictEqual(weak.resolved, true);
+assert.strictEqual(weak.qty, 2);
+assert.strictEqual(weak.subtotal, 150);
 
 const sharedSubtotalProfiles = profilesFor({
   "AMB-SKU": {

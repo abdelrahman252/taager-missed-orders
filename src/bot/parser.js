@@ -719,7 +719,7 @@ function tierDominanceForMatches(profile, matches) {
     topSamples: top.count,
     topConfidence: top.confidence,
     confidence,
-    trusted: isTrustedSkuTierSource(source) && (matchedSamples >= 3 || (top.qty === matchedQty && top.confidence >= 0.60)),
+    trusted: isTrustedSkuTierSource(source) && matchedQty > 0,
   };
 }
 
@@ -1372,27 +1372,6 @@ function resolveMissedOrders(missedOrders, catalog, taagerCatalog = {}, trustedC
     const fallbackProductMatch = productMatch || findProductInCatalog(order.productName, taagerCatalog);
     const productSku = normalizeSku(productMatch && productMatch.sku);
     const utmSku = normalizeSku(order.skuFromUtm || "");
-    if (productSku && utmSku && productSku !== utmSku) {
-      skippedNames.push(order.productName);
-      skippedOrders.push({
-        ...order,
-        source: order.source || "missed",
-        normPhone: order.normPhone || "",
-        normalizedPhone: order.normPhone || "",
-        name: order.name,
-        rawPhone: order.rawPhone,
-        productName: order.productName,
-        city: order.city,
-        address: order.address,
-        sku: productSku,
-        utmSku,
-        suggestedSku: productSku,
-        reason: "utm_product_sku_conflict",
-        actionMessage: `Missed product matched SKU ${productSku}, but UTM Campaign contains SKU ${utmSku}. Manual review required.`,
-        uncertain: true,
-      });
-      continue;
-    }
     const explicitSku = productSku || utmSku || normalizeSku(order.sku);
     const match = explicitSku
       ? (findCatalogBySku(taagerCatalog, explicitSku) || findCatalogBySku(trustedCatalog, explicitSku) || findCatalogBySku(catalog, explicitSku) || fallbackProductMatch)

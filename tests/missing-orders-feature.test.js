@@ -248,8 +248,9 @@ assert.strictEqual(
 const skuConflictResult = resolveMissedOrders([
   { ...missedA, skuFromUtm: "OTHER-SKU", productName: "Matched Product" },
 ], productPrimaryCatalog, {});
-assert.strictEqual(skuConflictResult.resolved.length, 0);
-assert.strictEqual(skuConflictResult.skippedOrders[0].reason, "utm_product_sku_conflict");
+assert.strictEqual(skuConflictResult.resolved.length, 1, "product-name SKU should win over conflicting UTM SKU");
+assert.strictEqual(skuConflictResult.resolved[0].sku, "SKU-FROM-PRODUCT");
+assert.strictEqual(skuConflictResult.resolved[0].skuSource, "product_name");
 const explicitBundleCatalog = {
   "2 pieces TAAGER-SKU-1": {
     sku: "TAAGER-SKU-1",
