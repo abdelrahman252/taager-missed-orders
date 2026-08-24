@@ -178,6 +178,15 @@ function referenceItemForProduct(productName, catalog, taagerCatalog) {
   };
 }
 
+function liveItemMatchesReference(liveItem = {}, reference = {}) {
+  const haystack = `${liveItem.text || ""} ${liveItem.productName || ""} ${liveItem.sku || ""}`.toLowerCase();
+  const sku = cleanText(reference.sku).toLowerCase();
+  if (sku && haystack.includes(sku)) return true;
+  const refName = normalizeProductName(reference.productName).toLowerCase();
+  const liveName = normalizeProductName(liveItem.productName || liveItem.text).toLowerCase();
+  return !!refName && !!liveName && productNamesMatch(refName, liveName);
+}
+
 function priceClose(a, b) {
   const left = Number(a);
   const right = Number(b);
@@ -198,6 +207,60 @@ function quantityFromReferencePrice(reference, modalPrice) {
     if (priceClose(modalPrice, option.subtotal) || priceClose(modalPrice, option.unitPrice)) {
       return Number(option.qty || 1) || 1;
     }
+  }
+  return null;
+}
+
+function priceOptionFromReferenceAmount(reference, amount, options = {}) {
+  if (!reference) return null;
+  const value = Number(amount || 0) || 0;
+  if (value <= 0) return null;
+  const list = Array.isArray(reference.priceOptions) && reference.priceOptions.length
+    ? reference.priceOptions
+    : [{
+        qty: Number(reference.qty || 1) || 1,
+        subtotal: Number(reference.subtotal || 0) || 0,
+        unitPrice: Number(reference.unitPrice || 0) || 0,
+      }];
+  const subtotalMatch = list.find((option) => priceClose(value, option && option.subtotal));
+  if (subtotalMatch) {
+    return {
+      qty: Number(subtotalMatch.qty || 1) || 1,
+      subtotal: Number(subtotalMatch.subtotal || 0) || 0,
+      unitPrice: Number(subtotalMatch.unitPrice || 0) || 0,
+      matchedBy: options.matchedBy || "subtotal",
+    };
+  }
+  const offsets = [];
+  const addOffset = (offset) => {
+    const next = Number(offset || 0) || 0;
+    if (next > 0 && !offsets.some((existing) => priceClose(existing, next))) offsets.push(next);
+  };
+  addOffset(options.shippingCost);
+  if ((options.country || "sa") === "sa") addOffset(28);
+  for (const offset of offsets) {
+    const productAmount = value - offset;
+    if (productAmount <= 0) continue;
+    const shippingAdjustedMatch = list.find((option) => priceClose(productAmount, option && option.subtotal));
+    if (!shippingAdjustedMatch) continue;
+    return {
+      qty: Number(shippingAdjustedMatch.qty || 1) || 1,
+      subtotal: Number(shippingAdjustedMatch.subtotal || 0) || 0,
+      unitPrice: Number(shippingAdjustedMatch.unitPrice || 0) || 0,
+      matchedBy: options.matchedBy || "subtotal_shipping_removed",
+      originalAmount: value,
+      shippingOffset: offset,
+    };
+  }
+  const allowUnitPrice = options.allowUnitPrice === true && Array.isArray(reference.priceOptions) && reference.priceOptions.length > 0;
+  const unitMatch = allowUnitPrice ? list.find((option) => priceClose(value, option && option.unitPrice)) : null;
+  if (unitMatch) {
+    return {
+      qty: Number(unitMatch.qty || 1) || 1,
+      subtotal: Number(unitMatch.subtotal || 0) || 0,
+      unitPrice: Number(unitMatch.unitPrice || 0) || 0,
+      matchedBy: options.matchedBy || "unit_price",
+    };
   }
   return null;
 }
@@ -234,9 +297,23 @@ function priceOptionForQty(reference, qty) {
       const q = Number(option && option.qty || 0) || 0;
       const subtotal = Number(option && option.subtotal || 0) || 0;
       const unitPrice = Number(option && option.unitPrice || 0) || (q > 0 ? subtotal / q : 0);
-      return { qty: q, subtotal, unitPrice };
+      return { ...option, qty: q, subtotal, unitPrice };
     })
     .find((option) => option.qty === targetQty && option.subtotal > 0 && option.unitPrice > 0) || null;
+}
+
+function priceOptionMatchingPreparedSubtotal(reference, qty) {
+  const targetQty = Number(qty || 0) || 0;
+  const preparedSubtotal = Number(reference && reference.subtotal || 0) || 0;
+  if (targetQty <= 0 || preparedSubtotal <= 0) return null;
+  return (Array.isArray(reference && reference.priceOptions) ? reference.priceOptions : [])
+    .map((option) => {
+      const q = Number(option && option.qty || 0) || 0;
+      const subtotal = Number(option && option.subtotal || 0) || 0;
+      const unitPrice = Number(option && option.unitPrice || 0) || (q > 0 ? subtotal / q : 0);
+      return { ...option, qty: q, subtotal, unitPrice };
+    })
+    .find((option) => option.qty === targetQty && priceClose(option.subtotal, preparedSubtotal) && option.unitPrice > 0) || null;
 }
 
 function referenceUsesInferredQuantity(reference) {
@@ -251,15 +328,59 @@ function referenceUsesInferredQuantity(reference) {
     || /catalog|history|repair|repaired|inferred/.test(text);
 }
 
+function referenceUsesLatestTrustedPrice(reference) {
+  const text = [
+    reference && reference.priceSource,
+    reference && reference.reason,
+    reference && reference.quantitySource,
+    reference && reference.referenceSource,
+  ].filter(Boolean).join(" ").toLowerCase();
+  return /latest|sku_price_updated_to_latest_tier/.test(text);
+}
+
 function quantityEditDecision(reference, modalItem = {}) {
-  const expectedQty = Number(reference && reference.qty || 1) || 1;
+  let expectedQty = Number(reference && reference.qty || 1) || 1;
   const modalQty = Number(modalItem && modalItem.qty || 0) || 0;
   const modalPrice = Number(modalItem && modalItem.price || 0) || 0;
+  const modalSubtotal = Number(modalItem && modalItem.subtotal || 0)
+    || (modalQty > 0 && modalPrice > 0 ? modalQty * modalPrice : 0);
   const fallbackUnitPrice = Number(reference && reference.unitPrice || 0) || 0;
-  const option = priceOptionForQty(reference, expectedQty);
-  const expectedUnitPrice = option ? option.unitPrice : fallbackUnitPrice;
+  const preservePreparedLatestPrice = referenceUsesLatestTrustedPrice(reference);
+  let option = priceOptionMatchingPreparedSubtotal(reference, expectedQty) || priceOptionForQty(reference, expectedQty);
+  let expectedUnitPrice = option ? option.unitPrice : fallbackUnitPrice;
+  let reason = "matched_normal_flow_prepared_order";
+  let priceVerified = !!option && modalPrice > 0 && priceClose(modalPrice, option.unitPrice);
+
+  const subtotalOption = preservePreparedLatestPrice ? null : priceOptionFromReferenceAmount(reference, modalSubtotal, {
+      matchedBy: "modal_subtotal",
+      country: modalItem.country || reference.country || "sa",
+      shippingCost: modalItem.shippingCost || reference.shippingCost,
+    });
+  if (subtotalOption) {
+    option = subtotalOption;
+    expectedQty = subtotalOption.qty;
+    expectedUnitPrice = subtotalOption.unitPrice;
+    priceVerified = true;
+    reason = subtotalOption.shippingOffset
+      ? "live_modal_subtotal_matched_trusted_tier_after_shipping_removed"
+      : "live_modal_subtotal_matched_trusted_tier";
+  } else if (!preservePreparedLatestPrice && modalQty === 1) {
+    const singleLinePriceOption = priceOptionFromReferenceAmount(reference, modalPrice, {
+      matchedBy: "modal_price_as_subtotal",
+      country: modalItem.country || reference.country || "sa",
+      shippingCost: modalItem.shippingCost || reference.shippingCost,
+    });
+    if (singleLinePriceOption && !priceClose(modalPrice, singleLinePriceOption.unitPrice)) {
+      option = singleLinePriceOption;
+      expectedQty = singleLinePriceOption.qty;
+      expectedUnitPrice = singleLinePriceOption.unitPrice;
+      priceVerified = true;
+      reason = singleLinePriceOption.shippingOffset
+        ? "live_modal_price_matched_trusted_subtotal_after_shipping_removed"
+        : "live_modal_price_matched_trusted_subtotal";
+    }
+  }
   const inferredQuantity = referenceUsesInferredQuantity(reference);
-  const priceVerified = !!option && modalPrice > 0 && priceClose(modalPrice, option.unitPrice);
 
   if (expectedQty > MAX_SAFE_AUTO_QUANTITY) {
     return { expectedQty, expectedUnitPrice, priceVerified, inferredQuantity, manualReview: true, reason: "normal_flow_prepared_quantity_is_suspicious" };
@@ -275,7 +396,97 @@ function quantityEditDecision(reference, modalItem = {}) {
     manualReview: false,
     shouldEditQuantity: expectedQty > 0 && modalQty !== expectedQty,
     shouldEditPrice: expectedUnitPrice > 0 && !priceClose(modalPrice, expectedUnitPrice),
-    reason: "matched_normal_flow_prepared_order",
+    reason,
+  };
+}
+
+function resolveLiveTierItemsForCandidate(candidate = {}, liveItems = [], options = {}) {
+  const country = options.country || "sa";
+  const references = (candidate.items || []).filter((item) => item && item.trusted);
+  const resolvedItems = [];
+  const manualReviewItems = [];
+  const usedReferences = new Set();
+  for (const liveItem of liveItems || []) {
+    let reference = references.find((item, index) => !usedReferences.has(index) && liveItemMatchesReference(liveItem, item));
+    const fallbackReference = !reference
+      ? referenceItemForProduct(liveItem.productName || candidate.productName || candidate.product || "", options.catalog, options.taagerCatalog)
+      : null;
+    if (!reference && fallbackReference && fallbackReference.trusted) {
+      reference = fallbackReference;
+    }
+    if (!reference) {
+      manualReviewItems.push({
+        ...liveItem,
+        reason: "no_trusted_product_reference",
+      });
+      continue;
+    }
+    const referenceIndex = references.indexOf(reference);
+    if (referenceIndex >= 0) usedReferences.add(referenceIndex);
+    const decision = quantityEditDecision(reference, liveItem);
+    if (decision.manualReview) {
+      manualReviewItems.push({
+        ...liveItem,
+        sku: liveItem.sku || reference.sku || "",
+        productName: liveItem.productName || reference.productName || "",
+        reason: decision.reason || "quantity_tier_price_not_verified",
+        expectedQty: decision.expectedQty || "",
+        expectedUnitPrice: decision.expectedUnitPrice || "",
+      });
+      continue;
+    }
+    const qty = Number(decision.expectedQty || reference.qty || 1) || 1;
+    const unitPrice = Number(decision.expectedUnitPrice || reference.unitPrice || 0) || 0;
+    const subtotal = Math.round((qty * unitPrice) * 100) / 100;
+    if (qty <= 0 || unitPrice <= 0 || subtotal <= 0) {
+      manualReviewItems.push({
+        ...liveItem,
+        sku: liveItem.sku || reference.sku || "",
+        productName: liveItem.productName || reference.productName || "",
+        reason: "live_tier_resolution_missing_price",
+      });
+      continue;
+    }
+    resolvedItems.push({
+      source: candidate.source || "missed",
+      recoverySource: candidate.recoverySource || "missed",
+      sku: reference.sku || liveItem.sku || "",
+      productName: liveItem.productName || reference.productName || "",
+      qty,
+      unitPrice,
+      subtotal,
+      trusted: true,
+      referenceSource: reference.referenceSource || "",
+      quantitySource: "easyorders_live_readonly_tier",
+      priceSource: decision.reason || "easyorders_live_readonly_tier",
+      priceOptions: Array.isArray(reference.priceOptions) ? reference.priceOptions : [],
+      normPhone: candidate.normPhone || normalizePhone(candidate.phone || candidate.rawPhone || "", country),
+      rawPhone: candidate.rawPhone || "",
+      name: candidate.name || "",
+      city: candidate.city || "",
+      region: candidate.region || "",
+      address: candidate.address || candidate.city || "",
+      createdAt: candidate.createdAt || candidate.date || "",
+      easyCreatedAt: candidate.easyCreatedAt || candidate.createdAt || candidate.date || "",
+      liveEasyOrdersQty: liveItem.qty || "",
+      liveEasyOrdersPrice: liveItem.price || "",
+      liveEasyOrdersSubtotal: liveItem.subtotal || "",
+      liveTierReason: decision.reason || "",
+    });
+  }
+  for (let i = 0; i < references.length; i++) {
+    if (usedReferences.has(i)) continue;
+    const reference = references[i];
+    manualReviewItems.push({
+      sku: reference.sku || "",
+      productName: reference.productName || "",
+      reason: "trusted_product_not_found_in_live_order",
+    });
+  }
+  return {
+    resolvedItems,
+    manualReviewItems,
+    resolved: manualReviewItems.length === 0 && resolvedItems.length > 0,
   };
 }
 
@@ -492,6 +703,7 @@ function recoveryResultRows(rows, country = "sa") {
       date: row.date || row.createdAt || "",
       createdAt: row.createdAt || "",
       easyCreatedAt: row.easyCreatedAt || "",
+      destination: row.destination || "affiliate-recovery",
       source: row.recoverySource || row.source || "",
       recoveryStatus: row.finalStatus || row.actionStatus || row.status || "",
       failureCode: row.failureCode || "",
@@ -575,8 +787,10 @@ module.exports = {
   splitTokens,
   groupRealRecoveryCandidates,
   quantityFromReferencePrice,
+  priceOptionFromReferenceAmount,
   quantityFromSuspiciousReference,
   quantityEditDecision,
+  resolveLiveTierItemsForCandidate,
   isSuspiciousQuantity,
   referenceItemForProduct,
   normalizeAttemptRow,

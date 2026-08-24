@@ -36,19 +36,29 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   function recoveryMetricsFor(sourceData, totalNew, failedOrders) {
     const recovery = sourceData?.affiliateRecovery;
     if (!recovery || recovery.enabled !== true) return null;
-    const attempted = Number(recovery.attemptedCount || 0) || (Array.isArray(sourceData?.attemptedOrderRows) ? sourceData.attemptedOrderRows.length : 0);
+    const attempted = recovery.previewOnly === true
+      ? (Number(recovery.queuedCount || 0) || (Array.isArray(recovery.queuedRows) ? recovery.queuedRows.length : 0) || (Array.isArray(sourceData?.attemptedOrderRows) ? sourceData.attemptedOrderRows.length : 0))
+      : (Number(recovery.attemptedCount || 0) || (Array.isArray(sourceData?.attemptedOrderRows) ? sourceData.attemptedOrderRows.length : 0));
     const verified = Number(recovery.verifiedCount || 0) || Number(totalNew || 0) || 0;
     const failed = Number(recovery.failedInTaagerCount || 0) || Number(failedOrders?.count || 0) || 0;
     const unresolved = Number(recovery.unresolvedCount || 0) || 0;
     const blockedReview = Number(recovery.blockedReviewCount || recovery.skippedManualCount || 0) || 0;
     const totalAttempted = Math.max(attempted, verified + failed + unresolved);
     if (totalAttempted <= 0) return null;
-    return { attempted: totalAttempted, verified, failed, unresolved, blockedReview };
+    return { attempted: totalAttempted, verified, failed, unresolved, blockedReview, previewOnly: recovery.previewOnly === true };
   }
 
   function translated(key, fallback) {
     const value = t(key);
     return value === key ? fallback : value;
+  }
+
+  function htmlEsc(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   function formatFailReason(reason) {
@@ -72,7 +82,9 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   const RESULTS_PAGE_SIZE = 10;
   let resultsPagerSeq = 0;
   let tableDownloadSeq = 0;
+  let manualReviewTableSeq = 0;
   window._resTableDownloads = {};
+  window._resManualReviewTables = {};
 
   function paginationStatusText(current, total) {
     return translated("results.pagination_status", "Page {current} / {total}")
@@ -126,6 +138,140 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   function tableDownloadButton(downloadId) {
     if (!downloadId) return "";
     return `<button type="button" class="btn res-table-download" onclick="window._resDownloadTable('${downloadId}')">⬇️ ${translated("results.download_table", "Download Table")}</button>`;
+  }
+
+  function registerManualReviewTable(rows) {
+    const cleanRows = Array.isArray(rows) ? rows : [];
+    if (!cleanRows.length) return "";
+    const id = `manual-review-table-${++manualReviewTableSeq}`;
+    window._resManualReviewTables[id] = cleanRows;
+    return id;
+  }
+
+  function manualReviewInput(field, value, options = {}) {
+    const type = options.type || "text";
+    const min = options.min != null ? ` min="${htmlEsc(options.min)}"` : "";
+    const step = options.step != null ? ` step="${htmlEsc(options.step)}"` : "";
+    return `<input data-manual-field="${field}" type="${type}" value="${htmlEsc(value)}"${min}${step} style="box-sizing:border-box;width:100%;min-width:${options.minWidth || 90}px;background:rgba(255,255,255,0.035);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font:inherit">`;
+  }
+
+  function manualReviewStaticField(field, value, className = "") {
+    const safe = htmlEsc(value || "");
+    return `<span data-manual-static-field="${field}" data-manual-static-value="${safe}" class="${className}" title="${safe}">${safe || "-"}</span>`;
+  }
+
+  function manualReviewHiddenField(field, value) {
+    const safe = htmlEsc(value || "");
+    return `<span data-manual-static-field="${field}" data-manual-static-value="${safe}" class="manual-hidden-field" aria-hidden="true"></span>`;
+  }
+
+  function manualReviewQualitySort(rows) {
+    const sourceRank = (row) => {
+      const source = String(row?.source || row?.recoverySource || "").toLowerCase();
+      if (source === "real") return 0;
+      if (source === "missed") return 1;
+      return 2;
+    };
+    const scoreRow = (row) => {
+      const reason = normalizedRecoveryReasonKey(row?.reason || row?.recoveryStatus || row?.actionMessage || row?.message || "");
+      const phone = String(row?.normalizedPhone || row?.normPhone || row?.phone || row?.rawPhone || "").trim();
+      const name = String(row?.name || row?.customerName || "").trim();
+      const sku = String(row?.sku || row?.suggestedSku || "").trim();
+      const product = String(row?.productName || row?.product || "").trim();
+      const city = String(row?.city || row?.region || "").trim();
+      const address = String(row?.address || row?.notes || row?.note || "").trim();
+      let score = 0;
+      if (phone.length >= 9) score += 20;
+      if (sku) score += 18;
+      if (product) score += 16;
+      if (name && !/^\d+$/.test(name) && !/^[^\p{L}\p{N}]+$/u.test(name)) score += 12;
+      if (city) score += 8;
+      if (address && address !== city) score += 6;
+      if (row?.suggestedSubtotal || row?.easyOrdersSubtotal || row?.subtotal || row?.price) score += 5;
+      if (reason === "invalid_customer_data") score -= 50;
+      if (reason === "missing_sku_for_missed_product") score -= 18;
+      if (reason === "no_trusted_product_reference" || reason === "missing_sku_tier_profile") score -= 16;
+      if (reason === "utm_product_sku_conflict" || reason === "ambiguous_sku_price_tier") score -= 8;
+      return score;
+    };
+    return (Array.isArray(rows) ? rows : [])
+      .map((row, index) => ({ row, index, source: sourceRank(row), score: scoreRow(row) }))
+      .sort((a, b) => (a.source - b.source) || (b.score - a.score) || (a.index - b.index))
+      .map((item) => item.row);
+  }
+
+  function collectManualReviewRows(tableId, selectedOnly) {
+    const table = document.querySelector(`[data-manual-table="${tableId}"]`);
+    if (!table) return [];
+    const trs = Array.from(table.querySelectorAll('tbody tr[data-manual-row="1"]'));
+    const selected = trs.filter((tr) => tr.querySelector("[data-manual-select]")?.checked);
+    const sourceRows = selectedOnly && selected.length ? selected : trs;
+    return sourceRows.map((tr) => {
+      const row = {};
+      tr.querySelectorAll("[data-manual-field]").forEach((input) => {
+        row[input.getAttribute("data-manual-field")] = input.value;
+      });
+      tr.querySelectorAll("[data-manual-static-field]").forEach((node) => {
+        row[node.getAttribute("data-manual-static-field")] = node.getAttribute("data-manual-static-value") || node.textContent || "";
+      });
+      row.source = tr.getAttribute("data-manual-source") || row.source || "manual-review";
+      row.reason = tr.getAttribute("data-manual-reason") || "";
+      return row;
+    });
+  }
+
+  window._resDownloadManualReviewTable = async function (tableId) {
+    const rows = collectManualReviewRows(tableId, false);
+    if (!rows.length || !window.api?.saveOutputFile) return;
+    const columns = [
+      { header: translated("results.source_col", "Source"), value: "source" },
+      { header: t("results.customer_name_col"), value: "name" },
+      { header: t("results.phone_col") || "Phone", value: "phone" },
+      { header: t("results.sku") || "SKU", value: "sku" },
+      { header: t("results.product_col"), value: "productName" },
+      { header: translated("results.qty_col", "Qty"), value: "qty" },
+      { header: translated("results.subtotal_col", "Subtotal"), value: "subtotal" },
+      { header: translated("results.city_col", "City"), value: "city" },
+      { header: translated("results.address_col", "Address"), value: "address" },
+      { header: t("results.reason_col"), value: "reason" },
+    ];
+    const csv = tableRowsToCsv(rows, columns);
+    const buffer = Array.from(new TextEncoder().encode(csv));
+    const result = await window.api.saveOutputFile({ buffer, filename: `manual-review-edited-${String(dateFrom || "results").replace(/-/g, "")}-${_runTimeTag}.csv` });
+    if (result && result.saved) {
+      const fn = t("results.toast_saved");
+      showToast(typeof fn === "function" ? fn(result.path) : fn);
+    }
+  };
+
+  window._resStartManualReviewUpload = async function (tableId) {
+    const rows = collectManualReviewRows(tableId, true);
+    if (!rows.length || !window.api?.runBot) {
+      showToast(translated("results.manual_review_no_rows", "No reviewed rows selected."));
+      return;
+    }
+    showToast(translated("results.manual_review_upload_started", "Starting reviewed-row upload..."));
+    const result = await window.api.runBot({
+      dateFrom,
+      dateTo,
+      accountIds: data?._accountId ? [data._accountId] : [],
+      manualReviewMode: true,
+      manualReviewOrders: rows,
+      easyOrdersAffiliateRecoveryEnabled: false,
+    });
+    if (result && result.success) {
+      window.renderResults({ ...(result.data || {}), _accountId: data?._accountId || result.accountId || "", _accountLabel: data?._accountLabel || result.accountLabel || "" }, dateFrom, dateTo, onRunAgain, onHome);
+    } else {
+      showToast((result && result.error) || translated("results.run_failed", "Bot run failed"));
+    }
+  };
+
+  function manualReviewActionButtons(tableId) {
+    if (!tableId) return "";
+    return `
+      <button type="button" class="btn res-table-download" onclick="window._resDownloadManualReviewTable('${tableId}')">⬇️ ${translated("results.download_edited_table", "Download Edited")}</button>
+      <button type="button" class="btn" style="background:rgba(249,115,22,0.16);border-color:#f97316;color:#fb923c" onclick="window._resStartManualReviewUpload('${tableId}')">${translated("results.start_reviewed_upload", "Start Reviewed")}</button>
+    `;
   }
 
   function ensureResultsPaginationStyle() {
@@ -201,7 +347,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       .orders-preview-table tbody tr:hover { background: rgba(79,142,247,0.05); }
       .orders-preview-table tbody tr:last-child td { border-bottom: none; }
       .orders-preview-table.skipped-orders-table {
-        min-width: 960px;
+        min-width: 1460px;
         table-layout: fixed;
       }
       .skipped-orders-table th,
@@ -239,26 +385,51 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         font-variant-numeric: tabular-nums;
       }
       .skipped-orders-table .skip-reason {
-        white-space: normal;
-        overflow: visible;
-        text-overflow: clip;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
         line-height: 1.35;
         font-size:var(--type-label);
         color: var(--text);
+      }
+      .skipped-orders-table .skip-message {
+        direction: auto;
+        text-align: start;
+        color: var(--text2);
+      }
+      .skipped-orders-table .manual-product-readonly {
+        box-sizing: border-box;
+        display: block;
+        width: 100%;
+        min-height: 30px;
+        padding: 6px 8px;
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 6px;
+        background: rgba(255,255,255,0.02);
+        color: var(--text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        direction: rtl;
+        text-align: right;
+      }
+      .skipped-orders-table .manual-hidden-field {
+        display: none !important;
       }
       .skipped-orders-table .skip-alert {
         text-align: center;
         font-size:var(--type-body);
       }
       .skipped-orders-table col.skip-col-index { width: 36px; }
-      .skipped-orders-table col.skip-col-outcome { width: 112px; }
-      .skipped-orders-table col.skip-col-source { width: 78px; }
-      .skipped-orders-table col.skip-col-name { width: 14%; }
-      .skipped-orders-table col.skip-col-phone { width: 12%; }
-      .skipped-orders-table col.skip-col-sku { width: 13%; }
-      .skipped-orders-table col.skip-col-product { width: 24%; }
+      .skipped-orders-table col.skip-col-outcome { width: 64px; }
+      .skipped-orders-table col.skip-col-source { width: 86px; }
+      .skipped-orders-table col.skip-col-name { width: 150px; }
+      .skipped-orders-table col.skip-col-phone { width: 130px; }
+      .skipped-orders-table col.skip-col-sku { width: 150px; }
+      .skipped-orders-table col.skip-col-product { width: 320px; }
       .skipped-orders-table col.skip-col-number { width: 76px; }
-      .skipped-orders-table col.skip-col-reason { width: 22%; }
+      .skipped-orders-table col.skip-col-reason { width: 230px; }
+      .skipped-orders-table col.skip-col-message { width: 360px; }
       .skipped-orders-table col.skip-col-alert { width: 44px; }
       .orders-preview-table.results-orders-table {
         width: 100%;
@@ -514,7 +685,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
   function buildSkippedOrdersHtml(skippedOrders) {
     if (!skippedOrders || !skippedOrders.count) return "";
-    const rows = skippedOrders.rows || [];
+    const rows = manualReviewQualitySort(skippedOrders.rows || []);
     const showAlertColumn = rows.some((row) => row && row.uploadedWithWarning);
     const manualReviewReasons = new Set([
       "quantity_above_safe_limit",
@@ -562,14 +733,19 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     const title = (value) => String(value || "").replace(/"/g,"");
     const reasonKeyFor = (row) => row?.uncertain && row.reason === "phone_parse_failed" ? "phone_uncertain_zero_appended" : row?.reason;
     const reasonTextFor = (row) => {
-      const reasonKey = reasonKeyFor(row);
+      const reasonKey = normalizedRecoveryReasonKey(reasonKeyFor(row));
       return reasonLabels[reasonKey] || reasonKey || "—";
     };
     const isManualReviewRow = (row) => {
       const reasonKey = reasonKeyFor(row);
       return row && (row.manualReview === true || (row.uncertain && manualReviewReasons.has(String(reasonKey || ""))));
     };
-    const messageFor = (row) => row?.actionMessage || row?.message || row?.skuTierDecision?.message || "";
+    const messageFor = (row) => {
+      const reasonKey = normalizedRecoveryReasonKey(reasonKeyFor(row) || row?.actionMessage || row?.message || row?.skuTierDecision?.message);
+      const normalized = recoveryStatusMessage({ ...row, reason: reasonKey });
+      if (normalized && normalized !== "-") return normalized;
+      return row?.actionMessage || row?.message || row?.skuTierDecision?.message || "";
+    };
     const phoneFor = (row) => row?.normalizedPhone || row?.normPhone || row?.phone || row?.rawPhone || "—";
     const qtyFor = (row) => row?.suggestedQty || row?.qty || row?.easyOrdersQty || "—";
     const subtotalFor = (row) => row?.suggestedSubtotal || row?.subtotal || row?.easyOrdersSubtotal || "—";
@@ -584,7 +760,6 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       { header: t("results.sku") || "SKU", value: (row) => row?.sku || row?.suggestedSku || "" },
       { header: t("results.product_col"), value: "productName" },
       { header: translated("results.qty_col", "Qty"), value: qtyFor },
-      { header: translated("results.subtotal_col", "Subtotal"), value: subtotalFor },
       { header: t("results.reason_col"), value: reasonTextFor },
       { header: translated("results.message_col", "Message"), value: messageFor },
     ], "warnings-skipped-orders");
@@ -598,21 +773,26 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const phone = phoneFor(row);
       const qty = qtyFor(row);
       const subtotal = subtotalFor(row);
+      const city = row.city || row.region || "";
+      const address = row.address || row.notes || "";
+      const editable = isManualReviewRow(row);
       return `<tr ${attrs} style="${isManualReview ? "background:rgba(249,115,22,0.07)" : (row.uncertain ? "background:rgba(255,170,0,0.05)" : "")}">
-        <td class="skip-outcome" style="color:${outcomeColor}" title="${outcomeText}">${outcomeText}</td>
+        <td class="skip-outcome" style="color:${outcomeColor}" title="${outcomeText}">${editable ? `<input data-manual-select type="checkbox" style="accent-color:#f97316">` : outcomeText}</td>
         <td class="skip-source" title="${title(row.source)}">${row.source || "—"}</td>
-        <td class="skip-name" title="${title(row.name)}">${row.name || "—"}</td>
-        <td class="skip-phone" style="color:var(--text)" title="${title(phone)}">${phone}</td>
-        <td class="skip-phone" title="${title(row.sku)}">${row.sku || row.suggestedSku || "—"}</td>
-        <td class="skip-product" title="${title(row.productName)}">${row.productName || "—"}</td>
-        <td class="skip-phone">${qty}</td>
-        <td class="skip-phone">${subtotal}</td>
+        <td class="skip-name" title="${title(row.name)}">${editable ? manualReviewInput("name", row.name || "") : (row.name || "—")}</td>
+        <td class="skip-phone" style="color:var(--text)" title="${title(phone)}">${editable ? manualReviewInput("phone", phone) : phone}</td>
+        <td class="skip-phone" title="${title(row.sku)}">${editable ? manualReviewInput("sku", row.sku || row.suggestedSku || "") : (row.sku || row.suggestedSku || "—")}</td>
+        <td class="skip-product" title="${title(row.productName)}">${editable ? `${manualReviewStaticField("productName", row.productName || "", "manual-product-readonly")}${manualReviewHiddenField("subtotal", subtotal)}` : (row.productName || "—")}</td>
+        <td class="skip-phone">${editable ? manualReviewInput("qty", qty, { type: "number", min: 1, step: 1, minWidth: 64 }) : qty}</td>
+        <td class="skip-phone">${editable ? manualReviewInput("city", city, { minWidth: 120 }) : htmlEsc(city || "—")}</td>
+        <td class="skip-phone">${editable ? manualReviewInput("address", address, { minWidth: 160 }) : htmlEsc(address || "—")}</td>
         <td class="skip-reason" style="color:${reviewColor}" title="${title(reasonText)}">${reasonText}</td>
-        <td class="skip-reason" title="${title(message)}">${message || "—"}</td>
+        <td class="skip-reason skip-message" title="${title(message)}">${message || "—"}</td>
         ${showAlertColumn ? `<td class="skip-alert">${row.uncertain ? `<span title="${t("results.phone_rescued_verify")}" style="color:var(--warning)">⚠️</span>` : ""}</td>` : ""}
-      </tr>`;
+      </tr>`.replace("<tr ", `<tr data-manual-row="${editable ? "1" : "0"}" data-manual-source="${htmlEsc(row.source || "")}" data-manual-reason="${htmlEsc(reasonText)}" `);
     }, "skipped");
     const hasManualReview = rows.some(isManualReviewRow);
+    const manualTableId = hasManualReview ? registerManualReviewTable(rows) : "";
     const sectionColor = hasManualReview ? "#f97316" : "var(--warning)";
     const sectionBg = hasManualReview ? "rgba(249,115,22,0.08)" : "rgba(255,170,0,0.06)";
     const sectionTitle = hasManualReview
@@ -627,10 +807,11 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <div style="display:flex;gap:8px;align-items:center">
             <div style="font-size:var(--type-caption);color:var(--text2)">${hasManualReview ? translated("results.manual_review_need_review", "{count} need manual review").replace("{count}", skippedOrders.count) : t("results.skipped_followup")}</div>
             ${tableDownloadButton(downloadId)}
+            ${manualReviewActionButtons(manualTableId)}
           </div>
         </div>
-        <div class="dash-section-body no-pad" style="overflow-x:auto">
-          <table class="orders-preview-table skipped-orders-table">
+        <div class="dash-section-body no-pad" style="overflow-x:auto;padding-bottom:10px;scrollbar-gutter:stable">
+          <table class="orders-preview-table skipped-orders-table" data-manual-table="${manualTableId}">
             <colgroup>
               <col class="skip-col-outcome">
               <col class="skip-col-source">
@@ -639,20 +820,22 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
               <col class="skip-col-sku">
               <col class="skip-col-product">
               <col class="skip-col-number">
-              <col class="skip-col-number">
+              <col class="skip-col-phone">
+              <col class="skip-col-product">
               <col class="skip-col-reason">
-              <col class="skip-col-reason">
+              <col class="skip-col-message">
               ${showAlertColumn ? `<col class="skip-col-alert">` : ""}
             </colgroup>
             <thead><tr>
-              <th>${t("results.warning_status_col")}</th>
+              <th>${hasManualReview ? translated("results.select_col", "Select") : t("results.warning_status_col")}</th>
               <th>${t("results.source_col")}</th>
               <th>${t("results.customer_name_col")}</th>
               <th>${t("results.phone_col") || "Phone"}</th>
               <th>${t("results.sku") || "SKU"}</th>
               <th>${t("results.product_col")}</th>
               <th>${translated("results.qty_col", "Qty")}</th>
-              <th>${translated("results.subtotal_col", "Subtotal")}</th>
+              <th>${translated("results.city_col", "City")}</th>
+              <th>${translated("results.address_col", "Address")}</th>
               <th>${t("results.reason_col")}</th>
               <th>${translated("results.message_col", "Message")}</th>
               ${showAlertColumn ? `<th>⚠️</th>` : ""}
@@ -812,6 +995,127 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     return addFailedProductCounts({}, failedOrders);
   }
 
+  function buildMissingOrdersSnapshotHtml(missingOrdersUpload) {
+    if (!missingOrdersUpload) return "";
+    const snapshotRows = Array.isArray(missingOrdersUpload.snapshotRows) ? missingOrdersUpload.snapshotRows : [];
+    const previewOnly = missingOrdersUpload.previewOnly === true || missingOrdersUpload.status === "preview_only_auto_confirm_off";
+    const snapshotError = String(missingOrdersUpload.snapshotError || "").trim();
+    const attempted = Number(missingOrdersUpload.attempted || 0) || 0;
+    const flatRows = [];
+    for (const order of snapshotRows) {
+      const products = Array.isArray(order.products) && order.products.length ? order.products : [{}];
+      for (const product of products) {
+        flatRows.push({
+          missingOrderCode: order.missingOrderCode || "",
+          convertedOrderCode: order.convertedOrderCode || "",
+          status: order.status || "",
+          customerName: order.customerName || "",
+          phone: order.phone || "",
+          source: order.source || "",
+          orderDate: order.orderDate || "",
+          note: order.note || "",
+          noteLabel: order.noteLabel || "",
+          productsQuantity: order.productsQuantity || "",
+          sku: product.sku || "",
+          qty: product.qty || "",
+          price: product.price || "",
+          productTitle: product.title || product.raw || "",
+          page: order.page || "",
+        });
+      }
+    }
+
+    if (!flatRows.length && !previewOnly && !snapshotError) return "";
+
+    const downloadId = registerTableDownload(flatRows, [
+      { header: translated("results.missing_order_code_col", "Missing Order Code"), value: "missingOrderCode" },
+      { header: translated("results.converted_order_code_col", "Converted Order Code"), value: "convertedOrderCode" },
+      { header: t("results.status_col"), value: "status" },
+      { header: t("results.customer_name_col"), value: "customerName" },
+      { header: t("results.phone_col") || "Phone", value: "phone" },
+      { header: t("results.source_col"), value: "source" },
+      { header: translated("results.order_date_col", "Order Date"), value: "orderDate" },
+      { header: t("results.sku") || "SKU", value: "sku" },
+      { header: translated("results.qty_col", "Qty"), value: "qty" },
+      { header: translated("results.price_col", "Price"), value: "price" },
+      { header: translated("results.note_col", "Note"), value: "note" },
+      { header: translated("results.page_col", "Page"), value: "page" },
+    ], "taager-missing-orders-snapshot");
+
+    const paged = buildPagedItems(flatRows, (row, i, attrs) => `
+      <tr ${attrs}>
+        <td title="${htmlEsc(row.missingOrderCode)}">${htmlEsc(row.missingOrderCode || "—")}</td>
+        <td title="${htmlEsc(row.convertedOrderCode)}">${htmlEsc(row.convertedOrderCode || "—")}</td>
+        <td title="${htmlEsc(row.status)}">${htmlEsc(row.status || "—")}</td>
+        <td title="${htmlEsc(row.customerName)}">${htmlEsc(row.customerName || "—")}</td>
+        <td title="${htmlEsc(row.phone)}">${htmlEsc(row.phone || "—")}</td>
+        <td title="${htmlEsc(row.orderDate)}">${htmlEsc(row.orderDate || "—")}</td>
+        <td title="${htmlEsc(row.sku)}">${htmlEsc(row.sku || "—")}</td>
+        <td>${htmlEsc(row.qty || "—")}</td>
+        <td>${htmlEsc(row.price || "—")}</td>
+        <td title="${htmlEsc(row.note || row.productTitle)}">${htmlEsc(row.note || row.productTitle || "—")}</td>
+      </tr>`, "missing-orders-snapshot");
+
+    const countText = flatRows.length
+      ? translated("results.missing_orders_snapshot_count", "{count} cards scraped from Taager Missing Orders").replace("{count}", flatRows.length)
+      : translated("results.missing_orders_snapshot_empty", "No Missing Orders cards were scraped yet.");
+    const previewText = previewOnly
+      ? translated("results.missing_orders_preview_only_body", "{count} missed-source orders are ready. Turn Auto-Confirm ON and run again to submit them.").replace("{count}", attempted)
+      : "";
+    const htmlPath = String(missingOrdersUpload.htmlPath || "").trim();
+    return `
+      ${previewOnly ? `
+      <div class="notice-box warn" style="border-color:var(--warning);background:rgba(255,170,0,0.08)">
+        <span class="notice-icon">⚠️</span>
+        <div class="notice-text">
+          <strong>${translated("results.missing_orders_preview_only_title", "Missing Orders preview only - nothing was submitted")}</strong>
+          <div style="font-size:var(--type-label);color:var(--text2);margin-top:3px">${previewText}</div>
+        </div>
+      </div>` : ""}
+      <div class="dash-section" style="border-color:#38bdf8">
+        <div class="dash-section-header" style="background:rgba(56,189,248,0.08)">
+          <div class="dash-section-title" style="color:#38bdf8"><span>i</span> ${translated("results.missing_orders_snapshot_title", "Taager Missing Orders Snapshot")}</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div style="font-size:var(--type-caption);color:var(--text2)">${countText}</div>
+            ${tableDownloadButton(downloadId)}
+          </div>
+        </div>
+        ${snapshotError ? `<div style="padding:10px 14px;color:var(--warning);font-size:var(--type-label);border-bottom:1px solid var(--border)">${htmlEsc(snapshotError)}</div>` : ""}
+        ${htmlPath ? `<div style="padding:8px 14px;color:var(--text2);font-size:var(--type-caption);border-bottom:1px solid var(--border)">${translated("results.raw_html_saved", "Raw HTML saved")} · ${htmlEsc(htmlPath)}</div>` : ""}
+        ${flatRows.length ? `
+        <div class="dash-section-body no-pad" style="overflow-x:auto;padding-bottom:10px;scrollbar-gutter:stable">
+          <table class="orders-preview-table missing-orders-snapshot-table" style="font-size:var(--type-label);width:100%;min-width:1180px;table-layout:fixed">
+            <colgroup>
+              <col style="width:130px">
+              <col style="width:180px">
+              <col style="width:130px">
+              <col style="width:170px">
+              <col style="width:150px">
+              <col style="width:120px">
+              <col style="width:190px">
+              <col style="width:70px">
+              <col style="width:85px">
+              <col style="width:310px">
+            </colgroup>
+            <thead><tr>
+              <th>${translated("results.missing_order_code_col", "Missing Order Code")}</th>
+              <th>${translated("results.converted_order_code_col", "Converted Order Code")}</th>
+              <th>${t("results.status_col")}</th>
+              <th>${t("results.customer_name_col")}</th>
+              <th>${t("results.phone_col") || "Phone"}</th>
+              <th>${translated("results.order_date_col", "Order Date")}</th>
+              <th>${t("results.sku") || "SKU"}</th>
+              <th>${translated("results.qty_col", "Qty")}</th>
+              <th>${translated("results.price_col", "Price")}</th>
+              <th>${translated("results.note_col", "Note")}</th>
+            </tr></thead>
+            <tbody>${paged.itemsHtml}</tbody>
+          </table>
+          ${paged.pagerHtml}
+        </div>` : `<div class="dash-section-body" style="color:var(--text2);font-size:var(--type-label)">${translated("results.missing_orders_snapshot_empty", "No Missing Orders cards were scraped yet.")}</div>`}
+      </div>`;
+  }
+
   // ── Shared helper: render the full orders table (name, phone, product, qty, city) ──
   function buildOrdersTableHtml(orderRows, label) {
     if (!orderRows || orderRows.length === 0) return "";
@@ -839,6 +1143,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         skipped_manual: translated("results.reason_skipped_manual", "Manual review needed"),
         completed_waiting_verification: translated("results.reason_completed_waiting_verification", "Already completed, verifying in Taager"),
         already_in_real_orders_unverified: translated("results.reason_already_in_real_orders_unverified", "Already in real orders, verifying in Taager"),
+        preview_only_auto_confirm_off: translated("results.reason_preview_only_auto_confirm_off", "Preview only - Auto-Confirm OFF"),
       };
       if (friendly[lower]) {
         const cls = /verified|confirmed/.test(lower)
@@ -866,7 +1171,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const createdAt = orderCreatedAtText(o);
       const destination = o.destination === "second-taager-cart"
         ? (t("results.destination_second") || "Second Cart")
-        : (isLegacyMissingOrder(o) ? t("results.destination_missing") : t("results.destination_cart"));
+        : (o.destination === "affiliate-recovery" ? translated("results.destination_recovery", "Recovery") : (isLegacyMissingOrder(o) ? t("results.destination_missing") : t("results.destination_cart")));
       const status = orderStatusInfo(o);
       return `<tr ${attrs || ""}>
         <td class="res-index">${i + 1}</td>
@@ -991,35 +1296,73 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   }
 
   function recoveryStatusMessage(row) {
-    if (row.reason === "no_trusted_product_reference") {
+    const reasonKey = normalizedRecoveryReasonKey(row.reason || row.recoveryStatus || row.actionMessage || row.message);
+    const rawMessage = String(row.actionMessage || row.message || row.error || "").toLowerCase();
+    if (reasonKey === "no_trusted_product_reference") {
       return translated(
         "results.message_no_trusted_product_reference",
         "No trusted product history exists; not submitted automatically."
       );
     }
-    if (row.reason === "already_in_real_orders_unverified" || row.recoveryStatus === "already_in_real_orders_unverified") {
+    if (reasonKey === "already_in_real_orders_unverified") {
       return translated(
         "results.message_already_in_real_orders_unverified",
         "Convert to Order was not available; verify whether it already moved to real EasyOrders orders and Taager."
       );
     }
-    if (row.reason === "awaiting_taager_verification" || row.recoveryStatus === "awaiting_taager_verification") {
+    if (reasonKey === "awaiting_taager_verification") {
       return translated(
         "results.message_awaiting_taager_verification",
         "EasyOrders action completed; Taager verification has not confirmed the order yet."
       );
     }
+    if (reasonKey === "missing_sku_for_missed_product") {
+      return translated("results.message_missing_sku_for_missed_product", "No trusted SKU match was found for this missed-order product.");
+    }
+    if (reasonKey === "invalid_customer_data") {
+      return translated("results.message_invalid_customer_data", "Customer name or phone looks fake; review before upload.");
+    }
+    if (reasonKey === "utm_product_sku_conflict") {
+      return translated("results.message_utm_product_sku_conflict", "The product match conflicts with the UTM campaign SKU.");
+    }
+    if (reasonKey === "ambiguous_sku_price_tier") {
+      return translated("results.message_ambiguous_sku_price_tier", "More than one trusted price tier is possible; choose the correct quantity/subtotal.");
+    }
+    if (/customer data looks fake|sequential_digit|phone_like|name:phone_like/.test(rawMessage)) {
+      return translated("results.message_invalid_customer_data", "Customer name or phone looks fake; review before upload.");
+    }
+    if (/missing sku|did not match easyorders|was found in utm campaign|utm campaign/.test(rawMessage)) {
+      return translated("results.message_missing_sku_for_missed_product", "No trusted SKU match was found for this missed-order product.");
+    }
     return row.actionMessage || row.existingSkus || row.missingSkus || "-";
+  }
+
+  function normalizedRecoveryReasonKey(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const compact = raw.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    if (compact.includes("customer_data_looks_fake") || compact.includes("invalid_customer_data") || compact.includes("sequential_digit") || compact.includes("phone_like")) return "invalid_customer_data";
+    if (compact.includes("missing_sku_for_missed_product") || compact.includes("missing_sku") || compact.includes("product_name_did_not_match")) return "missing_sku_for_missed_product";
+    if (compact.includes("product_sku_conflicts_with_utm") || compact.includes("utm_product_sku_conflict") || compact.includes("utm_campaign")) return "utm_product_sku_conflict";
+    if (compact.includes("ambiguous_sku_price_tier")) return "ambiguous_sku_price_tier";
+    if (compact.includes("subtotal_not_in_sku_tiers")) return "subtotal_not_in_sku_tiers";
+    if (compact.includes("sku_tier_profile_too_weak")) return "sku_tier_profile_too_weak";
+    if (compact.includes("no_trusted_product_reference")) return "no_trusted_product_reference";
+    if (compact.includes("already_in_real_orders_unverified")) return "already_in_real_orders_unverified";
+    if (compact.includes("awaiting_taager_verification")) return "awaiting_taager_verification";
+    if (compact.includes("preview_only_auto_confirm_off")) return "preview_only_auto_confirm_off";
+    return compact || raw;
+  }
+
+  function recoveryReasonLabel(value) {
+    const key = normalizedRecoveryReasonKey(value);
+    return translated(`results.reason_${key}`, value || "-");
   }
 
   function buildRecoveryUnresolvedHtml(recovery) {
     if (!recovery || recovery.enabled !== true) return "";
     const rows = recovery.unresolvedRows || [];
     if (!rows.length) return "";
-    const labelFor = (prefix, value, fallback = "-") => {
-      const raw = value || fallback;
-      return translated(`${prefix}${raw}`, raw);
-    };
     const td = (value, className = "", extra = "") => {
       const text = affiliateHtmlEsc(value);
       const cls = className ? ` class="${className}"` : "";
@@ -1036,12 +1379,12 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       { header: t("results.product_col"), value: "productName" },
       { header: translated("results.qty_col", "Qty"), value: qtyFor },
       { header: translated("results.subtotal_col", "Subtotal"), value: subtotalFor },
-      { header: t("results.reason_col"), value: (row) => labelFor("results.reason_", row?.recoveryStatus || row?.reason) },
+      { header: t("results.reason_col"), value: (row) => recoveryReasonLabel(row?.recoveryStatus || row?.reason) },
       { header: translated("results.message_col", "Message"), value: recoveryStatusMessage },
     ], "attempted-not-verified");
     const countText = translated("results.unresolved_attempted_count", "{count} attempted orders need Taager verification").replace("{count}", rows.length);
     const rowHtml = (row, i, attrs) => {
-      const reasonText = labelFor("results.reason_", row.recoveryStatus || row.reason);
+      const reasonText = recoveryReasonLabel(row.recoveryStatus || row.reason);
       return `
       <tr ${attrs || ""} style="background:rgba(255,170,0,0.05)">
         ${td(row.source || row.recoverySource)}
@@ -1098,12 +1441,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
   function buildRecoveryUncertainHtml(recovery) {
     if (!recovery || recovery.enabled !== true) return "";
-    const rows = recovery.blockedReviewRows || recovery.manualReviewRows || [];
+    const rows = manualReviewQualitySort(recovery.blockedReviewRows || recovery.manualReviewRows || []);
     if (!rows.length) return "";
-    const labelFor = (prefix, value, fallback = "-") => {
-      const raw = value || fallback;
-      return translated(`${prefix}${raw}`, raw);
-    };
     const messageFor = (row) => {
       return recoveryStatusMessage(row);
     };
@@ -1122,28 +1461,32 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       { header: t("results.sku") || "SKU", value: "sku" },
       { header: t("results.product_col"), value: "productName" },
       { header: translated("results.qty_col", "Qty"), value: qtyFor },
-      { header: translated("results.subtotal_col", "Subtotal"), value: subtotalFor },
-      { header: t("results.reason_col"), value: (row) => labelFor("results.reason_", row?.reason || row?.recoveryStatus) },
+      { header: t("results.reason_col"), value: (row) => recoveryReasonLabel(row?.reason || row?.recoveryStatus) },
       { header: translated("results.message_col", "Message"), value: messageFor },
     ], "needs-manual-review");
+    const manualTableId = registerManualReviewTable(rows);
     const countText = translated("results.manual_review_need_review", "{count} need manual review").replace("{count}", rows.length);
     const rowHtml = (row, i, attrs) => {
-      const reasonText = labelFor("results.reason_", row.reason || row.recoveryStatus);
+      const reasonText = recoveryReasonLabel(row.reason || row.recoveryStatus);
       const messageText = messageFor(row);
       const phone = phoneFor(row);
       const qty = qtyFor(row);
       const subtotal = subtotalFor(row);
+      const city = row.city || row.region || "";
+      const address = row.address || row.notes || "";
       return `
-      <tr ${attrs || ""} style="background:rgba(249,115,22,0.06)">
+      <tr data-manual-row="1" data-manual-source="${htmlEsc(row.source || row.recoverySource || "")}" data-manual-reason="${htmlEsc(reasonText)}" ${attrs || ""} style="background:rgba(249,115,22,0.06)">
+        <td><input data-manual-select type="checkbox" style="accent-color:#f97316"></td>
         ${td(row.source || row.recoverySource)}
-        ${td(row.name)}
-        ${td(phone, "skip-phone")}
-        ${td(row.sku)}
-        ${td(row.productName)}
-        ${td(qty, "skip-phone")}
-        ${td(subtotal, "skip-phone")}
+        <td>${manualReviewInput("name", row.name || "")}</td>
+        <td class="skip-phone">${manualReviewInput("phone", phone)}</td>
+        <td>${manualReviewInput("sku", row.sku || "")}</td>
+        <td class="skip-product">${manualReviewStaticField("productName", row.productName || "", "manual-product-readonly")}${manualReviewHiddenField("subtotal", subtotal)}</td>
+        <td class="skip-phone">${manualReviewInput("qty", qty, { type: "number", min: 1, step: 1, minWidth: 64 })}</td>
+        <td class="skip-phone">${manualReviewInput("city", city, { minWidth: 120 })}</td>
+        <td class="skip-phone">${manualReviewInput("address", address, { minWidth: 160 })}</td>
         ${td(reasonText, "", ` style="color:#f97316;font-weight:var(--weight-semibold)"`)}
-        ${td(messageText)}
+        ${td(messageText, "skip-message")}
       </tr>`;
     };
     const paged = buildPagedItems(rows, rowHtml, "recovery-uncertain");
@@ -1154,29 +1497,34 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <div style="display:flex;gap:8px;align-items:center">
             <div style="font-size:var(--type-caption);color:var(--text2)">${countText}</div>
             ${tableDownloadButton(downloadId)}
+            ${manualReviewActionButtons(manualTableId)}
           </div>
         </div>
-        <div class="dash-section-body no-pad" style="overflow-x:auto">
-          <table class="orders-preview-table skipped-orders-table" style="font-size:var(--type-label);width:100%;min-width:980px">
+        <div class="dash-section-body no-pad" style="overflow-x:auto;padding-bottom:10px;scrollbar-gutter:stable">
+          <table class="orders-preview-table skipped-orders-table" data-manual-table="${manualTableId}" style="font-size:var(--type-label);width:100%;min-width:1360px">
             <colgroup>
+              <col class="skip-col-outcome">
               <col class="skip-col-source">
               <col class="skip-col-name">
               <col class="skip-col-phone">
               <col class="skip-col-sku">
               <col class="skip-col-product">
               <col class="skip-col-number">
-              <col class="skip-col-number">
+              <col class="skip-col-phone">
+              <col class="skip-col-product">
               <col class="skip-col-reason">
-              <col class="skip-col-reason">
+              <col class="skip-col-message">
             </colgroup>
             <thead><tr>
+              <th>${translated("results.select_col", "Select")}</th>
               <th>${translated("results.source_col", "Source")}</th>
               <th>${t("results.customer_name_col")}</th>
               <th>${t("results.phone_col") || t("results.phone")}</th>
               <th>${t("results.sku") || "SKU"}</th>
               <th>${t("results.product_col")}</th>
               <th>${translated("results.qty_col", "Qty")}</th>
-              <th>${translated("results.subtotal_col", "Subtotal")}</th>
+              <th>${translated("results.city_col", "City")}</th>
+              <th>${translated("results.address_col", "Address")}</th>
               <th>${t("results.reason_col")}</th>
               <th>${translated("results.message_col", "Message")}</th>
             </tr></thead>
@@ -1481,6 +1829,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const buffer       = accData.buffer;
       const failedOrders = accData.failedOrders || { count:0, summary:[], failedDir:"", failedPath:"", errorRows:[] };
       const skippedOrders = accData.skippedOrders || { count:0, rows:[], buffer:null, filePath:"" };
+      const missingOrdersUpload = accData.missingOrdersUpload || null;
       const runFailed    = !r.success;
       const failReason   = r.error || "";
       const hasFailed    = failedOrders.count > 0;
@@ -1593,6 +1942,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
             <div style="font-size:var(--type-label);color:var(--text2);margin-top:3px">${translated("results.missing_orders_pending_body", "Taager accepted the Missing Orders workbook, but those rows may not appear immediately in the normal Taager orders list. Check the Missing Orders tab, or route missed orders to Cart/Second Cart when you need confirmed normal orders.")}</div>
           </div>
         </div>` : ""}
+
+        ${buildMissingOrdersSnapshotHtml(missingOrdersUpload)}
 
         <!-- Success rate bar -->
         ${totalAttempt > 0 ? `
@@ -1710,7 +2061,14 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           </div>
         <div class="dash-section-body no-pad">${errorRowsHtml}</div>
       </div>` : `
-      ${recoveryMetrics?.unresolved ? `
+      ${recoveryMetrics?.previewOnly ? `
+      <div class="notice-box warn" style="border-color:var(--warning);background:rgba(255,170,0,0.08)">
+        <span class="notice-icon">⚠️</span>
+        <div class="notice-text">
+          <strong>${translated("results.recovery_preview_only_title", "Recovery preview only - nothing was submitted")}</strong>
+          <div style="font-size:var(--type-label);color:var(--text2);margin-top:3px">${translated("results.recovery_preview_only_body", "{count} recovery orders are ready for review. Turn Auto-Confirm ON and run again to submit them.").replace("{count}", recoveryMetrics.attempted)}</div>
+        </div>
+      </div>` : recoveryMetrics?.unresolved ? `
       <div class="notice-box warn" style="border-color:var(--warning);background:rgba(255,170,0,0.08)">
         <span class="notice-icon">⚠️</span>
         <div class="notice-text">
@@ -1886,6 +2244,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   const buffer       = data.buffer;
   const failedOrders = data.failedOrders || { count: 0, summary: [], failedDir: "", failedPath: "", errorRows: [] };
   const skippedOrders = data.skippedOrders || { count: 0, rows: [], buffer: null, filePath: "" };
+  const missingOrdersUpload = data.missingOrdersUpload || null;
   const runFailed    = data._runFailed   || false;
   const failReason   = data._failReason  || "";
 
@@ -2031,6 +2390,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         </div>
       </div>` : ""}
 
+      ${buildMissingOrdersSnapshotHtml(missingOrdersUpload)}
+
       <!-- SUCCESS RATE BAR -->
       ${totalUploaded > 0 ? `
       <div class="dash-section">
@@ -2149,7 +2510,14 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         </div>
         <div class="dash-section-body no-pad">${errorRowsHtml}</div>
       </div>` : `
-      ${recoveryMetrics?.unresolved ? `
+      ${recoveryMetrics?.previewOnly ? `
+      <div class="notice-box warn" style="border-color:var(--warning);background:rgba(255,170,0,0.08)">
+        <span class="notice-icon">⚠️</span>
+        <div class="notice-text">
+          <strong>${translated("results.recovery_preview_only_title", "Recovery preview only - nothing was submitted")}</strong>
+          <div style="font-size:var(--type-label);color:var(--text2);margin-top:3px">${translated("results.recovery_preview_only_body", "{count} recovery orders are ready for review. Turn Auto-Confirm ON and run again to submit them.").replace("{count}", recoveryMetrics.attempted)}</div>
+        </div>
+      </div>` : recoveryMetrics?.unresolved ? `
       <div class="notice-box warn" style="border-color:var(--warning);background:rgba(255,170,0,0.08)">
         <span class="notice-icon">⚠️</span>
         <div class="notice-text">

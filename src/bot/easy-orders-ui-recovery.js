@@ -4,6 +4,7 @@ const { normalizePhone, normalizePhoneWithMeta, COUNTRY_PHONE_RULES } = require(
 const {
   cleanText,
   quantityEditDecision,
+  resolveLiveTierItemsForCandidate,
 } = require("./easy-orders-affiliate-recovery-data");
 const { normalizeProductName, productNamesMatch } = require("./parser");
 
@@ -27,6 +28,8 @@ function createEasyOrdersUiRecovery(options = {}) {
   const country = options.country || "sa";
   const stepDelayMs = Number(options.stepDelayMs || DEFAULT_STEP_DELAY_MS) || DEFAULT_STEP_DELAY_MS;
   const onAttemptResult = typeof options.onAttemptResult === "function" ? options.onAttemptResult : () => {};
+  const catalog = options.catalog || {};
+  const taagerCatalog = options.taagerCatalog || {};
 
   function emit(stageName, status, message, extra = {}) {
     stage(stageName, status, message, extra);
@@ -304,6 +307,57 @@ function createEasyOrdersUiRecovery(options = {}) {
           text: allText,
         };
       });
+    });
+  }
+
+  async function inspectDetailItems(page) {
+    return page.evaluate(() => {
+      const text = (el) => String(el && (el.innerText || el.textContent) || "").replace(/\s+/g, " ").trim();
+      const parseNumber = (value) => {
+        const match = String(value || "").replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+        return match ? Number(match[0]) : 0;
+      };
+      const parseMoney = (value) => {
+        const clean = String(value || "").replace(/,/g, " ");
+        const moneyMatch = clean.match(/(?:SAR|ر\.?س|ريال)?\s*(-?\d+(?:\.\d+)?)\s*(?:SAR|ر\.?س|ريال)?/i);
+        return moneyMatch ? Number(moneyMatch[1]) : 0;
+      };
+      const hasProductMedia = (node) => !!(node && node.querySelector && node.querySelector("img[alt]"));
+      const candidateRows = [
+        ...Array.from(document.querySelectorAll("tbody tr")),
+        ...Array.from(document.querySelectorAll(".MuiGrid-container")),
+      ].filter((node) => {
+        const rowText = text(node);
+        return hasProductMedia(node) && rowText && /\d/.test(rowText);
+      });
+      const seen = new Set();
+      const items = [];
+      for (const node of candidateRows) {
+        const img = node.querySelector("img[alt]");
+        const children = Array.from(node.children || []);
+        const childTexts = children.map(text).filter(Boolean);
+        const imgIndex = Math.max(0, children.findIndex((child) => child.contains(img)));
+        const afterProductTexts = childTexts.slice(Math.min(imgIndex + 1, childTexts.length));
+        const productName = String(img && img.getAttribute("alt") || childTexts[imgIndex] || childTexts[0] || "").replace(/\s+/g, " ").trim();
+        const qtyText = afterProductTexts.find((part) => /^\d+(?:\.\d+)?$/.test(String(part || "").trim())) || "";
+        const qty = parseNumber(qtyText) || 1;
+        const moneyTexts = afterProductTexts.filter((part) => /SAR|ر\.?س|ريال|\d/.test(part));
+        const subtotal = parseMoney(moneyTexts[moneyTexts.length - 1] || "") || 0;
+        if (!productName || subtotal <= 0) continue;
+        const key = `${productName}|${qty}|${subtotal}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        items.push({
+          index: items.length,
+          productName,
+          qty,
+          price: qty > 0 ? subtotal / qty : subtotal,
+          subtotal,
+          sku: "",
+          text: text(node),
+        });
+      }
+      return items;
     });
   }
 
@@ -678,6 +732,120 @@ function createEasyOrdersUiRecovery(options = {}) {
     };
   }
 
+  async function inspectMissedDetailReadOnly(page, candidate, options = {}) {
+    await page.locator("body").waitFor({ state: "visible", timeout: 10000 });
+    await waitForEasyOrdersDetail(page, "missed", candidate, 20000);
+    const completed = await page.locator(".MuiChip-label:has-text('Completed'), text=Completed").first()
+      .isVisible({ timeout: 1000 }).catch(() => false);
+    if (completed) {
+      return {
+        ...candidate,
+        actionStatus: "skipped_completed",
+        actionMessage: "Missed order is completed",
+        liveReadOnly: true,
+        resolvedOrders: [],
+      };
+    }
+    const liveItems = await inspectDetailItems(page);
+    const resolved = resolveLiveTierItemsForCandidate(candidate, liveItems, { country, catalog, taagerCatalog });
+    if (!resolved.resolved) {
+      return {
+        ...candidate,
+        actionStatus: "skipped_manual",
+        actionMessage: (resolved.manualReviewItems || []).map((item) => item.reason).filter(Boolean).join(", ") || "Live EasyOrders detail did not resolve trusted tier",
+        liveReadOnly: true,
+        liveItems,
+        manualReviewItems: resolved.manualReviewItems || [],
+        resolvedOrders: [],
+      };
+    }
+    const resolvedOrders = resolved.resolvedItems.map((item, index) => ({
+      ...candidate,
+      ...item,
+      source: "missed",
+      recoverySource: "missed",
+      liveReadOnly: true,
+      liveReadOnlyIndex: index,
+      name: candidate.name || item.name || "",
+      normPhone: candidate.normPhone || item.normPhone || "",
+      phone: candidate.phone || item.phone || "",
+      rawPhone: candidate.rawPhone || item.rawPhone || "",
+      city: candidate.city || item.city || "",
+      region: candidate.region || item.region || "",
+      address: candidate.address || item.address || candidate.city || "",
+      date: candidate.date || candidate.createdAt || "",
+      createdAt: candidate.createdAt || "",
+      easyCreatedAt: candidate.easyCreatedAt || candidate.createdAt || "",
+      uploadGroupKey: candidate.uploadGroupKey || [
+        "missed-live",
+        candidate.normPhone || "",
+        candidate.createdAt || candidate.date || "",
+        candidate.name || "",
+      ].join("|"),
+    }));
+    return {
+      ...candidate,
+      actionStatus: "live_readonly_resolved",
+      actionMessage: `Live EasyOrders detail resolved ${resolvedOrders.length} item(s)`,
+      liveReadOnly: true,
+      liveItems,
+      resolvedOrders,
+      manualReviewItems: [],
+    };
+  }
+
+  async function inspectRealDetailReadOnly(page, candidate) {
+    await page.locator("body").waitFor({ state: "visible", timeout: 10000 });
+    await waitForEasyOrdersDetail(page, "real", candidate, 20000);
+    const liveItems = await inspectDetailItems(page);
+    const resolved = resolveLiveTierItemsForCandidate(candidate, liveItems, { country, catalog, taagerCatalog });
+    if (!resolved.resolved) {
+      return {
+        ...candidate,
+        actionStatus: "skipped_manual",
+        actionMessage: (resolved.manualReviewItems || []).map((item) => item.reason).filter(Boolean).join(", ") || "Live EasyOrders real detail did not resolve trusted tier",
+        liveReadOnly: true,
+        liveItems,
+        manualReviewItems: resolved.manualReviewItems || [],
+        resolvedOrders: [],
+      };
+    }
+    const resolvedOrders = resolved.resolvedItems.map((item, index) => ({
+      ...candidate,
+      ...item,
+      source: "real",
+      recoverySource: "real",
+      liveReadOnly: true,
+      liveReadOnlyIndex: index,
+      name: candidate.name || item.name || "",
+      normPhone: candidate.normPhone || item.normPhone || "",
+      phone: candidate.phone || item.phone || "",
+      rawPhone: candidate.rawPhone || item.rawPhone || "",
+      city: candidate.city || item.city || "",
+      region: candidate.region || item.region || "",
+      address: candidate.address || item.address || candidate.city || "",
+      date: candidate.date || candidate.createdAt || "",
+      createdAt: candidate.createdAt || "",
+      easyCreatedAt: candidate.easyCreatedAt || candidate.createdAt || "",
+      easyOrderUuid: candidate.easyOrderUuid || "",
+      uploadGroupKey: candidate.uploadGroupKey || [
+        "real-live",
+        candidate.easyOrderUuid || "",
+        candidate.normPhone || "",
+        candidate.createdAt || candidate.date || "",
+      ].join("|"),
+    }));
+    return {
+      ...candidate,
+      actionStatus: "live_readonly_resolved",
+      actionMessage: `Live EasyOrders real detail resolved ${resolvedOrders.length} item(s)`,
+      liveReadOnly: true,
+      liveItems,
+      resolvedOrders,
+      manualReviewItems: [],
+    };
+  }
+
   function missedRowScore(candidate, row) {
     const candidatePhone = normalizePhone(candidate.normPhone || candidate.phone || candidate.rawPhone || "", country);
     const rowPhone = normalizePhone(row.phone || "", country);
@@ -730,6 +898,19 @@ function createEasyOrdersUiRecovery(options = {}) {
       const score = realRowScore(candidate, row);
       if (score > bestScore) {
         best = row;
+        bestScore = score;
+      }
+    }
+    return bestScore >= 10 ? best : null;
+  }
+
+  function findPreparedRealCandidateMatch(row, pending) {
+    let best = null;
+    let bestScore = 0;
+    for (const candidate of pending || []) {
+      const score = realRowScore(candidate, row);
+      if (score > bestScore) {
+        best = candidate;
         bestScore = score;
       }
     }
@@ -919,6 +1100,173 @@ function createEasyOrdersUiRecovery(options = {}) {
     return { attempted, skippedCompleted: [], skippedManual };
   }
 
+  async function enrichMissedOrdersReadOnly(page, candidates, fromDate, toDate) {
+    emit("easyorders.readonly.missed", "started", `Inspecting ${candidates.length} ambiguous missed orders`);
+    if (!Array.isArray(candidates) || candidates.length === 0) {
+      emit("easyorders.readonly.missed", "ok", "No ambiguous missed orders need live inspection");
+      return { resolvedOrders: [], skippedManual: [], inspected: 0 };
+    }
+    await openList(page, "missed", fromDate, toDate);
+    const pending = [...candidates];
+    const resolvedOrders = [];
+    const skippedManual = [];
+    let inspected = 0;
+    let pageNo = 1;
+    const maxPages = 100;
+    while (pageNo <= maxPages && pending.length > 0) {
+      const rows = await readMissedRows(page);
+      log(`EasyOrders read-only missed page ${pageNo}: ${rows.length} rows, pending enrichment=${pending.length}`);
+      for (let index = 0; index < rows.length; index++) {
+        const row = rows[index];
+        const candidate = findPreparedMissedMatch(row, pending);
+        if (!candidate) continue;
+        const pendingIndex = pending.indexOf(candidate);
+        if (pendingIndex >= 0) pending.splice(pendingIndex, 1);
+        inspected += 1;
+        log(`EasyOrders read-only matched missed order: ${candidate.name || row.name} / ${candidate.normPhone || row.phone} / ${candidate.productName || ""}`);
+        const readResult = await withEasyOrdersOrderRetry(
+          page,
+          `read-only missed order ${candidate.name || candidate.normPhone || row.phone || index + 1}`,
+          async (readAttempt) => {
+            if (!(readAttempt > 1 && /#\/missed-orders\/[^/]+/i.test(page.url()))) {
+              const tableRows = page.locator(".RaDatagrid-tableWrapper tbody tr.RaDatagrid-clickableRow, tbody tr.RaDatagrid-clickableRow");
+              await tableRows.nth(index).click({ timeout: 10000 });
+              await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
+              await page.waitForTimeout(stepDelayMs);
+            }
+            const detailUrl = page.url();
+            return inspectMissedDetailReadOnly(page, { ...candidate, detailUrl }, { attempt: readAttempt });
+          },
+          (error) => ({
+            ...candidate,
+            detailUrl: page.url(),
+            actionStatus: "skipped_manual",
+            actionMessage: `EasyOrders read-only missed detail did not recover after reload: ${error.message}`,
+            liveReadOnly: true,
+            resolvedOrders: [],
+          })
+        );
+        if (readResult.actionStatus === "live_readonly_resolved") {
+          resolvedOrders.push(...(readResult.resolvedOrders || []));
+        } else {
+          skippedManual.push({
+            ...candidate,
+            actionStatus: "skipped_manual",
+            actionMessage: readResult.actionMessage || "Live EasyOrders detail did not resolve trusted tier",
+            manualReviewItems: readResult.manualReviewItems || [],
+            liveItems: readResult.liveItems || [],
+            reason: readResult.actionMessage || candidate.reason || "live_readonly_unresolved",
+          });
+        }
+        await page.goBack({ waitUntil: "domcontentloaded", timeout: 30000 }).catch(async () => {
+          await openList(page, "missed", fromDate, toDate);
+          for (let i = 1; i < pageNo; i++) await goToNextPage(page);
+        });
+        await page.locator(".RaDatagrid-tableWrapper table.RaDatagrid-table, table").first()
+          .waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+        await page.waitForTimeout(Math.min(stepDelayMs, 800));
+      }
+      if (!(await goToNextPage(page))) break;
+      pageNo++;
+    }
+    for (const candidate of pending) {
+      skippedManual.push({
+        ...candidate,
+        actionStatus: "skipped_manual",
+        actionMessage: "Ambiguous missed order was not found in EasyOrders missed table for read-only enrichment",
+        reason: candidate.reason || "live_readonly_order_not_found",
+      });
+    }
+    emit("easyorders.readonly.missed", "ok", `Live read-only enrichment resolved=${resolvedOrders.length}, manual=${skippedManual.length}, inspected=${inspected}`);
+    return { resolvedOrders, skippedManual, inspected };
+  }
+
+  async function enrichRealOrdersReadOnly(page, candidates, fromDate, toDate) {
+    emit("easyorders.readonly.real", "started", `Inspecting ${candidates.length} ambiguous real orders`);
+    if (!Array.isArray(candidates) || candidates.length === 0) {
+      emit("easyorders.readonly.real", "ok", "No ambiguous real orders need live inspection");
+      return { resolvedOrders: [], skippedManual: [], inspected: 0 };
+    }
+    await openList(page, "real", fromDate, toDate);
+    const pending = [...candidates];
+    const resolvedOrders = [];
+    const skippedManual = [];
+    let inspected = 0;
+    let pageNo = 1;
+    const maxPages = 100;
+    while (pageNo <= maxPages && pending.length > 0) {
+      const rows = await readRealRows(page);
+      log(`EasyOrders read-only real page ${pageNo}: ${rows.length} rows, pending enrichment=${pending.length}`);
+      for (let index = 0; index < rows.length; index++) {
+        const row = rows[index];
+        const candidate = findPreparedRealCandidateMatch(row, pending);
+        if (!candidate) continue;
+        const pendingIndex = pending.indexOf(candidate);
+        if (pendingIndex >= 0) pending.splice(pendingIndex, 1);
+        inspected += 1;
+        log(`EasyOrders read-only matched real order: ${candidate.name || row.customerText || row.shortId} / ${candidate.normPhone || row.phone} / ${candidate.productName || ""}`);
+        const readResult = await withEasyOrdersOrderRetry(
+          page,
+          `read-only real order ${candidate.easyShortId || candidate.easyOrderUuid || candidate.normPhone || index + 1}`,
+          async (readAttempt) => {
+            if (!(readAttempt > 1 && /#\/orders\/[^/]+/i.test(page.url()))) {
+              const tableRows = page.locator(".RaDatagrid-tableWrapper tbody tr.RaDatagrid-clickableRow, tbody tr.RaDatagrid-clickableRow");
+              await tableRows.nth(row.index).click({ timeout: 10000 });
+              await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
+              await page.waitForTimeout(stepDelayMs);
+            }
+            const detailUrl = page.url();
+            const uuidMatch = detailUrl.match(/\/orders\/([^/?#]+)/i);
+            return inspectRealDetailReadOnly(page, {
+              ...candidate,
+              detailUrl,
+              easyOrderUuid: candidate.easyOrderUuid || (uuidMatch ? uuidMatch[1] : ""),
+            });
+          },
+          (error) => ({
+            ...candidate,
+            detailUrl: page.url(),
+            actionStatus: "skipped_manual",
+            actionMessage: `EasyOrders read-only real detail did not recover after reload: ${error.message}`,
+            liveReadOnly: true,
+            resolvedOrders: [],
+          })
+        );
+        if (readResult.actionStatus === "live_readonly_resolved") {
+          resolvedOrders.push(...(readResult.resolvedOrders || []));
+        } else {
+          skippedManual.push({
+            ...candidate,
+            actionStatus: "skipped_manual",
+            actionMessage: readResult.actionMessage || "Live EasyOrders real detail did not resolve trusted tier",
+            manualReviewItems: readResult.manualReviewItems || [],
+            liveItems: readResult.liveItems || [],
+            reason: readResult.actionMessage || candidate.reason || "live_readonly_unresolved",
+          });
+        }
+        await page.goBack({ waitUntil: "domcontentloaded", timeout: 30000 }).catch(async () => {
+          await openList(page, "real", fromDate, toDate);
+          for (let i = 1; i < pageNo; i++) await goToNextPage(page);
+        });
+        await page.locator(".RaDatagrid-tableWrapper table.RaDatagrid-table, table").first()
+          .waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+        await page.waitForTimeout(Math.min(stepDelayMs, 800));
+      }
+      if (!(await goToNextPage(page))) break;
+      pageNo++;
+    }
+    for (const candidate of pending) {
+      skippedManual.push({
+        ...candidate,
+        actionStatus: "skipped_manual",
+        actionMessage: "Ambiguous real order was not found in EasyOrders real orders table for read-only enrichment",
+        reason: candidate.reason || "live_readonly_order_not_found",
+      });
+    }
+    emit("easyorders.readonly.real", "ok", `Live read-only real enrichment resolved=${resolvedOrders.length}, manual=${skippedManual.length}, inspected=${inspected}`);
+    return { resolvedOrders, skippedManual, inspected };
+  }
+
   async function processRealOrders(page, candidates) {
     emit("easyorders.recovery.real", "started", `Processing ${candidates.length} real orders`);
     const attempted = [];
@@ -991,9 +1339,14 @@ function createEasyOrdersUiRecovery(options = {}) {
     openList,
     processRealOrders,
     processMissedOrders,
+    enrichRealOrdersReadOnly,
+    enrichMissedOrdersReadOnly,
     retryAttempts,
     resendRealOrder,
     convertMissedDetail,
+    inspectDetailItems,
+    inspectRealDetailReadOnly,
+    inspectMissedDetailReadOnly,
     setRowsPerPage100,
     applyDateFilters,
     readMissedRows,

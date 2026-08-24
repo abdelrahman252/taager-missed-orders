@@ -32,6 +32,12 @@ const { createLightFunnelsFlow } = require("./lightfunnels-flow");
 const { createTaagerOrdersExportFlow } = require("./taager-orders-export-flow");
 const { createMissingOrdersUploadFlow } = require("./missing-orders-upload-flow");
 const { createEasyOrdersAffiliateRecoveryFlow } = require("./easy-orders-affiliate-recovery-flow");
+const { createEasyOrdersUiRecovery } = require("./easy-orders-ui-recovery");
+const {
+  buildAffiliateRecoveryResult,
+  recoveryProductSummary,
+  referenceItemForProduct,
+} = require("./easy-orders-affiliate-recovery-data");
 const {
   DESTINATION_LEGACY_MISSING_ORDERS,
   DESTINATION_SECOND_TAAGER_CART,
@@ -151,6 +157,10 @@ function buildFailedExcel(...args) {
 
 function buildSkippedExcel(...args) {
   return output().buildSkippedExcel(...args);
+}
+
+function buildMissingOrdersSnapshotExcel(...args) {
+  return output().buildMissingOrdersSnapshotExcel(...args);
 }
 
 function xlsx() {
@@ -4263,6 +4273,435 @@ function splitOrdersByVerificationDelta(orders, beforeCounts, afterCounts) {
   }
   return { confirmed, unconfirmed };
 }
+
+function numberOrZero(value) {
+  const n = Number(String(value == null ? "" : value).replace(/,/g, "").trim());
+  return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeManualReviewUploadRows(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const normalized = [];
+  const skipped = [];
+  list.forEach((row, index) => {
+    const rawPhone = row.phone || row.normalizedPhone || row.normPhone || row.rawPhone || "";
+    const normPhone = normalizePhone(rawPhone, TAAGER_COUNTRY);
+    const sku = String(row.sku || row.suggestedSku || "").trim();
+    const productName = String(row.productName || row.product || "").trim();
+    const qty = Math.max(1, Math.floor(numberOrZero(row.qty || row.suggestedQty || row.easyOrdersQty || 1)));
+    const subtotal = numberOrZero(row.subtotal || row.suggestedSubtotal || row.easyOrdersSubtotal || row.price);
+    const unitPrice = numberOrZero(row.unitPrice) || (subtotal > 0 ? subtotal / qty : 0);
+    const nameSeed = String(row.name || row.customerName || "").trim() || formatPhone(normPhone, TAAGER_COUNTRY) || normPhone;
+    const city = String(row.city || row.region || "").trim();
+    const address = String(row.address || row.notes || row.note || city || "").trim();
+    const reason = !normPhone
+      ? "missing_phone"
+      : (!sku ? "missing_sku" : (!productName ? "missing_product" : (!subtotal ? "missing_subtotal" : "")));
+    if (reason) {
+      skipped.push({
+        ...row,
+        source: row.source || "manual-review",
+        reason,
+        actionMessage: "Manual-review row is missing a required upload field.",
+        manualReview: true,
+        uncertain: true,
+      });
+      return;
+    }
+    const safeCustomer = sanitizeCustomerFields({
+      name: nameSeed,
+      address,
+      city,
+      resolvedCity: city,
+    }, {
+      country: TAAGER_COUNTRY,
+      cityFallback: city,
+    });
+    normalized.push({
+      source: row.source || "manual-review",
+      manualReviewOverride: true,
+      manualReviewIndex: index,
+      name: safeCustomer.name || nameSeed,
+      normPhone,
+      phone: formatPhone(normPhone, TAAGER_COUNTRY) || normPhone,
+      rawPhone,
+      sku,
+      productName,
+      qty,
+      unitPrice,
+      subtotal,
+      city: city || safeCustomer.city || "",
+      region: row.region || "",
+      address: safeCustomer.address || address || city || "",
+      date: row.date || row.createdAt || row.easyCreatedAt || "",
+      createdAt: row.createdAt || "",
+      easyCreatedAt: row.easyCreatedAt || row.createdAt || "",
+      orderStatus: row.orderStatus || "Under processing",
+      amountDue: numberOrZero(row.amountDue),
+      marketerCommission: numberOrZero(row.marketerCommission),
+      taagerOrderNumber: row.taagerOrderNumber || "",
+      destination: "cart",
+    });
+  });
+  return { orders: normalized, skipped };
+}
+
+function manualReviewLearningRowsFromSuccessfulOrders(successfulOrders) {
+  const rows = [];
+  for (const order of successfulOrders || []) {
+    for (const item of orderLineItems(order)) {
+      const sku = String(item.sku || order.sku || "").trim();
+      const productName = String(item.productName || order.productName || "").trim();
+      const qty = Math.max(1, Math.floor(numberOrZero(item.qty || order.qty || 1)));
+      const subtotal = numberOrZero(item.subtotal || order.subtotal || item.unitPrice * qty || order.unitPrice * qty);
+      if (!sku || !productName || qty <= 0 || subtotal <= 0) continue;
+      rows.push({
+        source: "manual-review",
+        sku,
+        productName,
+        qty,
+        subtotal,
+        unitPrice: subtotal / qty,
+        priceSource: "manual_review_approved",
+        quantitySource: "manual_review_approved",
+      });
+    }
+  }
+  return rows;
+}
+
+const CART_LIVE_ENRICHMENT_REASONS = new Set([
+  "ambiguous_sku_price_tier",
+  "quantity_inference_requires_manual_review",
+  "subtotal_not_in_sku_tiers",
+  "sku_tier_profile_too_weak",
+  "missing_sku_tier_profile",
+  "missing_sku_for_missed_product",
+  "product_not_in_easyorders_or_taager",
+]);
+
+function cartLiveEnrichmentKey(row) {
+  return [
+    normalizePhone(row && (row.normalizedPhone || row.normPhone || row.phone || row.rawPhone) || "", TAAGER_COUNTRY),
+    row && (row.easyOrderUuid || row.easyOrderId || row.orderUuid || row.orderId || ""),
+    row && (row.easyCreatedAt || row.createdAt || row.date || ""),
+    row && (row.name || row.customerName || ""),
+    row && (row.productName || row.product || ""),
+  ].map((value) => String(value || "").trim()).join("|");
+}
+
+function catalogReferenceFromEntry(entry, productName, referenceSource) {
+  if (!entry || !entry.sku) return null;
+  const prices = entry.prices && typeof entry.prices === "object" ? entry.prices : {};
+  const priceOptions = Object.entries(prices).map(([qtyText, subtotalValue]) => {
+    const qty = Number(qtyText) || 0;
+    const subtotal = Number(subtotalValue) || 0;
+    return {
+      qty,
+      subtotal,
+      unitPrice: qty > 0 ? subtotal / qty : subtotal,
+    };
+  }).filter((option) => option.qty > 0 && option.subtotal > 0).sort((a, b) => a.qty - b.qty);
+  if (!priceOptions.length) return null;
+  const qty = Number(entry.minQty || priceOptions[0].qty || 1) || 1;
+  const selected = priceOptions.find((option) => option.qty === qty) || priceOptions[0];
+  return {
+    sku: String(entry.sku || "").trim(),
+    productName: String(productName || entry.productName || entry.sku || "").trim(),
+    qty: selected.qty,
+    subtotal: selected.subtotal,
+    unitPrice: selected.unitPrice,
+    priceOptions,
+    qtyCounts: entry.qtyCounts || {},
+    totalSamples: Number(entry.totalSamples || 0) || 0,
+    dominantQty: Number(entry.dominantQty || selected.qty) || selected.qty,
+    dominantQtyCount: Number(entry.dominantQtyCount || 0) || 0,
+    dominantQtyConfidence: Number(entry.dominantQtyConfidence || 0) || 0,
+    maxQty: Number(entry.maxQty || selected.qty) || selected.qty,
+    trusted: true,
+    referenceSource,
+  };
+}
+
+function findCatalogReferenceForMissedRow(row, catalog = {}, taagerCatalog = {}) {
+  const productName = String(row.productName || row.product || "").trim();
+  const byProduct = referenceItemForProduct(productName, catalog, taagerCatalog);
+  if (byProduct && byProduct.trusted) return byProduct;
+  const sku = String(row.sku || row.skuFromUtm || row.suggestedSku || "").trim();
+  if (!sku) return null;
+  const sources = [
+    { source: "easyorders-catalog-sku", catalog },
+    { source: "taager-catalog-sku", catalog: taagerCatalog },
+  ];
+  for (const source of sources) {
+    const entry = Object.values(source.catalog || {}).find((item) => String(item && item.sku || "").trim() === sku);
+    const reference = catalogReferenceFromEntry(entry, productName, source.source);
+    if (reference) return reference;
+  }
+  return null;
+}
+
+function buildCartLiveEnrichmentCandidates(rows = [], catalog = {}, taagerCatalog = {}) {
+  const candidates = [];
+  const candidateKeys = new Set();
+  for (const row of rows || []) {
+    const source = String(row && (row.source || "missed"));
+    if (source !== "missed" && source !== "real") continue;
+    const reason = String(row && row.reason || "");
+    if (!CART_LIVE_ENRICHMENT_REASONS.has(reason)) continue;
+    const productName = String(row.productName || row.product || "").trim();
+    const reference = findCatalogReferenceForMissedRow(row, catalog, taagerCatalog);
+    const normPhone = normalizePhone(row.normalizedPhone || row.normPhone || row.phone || row.rawPhone || "", TAAGER_COUNTRY);
+    if (!normPhone) continue;
+    const city = row.city || row.region || "";
+    const address = row.address || city || "";
+    const name = String(row.name || row.customerName || "").trim() || formatPhone(normPhone, TAAGER_COUNTRY) || normPhone;
+    candidates.push({
+      ...row,
+      source,
+      recoverySource: source,
+      cartLiveEnrichment: true,
+      cartLiveEnrichmentReason: reason,
+      normPhone,
+      normalizedPhone: normPhone,
+      phone: formatPhone(normPhone, TAAGER_COUNTRY) || normPhone,
+      rawPhone: row.rawPhone || row.phone || "",
+      name,
+      city,
+      address,
+      productName,
+      items: reference && reference.trusted ? [{
+        ...reference,
+        source,
+        recoverySource: source,
+        trusted: true,
+        quantitySource: "cart_live_readonly_pending",
+        priceSource: "cart_live_readonly_pending",
+        normPhone,
+        rawPhone: row.rawPhone || row.phone || "",
+        name,
+        city,
+        address,
+        createdAt: row.createdAt || row.date || "",
+        easyCreatedAt: row.easyCreatedAt || "",
+      }] : [],
+    });
+    candidateKeys.add(cartLiveEnrichmentKey(row));
+  }
+  return { candidates, candidateKeys };
+}
+
+async function enrichCartRowsFromEasyOrdersLive(page, skippedRows, catalog, taagerCatalog, dateFrom, dateTo) {
+  if (CMS_PROVIDER !== "easyorders") return { resolved: [], unresolved: skippedRows || [], attempted: 0 };
+  const { candidates, candidateKeys } = buildCartLiveEnrichmentCandidates(skippedRows, catalog, taagerCatalog);
+  if (!candidates.length) return { resolved: [], unresolved: skippedRows || [], attempted: 0 };
+  const realCandidates = candidates.filter((row) => row.source === "real");
+  const missedCandidates = candidates.filter((row) => row.source !== "real");
+  log(`Cart live EasyOrders enrichment: ${candidates.length} ambiguous rows will be inspected read-only (real=${realCandidates.length}, missed=${missedCandidates.length}).`);
+  emitStage("cart.live-enrichment", "started", `Inspecting ${candidates.length} ambiguous EasyOrders rows`);
+  const ui = createEasyOrdersUiRecovery({
+    log,
+    stage: emitStage,
+    country: TAAGER_COUNTRY,
+    catalog,
+    taagerCatalog,
+    goto: async (easyPage, url) => {
+      await gotoWithNetworkRetries(easyPage, url, "EasyOrders cart live enrichment", { attempts: 3, timeout: 45000, waitMs: 5000 });
+      return easyPage;
+    },
+  });
+  try {
+    const realResult = realCandidates.length
+      ? await ui.enrichRealOrdersReadOnly(page, realCandidates, dateFrom, dateTo)
+      : { resolvedOrders: [], skippedManual: [], inspected: 0 };
+    const missedResult = missedCandidates.length
+      ? await ui.enrichMissedOrdersReadOnly(page, missedCandidates, dateFrom, dateTo)
+      : { resolvedOrders: [], skippedManual: [], inspected: 0 };
+    const resolved = [...(realResult.resolvedOrders || []), ...(missedResult.resolvedOrders || [])].map((row) => ({
+      ...row,
+      source: row.source || "missed",
+      cartLiveEnriched: true,
+      uploadedWithWarning: false,
+      uncertain: false,
+    }));
+    const stillManualByKey = new Set([...(realResult.skippedManual || []), ...(missedResult.skippedManual || [])].map(cartLiveEnrichmentKey));
+    const untouched = (skippedRows || []).filter((row) => {
+      const key = cartLiveEnrichmentKey(row);
+      return !candidateKeys.has(key) || stillManualByKey.has(key);
+    });
+    const inspected = Number(realResult.inspected || 0) + Number(missedResult.inspected || 0);
+    log(`Cart live EasyOrders enrichment: resolved=${resolved.length}, stillManual=${untouched.length}, inspected=${inspected}.`);
+    emitStage("cart.live-enrichment", "ok", `Live enrichment resolved ${resolved.length} ambiguous EasyOrders rows`, {
+      candidates: candidates.length,
+      resolved: resolved.length,
+      manual: untouched.length,
+      inspected,
+    });
+    return { resolved, unresolved: untouched, attempted: candidates.length };
+  } catch (err) {
+    const message = err && err.message || String(err || "unknown error");
+    log(`Cart live EasyOrders enrichment skipped after error: ${message}`);
+    emitStage("cart.live-enrichment", "warning", `Live enrichment skipped: ${message}`);
+    return { resolved: [], unresolved: skippedRows || [], attempted: candidates.length, error: message };
+  }
+}
+
+async function runManualReviewUpload(page, dateFrom, dateTo, taagerStartDate, taagerEndDate) {
+  const prepared = normalizeManualReviewUploadRows(config.manualReviewOrders);
+  const manualRows = prepared.orders;
+  const parserApi = parser();
+  const taagerBuffer = await phase4_taager(page, taagerStartDate, taagerEndDate);
+  page = activePage || page;
+  const taagerOrderKeys = parserApi.parseTaagerOrderKeys(taagerBuffer);
+  const taagerAnalyticsMap = parserApi.parseTaagerAnalyticsMap(taagerBuffer);
+  const provinceFallbackOptions = {
+    fallbackProvince: taagerAnalyticsMap.provinceFallback,
+    fallbackProvinceBySku: taagerAnalyticsMap.provinceFallbackBySku,
+  };
+  const dedupeResult = parserApi.mergeAndDeduplicate(manualRows, [], taagerOrderKeys);
+  const orders = dedupeResult.orders;
+  const skippedRows = [...prepared.skipped, ...(dedupeResult.skippedOrders || [])].map((row) => ({
+    ...row,
+    accountEmail: config.easyEmail || "",
+    accountLabel: config.label || "",
+    taagerCountry: TAAGER_COUNTRY,
+  }));
+  const outputBuffer = buildOutputExcel(orders, provinceFallbackOptions);
+  process.send && process.send({
+    type: "preview",
+    rows: orders.slice(0, 50).map((o) => ({
+      productName: o.productName || "",
+      sku: o.sku || "",
+      qty: o.qty || 1,
+      unitPrice: o.unitPrice || "",
+      subtotal: o.subtotal || 0,
+      date: o.date || "",
+      city: o.city || "",
+      region: o.region || "",
+      address: o.address || "",
+      name: o.name || "",
+      phone: formatPhone(o.normPhone, TAAGER_COUNTRY) || "",
+      taagerCountry: TAAGER_COUNTRY,
+      destination: "manual-review-cart",
+    })),
+    total: orders.length,
+    manualReviewMode: true,
+    buffer: Array.from(outputBuffer),
+  });
+  log(`Manual review upload: ${orders.length} reviewed rows ready after Taager duplicate check; ${skippedRows.length} skipped.`);
+
+  let uploadResults = {
+    success: 0,
+    failed: 0,
+    successfulOrders: [],
+    failedOrders: [],
+    failedSource: "none",
+    cartVerification: null,
+  };
+  if (orders.length > 0) {
+    const todayForCartVerification = parseDate(formatDataDay(new Date()));
+    const cartVerificationEndDate = todayForCartVerification > taagerEndDate ? todayForCartVerification : taagerEndDate;
+    uploadResults = await phase5_uploadToTaagerVerified(page, orders, provinceFallbackOptions, {
+      exportFromDate: taagerStartDate,
+      exportToDate: cartVerificationEndDate,
+      baselineBuffer: cartVerificationEndDate > taagerEndDate ? null : taagerBuffer,
+      label: "manual review cart",
+    });
+  }
+
+  const successfulOrders = Array.isArray(uploadResults.successfulOrders)
+    ? uploadResults.successfulOrders
+    : splitSuccessfulOrders(orders, uploadResults.failedOrders || []);
+  try {
+    const manualLearningRows = manualReviewLearningRowsFromSuccessfulOrders(successfulOrders);
+    if (manualLearningRows.length > 0 && typeof parserApi.buildProductCatalog === "function") {
+      const tierCatalogScope = buildCatalogScope(config, TAAGER_COUNTRY);
+      let trustedTierState = loadTrustedSkuTierCatalog(tierCatalogScope, { baseDir: config.profilePath });
+      const manualReviewCatalog = parserApi.buildProductCatalog(manualLearningRows);
+      trustedTierState = updateTrustedSkuTierCatalog(trustedTierState, {
+        scope: tierCatalogScope,
+        manualReviewCatalog,
+      });
+      const savedTierPath = saveTrustedSkuTierCatalog(trustedTierState, tierCatalogScope, { baseDir: config.profilePath });
+      const savedTierStats = trustedCatalogStats(trustedTierState);
+      log(`Manual review learning saved: ${manualLearningRows.length} approved rows, catalog now ${savedTierStats.entries} SKUs / ${savedTierStats.tiers} tiers (${savedTierPath}).`);
+    }
+  } catch (err) {
+    log(`Manual review learning skipped: ${err && err.message || err}`);
+  }
+  const productSummaryMap = {};
+  for (const order of successfulOrders) {
+    for (const item of orderLineItems(order)) {
+      const key = item.productName || "Unknown";
+      if (!productSummaryMap[key]) productSummaryMap[key] = { productName: key, count: 0, totalQty: 0 };
+      productSummaryMap[key].count++;
+      productSummaryMap[key].totalQty += item.qty || 1;
+    }
+  }
+  const buildResultOrderRow = (o) => ({
+    name: o.name || "",
+    phone: formatPhone(o.normPhone, TAAGER_COUNTRY) || "",
+    taagerCountry: TAAGER_COUNTRY,
+    productName: o.productName || "",
+    sku: o.sku || "",
+    qty: o.qty || 1,
+    city: o.city || "",
+    unitPrice: o.unitPrice || "",
+    subtotal: o.subtotal || 0,
+    date: o.date || "",
+    createdAt: o.createdAt || "",
+    easyCreatedAt: o.easyCreatedAt || "",
+    source: o.source || "manual-review",
+    destination: "cart",
+    address: o.address || "",
+    orderStatus: o.orderStatus || "Under processing",
+    amountDue: o.amountDue || 0,
+    marketerCommission: o.marketerCommission || 0,
+    taagerOrderNumber: o.taagerOrderNumber || "",
+  });
+  const failedBuffer = uploadResults.failedOrders && uploadResults.failedOrders.length
+    ? buildFailedExcel(uploadResults.failedOrders)
+    : null;
+  const skippedBuffer = skippedRows.length ? buildSkippedExcel(skippedRows) : null;
+  process.send && process.send({
+    type: "result",
+    data: {
+      orders: successfulOrders.length,
+      taagerCountry: TAAGER_COUNTRY,
+      manualReviewMode: true,
+      stats: dedupeResult.stats,
+      productSummary: Object.values(productSummaryMap),
+      buffer: Array.from(outputBuffer),
+      confirmedOrderRows: successfulOrders.map(buildResultOrderRow),
+      orderRows: successfulOrders.map(buildResultOrderRow),
+      attemptedOrderRows: orders.map(buildResultOrderRow),
+      cartVerification: uploadResults.verification || null,
+      failedOrders: {
+        count: uploadResults.failed || 0,
+        summary: uploadResults.failedOrders || [],
+        errorRows: uploadResults.failedOrders || [],
+        source: uploadResults.failedSource || "unknown",
+        failedDir: "",
+        failedPath: "",
+        buffer: failedBuffer ? Array.from(failedBuffer) : null,
+      },
+      skippedOrders: {
+        count: skippedRows.length,
+        rows: skippedRows,
+        buffer: skippedBuffer ? Array.from(skippedBuffer) : null,
+        filePath: "",
+      },
+      taagerSnapshot: {
+        entries: Array.from(taagerAnalyticsMap.byPhoneSku.entries()),
+        skuDefaults: taagerAnalyticsMap.skuDefaults,
+        provinceFallback: taagerAnalyticsMap.provinceFallback,
+        provinceFallbackBySku: taagerAnalyticsMap.provinceFallbackBySku,
+        provinceFallbackStats: taagerAnalyticsMap.provinceFallbackStats,
+      },
+      taagerDashboardSnapshot: null,
+    },
+  });
+}
 async function exportTaagerCartVerificationSnapshot(page, exportFromDate, exportToDate, cycle, label) {
   const dateLabel = `${formatDataDay(exportFromDate)} -> ${formatDataDay(exportToDate)}`;
   const maxAttempts = Math.max(1, Number(config.cartVerificationExportAttempts || 3) || 3);
@@ -4331,8 +4770,8 @@ async function phase5_uploadToTaagerVerified(page, orders, outputOptions = {}, v
   const maxCycles = Math.max(1, Number.isFinite(configuredMaxCycles) && configuredMaxCycles > 0 ? configuredMaxCycles : defaultMaxCycles);
   const configuredNoProgressCycles = Number(config.cartVerificationNoProgressCycles || verifyOptions.noProgressCycles || 2);
   const maxNoProgressCycles = Math.max(1, Number.isFinite(configuredNoProgressCycles) && configuredNoProgressCycles > 0 ? configuredNoProgressCycles : 2);
-  const configuredBatchSize = Number(config.cartVerificationBatchSize || verifyOptions.batchSize || 10);
-  const batchSize = Math.max(1, Number.isFinite(configuredBatchSize) && configuredBatchSize > 0 ? Math.floor(configuredBatchSize) : 10);
+  const configuredBatchSize = Number(config.cartVerificationBatchSize || verifyOptions.batchSize || 20);
+  const batchSize = Math.max(1, Number.isFinite(configuredBatchSize) && configuredBatchSize > 0 ? Math.floor(configuredBatchSize) : 20);
   const label = verifyOptions.label || "cart";
   let baselineCounts = verifyOptions.baselineBuffer
     ? taagerSnapshotCountsFromBuffer(verifyOptions.baselineBuffer, exportFromDate, exportToDate)
@@ -4509,8 +4948,42 @@ async function phase6_uploadMissingOrders(page, orders, outputOptions = {}) {
   try {
     page = await flow.openLegacyMissingOrders(page);
     const result = await flow.uploadFile(page, tempPath, { storeName: missingOrdersStoreName });
+    const snapshot = await flow.scrapeMissingOrdersSnapshot(page, {
+      fromDate: outputOptions.exportFromDate || outputOptions.fromDate || "",
+      toDate: outputOptions.exportToDate || outputOptions.toDate || "",
+    }).catch((error) => ({
+      page,
+      rows: [],
+      html: "",
+      error: error.message || String(error),
+    }));
+    page = snapshot.page || page;
+    const snapshotRows = Array.isArray(snapshot.rows) ? snapshot.rows : [];
+    const snapshotBuffer = buildMissingOrdersSnapshotExcel(snapshotRows);
+    let snapshotPath = "";
+    let htmlPath = "";
+    const snapshotDir = path.join(path.dirname(config.profilePath || os.tmpdir()), "missing-orders-snapshots");
+    if (!fs.existsSync(snapshotDir)) fs.mkdirSync(snapshotDir, { recursive: true });
+    if (snapshotBuffer) {
+      snapshotPath = uniqueFilePath(snapshotDir, accountFileBase("missing-orders-snapshot"));
+      fs.writeFileSync(snapshotPath, snapshotBuffer);
+    }
+    if (snapshot.html) {
+      htmlPath = uniqueFilePath(snapshotDir, accountFileBase("missing-orders-html").replace(/\.xlsx$/i, ".html"));
+      fs.writeFileSync(htmlPath, snapshot.html, "utf8");
+    }
+    log(`Taager Missing Orders snapshot: rows=${snapshotRows.length}${snapshot.error ? ` error=${snapshot.error}` : ""}${snapshotPath ? ` file=${snapshotPath}` : ""}${htmlPath ? ` html=${htmlPath}` : ""}`);
     emitStage("taager.missing-orders.upload", "ok", `Missing Orders upload completed for ${orders.length} order items`, { total: orders.length });
-    return { page, buffer, result };
+    return {
+      page,
+      buffer,
+      result,
+      snapshotRows,
+      snapshotBuffer,
+      snapshotPath,
+      htmlPath,
+      snapshotError: snapshot.error || "",
+    };
   } catch (error) {
     emitStage("taager.missing-orders.upload", "failed", error.message || String(error), { total: orders.length });
     throw error;
@@ -4872,6 +5345,27 @@ if (config.mode === "second-taager-cart-upload") {
     }
   }
 
+  if (config.manualReviewMode === true && Array.isArray(config.manualReviewOrders)) {
+    try {
+      log("\n========================================");
+      log("  MANUAL REVIEW UPLOAD MODE");
+      log(`  Reviewed rows: ${config.manualReviewOrders.length}`);
+      log("========================================\n");
+      await runManualReviewUpload(page, dateFrom, dateTo, taagerStartDate, taagerEndDate);
+    } catch (err) {
+      if (!stopRequested) {
+        const message = friendlyErrorMessage(err);
+        log(`❌ FATAL: ${message}`);
+        process.send && process.send({ type: "error", error: message });
+      }
+    } finally {
+      await (activeContext || context).close().catch(() => {});
+      activeContext = null;
+      activePage = null;
+    }
+    return;
+  }
+
   try {
     // Phase 1 — Easy-Orders login (unchanged)
     if (CMS_PROVIDER === "lightfunnels") {
@@ -4913,6 +5407,7 @@ if (config.mode === "second-taager-cart-upload") {
       repairOrderQuantitiesFromCatalog,
       resolveMissedOrders,
       mergeAndDeduplicate,
+      makeOrderKey,
     } = parser();
 
     const taagerOrderKeys = parseTaagerOrderKeys(taagerBuffer);
@@ -4941,7 +5436,7 @@ if (config.mode === "second-taager-cart-upload") {
       log(`Real orders quantity repaired from EasyOrders/Taager/trusted history: ${catalogQuantityRepairs}`);
       catalog = buildProductCatalog(realOrders);
     }
-    const realTierManualRows = realOrders.filter((order) => order && order.manualReview === true).map((order) => ({
+    let realTierManualRows = realOrders.filter((order) => order && order.manualReview === true).map((order) => ({
       ...order,
       source: order.source || "real",
       normPhone: order.normPhone || "",
@@ -4955,7 +5450,7 @@ if (config.mode === "second-taager-cart-upload") {
       accountLabel: config.label || "",
       taagerCountry: TAAGER_COUNTRY,
     }));
-    const uploadRealOrders = realOrders.filter((order) => !(order && order.manualReview === true));
+    let uploadRealOrders = realOrders.filter((order) => !(order && order.manualReview === true));
     if (realTierManualRows.length > 0) {
       log(`SKU tier resolver: ${realTierManualRows.length} real EasyOrders rows require Uncertain review and will not be uploaded automatically.`);
       catalog = buildProductCatalog(realOrders);
@@ -4985,13 +5480,45 @@ if (config.mode === "second-taager-cart-upload") {
     }
     const missingOrdersFeatureEnabled = missedOrdersDestination === DESTINATION_LEGACY_MISSING_ORDERS;
     const secondTaagerCartEnabled = missedOrdersDestination === DESTINATION_SECOND_TAAGER_CART;
-    const resolvedMissed = resolvedMissedAll;
-    log(`Missing Orders audit: parsed=${missedOrders.length}, resolved=${resolvedMissed.length}, phoneSkipped=${phoneFailedOrders.length}, catalogSkipped=${catalogFailedOrders.length}, localRegistrySkipped=0`);
+    let resolvedMissed = resolvedMissedAll;
+    let catalogReviewRows = catalogFailedOrders;
+    log(`Routing config: affiliateRecovery=${config.easyOrdersAffiliateRecoveryEnabled === true ? "on" : "off"}, autoConfirm=${config.autoConfirm === true ? "on" : "off"}, missedOrdersDestination=${missedOrdersDestination}, legacyMissingOrders=${missingOrdersFeatureEnabled ? "on" : "off"}, secondTaagerCart=${secondTaagerCartEnabled ? "on" : "off"}`);
+    log(`Missing Orders audit: parsed=${missedOrders.length}, resolved=${resolvedMissed.length}, phoneSkipped=${phoneFailedOrders.length}, catalogSkipped=${catalogReviewRows.length}, localRegistrySkipped=0`);
     if (missingOrdersFeatureEnabled || secondTaagerCartEnabled) {
       log("Missing Orders audit: local machine registry is ignored; routing uses this run's EasyOrders export plus Taager online duplicate checks.");
     }
+    if (config.easyOrdersAffiliateRecoveryEnabled !== true) {
+      const liveEnrichment = await enrichCartRowsFromEasyOrdersLive(page, [...catalogReviewRows, ...realTierManualRows], catalog, taagerCatalog, dateFrom, dateTo);
+      if (liveEnrichment.resolved.length > 0 || liveEnrichment.attempted > 0) {
+        const liveResolvedReal = liveEnrichment.resolved.filter((row) => row.source === "real");
+        const liveResolvedMissed = liveEnrichment.resolved.filter((row) => row.source !== "real");
+        uploadRealOrders = [...uploadRealOrders, ...liveResolvedReal];
+        resolvedMissed = [...resolvedMissed, ...liveResolvedMissed];
+        catalogReviewRows = liveEnrichment.unresolved.filter((row) => row.source !== "real");
+        realTierManualRows = liveEnrichment.unresolved.filter((row) => row.source === "real");
+        log(`Missing Orders audit after live EasyOrders enrichment: realResolved=${liveResolvedReal.length}, missedResolved=${liveResolvedMissed.length}, resolvedMissed=${resolvedMissed.length}, realReview=${realTierManualRows.length}, catalogSkipped=${catalogReviewRows.length}`);
+      }
+    }
 
-    const baseSkippedOrders = [...phoneFailedOrders, ...catalogFailedOrders, ...realTierManualRows].map(o => ({
+    const reviewRowsBeforeTaagerFilter = [...phoneFailedOrders, ...catalogReviewRows, ...realTierManualRows];
+    let reviewRowsAlreadyInTaager = 0;
+    const reviewRowsAfterTaagerFilter = reviewRowsBeforeTaagerFilter.filter((row) => {
+      const phone = normalizePhone(row && (row.normalizedPhone || row.normPhone || row.rawPhone || row.phone) || "", TAAGER_COUNTRY);
+      if (!phone) return true;
+      const items = orderLineItems(row);
+      const skus = items.length
+        ? items.map((item) => item.sku).filter(Boolean)
+        : [row && row.sku].filter(Boolean);
+      if (!skus.length) return true;
+      const alreadyInTaager = skus.some((sku) => taagerOrderKeys.has(makeOrderKey(phone, sku)));
+      if (alreadyInTaager) reviewRowsAlreadyInTaager += 1;
+      return !alreadyInTaager;
+    });
+    if (reviewRowsAlreadyInTaager > 0) {
+      log(`Manual review cleanup: ${reviewRowsAlreadyInTaager} rows already exist in Taager and were removed from manual review.`);
+    }
+
+    const baseSkippedOrders = reviewRowsAfterTaagerFilter.map(o => ({
       ...o,
       accountEmail: config.easyEmail || "",
       accountLabel: config.label || "",
@@ -5094,6 +5621,343 @@ if (config.mode === "second-taager-cart-upload") {
       if (recoveryManualSkippedOrders.length > 0) {
         log(`Affiliate recovery: ${recoveryManualSkippedOrders.length} actionable/manual skipped rows will be shown in the recovery manual-review table.`);
       }
+      if (missingOrdersFeatureEnabled) {
+        const destinationSplit = splitOrdersByMissedDestination(orders, missedOrdersDestination);
+        const { primaryCartOrders, legacyMissingOrders } = destinationSplit;
+        const missingOrdersStoreName = String(config.missingOrdersStoreName || "").trim();
+        const recoveryPreparedOrders = buildGroupedCartOrders(primaryCartOrders);
+        const realRecoveryManualRows = recoveryManualSkippedOrders.filter((row) => String(row && (row.recoverySource || row.source) || "") === "real");
+        const normalSkippedRows = allSkippedOrders.filter((row) => String(row && (row.recoverySource || row.source) || "") !== "real" || isPhoneTrashSkip(row));
+        const normalSkippedBuffer = normalSkippedRows.length > 0 ? buildSkippedExcel(normalSkippedRows) : null;
+        const missingOrdersBuffer = legacyMissingOrders.length > 0
+          ? buildMissingOrdersExcel(legacyMissingOrders, provinceFallbackOptions)
+          : null;
+        const missingOrdersUpload = {
+          enabled: true,
+          attempted: legacyMissingOrders.length,
+          success: 0,
+          failed: 0,
+          status: legacyMissingOrders.length ? "pending" : "skipped",
+          error: "",
+          storeName: missingOrdersStoreName,
+          buffer: missingOrdersBuffer ? Array.from(missingOrdersBuffer) : null,
+        };
+        const recoveryPreviewAttempts = recoveryPreparedOrders.map((order) => ({
+          ...order,
+          actionStatus: "preview_only_auto_confirm_off",
+          finalStatus: "preview_only_auto_confirm_off",
+          actionMessage: "Auto-confirm is OFF; affiliate recovery stopped after preview and did not resend this order.",
+          uploadedWithWarning: false,
+          uncertain: false,
+        }));
+        const missingPreviewRows = legacyMissingOrders.map((order) => ({
+          ...order,
+          phone: formatPhone(order.normPhone, TAAGER_COUNTRY) || "",
+          destination: "missing-orders",
+          recoveryStatus: config.autoConfirm === true ? "missing_orders_pending_upload" : "preview_only_auto_confirm_off",
+          finalStatus: config.autoConfirm === true ? "missing_orders_pending_upload" : "preview_only_auto_confirm_off",
+          actionMessage: config.autoConfirm === true
+            ? "Prepared for Taager Missing Orders upload."
+            : "Auto-confirm is OFF; Missing Orders upload stopped after preview.",
+        }));
+        const recoveryPreviewRows = recoveryPreparedOrders.slice(0, 50).map(o => ({
+          productName: o.productName || "",
+          sku:         o.sku || "",
+          qty:         o.qty || 1,
+          unitPrice:   o.unitPrice || "",
+          subtotal:    o.subtotal || 0,
+          date:        o.date || "",
+          city:        o.city || "",
+          region:      o.region || "",
+          address:     o.address || "",
+          name:        o.name || "",
+          phone:       formatPhone(o.normPhone, TAAGER_COUNTRY) || "",
+          taagerCountry: TAAGER_COUNTRY,
+          uncertain:   !!o.uncertain,
+          destination: "affiliate-recovery",
+          recoverySource: o.recoverySource || o.source || "",
+        }));
+        const missingPreviewForDashboard = missingPreviewRows.slice(0, Math.max(0, 50 - recoveryPreviewRows.length)).map(o => ({
+          productName: o.productName || "",
+          sku:         o.sku || "",
+          qty:         o.qty || 1,
+          unitPrice:   o.unitPrice || "",
+          subtotal:    o.subtotal || 0,
+          date:        o.date || "",
+          city:        o.city || "",
+          region:      o.region || "",
+          address:     o.address || "",
+          name:        o.name || "",
+          phone:       o.phone || "",
+          taagerCountry: TAAGER_COUNTRY,
+          uncertain:   !!o.uncertain,
+          destination: "missing-orders",
+          recoverySource: o.recoverySource || o.source || "",
+        }));
+        const recoveryPreviewBuffer = primaryCartOrders.length > 0 ? buildOutputExcel(primaryCartOrders, provinceFallbackOptions) : null;
+        process.send && process.send({
+          type: "preview",
+          rows: [...recoveryPreviewRows, ...missingPreviewForDashboard],
+          total: recoveryPreparedOrders.length + legacyMissingOrders.length,
+          recoveryPreview: true,
+          combinedRecoveryMissingOrders: true,
+          primaryCartCount: recoveryPreparedOrders.length,
+          legacyMissingOrdersCount: legacyMissingOrders.length,
+          buffer: recoveryPreviewBuffer ? Array.from(recoveryPreviewBuffer) : (missingOrdersBuffer ? Array.from(missingOrdersBuffer) : null),
+        });
+        log(`Combined recovery + Missing Orders preview sent: recovery real=${recoveryPreparedOrders.length}, legacy missing=${legacyMissingOrders.length}`);
+        emitStage("affiliate-recovery.combined-mode", "started", `Affiliate recovery real=${recoveryPreparedOrders.length}, Missing Orders=${legacyMissingOrders.length}`);
+
+        const productSummaryFromOrders = (rows) => {
+          const summary = new Map();
+          for (const row of rows || []) {
+            for (const item of orderLineItems(row)) {
+              const key = item.productName || item.sku || "Unknown";
+              if (!summary.has(key)) summary.set(key, { productName: key, count: 0, totalQty: 0 });
+              const entry = summary.get(key);
+              entry.count += 1;
+              entry.totalQty += Number(item.qty || 1) || 1;
+            }
+          }
+          return Array.from(summary.values());
+        };
+        const mergeProductSummaries = (...groups) => {
+          const summary = new Map();
+          for (const group of groups) {
+            for (const row of group || []) {
+              const key = row.productName || "Unknown";
+              if (!summary.has(key)) summary.set(key, { productName: key, count: 0, totalQty: 0 });
+              const entry = summary.get(key);
+              entry.count += Number(row.count || 0) || 0;
+              entry.totalQty += Number(row.totalQty || 0) || 0;
+            }
+          }
+          return Array.from(summary.values());
+        };
+        const baseTaagerSnapshot = {
+          entries:     Array.from(taagerAnalyticsMap.byPhoneSku.entries()),
+          skuDefaults: taagerAnalyticsMap.skuDefaults,
+          provinceFallback: taagerAnalyticsMap.provinceFallback,
+          provinceFallbackBySku: taagerAnalyticsMap.provinceFallbackBySku,
+          provinceFallbackStats: taagerAnalyticsMap.provinceFallbackStats,
+        };
+
+        if (config.autoConfirm !== true) {
+          log("Auto-confirm is OFF - combined affiliate recovery + Missing Orders stopped after preview; nothing was submitted.");
+          emitStage("affiliate-recovery.combined-preview-only", "waiting", "Auto-confirm is OFF; review recovery and Missing Orders queues, then rerun with Auto-Confirm ON", {
+            recovery: recoveryPreparedOrders.length,
+            missingOrders: legacyMissingOrders.length,
+          });
+          const affiliateRecovery = buildAffiliateRecoveryResult({
+            realAttempts: recoveryPreviewAttempts,
+            missedAttempts: [],
+            verified: [],
+            failedInTaager: [],
+            unresolved: [],
+            skippedAlready: [],
+            skippedCompleted: [],
+            skippedManual: realRecoveryManualRows,
+          }, TAAGER_COUNTRY);
+          affiliateRecovery.previewOnly = true;
+          affiliateRecovery.autoConfirmRequired = true;
+          affiliateRecovery.queuedCount = recoveryPreparedOrders.length;
+          affiliateRecovery.queuedRows = affiliateRecovery.attemptedRows || [];
+          affiliateRecovery.attemptedCount = 0;
+          affiliateRecovery.realAttempted = 0;
+          affiliateRecovery.missedAttempted = 0;
+          affiliateRecovery.productSummary = recoveryProductSummary(recoveryPreviewAttempts);
+          missingOrdersUpload.status = legacyMissingOrders.length ? "preview_only_auto_confirm_off" : "skipped";
+          missingOrdersUpload.previewOnly = legacyMissingOrders.length > 0;
+          missingOrdersUpload.autoConfirmRequired = legacyMissingOrders.length > 0;
+          if (legacyMissingOrders.length > 0) {
+            missingOrdersUpload.error = "Auto-confirm is OFF; Missing Orders upload stopped after preview.";
+          }
+          process.send && process.send({
+            type: "result",
+            data: {
+              orders: 0,
+              taagerCountry: TAAGER_COUNTRY,
+              stats: {
+                taagerOrderCount: Number(taagerOrderKeys.taagerOrderCount || 0),
+                ...dedupeResult.stats,
+                realNew: 0,
+                missedNew: 0,
+              },
+              productSummary: mergeProductSummaries(affiliateRecovery.productSummary || [], productSummaryFromOrders(legacyMissingOrders)),
+              buffer: null,
+              confirmedOrderRows: [],
+              orderRows: [],
+              attemptedOrderRows: [...(affiliateRecovery.queuedRows || []), ...missingPreviewRows],
+              failedOrders: {
+                count: 0,
+                summary: [],
+                errorRows: [],
+                source: "combined-affiliate-recovery-missing-orders-preview-only",
+                failedDir: "",
+                failedPath: "",
+                buffer: null,
+              },
+              skippedOrders: {
+                count: normalSkippedRows.length,
+                rows: normalSkippedRows,
+                buffer: normalSkippedBuffer ? Array.from(normalSkippedBuffer) : null,
+                filePath: "",
+              },
+              affiliateRecovery,
+              missingOrdersUpload,
+              taagerSnapshot: baseTaagerSnapshot,
+              taagerDashboardSnapshot: null,
+            },
+          });
+          return;
+        }
+
+        if (legacyMissingOrders.length > 0 && !missingOrdersStoreName) {
+          throw new Error("MISSING_ORDERS_STORE_NAME_REQUIRED: enter the Taager Missing Orders store name in setup");
+        }
+
+        let affiliateRecovery = buildAffiliateRecoveryResult({
+          realAttempts: [],
+          missedAttempts: [],
+          verified: [],
+          failedInTaager: [],
+          unresolved: [],
+          skippedAlready: [],
+          skippedCompleted: [],
+          skippedManual: realRecoveryManualRows,
+        }, TAAGER_COUNTRY);
+        if (recoveryPreparedOrders.length > 0) {
+          const recoveryFlow = createEasyOrdersAffiliateRecoveryFlow({
+            log,
+            stage: emitStage,
+            progress: (msg) => process.send && process.send({ type: "order-progress", mode: "affiliate-recovery", ...msg }),
+            country: TAAGER_COUNTRY,
+            gotoEasyOrders: async (recoveryPage, url) => {
+              await gotoWithNetworkRetries(recoveryPage, url, "EasyOrders affiliate recovery", { attempts: 3, timeout: 45000, waitMs: 5000 });
+              return recoveryPage;
+            },
+            gotoTaager: (recoveryPage, pathOrUrl) => taagerGoto(recoveryPage, pathOrUrl),
+            readDownloadToBuffer,
+            exportTaagerOrders: (recoveryPage, from, to) => createRunnerTaagerOrdersExportFlow().exportOrders(recoveryPage, from, to),
+            parseTaagerOrderKeys,
+          });
+          affiliateRecovery = await recoveryFlow.run(page, {
+            preparedOrders: recoveryPreparedOrders,
+            skippedOrders: realRecoveryManualRows,
+            normalFlowStats: stats,
+            initialTaagerKeys: taagerOrderKeys,
+            catalog,
+            taagerCatalog,
+            fallbackProvince: taagerAnalyticsMap.provinceFallback,
+            fallbackProvinceBySku: taagerAnalyticsMap.provinceFallbackBySku,
+            fromDate: dateFrom,
+            toDate: dateTo,
+            taagerFromDate: taagerStartDate,
+            taagerToDate: taagerEndDate,
+            taagerFromText: formatDataDay(taagerStartDate),
+            taagerToText: formatDataDay(taagerEndDate),
+          });
+        } else {
+          log("Combined affiliate recovery: no real EasyOrders orders need recovery.");
+        }
+
+        let missingSuccessfulRows = [];
+        let missingFailedRows = [];
+        if (legacyMissingOrders.length > 0) {
+          try {
+            const todayForCartVerification = parseDate(formatDataDay(new Date()));
+            const cartVerificationEndDate = todayForCartVerification > taagerEndDate ? todayForCartVerification : taagerEndDate;
+            const missingResult = await phase6_uploadMissingOrders(page, legacyMissingOrders, {
+              ...provinceFallbackOptions,
+              missingOrdersStoreName,
+              exportFromDate: formatDataDay(taagerStartDate),
+              exportToDate: formatDataDay(cartVerificationEndDate),
+            });
+            page = missingResult.page || page;
+            missingSuccessfulRows = legacyMissingOrders.map((order) => ({
+              ...order,
+              phone: formatPhone(order.normPhone, TAAGER_COUNTRY) || "",
+              destination: "missing-orders",
+              recoveryStatus: "missing_orders_submitted",
+              finalStatus: "missing_orders_submitted",
+              actionMessage: "Submitted to Taager Missing Orders.",
+            }));
+            missingOrdersUpload.success = legacyMissingOrders.length;
+            missingOrdersUpload.status = "ok";
+            missingOrdersUpload.snapshotRows = missingResult.snapshotRows || [];
+            missingOrdersUpload.snapshotCount = missingOrdersUpload.snapshotRows.length;
+            missingOrdersUpload.snapshotBuffer = missingResult.snapshotBuffer ? Array.from(missingResult.snapshotBuffer) : null;
+            missingOrdersUpload.snapshotPath = missingResult.snapshotPath || "";
+            missingOrdersUpload.htmlPath = missingResult.htmlPath || "";
+            missingOrdersUpload.snapshotError = missingResult.snapshotError || "";
+          } catch (error) {
+            missingFailedRows = legacyMissingOrders.map((order) => ({
+              ...order,
+              phone: formatPhone(order.normPhone, TAAGER_COUNTRY) || "",
+              destination: "missing-orders",
+              error: error.message || String(error),
+              recoveryStatus: "missing_orders_upload_failed",
+              finalStatus: "missing_orders_upload_failed",
+            }));
+            missingOrdersUpload.failed = legacyMissingOrders.length;
+            missingOrdersUpload.status = "failed";
+            missingOrdersUpload.error = error.message || String(error);
+            log(`Combined Missing Orders destination failed: ${missingOrdersUpload.error}`);
+          }
+        } else {
+          missingOrdersUpload.status = "skipped";
+          log("Combined Missing Orders destination skipped: no missed-source orders.");
+        }
+
+        const failedRecoveryRows = [...(affiliateRecovery.failedRows || [])];
+        const failedRows = [...failedRecoveryRows, ...missingFailedRows];
+        const confirmedRows = [...(affiliateRecovery.verifiedRows || []), ...missingSuccessfulRows];
+        const attemptedRows = [...(affiliateRecovery.attemptedRows || []), ...missingSuccessfulRows, ...missingFailedRows, ...missingPreviewRows.filter((row) => !missingSuccessfulRows.some((done) => done.normPhone === row.normPhone && done.sku === row.sku))];
+        const failedBuffer = failedRows.length === 0
+          ? null
+          : (missingFailedRows.length > 0 && missingFailedRows.length === failedRows.length
+            ? buildMissingOrdersExcel(missingFailedRows, provinceFallbackOptions)
+            : (affiliateRecovery.failedOrdersDiagnostic?.buffer || buildFailedExcel(failedRows)));
+        const recoveryStats = {
+          taagerOrderCount: Number(affiliateRecovery.finalVerification?.taagerOrderCount || taagerOrderKeys.taagerOrderCount || 0),
+          ...dedupeResult.stats,
+          realNew: affiliateRecovery.realAttempted || recoveryPreparedOrders.length || 0,
+          missedNew: legacyMissingOrders.length || 0,
+        };
+        process.send && process.send({
+          type: "result",
+          data: {
+            orders: confirmedRows.length,
+            taagerCountry: TAAGER_COUNTRY,
+            stats: recoveryStats,
+            productSummary: mergeProductSummaries(affiliateRecovery.productSummary || [], productSummaryFromOrders(missingSuccessfulRows)),
+            buffer: null,
+            confirmedOrderRows: confirmedRows,
+            orderRows: confirmedRows,
+            attemptedOrderRows: attemptedRows,
+            failedOrders: {
+              count: failedRows.length,
+              summary: failedRows,
+              errorRows: failedRows,
+              source: failedRows.length ? "combined-affiliate-recovery-missing-orders" : "combined-affiliate-recovery-missing-orders-ok",
+              failedDir: "",
+              failedPath: "",
+              buffer: failedBuffer ? (Array.isArray(failedBuffer) ? failedBuffer : Array.from(failedBuffer)) : null,
+            },
+            skippedOrders: {
+              count: normalSkippedRows.length,
+              rows: normalSkippedRows,
+              buffer: normalSkippedBuffer ? Array.from(normalSkippedBuffer) : null,
+              filePath: "",
+            },
+            affiliateRecovery,
+            missingOrdersUpload,
+            taagerSnapshot: baseTaagerSnapshot,
+            taagerDashboardSnapshot: null,
+          },
+        });
+        return;
+      }
       log("\n========================================");
       log("  EASYORDERS AFFILIATE RECOVERY MODE");
       log("========================================\n");
@@ -5127,6 +5991,80 @@ if (config.mode === "second-taager-cart-upload") {
           buffer: recoveryPreviewBuffer ? Array.from(recoveryPreviewBuffer) : null,
         });
         log(`Affiliate recovery preview sent to dashboard (${recoveryPreparedOrders.length} prepared orders)`);
+      }
+      if (config.autoConfirm !== true) {
+        log("Auto-confirm is OFF - affiliate recovery stopped after preview; no EasyOrders resend/convert actions were submitted.");
+        emitStage("affiliate-recovery.preview-only", "waiting", "Auto-confirm is OFF; review the recovery queue, then rerun with Auto-Confirm ON to submit");
+        const previewOnlyAttempts = recoveryPreparedOrders.map((order) => ({
+          ...order,
+          actionStatus: "preview_only_auto_confirm_off",
+          finalStatus: "preview_only_auto_confirm_off",
+          actionMessage: "Auto-confirm is OFF; affiliate recovery stopped after preview and did not resend or convert this order.",
+          uploadedWithWarning: false,
+          uncertain: false,
+        }));
+        const affiliateRecovery = buildAffiliateRecoveryResult({
+          realAttempts: previewOnlyAttempts.filter((row) => (row.recoverySource || row.source) === "real"),
+          missedAttempts: previewOnlyAttempts.filter((row) => (row.recoverySource || row.source) !== "real"),
+          verified: [],
+          failedInTaager: [],
+          unresolved: [],
+          skippedAlready: [],
+          skippedCompleted: [],
+          skippedManual: recoveryManualSkippedOrders,
+        }, TAAGER_COUNTRY);
+        affiliateRecovery.previewOnly = true;
+        affiliateRecovery.autoConfirmRequired = true;
+        affiliateRecovery.queuedCount = recoveryPreparedOrders.length;
+        affiliateRecovery.queuedRows = affiliateRecovery.attemptedRows || [];
+        affiliateRecovery.attemptedCount = 0;
+        affiliateRecovery.realAttempted = 0;
+        affiliateRecovery.missedAttempted = 0;
+        affiliateRecovery.productSummary = recoveryProductSummary(previewOnlyAttempts);
+        const skippedRecoveryBuffer = recoveryTrashSkippedOrders.length > 0 ? buildSkippedExcel(recoveryTrashSkippedOrders) : null;
+        process.send && process.send({
+          type: "result",
+          data: {
+            orders: 0,
+            taagerCountry: TAAGER_COUNTRY,
+            stats: {
+              taagerOrderCount: Number(taagerOrderKeys.taagerOrderCount || 0),
+              ...dedupeResult.stats,
+              realNew: 0,
+              missedNew: 0,
+            },
+            productSummary: affiliateRecovery.productSummary || [],
+            buffer: null,
+            confirmedOrderRows: [],
+            orderRows: [],
+            attemptedOrderRows: affiliateRecovery.queuedRows || [],
+            failedOrders: {
+              count: 0,
+              summary: [],
+              errorRows: [],
+              source: "easyorders-affiliate-recovery-preview-only",
+              failedDir: "",
+              failedPath: "",
+              buffer: null,
+            },
+            skippedOrders: {
+              count: recoveryTrashSkippedOrders.length,
+              rows: recoveryTrashSkippedOrders,
+              buffer: skippedRecoveryBuffer ? Array.from(skippedRecoveryBuffer) : null,
+              filePath: "",
+            },
+            affiliateRecovery,
+            taagerSnapshot: {
+              entries:     Array.from(taagerAnalyticsMap.byPhoneSku.entries()),
+              skuDefaults: taagerAnalyticsMap.skuDefaults,
+              provinceFallback: taagerAnalyticsMap.provinceFallback,
+              provinceFallbackBySku: taagerAnalyticsMap.provinceFallbackBySku,
+              provinceFallbackStats: taagerAnalyticsMap.provinceFallbackStats,
+            },
+            taagerDashboardSnapshot: null,
+          },
+        });
+        return;
       }
       const recoveryFlow = createEasyOrdersAffiliateRecoveryFlow({
         log,
@@ -5348,21 +6286,38 @@ if (config.mode === "second-taager-cart-upload") {
 
     missingOrdersUpload.attempted = legacyMissingOrders.length;
     if (legacyMissingOrders.length > 0) {
-      try {
-        const missingResult = await phase6_uploadMissingOrders(page, legacyMissingOrders, {
-          ...provinceFallbackOptions,
-          missingOrdersStoreName,
-        });
-        page = missingResult.page || page;
-        successful.push(...legacyMissingOrders.map((order) => ({ ...order, destination: "missing-orders" })));
-        missingOrdersUpload.success = legacyMissingOrders.length;
-        missingOrdersUpload.status = "ok";
-      } catch (error) {
-        missingOrdersUpload.failed = legacyMissingOrders.length;
-        missingOrdersUpload.status = "failed";
-        missingOrdersUpload.error = error.message || String(error);
-        failures.push(...legacyMissingOrders.map((order) => ({ ...order, error: missingOrdersUpload.error, destination: "missing-orders" })));
-        log(`Taager Missing Orders destination failed without retry: ${missingOrdersUpload.error}`);
+      if (config.autoConfirm !== true) {
+        missingOrdersUpload.status = "preview_only_auto_confirm_off";
+        missingOrdersUpload.previewOnly = true;
+        missingOrdersUpload.autoConfirmRequired = true;
+        missingOrdersUpload.error = "Auto-confirm is OFF; Missing Orders upload stopped after preview.";
+        log("Auto-confirm is OFF - legacy Missing Orders upload stopped after preview; no Missing Orders workbook was submitted.");
+        emitStage("taager.missing-orders.preview-only", "waiting", "Auto-confirm is OFF; review the Missing Orders queue, then rerun with Auto-Confirm ON to submit", { total: legacyMissingOrders.length });
+      } else {
+        try {
+          const missingResult = await phase6_uploadMissingOrders(page, legacyMissingOrders, {
+            ...provinceFallbackOptions,
+            missingOrdersStoreName,
+            exportFromDate: formatDataDay(taagerStartDate),
+            exportToDate: formatDataDay(cartVerificationEndDate),
+          });
+          page = missingResult.page || page;
+          successful.push(...legacyMissingOrders.map((order) => ({ ...order, destination: "missing-orders" })));
+          missingOrdersUpload.success = legacyMissingOrders.length;
+          missingOrdersUpload.status = "ok";
+          missingOrdersUpload.snapshotRows = missingResult.snapshotRows || [];
+          missingOrdersUpload.snapshotCount = missingOrdersUpload.snapshotRows.length;
+          missingOrdersUpload.snapshotBuffer = missingResult.snapshotBuffer ? Array.from(missingResult.snapshotBuffer) : null;
+          missingOrdersUpload.snapshotPath = missingResult.snapshotPath || "";
+          missingOrdersUpload.htmlPath = missingResult.htmlPath || "";
+          missingOrdersUpload.snapshotError = missingResult.snapshotError || "";
+        } catch (error) {
+          missingOrdersUpload.failed = legacyMissingOrders.length;
+          missingOrdersUpload.status = "failed";
+          missingOrdersUpload.error = error.message || String(error);
+          failures.push(...legacyMissingOrders.map((order) => ({ ...order, error: missingOrdersUpload.error, destination: "missing-orders" })));
+          log(`Taager Missing Orders destination failed without retry: ${missingOrdersUpload.error}`);
+        }
       }
     } else {
       missingOrdersUpload.status = missingOrdersFeatureEnabled ? "skipped" : "disabled";

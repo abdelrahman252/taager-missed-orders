@@ -198,12 +198,16 @@ function updateTrustedSkuTierCatalog(previousCatalog = {}, inputs = {}) {
   for (const entry of Object.values(inputs.taagerCatalog || {})) {
     learnedSamples += addParserCatalogEntry(catalog, entry, "taager_orders", now);
   }
+  for (const entry of Object.values(inputs.manualReviewCatalog || {})) {
+    learnedSamples += addParserCatalogEntry(catalog, entry, "manual_review_approved", now);
+  }
   catalog.learnedSamples = learnedSamples;
   return catalog;
 }
 
 function tierSourcePriority(tier = {}) {
   const sources = tier.sources && typeof tier.sources === "object" ? tier.sources : {};
+  if (Number(sources.manual_review_approved || 0) > 0) return 4;
   if (Number(sources.easyorders_real || 0) > 0) return 3;
   if (Number(sources.taager_orders || 0) > 0) return 2;
   return 1;
@@ -213,6 +217,10 @@ function winningSubtotal(tierMap = {}) {
   return Object.values(tierMap)
     .filter((tier) => Number(tier && tier.subtotal || 0) > 0)
     .sort((a, b) => {
+      const manualPriorityDiff = tierSourcePriority(b) === 4 || tierSourcePriority(a) === 4
+        ? tierSourcePriority(b) - tierSourcePriority(a)
+        : 0;
+      if (manualPriorityDiff) return manualPriorityDiff;
       const countDiff = (Number(b.count || 0) || 0) - (Number(a.count || 0) || 0);
       if (countDiff) return countDiff;
       const sourceDiff = tierSourcePriority(b) - tierSourcePriority(a);

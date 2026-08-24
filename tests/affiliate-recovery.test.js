@@ -13,6 +13,7 @@ const {
   quantityFromReferencePrice,
   quantityFromSuspiciousReference,
   quantityEditDecision,
+  resolveLiveTierItemsForCandidate,
   parseTaagerFailedOrders,
   classifyRecoveryAttempts,
   filterFailedRowsForAttempts,
@@ -93,6 +94,133 @@ const tierVerifiedCameraDecision = quantityEditDecision({
 assert.strictEqual(tierVerifiedCameraDecision.manualReview, false, "verified tier unit price can allow an inferred quantity edit");
 assert.strictEqual(tierVerifiedCameraDecision.shouldEditQuantity, true);
 assert.strictEqual(tierVerifiedCameraDecision.expectedUnitPrice, 166);
+const liveSubtotalTierDecision = quantityEditDecision({
+  sku: "SA030101SATY99",
+  productName: "\u0634\u0631\u064a\u0637 \u0627\u0644\u0623\u0644\u0648\u0645\u0646\u064a\u0648\u0645 \u0627\u0644\u0639\u0627\u0632\u0644 3 \u0641\u064a 1",
+  qty: 2,
+  subtotal: 98,
+  unitPrice: 49,
+  quantitySource: "affiliate_recovery_live_modal_pending",
+  referenceSource: "easyorders-catalog",
+  priceOptions: [
+    { qty: 2, subtotal: 98, unitPrice: 49 },
+    { qty: 4, subtotal: 160, unitPrice: 40 },
+  ],
+}, { qty: 1, price: 98 });
+assert.strictEqual(liveSubtotalTierDecision.manualReview, false, "affiliate recovery should use live modal subtotal to select a trusted tier");
+assert.strictEqual(liveSubtotalTierDecision.expectedQty, 2);
+assert.strictEqual(liveSubtotalTierDecision.expectedUnitPrice, 49);
+assert.strictEqual(liveSubtotalTierDecision.shouldEditQuantity, true);
+assert.strictEqual(liveSubtotalTierDecision.shouldEditPrice, true);
+assert.strictEqual(liveSubtotalTierDecision.reason, "live_modal_subtotal_matched_trusted_tier");
+const readOnlyLiveResolution = resolveLiveTierItemsForCandidate({
+  source: "missed",
+  normPhone: "966555400499",
+  name: "\u0634\u0631\u0642\u0639 \u0628\u0646 \u0634\u062e\u0628\u064a\u0637 \u0627\u0644\u0642\u0631\u0646\u0628\u0639\u0627\u0648\u064a",
+  city: "\u0627\u0644\u0645\u0646\u0637\u0642\u0629 \u0627\u0644\u0634\u0631\u0642\u064a\u0629",
+  items: [{
+    sku: "SA030101SATY99",
+    productName: "\u0634\u0631\u064a\u0637 \u0627\u0644\u0623\u0644\u0648\u0645\u0646\u064a\u0648\u0645 \u0627\u0644\u0639\u0627\u0632\u0644 3 \u0641\u064a 1",
+    qty: 2,
+    subtotal: 98,
+    unitPrice: 49,
+    trusted: true,
+    referenceSource: "easyorders-catalog",
+    priceOptions: [
+      { qty: 2, subtotal: 98, unitPrice: 49 },
+      { qty: 4, subtotal: 160, unitPrice: 40 },
+    ],
+  }],
+}, [{
+  productName: "\u0634\u0631\u064a\u0637 \u0627\u0644\u0623\u0644\u0648\u0645\u0646\u064a\u0648\u0645 \u0627\u0644\u0639\u0627\u0632\u0644 3 \u0641\u064a 1 (\u0639\u0632\u0644 \u0645\u0627\u0626\u064a\u060c \u0639\u0632\u0644 \u062d\u0631\u0627\u0631\u064a)",
+  qty: 1,
+  price: 98,
+  subtotal: 98,
+}], { country: "sa" });
+assert.strictEqual(readOnlyLiveResolution.resolved, true, "read-only cart enrichment should resolve live EasyOrders subtotal against trusted tiers");
+assert.strictEqual(readOnlyLiveResolution.resolvedItems[0].qty, 2);
+assert.strictEqual(readOnlyLiveResolution.resolvedItems[0].unitPrice, 49);
+assert.strictEqual(readOnlyLiveResolution.resolvedItems[0].subtotal, 98);
+assert.strictEqual(readOnlyLiveResolution.resolvedItems[0].priceSource, "live_modal_subtotal_matched_trusted_tier");
+const readOnlyShippingIncludedResolution = resolveLiveTierItemsForCandidate({
+  source: "real",
+  normPhone: "966512822720",
+  name: "\u0633\u0644\u0637\u0627\u0646 \u0627\u0644\u062d\u0627\u0631\u062b\u064a",
+  items: [{
+    sku: "SA050301ULE499",
+    productName: "\u0637\u0627\u0626\u0631\u0629 \u0627\u0644\u062f\u0631\u0648\u0646 A30",
+    qty: 1,
+    subtotal: 199,
+    unitPrice: 199,
+    trusted: true,
+    referenceSource: "taager-catalog",
+    priceOptions: [
+      { qty: 1, subtotal: 199, unitPrice: 199 },
+      { qty: 2, subtotal: 260, unitPrice: 130 },
+    ],
+  }],
+}, [{
+  productName: "\u0637\u0627\u0626\u0631\u0629 \u0627\u0644\u062f\u0631\u0648\u0646 A30",
+  qty: 1,
+  price: 227,
+  subtotal: 227,
+}], { country: "sa" });
+assert.strictEqual(readOnlyShippingIncludedResolution.resolved, true, "read-only cart enrichment should remove Saudi shipping from live totals before tier matching");
+assert.strictEqual(readOnlyShippingIncludedResolution.resolvedItems[0].qty, 1);
+assert.strictEqual(readOnlyShippingIncludedResolution.resolvedItems[0].unitPrice, 199);
+assert.strictEqual(readOnlyShippingIncludedResolution.resolvedItems[0].subtotal, 199);
+assert.strictEqual(readOnlyShippingIncludedResolution.resolvedItems[0].priceSource, "live_modal_subtotal_matched_trusted_tier_after_shipping_removed");
+const latestPreparedPriceDecision = quantityEditDecision({
+  sku: "SA050301ULE499",
+  productName: "\u0637\u0627\u0626\u0631\u0629 \u0627\u0644\u062f\u0631\u0648\u0646 A30",
+  qty: 1,
+  subtotal: 260,
+  unitPrice: 260,
+  trusted: true,
+  referenceSource: "taager-catalog",
+  priceSource: "taager_sku_subtotal_tier_latest",
+  reason: "sku_price_updated_to_latest_tier",
+  priceOptions: [
+    { qty: 1, subtotal: 199, unitPrice: 199, latestSeen: "2026-08-12 10:00" },
+    { qty: 1, subtotal: 260, unitPrice: 260, latestSeen: "2026-08-24 12:00" },
+  ],
+}, {
+  qty: 1,
+  price: 227,
+  subtotal: 227,
+});
+assert.strictEqual(latestPreparedPriceDecision.manualReview, false, "latest prepared trusted SKU price should remain uploadable");
+assert.strictEqual(latestPreparedPriceDecision.expectedQty, 1);
+assert.strictEqual(latestPreparedPriceDecision.expectedUnitPrice, 260);
+assert.strictEqual(latestPreparedPriceDecision.shouldEditPrice, true, "affiliate recovery should edit old shipping-included modal price to the latest prepared price");
+assert.strictEqual(latestPreparedPriceDecision.reason, "matched_normal_flow_prepared_order");
+const readOnlyShippingIncludedTwoPiece = resolveLiveTierItemsForCandidate({
+  source: "missed",
+  normPhone: "966541873359",
+  name: "Sujon",
+  items: [{
+    sku: "SA050301ULE499",
+    productName: "\u0637\u0627\u0626\u0631\u0629 \u0627\u0644\u062f\u0631\u0648\u0646 A30",
+    qty: 1,
+    subtotal: 199,
+    unitPrice: 199,
+    trusted: true,
+    referenceSource: "taager-catalog",
+    priceOptions: [
+      { qty: 1, subtotal: 199, unitPrice: 199 },
+      { qty: 2, subtotal: 260, unitPrice: 130 },
+    ],
+  }],
+}, [{
+  productName: "\u0637\u0627\u0626\u0631\u0629 \u0627\u0644\u062f\u0631\u0648\u0646 A30",
+  qty: 1,
+  price: 288,
+  subtotal: 288,
+}], { country: "sa" });
+assert.strictEqual(readOnlyShippingIncludedTwoPiece.resolved, true, "shipping-included 288 should resolve to the 260 two-piece tier");
+assert.strictEqual(readOnlyShippingIncludedTwoPiece.resolvedItems[0].qty, 2);
+assert.strictEqual(readOnlyShippingIncludedTwoPiece.resolvedItems[0].unitPrice, 130);
+assert.strictEqual(readOnlyShippingIncludedTwoPiece.resolvedItems[0].subtotal, 260);
 assert.strictEqual(isSuspiciousQuantity({ maxQty: 3 }, 44), true, "44 should be suspicious when known max quantity is 3");
 assert.strictEqual(isSuspiciousQuantity({ maxQty: 3 }, 8), false, "small quantities should not trip the suspicious guard");
 assert.strictEqual(
@@ -271,6 +399,8 @@ assert(mainSource.includes("easyOrdersAffiliateRecoveryEnabled"), "main process 
 assert(mainSource.includes("save-settings") && mainSource.includes("easyOrdersAffiliateRecoveryEnabled"), "settings IPC should persist affiliate recovery toggle");
 assert(preloadSource.includes("setEasyOrdersAffiliateRecoveryEnabled"), "preload should expose affiliate recovery setup toggle");
 assert(runnerSource.includes("createEasyOrdersAffiliateRecoveryFlow"), "runner should include affiliate recovery branch");
+assert(runnerSource.includes("enrichCartRowsFromEasyOrdersLive"), "normal cart should enrich ambiguous real/missed rows from EasyOrders live detail before Taager upload");
+assert(runnerSource.indexOf("await enrichCartRowsFromEasyOrdersLive") < runnerSource.indexOf("const dedupeResult = mergeAndDeduplicate"), "cart live enrichment must happen before Taager duplicate filtering and upload");
 assert(runSource.includes("easyOrdersAffiliateRecoveryEnabled"), "run page should pass affiliate recovery toggle into runBot payload");
 assert(runnerSource.includes("const recoveryPreparedOrders = buildGroupedCartOrders(orders)") && runnerSource.includes("preparedOrders: recoveryPreparedOrders"), "runner should pass only trusted normal-flow grouped orders into recovery");
 assert(runnerSource.includes("no_trusted_product_reference"), "recovery mode should move no-history products to uncertain instead of submitting them");
@@ -286,6 +416,9 @@ assert(uiRecoverySource.includes("phone_display_rewrite"), "affiliate recovery s
 assert(uiRecoverySource.includes("normal_flow_prepared_quantity_is_suspicious"), "affiliate recovery should stop unsafe prepared quantities for manual review");
 assert(uiRecoverySource.includes("quantity_tier_price_not_verified"), "affiliate recovery should stop inferred quantity edits when tier price is not verified");
 assert(uiRecoverySource.includes("pending prepared targets"), "missed recovery should only open prepared missed targets");
+assert(uiRecoverySource.includes("enrichMissedOrdersReadOnly"), "EasyOrders UI helper should expose read-only missed-order enrichment for cart flow");
+assert(uiRecoverySource.includes("enrichRealOrdersReadOnly"), "EasyOrders UI helper should expose read-only real-order enrichment for cart flow");
+assert(uiRecoverySource.includes("inspectDetailItems"), "read-only cart enrichment should read visible detail product rows without opening the edit modal");
 assert(uiRecoverySource.includes("fillInputValue(page, `cart_items[${modalItem.index}].price`"), "affiliate recovery should edit price from the normal-flow prepared order");
 assert(uiRecoverySource.includes("waitForEasyOrdersDetail"), "affiliate recovery should wait for detail controls before checking action buttons");
 assert(uiRecoverySource.includes("no_trusted_product_reference"), "unknown modal products should be blocked as uncertain instead of sent as-is");
@@ -310,6 +443,8 @@ assert(failedFlowSource.includes("export-to-excel-button"), "failed-orders diagn
 assert(failedFlowSource.includes('[data-day="${target}"]'), "failed-orders diagnosis should select calendar days by stable data-day");
 assert(failedFlowSource.includes("leaving to date empty"), "failed-orders diagnosis should leave the end date empty like normal Taager orders export");
 assert(runnerSource.includes("recoveryPreview: true"), "affiliate recovery should send a run-page preview table");
+assert(runnerSource.includes("config.autoConfirm !== true") && runnerSource.includes("preview_only_auto_confirm_off"), "affiliate recovery should stop after preview when Auto-Confirm is OFF");
+assert(runnerSource.includes("Auto-confirm is OFF - affiliate recovery stopped after preview"), "affiliate recovery preview-only safeguard should be logged clearly");
 assert(runnerSource.includes('mode: "affiliate-recovery"'), "affiliate recovery progress should be tagged for the run page");
 assert(setupSource.includes("sv3-btn-affiliate-recovery"), "setup should render affiliate recovery run toggle");
 assert(!setupSource.includes("sv3-affiliate-recovery-enabled"), "affiliate recovery should not be an account-form checkbox");
@@ -325,6 +460,12 @@ assert(resultsSource.includes("message_awaiting_taager_verification") && results
 assert(resultsSource.includes("buildRecoveryUnresolvedHtml") && resultsSource.includes("blockedReviewRows"), "results should split unresolved attempted rows from blocked manual-review rows");
 assert(resultsSource.includes("rawRowCount") && resultsSource.includes("matchedRows"), "failed-order diagnosis should display matched current-run rows without losing raw download/count context");
 assert(resultsSource.includes("recovery_verification_rate") && resultsSource.includes("recovery_pending_title"), "affiliate recovery results should not show 100% uploaded while orders are still unresolved");
+assert(resultsSource.includes("recovery_preview_only_title") && resultsSource.includes("reason_preview_only_auto_confirm_off"), "results should show affiliate recovery preview-only state when Auto-Confirm is OFF");
+assert(resultsSource.includes("manualReviewStaticField(\"productName\""), "manual-review product names should be read-only, not editable upload inputs");
+assert(resultsSource.includes("skip-col-message") && resultsSource.includes("normalizedRecoveryReasonKey"), "manual-review tables should have readable message width and normalized translated reasons");
+assert(resultsSource.includes("manualReviewQualitySort"), "manual-review rows should be sorted so more actionable rows appear before fake/low-quality rows");
+assert(resultsSource.includes('source === "real"') && resultsSource.includes('source === "missed"'), "manual-review rows should put real-order source rows before missed-order source rows");
+assert(resultsSource.includes("manualReviewHiddenField(\"subtotal\"") && !resultsSource.includes("manualReviewInput(\"subtotal\""), "manual-review subtotal should be hidden metadata, not a visible editable column");
 assert(runSource.includes("run.recovery_preview_header") && runSource.includes("run.recovery_progress_title"), "run page should label affiliate recovery preview and progress distinctly");
 assert(runSource.includes("progressLastOrderText"), "run page progress should show last recovery order product/customer/status details");
 assert(runSource.includes("previewDestinationLabel"), "run page preview tables should label affiliate recovery rows as Recovery");

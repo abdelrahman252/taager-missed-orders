@@ -149,7 +149,7 @@ function assessCustomerName(value, options = {}) {
   if (!text) strong.push("missing");
   if (isPlaceholder(text)) strong.push("placeholder");
   if (hasUnsafeSymbols(text)) strong.push("unsafe_symbols");
-  if (hasEmoji(text)) strong.push("emoji");
+  if (hasEmoji(text)) issues.push("emoji");
   if (hasRepeatedGarbage(text, 4)) strong.push("repeated_chars");
   if (looksLikeLatinKeyboardSmash(text)) strong.push("latin_keyboard_smash");
   if (looksLikeShortLatinKeyboardSmash(text)) strong.push("short_latin_keyboard_smash");
@@ -202,7 +202,6 @@ function assessCustomerOrder(order, options = {}) {
   const blockingNameIssues = new Set([
     "placeholder",
     "unsafe_symbols",
-    "emoji",
     "repeated_chars",
     "mostly_digits",
     "phone_like",

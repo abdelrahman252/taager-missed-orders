@@ -586,4 +586,56 @@ function buildSkippedExcel(skippedOrders) {
   return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 }
 
-module.exports = { buildOutputExcel, buildMissingOrdersExcel, buildFailedExcel, buildSkippedExcel, normalizeProvince, normalizeProvinceMatch, COUNTRY_CONFIG };
+function buildMissingOrdersSnapshotExcel(snapshotRows) {
+  if (!snapshotRows || snapshotRows.length === 0) return null;
+  const headers = [
+    "Missing Order Code",
+    "Converted Order Code",
+    "Status",
+    "Customer Name",
+    "Phone",
+    "Source",
+    "Order Date",
+    "Note Label",
+    "Note",
+    "Products Qty",
+    "SKU",
+    "Qty",
+    "Price",
+    "Product Title",
+  ];
+  const rows = [];
+  for (const order of snapshotRows) {
+    const products = Array.isArray(order.products) && order.products.length ? order.products : [{}];
+    for (const product of products) {
+      rows.push([
+        order.missingOrderCode || "",
+        order.convertedOrderCode || "",
+        order.status || "",
+        order.customerName || "",
+        order.phone || "",
+        order.source || "",
+        order.orderDate || "",
+        order.noteLabel || "",
+        order.note || "",
+        order.productsQuantity || "",
+        product.sku || "",
+        product.qty || "",
+        product.price || "",
+        product.title || "",
+      ]);
+    }
+  }
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws["!cols"] = [
+    { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 28 }, { wch: 18 },
+    { wch: 14 }, { wch: 14 }, { wch: 24 }, { wch: 32 }, { wch: 14 },
+    { wch: 24 }, { wch: 10 }, { wch: 12 }, { wch: 45 },
+  ];
+  ws["!autofilter"] = { ref: ws["!ref"] };
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Missing Orders Snapshot");
+  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+}
+
+module.exports = { buildOutputExcel, buildMissingOrdersExcel, buildFailedExcel, buildSkippedExcel, buildMissingOrdersSnapshotExcel, normalizeProvince, normalizeProvinceMatch, COUNTRY_CONFIG };

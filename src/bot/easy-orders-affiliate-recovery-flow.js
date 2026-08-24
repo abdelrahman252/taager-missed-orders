@@ -8,6 +8,7 @@ const {
   buildAffiliateRecoveryResult,
   classifyRecoveryAttempts,
   filterFailedRowsForAttempts,
+  referenceItemForProduct,
 } = require("./easy-orders-affiliate-recovery-data");
 
 function mergeItems(existingItems, nextItems) {
@@ -65,6 +66,73 @@ function dedupePreparedRealOrders(prepared, country = "sa") {
     }
   }
   return { orders, manualRows };
+}
+
+const RECOVERY_PROMOTABLE_MANUAL_REASONS = new Set([
+  "ambiguous_sku_price_tier",
+  "quantity_inference_requires_manual_review",
+  "subtotal_not_in_sku_tiers",
+  "sku_tier_profile_too_weak",
+]);
+
+function skippedRecoveryKey(row, country = "sa") {
+  return [
+    normalizePhone(row && (row.normPhone || row.normalizedPhone || row.phone || row.rawPhone) || "", country),
+    row && (row.easyOrderUuid || row.easyOrderId || row.orderUuid || row.orderId || ""),
+    row && (row.easyCreatedAt || row.createdAt || row.date || ""),
+    row && (row.name || row.customerName || ""),
+    row && (row.productName || row.product || ""),
+  ].map((value) => String(value || "").trim()).join("|");
+}
+
+function promoteSkippedRowsForLiveTierRecovery(skippedRows = [], input = {}, country = "sa") {
+  const promoted = [];
+  const promotedKeys = new Set();
+  for (const row of skippedRows || []) {
+    const source = row && (row.recoverySource || row.source);
+    const reason = String(row && row.reason || "");
+    if (source !== "missed" || !RECOVERY_PROMOTABLE_MANUAL_REASONS.has(reason)) continue;
+    const productName = row.productName || row.product || "";
+    const reference = referenceItemForProduct(productName, input.catalog, input.taagerCatalog);
+    if (!reference || !reference.trusted) continue;
+    const normPhone = normalizePhone(row.normalizedPhone || row.normPhone || row.phone || row.rawPhone || "", country);
+    if (!normPhone) continue;
+    const city = row.city || row.region || "";
+    const address = row.address || city || "";
+    const name = row.name || row.customerName || formatPhone(normPhone, country) || normPhone;
+    const candidate = {
+      ...row,
+      source: "missed",
+      recoverySource: "missed",
+      promotedFromManualReview: true,
+      promotedReason: reason,
+      normPhone,
+      normalizedPhone: normPhone,
+      phone: formatPhone(normPhone, country) || normPhone,
+      name,
+      city,
+      address,
+      items: [{
+        ...reference,
+        source: "missed",
+        recoverySource: "missed",
+        trusted: true,
+        quantitySource: "affiliate_recovery_live_modal_pending",
+        priceSource: "affiliate_recovery_live_modal_pending",
+        normPhone,
+        phone: formatPhone(normPhone, country) || normPhone,
+        rawPhone: row.rawPhone || row.phone || "",
+        name,
+        city,
+        address,
+        createdAt: row.createdAt || row.date || "",
+        easyCreatedAt: row.easyCreatedAt || "",
+      }],
+    };
+    promoted.push(candidate);
+    promotedKeys.add(skippedRecoveryKey(row, country));
+  }
+  return { promoted, promotedKeys };
 }
 
 function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
@@ -200,7 +268,11 @@ function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
       taagerToDate,
     } = input;
 
-    const normalizedPrepared = (preparedOrders || []).map((order) => normalizePreparedOrder(order, input));
+    const promotedSkipped = promoteSkippedRowsForLiveTierRecovery(skippedOrders, input, country);
+    if (promotedSkipped.promoted.length) {
+      log(`Affiliate recovery: promoted ${promotedSkipped.promoted.length} missed/manual rows for live modal tier repair.`);
+    }
+    const normalizedPrepared = [...(preparedOrders || []), ...promotedSkipped.promoted].map((order) => normalizePreparedOrder(order, input));
     const deduped = dedupePreparedRealOrders(normalizedPrepared, country);
     const prepared = deduped.orders;
     if (deduped.manualRows.length) {
@@ -307,7 +379,7 @@ function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
       ],
       skippedCompleted: missedResult.skippedCompleted || [],
       skippedManual: [
-        ...(skippedOrders || []),
+        ...(skippedOrders || []).filter((row) => !promotedSkipped.promotedKeys.has(skippedRecoveryKey(row, country))),
         ...(deduped.manualRows || []),
         ...(realResult.skippedManual || []),
         ...(missedResult.skippedManual || []),

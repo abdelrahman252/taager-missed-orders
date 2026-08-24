@@ -1133,8 +1133,9 @@ function missedOrdersDestinationOf(acc, legacyEnabled = false) {
   const clean = String(acc && acc.missedOrdersDestination || "").trim().toLowerCase();
   if (clean === "legacy_missing_orders" || clean === "missing-orders" || clean === "legacy") return "legacy_missing_orders";
   if (clean === "second_taager_cart" || clean === "second-taager-cart" || clean === "second_cart") return "second_taager_cart";
-  if (clean === "primary_cart" || clean === "cart" || clean === "normal") return "primary_cart";
   if (acc && acc.secondTaagerCartEnabled === true) return "second_taager_cart";
+  if (legacyEnabled === true) return "legacy_missing_orders";
+  if (clean === "primary_cart" || clean === "cart" || clean === "normal") return "primary_cart";
   return "primary_cart";
 }
 
@@ -7547,7 +7548,7 @@ function createBotRunLogWriter(account, dateFrom, dateTo, suffix = "") {
   return { filePath, write };
 }
 
-ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAffiliateRecoveryEnabled: runAffiliateRecoveryEnabled } = {}) => {
+ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAffiliateRecoveryEnabled: runAffiliateRecoveryEnabled, manualReviewOrders, manualReviewMode } = {}) => {
   if (!(await isLicenseValid())) return { success: false, error: "LICENSE_INVALID" };
   if (licenseStore.get("teamLeaderEnabled", false) === true) {
     return { success: false, error: "TEAM_LEADER_DASHBOARD_ONLY" };
@@ -7560,6 +7561,10 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
   // only to exports from this run.
   lastExportTimestamp = 0;
   const autoConfirm = store.get("autoConfirm", false);
+  const manualReviewUploadRows = Array.isArray(manualReviewOrders)
+    ? manualReviewOrders.filter((row) => row && typeof row === "object").slice(0, 500)
+    : [];
+  const manualReviewUploadMode = manualReviewMode === true && manualReviewUploadRows.length > 0;
   const missingOrdersUploadEnabled = store.get("missingOrdersUploadEnabled", false) === true;
   const easyOrdersAffiliateRecoveryEnabled = runAffiliateRecoveryEnabled === true || store.get("easyOrdersAffiliateRecoveryEnabled", false) === true;
   const secondTaagerProfilePathFor = (accountId) => path.join(app.getPath("userData"), `bot-profile-${accountId}-second-taager-cart`);
@@ -7725,6 +7730,8 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
       autoConfirm,
       missingOrdersUploadEnabled,
       easyOrdersAffiliateRecoveryEnabled,
+      manualReviewMode: manualReviewUploadMode,
+      manualReviewOrders: manualReviewUploadMode ? manualReviewUploadRows : [],
       needsSnapshot: false,
       operationsSuiteEnabled,
       dashboardEnabled,

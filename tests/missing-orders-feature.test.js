@@ -8,7 +8,7 @@ const XLSX = require("xlsx");
 process.env.BOT_CONFIG = JSON.stringify({ taagerCountry: "sa" });
 delete require.cache[require.resolve("../src/bot/output")];
 
-const { buildOutputExcel, buildMissingOrdersExcel, buildSkippedExcel } = require("../src/bot/output");
+const { buildOutputExcel, buildMissingOrdersExcel, buildSkippedExcel, buildMissingOrdersSnapshotExcel } = require("../src/bot/output");
 const {
   splitOrdersByDestination,
   groupMissingOrders,
@@ -18,6 +18,9 @@ const {
   SWITCH_TO_OLD_SELECTOR,
   MISSING_ORDERS_TAB_SELECTOR,
   MISSING_ORDERS_UPLOAD_SELECTOR,
+  MISSING_ORDERS_SEARCH_SELECTOR,
+  MISSING_ORDERS_NEXT_SELECTOR,
+  MISSING_ORDERS_PREV_SELECTOR,
   MISSING_ORDERS_ERROR_NOTICE_RE,
   MISSING_ORDERS_SUCCESS_NOTICE_RE,
 } = require("../src/bot/missing-orders-upload-flow");
@@ -63,7 +66,8 @@ assert.strictEqual(groupMissingOrders([missedA, missedB]).length, 1);
 assert.notStrictEqual(missingOrderUploadIdentity(missedA), missingOrderUploadIdentity(missedB));
 
 assert.strictEqual(normalizeMissedOrdersDestination(""), "primary_cart");
-assert.strictEqual(normalizeMissedOrdersDestination("", { legacyEnabled: true }), "primary_cart");
+assert.strictEqual(normalizeMissedOrdersDestination("", { legacyEnabled: true }), "legacy_missing_orders");
+assert.strictEqual(normalizeMissedOrdersDestination("primary_cart", { legacyEnabled: true }), "legacy_missing_orders");
 assert.strictEqual(normalizeMissedOrdersDestination("second-taager-cart"), "second_taager_cart");
 const primaryRoute = splitOrdersByMissedDestination([real, missedA], "primary_cart");
 assert.deepStrictEqual(primaryRoute.primaryCartOrders, [real, missedA]);
@@ -382,6 +386,41 @@ const explicitTaagerQuantityRepairRows = [{
 assert.strictEqual(repairOrderQuantitiesFromCatalog(explicitTaagerQuantityRepairRows, {}, taagerQuantityFallback), 0);
 assert.strictEqual(explicitTaagerQuantityRepairRows[0].manualReview, true, "explicit title still cannot repair when subtotal does not match a verified tier");
 assert.strictEqual(explicitTaagerQuantityRepairRows[0].reason, "subtotal_not_in_sku_tiers");
+const shippingIncludedRepairRows = [{
+  source: "real",
+  normPhone: "500000011",
+  sku: "TAAGER-QTY-SKU",
+  productName: "New EasyOrders Product Name",
+  qty: 1,
+  unitPrice: 148,
+  subtotal: 148,
+  shippingCost: 0,
+}];
+assert.strictEqual(repairOrderQuantitiesFromCatalog(shippingIncludedRepairRows, {}, taagerQuantityFallback), 1);
+assert.strictEqual(shippingIncludedRepairRows[0].manualReview, undefined, "trusted subtotal plus Saudi shipping should not need manual review");
+assert.strictEqual(shippingIncludedRepairRows[0].qty, 2);
+assert.strictEqual(shippingIncludedRepairRows[0].subtotal, 120);
+assert.strictEqual(shippingIncludedRepairRows[0].originalSubtotal, 148);
+assert.strictEqual(shippingIncludedRepairRows[0].shippingOffsetRemoved, 28);
+assert.strictEqual(shippingIncludedRepairRows[0].reason, undefined);
+assert.strictEqual(shippingIncludedRepairRows[0].priceSource, "taager_sku_subtotal_tier_shipping_removed");
+const selfConsistentRealProductCostRows = [{
+  source: "real",
+  normPhone: "966580209900",
+  sku: "TAAGER-QTY-SKU",
+  productName: "طائرة الدرون A30",
+  qty: 2,
+  unitPrice: 260,
+  subtotal: 520,
+  priceSource: "easyorders_export_product_cost",
+  quantitySource: "easyorders_export",
+  shippingCost: 28,
+}];
+assert.strictEqual(repairOrderQuantitiesFromCatalog(selfConsistentRealProductCostRows, {}, taagerQuantityFallback), 0);
+assert.strictEqual(selfConsistentRealProductCostRows[0].manualReview, undefined, "real EasyOrders Product Cost rows that equal qty x item price should not require SKU tier history");
+assert.strictEqual(selfConsistentRealProductCostRows[0].qty, 2);
+assert.strictEqual(selfConsistentRealProductCostRows[0].subtotal, 520);
+assert.strictEqual(selfConsistentRealProductCostRows[0].priceSource, "easyorders_export_product_cost");
 const taagerExistingHeader = Array(23).fill("");
 taagerExistingHeader[0] = "Order Number";
 taagerExistingHeader[2] = "Status";
@@ -539,9 +578,32 @@ assert.strictEqual(rows[1][9], "", "SKU-backed upload should leave optional prod
 assert.strictEqual(rows[1][10], "100,250");
 assert.strictEqual(rows[1][11], "1,2");
 
+const snapshotWorkbook = XLSX.read(buildMissingOrdersSnapshotExcel([{
+  missingOrderCode: "293707",
+  convertedOrderCode: "2185028-23699967",
+  status: "قيد المراجعة",
+  customerName: "C9k6",
+  phone: "966567676736",
+  source: "يدوي",
+  orderDate: "7/2/2026",
+  noteLabel: "ملاحظات محاولات التأكيد:",
+  note: "المكالمة معلقة",
+  productsQuantity: 6,
+  products: [{ sku: "SA03010W210099EC", qty: 6, price: 265, title: "NOT_PROVIDED" }],
+}]), { type: "buffer" });
+const snapshotRows = XLSX.utils.sheet_to_json(snapshotWorkbook.Sheets["Missing Orders Snapshot"], { header: 1, defval: "" });
+assert.deepStrictEqual(snapshotRows[0].slice(0, 5), ["Missing Order Code", "Converted Order Code", "Status", "Customer Name", "Phone"]);
+assert.strictEqual(snapshotRows[1][0], "293707");
+assert.strictEqual(snapshotRows[1][10], "SA03010W210099EC");
+assert.strictEqual(snapshotRows[1][11], 6);
+assert.strictEqual(snapshotRows[1][12], 265);
+
 assert.strictEqual(SWITCH_TO_OLD_SELECTOR, "#switch-to-old-layout-btn");
 assert.strictEqual(MISSING_ORDERS_TAB_SELECTOR, "#missing-orders");
 assert.strictEqual(MISSING_ORDERS_UPLOAD_SELECTOR, "#upload-missing-orders-button");
+assert.strictEqual(MISSING_ORDERS_SEARCH_SELECTOR, "#orders-search-button");
+assert.strictEqual(MISSING_ORDERS_NEXT_SELECTOR, "#cursor-pagination-btn-next");
+assert.strictEqual(MISSING_ORDERS_PREV_SELECTOR, "#cursor-pagination-btn-prev");
 assert(MISSING_ORDERS_ERROR_NOTICE_RE.test("\u0641\u0634\u0644 \u0631\u0641\u0639 \u0627\u0644\u0645\u0644\u0641"));
 assert(MISSING_ORDERS_ERROR_NOTICE_RE.test("\u062e\u0637\u0623: \u0627\u0644\u0645\u0644\u0641 \u063a\u064a\u0631 \u0635\u0627\u0644\u062d"));
 assert(MISSING_ORDERS_SUCCESS_NOTICE_RE.test("\u062a\u0645 \u0631\u0641\u0639 \u0627\u0644\u0645\u0644\u0641"));
@@ -552,6 +614,7 @@ const mainSource = fs.readFileSync(path.join(root, "src", "main", "main.js"), "u
 const runnerSource = fs.readFileSync(path.join(root, "src", "bot", "runner.js"), "utf8");
 const preloadSource = fs.readFileSync(path.join(root, "src", "main", "preload.js"), "utf8");
 const rendererAppSource = fs.readFileSync(path.join(root, "src", "renderer", "app.js"), "utf8");
+const resultsSource = fs.readFileSync(path.join(root, "src", "renderer", "pages", "results.js"), "utf8");
 const setupSource = fs.readFileSync(path.join(root, "src", "renderer", "pages", "setup.js"), "utf8");
 assert(mainSource.includes('store.get("missingOrdersUploadEnabled", false)'), "feature must default OFF");
 assert(mainSource.includes('ipcMain.handle("set-missing-orders-upload-enabled"'), "main process must persist the toggle");
@@ -562,7 +625,9 @@ assert(setupSource.includes('id="sv3-btn-missing-orders"'), "setup must render t
 assert(setupSource.includes('id="sv3-missed-orders-destination"'), "account form must render the missed destination selector");
 assert(setupSource.includes('id="sv3-second-taager-panel"'), "account form must render the second Taager cart configuration");
 assert(runnerSource.includes("splitOrdersByMissedDestination"), "runner must use the enum-based destination split");
-assert(runnerSource.includes('legacyEnabled: config.missingOrdersUploadEnabled === true'), "runner may receive the legacy toggle but blank destinations must still normalize to cart");
+assert(mainSource.includes('if (legacyEnabled === true) return "legacy_missing_orders";'), "legacy Missing Orders toggle must force legacy routing when second-cart is not selected");
+assert(runnerSource.includes('legacyEnabled: config.missingOrdersUploadEnabled === true'), "runner must honor the legacy toggle while normalizing destination routing");
+assert(runnerSource.includes("Routing config:"), "runner logs must expose affiliate/destination routing decisions");
 assert(runnerSource.includes("runSecondTaagerCartUpload"), "runner must support a second Taager cart destination");
 assert(runnerSource.includes('mode: "second-taager-cart-upload"'), "runner must launch a Taager-only worker for second cart uploads");
 assert(runnerSource.includes("const defaultMaxCycles = Math.max(12, list.length)"), "verified cart upload should scale reconciliation cycles to the pending order count by default");
@@ -574,6 +639,16 @@ assert(runnerSource.includes("hardFailed: false"), "export-unconfirmed rows shou
 assert(runnerSource.includes("cartVerificationKeys"), "verification should check every SKU key inside a grouped cart order");
 assert(runnerSource.includes("await phase5_uploadToTaagerVerified(page, primaryCartOrders"), "normal cart upload should still receive raw destination rows because Taager rejects grouped product cells");
 assert(!runnerSource.includes("await phase5_uploadToTaagerVerified(page, buildGroupedCartOrders"), "normal cart upload must not group multi-product rows");
+assert(runnerSource.includes("preview_only_auto_confirm_off"), "legacy Missing Orders upload must respect Auto-Confirm as a submission guard");
+assert(runnerSource.includes("scrapeMissingOrdersSnapshot"), "legacy Missing Orders flow must scrape Taager cards after submission");
+assert(runnerSource.includes("missing-orders-snapshots"), "legacy Missing Orders flow must save the scraped HTML/snapshot near the profile");
+assert(runnerSource.includes("combinedRecoveryMissingOrders"), "affiliate recovery plus legacy Missing Orders must have a combined split mode");
+assert(runnerSource.includes("Combined recovery + Missing Orders preview sent"), "combined mode must preview both recovery and Missing Orders queues");
+assert(runnerSource.includes("preparedOrders: recoveryPreparedOrders"), "combined mode must send only the real-order recovery queue into affiliate recovery");
+assert(rendererAppSource.includes("results.missing_orders_snapshot_title"), "results page must translate the Missing Orders snapshot section");
+assert(rendererAppSource.includes("results.missing_orders_preview_only_title"), "results page must translate the Missing Orders preview-only guard");
+assert(resultsSource.includes("buildMissingOrdersSnapshotHtml"), "results page must render the Taager Missing Orders snapshot section");
+assert(resultsSource.includes("missingOrdersUpload.snapshotRows"), "results page must read scraped Taager Missing Orders rows");
 assert(rendererAppSource.includes("function confirmedAnalyticsRows"), "analytics save must explicitly select confirmed Taager rows");
 assert(rendererAppSource.includes("orders:          confirmedRows"), "analytics/operations stored order rows must be confirmed-only");
 assert(rendererAppSource.includes("analyticsOrdersSource: \"taager-confirmed\""), "analytics save must mark confirmed-only runs");

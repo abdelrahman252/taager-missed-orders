@@ -12,6 +12,9 @@ function normalizeMissedOrdersDestination(value, options = {}) {
   if (clean === DESTINATION_SECOND_TAAGER_CART || clean === "second-taager-cart" || clean === "second_cart") {
     return DESTINATION_SECOND_TAAGER_CART;
   }
+  if (options && options.legacyEnabled === true) {
+    return DESTINATION_LEGACY_MISSING_ORDERS;
+  }
   if (clean === DESTINATION_PRIMARY_CART || clean === "cart" || clean === "normal") {
     return DESTINATION_PRIMARY_CART;
   }

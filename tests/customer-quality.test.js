@@ -31,6 +31,8 @@ assert.strictEqual(assessCustomerOrder({ name: "تب", rawPhone: "956236585665",
 assert.strictEqual(assessCustomerOrder({ name: "مساء الخير", rawPhone: "05488484584", normPhone: "548848458" }).ok, true);
 assert.strictEqual(assessCustomerOrder({ name: "Wad elamin ود الأمين", rawPhone: "0534439785", normPhone: "534439785" }).ok, true);
 assert.strictEqual(assessCustomerOrder({ name: "جازم محمد علي", rawPhone: "0540635590", normPhone: "540635590" }).ok, true);
+assert.strictEqual(assessCustomerOrder({ name: "أحمد 😊", rawPhone: "0536679002", normPhone: "536679002" }).ok, true);
+assert.strictEqual(assessCustomerOrder({ name: "111111111😊111111111", rawPhone: "1234567778890000002222223333333311122234445567890000", normPhone: "567778890" }).ok, false);
 
 const realHeader = [
   "ID", "Status", "FullName", "Phone", "City", "Address", "Total Cost", "Product Cost", "Shipping Cost", "Coupon",

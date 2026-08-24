@@ -75,6 +75,29 @@ assert.strictEqual(persistedEntry.qtyCounts[2], 4);
 assert.strictEqual(persistedEntry.qtyCounts[4], 3);
 assert.ok((persistedEntry.productNames || []).includes("عرض 2 حبه من لعبة الكرة الطائرة السحرية"));
 
+catalog = updateTrustedSkuTierCatalog(loaded, {
+  scope,
+  now: "2026-08-20T13:00:00.000Z",
+  manualReviewCatalog: {
+    "عرض 2 حبه من لعبة الكرة الطائرة السحرية": {
+      sku: "SA050301IA0099",
+      productName: "عرض 2 حبه من لعبة الكرة الطائرة السحرية",
+      prices: { 2: 126 },
+      qtyCounts: { 2: 1 },
+      source: "manual-review",
+    },
+  },
+});
+const manualParserCatalog = trustedCatalogToParserCatalog(catalog);
+const manualEntry = Object.values(manualParserCatalog).find((entry) => entry.sku === "SA050301IA0099");
+assert.ok(manualEntry);
+assert.strictEqual(manualEntry.prices[2], 126, "approved manual-review subtotal should win source-priority ties for the same quantity");
+assert.strictEqual(
+  catalog.entries.SA050301IA0099.tiers["2"]["126"].sources.manual_review_approved,
+  1,
+  "manual-review learning should be tracked separately from automatic sheet learning"
+);
+
 const isolated = trustedCatalogStats(loadTrustedSkuTierCatalog(otherScope, { baseDir: tempRoot }));
 assert.strictEqual(isolated.entries, 0);
 

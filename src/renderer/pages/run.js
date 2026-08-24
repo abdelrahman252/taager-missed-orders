@@ -882,9 +882,9 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
               </div>`).join("");
           }
           // Still navigate to results after a delay so the user sees this
-          setTimeout(() => onComplete({ ...result.data, runtimeMs: result.runtimeMs || 0, runStartedAt: result.runStartedAt || null, runEndedAt: result.runEndedAt || null, _accountLabel: selectedAccountEmailTag() }), 3000);
+          setTimeout(() => onComplete({ ...result.data, runtimeMs: result.runtimeMs || 0, runStartedAt: result.runStartedAt || null, runEndedAt: result.runEndedAt || null, _accountLabel: selectedAccountEmailTag(), _accountId: (selectedAccountIds || [])[0] || result.accountId || "" }), 3000);
         } else {
-          setTimeout(() => onComplete({ ...result.data, runtimeMs: result.runtimeMs || 0, runStartedAt: result.runStartedAt || null, runEndedAt: result.runEndedAt || null, _accountLabel: selectedAccountEmailTag() }), 1200);
+          setTimeout(() => onComplete({ ...result.data, runtimeMs: result.runtimeMs || 0, runStartedAt: result.runStartedAt || null, runEndedAt: result.runEndedAt || null, _accountLabel: selectedAccountEmailTag(), _accountId: (selectedAccountIds || [])[0] || result.accountId || "" }), 1200);
         }
       } else if (result.error === "LICENSE_INVALID") {
         badge.textContent = t("run.badge_license_expired");
