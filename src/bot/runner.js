@@ -5408,6 +5408,7 @@ if (config.mode === "second-taager-cart-upload") {
       resolveMissedOrders,
       mergeAndDeduplicate,
       makeOrderKey,
+      taagerRepeatAllowedStatusDecision,
     } = parser();
 
     const taagerOrderKeys = parseTaagerOrderKeys(taagerBuffer);
@@ -5510,7 +5511,13 @@ if (config.mode === "second-taager-cart-upload") {
         ? items.map((item) => item.sku).filter(Boolean)
         : [row && row.sku].filter(Boolean);
       if (!skus.length) return true;
-      const alreadyInTaager = skus.some((sku) => taagerOrderKeys.has(makeOrderKey(phone, sku)));
+      const alreadyInTaager = skus.some((sku) => {
+        const key = makeOrderKey(phone, sku);
+        if (!key) return false;
+        if (taagerOrderKeys.has(key)) return true;
+        const decision = taagerRepeatAllowedStatusDecision(row, key, taagerOrderKeys);
+        return decision.action === "block";
+      });
       if (alreadyInTaager) reviewRowsAlreadyInTaager += 1;
       return !alreadyInTaager;
     });

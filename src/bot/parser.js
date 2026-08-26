@@ -257,6 +257,38 @@ function orderCreatedDay(order) {
   return localDateKey(order && (order.easyCreatedAt || order.createdAt || order.date));
 }
 
+function taagerRepeatAllowedStatusDecision(order, key, existingPhones) {
+  const records = existingPhones && existingPhones.taagerStatusByKey instanceof Map
+    ? (existingPhones.taagerStatusByKey.get(key) || [])
+    : [];
+  const repeatAllowedRecords = records.filter((record) => record.repeatAllowed === true);
+  if (!repeatAllowedRecords.length) return { action: "allow" };
+
+  const sourceId = orderSourceId(order);
+  if (sourceId && repeatAllowedRecords.some((record) => record.sourceOrderId && record.sourceOrderId === sourceId)) {
+    return { action: "block", reason: "source_order_already_in_taager" };
+  }
+
+  const incomingDay = orderCreatedDay(order);
+  const repeatAllowedDays = repeatAllowedRecords.map((record) => record.createdDay).filter(Boolean);
+  if (incomingDay && repeatAllowedDays.length) {
+    if (repeatAllowedDays.includes(incomingDay)) {
+      return { action: "block", reason: "repeat_allowed_order_already_in_taager" };
+    }
+    return { action: "allow" };
+  }
+
+  if (sourceId && repeatAllowedRecords.some((record) => record.sourceOrderId && record.sourceOrderId !== sourceId)) {
+    return { action: "allow" };
+  }
+
+  return {
+    action: "block",
+    reason: "repeat_allowed_order_already_in_taager",
+    actionMessage: "A delivered, failed-delivery, or canceled phone+SKU history exists, and no different EasyOrders date/source proves this is a new repeat order.",
+  };
+}
+
 function comparableDateTimeKey(value) {
   return localDateTimeKey(value) || localDateKey(value) || String(value || "").trim();
 }
@@ -1837,39 +1869,6 @@ function mergeAndDeduplicate(realOrders, resolvedMissed, existingPhones) {
     });
   }
 
-  function repeatAllowedStatusDecision(order, key) {
-    const records = existingPhones && existingPhones.taagerStatusByKey instanceof Map
-      ? (existingPhones.taagerStatusByKey.get(key) || [])
-      : [];
-    const repeatAllowedRecords = records.filter((record) => record.repeatAllowed === true);
-    if (!repeatAllowedRecords.length) return { action: "allow" };
-
-    const sourceId = orderSourceId(order);
-    if (sourceId) {
-      if (repeatAllowedRecords.some((record) => record.sourceOrderId && record.sourceOrderId === sourceId)) {
-        return { action: "block", reason: "source_order_already_in_taager" };
-      }
-      if (repeatAllowedRecords.some((record) => record.sourceOrderId)) {
-        return { action: "allow" };
-      }
-    }
-
-    const incomingDay = orderCreatedDay(order);
-    const repeatAllowedDays = repeatAllowedRecords.map((record) => record.createdDay).filter(Boolean);
-    if (incomingDay && repeatAllowedDays.length) {
-      if (repeatAllowedDays.includes(incomingDay)) {
-        return { action: "block", reason: "repeat_allowed_order_already_in_taager" };
-      }
-      return { action: "allow" };
-    }
-
-    return {
-      action: "uncertain",
-      reason: "repeat_allowed_status_needs_identity",
-      actionMessage: "A delivered, failed-delivery, or canceled phone+SKU history exists, but no source order ID/date proves this is a new order.",
-    };
-  }
-
   function acceptGroup(items, source) {
     const mergedItems = mergeItemList(items);
     const groupedOrder = buildGroupedCartOrders(mergedItems)[0];
@@ -1891,7 +1890,7 @@ function mergeAndDeduplicate(realOrders, resolvedMissed, existingPhones) {
     const duplicate = itemKeys.filter((entry) => seen.has(entry.key));
     const repeatAllowedDecisions = itemKeys
       .filter((entry) => entry.key && !existingPhones.has(entry.key) && !seen.has(entry.key))
-      .map((entry) => ({ ...entry, decision: repeatAllowedStatusDecision(entry.order, entry.key) }))
+      .map((entry) => ({ ...entry, decision: taagerRepeatAllowedStatusDecision(entry.order, entry.key, existingPhones) }))
       .filter((entry) => entry.decision.action !== "allow");
     const repeatAllowedBlocked = repeatAllowedDecisions.filter((entry) => entry.decision.action === "block");
     const repeatAllowedUncertain = repeatAllowedDecisions.filter((entry) => entry.decision.action === "uncertain");
@@ -2449,6 +2448,7 @@ module.exports = {
   extractSkuFromText,
   hasExplicitQuantityInProductName,
   makeOrderKey,
+  taagerRepeatAllowedStatusDecision,
   loadProductMap,
   saveProductMap,
   learnProductMappings,

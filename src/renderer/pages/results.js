@@ -205,7 +205,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     if (!table) return [];
     const trs = Array.from(table.querySelectorAll('tbody tr[data-manual-row="1"]'));
     const selected = trs.filter((tr) => tr.querySelector("[data-manual-select]")?.checked);
-    const sourceRows = selectedOnly && selected.length ? selected : trs;
+    const sourceRows = selectedOnly ? selected : trs;
     return sourceRows.map((tr) => {
       const row = {};
       tr.querySelectorAll("[data-manual-field]").forEach((input) => {
@@ -244,6 +244,14 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     }
   };
 
+  window._resSetManualReviewSelection = function (tableId, checked) {
+    const table = document.querySelector(`[data-manual-table="${tableId}"]`);
+    if (!table) return;
+    table.querySelectorAll('tbody tr[data-manual-row="1"] [data-manual-select]').forEach((input) => {
+      input.checked = Boolean(checked);
+    });
+  };
+
   window._resStartManualReviewUpload = async function (tableId) {
     const rows = collectManualReviewRows(tableId, true);
     if (!rows.length || !window.api?.runBot) {
@@ -269,9 +277,59 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   function manualReviewActionButtons(tableId) {
     if (!tableId) return "";
     return `
+      <button type="button" class="btn res-manual-select-action" onclick="window._resSetManualReviewSelection('${tableId}', true)">${translated("results.select_all", "Select All")}</button>
+      <button type="button" class="btn res-manual-clear-action" onclick="window._resSetManualReviewSelection('${tableId}', false)">${translated("results.deselect_all", "Deselect All")}</button>
       <button type="button" class="btn res-table-download" onclick="window._resDownloadManualReviewTable('${tableId}')">⬇️ ${translated("results.download_edited_table", "Download Edited")}</button>
       <button type="button" class="btn" style="background:rgba(249,115,22,0.16);border-color:#f97316;color:#fb923c" onclick="window._resStartManualReviewUpload('${tableId}')">${translated("results.start_reviewed_upload", "Start Reviewed")}</button>
     `;
+  }
+
+  function setupResultsCollapsibleTables(root = document) {
+    const sections = Array.from(root.querySelectorAll(".dash-section"));
+    const keepOpenPattern = /manual review|needs manual|confirmed|uploaded orders|مراجعة|مؤكدة|تم الرفع|مرفوعة|مرفوعة \/ مقدمة|مرفوعة أو مقدمة/i;
+    const interactiveSelector = "button,input,select,textarea,a,label,[role='button']";
+
+    function setCollapsed(section, collapsed) {
+      const blocks = Array.from(section.querySelectorAll(":scope > .results-collapsible-extra, :scope > .dash-section-body"));
+      if (!blocks.length) return;
+      if (collapsed) {
+        blocks.forEach((block) => {
+          block.style.maxHeight = `${block.scrollHeight}px`;
+          block.offsetHeight;
+        });
+        section.classList.add("is-collapsed");
+        blocks.forEach((block) => {
+          block.style.maxHeight = "0px";
+        });
+      } else {
+        section.classList.remove("is-collapsed");
+        blocks.forEach((block) => {
+          block.style.maxHeight = `${block.scrollHeight}px`;
+        });
+      }
+    }
+
+    sections.forEach((section) => {
+      const body = section.querySelector(":scope > .dash-section-body");
+      const header = section.querySelector(":scope > .dash-section-header");
+      if (!body || !header || !section.querySelector("table")) return;
+      const titleText = section.querySelector(".dash-section-title")?.textContent || "";
+      const isManualReview = Boolean(section.querySelector("[data-manual-table]"));
+      const isImportant = isManualReview || keepOpenPattern.test(titleText);
+      if (isImportant || section.dataset.resultsCollapsibleReady === "1") return;
+
+      section.dataset.resultsCollapsibleReady = "1";
+      section.classList.add("results-collapsible");
+      const title = section.querySelector(".dash-section-title");
+      if (title && !title.querySelector(".results-collapse-icon")) {
+        title.insertAdjacentHTML("beforeend", `<span class="results-collapse-icon" aria-hidden="true">›</span>`);
+      }
+      setCollapsed(section, true);
+      header.addEventListener("click", (event) => {
+        if (event.target.closest(interactiveSelector)) return;
+        setCollapsed(section, !section.classList.contains("is-collapsed"));
+      });
+    });
   }
 
   function ensureResultsPaginationStyle() {
@@ -321,6 +379,56 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         background: rgba(79,142,247,0.08);
         border-color: rgba(79,142,247,0.28);
         color: var(--accent);
+      }
+      .res-manual-select-action {
+        font-size: var(--type-caption);
+        padding: 5px 10px;
+        background: rgba(20,184,166,0.12);
+        border-color: rgba(20,184,166,0.36);
+        color: #2dd4bf;
+      }
+      .res-manual-clear-action {
+        font-size: var(--type-caption);
+        padding: 5px 10px;
+        background: rgba(148,163,184,0.10);
+        border-color: rgba(148,163,184,0.28);
+        color: var(--text2);
+      }
+      .dash-section.results-collapsible .dash-section-header {
+        cursor: pointer;
+        user-select: none;
+      }
+      .dash-section.results-collapsible .dash-section-body,
+      .dash-section.results-collapsible .results-collapsible-extra {
+        transition: max-height 0.26s ease, opacity 0.2s ease, padding-top 0.2s ease, padding-bottom 0.2s ease;
+        will-change: max-height, opacity;
+      }
+      .dash-section.results-collapsible.is-collapsed .dash-section-body,
+      .dash-section.results-collapsible.is-collapsed .results-collapsible-extra {
+        max-height: 0 !important;
+        opacity: 0;
+        overflow: hidden !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        border-bottom-width: 0 !important;
+      }
+      .results-collapse-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        margin-inline-start: 6px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        color: var(--text2);
+        font-size: 11px;
+        transition: transform 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+      }
+      .dash-section.results-collapsible:not(.is-collapsed) .results-collapse-icon {
+        transform: rotate(90deg);
+        color: var(--accent);
+        border-color: rgba(79,142,247,0.36);
       }
       .orders-preview-table { border-collapse: collapse; width: 100%; table-layout: fixed; }
       .orders-preview-table th,
@@ -1248,7 +1356,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
             ${tableDownloadButton(downloadId)}
           </div>
         </div>
-        <div style="padding:8px 12px;border-bottom:1px solid var(--border);background:rgba(0,0,0,0.04)">
+        <div class="results-collapsible-extra" style="padding:8px 12px;border-bottom:1px solid var(--border);background:rgba(0,0,0,0.04)">
           <input type="text" placeholder="${t('results.search_orders_placeholder') || 'Search by name, phone or product...'}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font-size:var(--type-label);color:var(--text);outline:none" oninput="window._resOrderSearch('${tableUid}',this.value)">
         </div>
         <div class="dash-section-body no-pad results-orders-table-wrap" style="overflow-x:auto">
@@ -2130,6 +2238,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           if (result.saved) { const fn = t("results.toast_saved"); showToast(typeof fn === "function" ? fn(result.path) : fn); }
         });
       }
+      setupResultsCollapsibleTables(wrap);
     }
 
     // ── Update sidebar active state ──
@@ -2550,6 +2659,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   `;
 
   wireSharedSidebar(el);
+  setupResultsCollapsibleTables(el);
   document.getElementById("btn-home")?.addEventListener("click", onHome);
   document.getElementById("btn-run-again")?.addEventListener("click", onRunAgain);
 

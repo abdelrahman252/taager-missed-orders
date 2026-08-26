@@ -464,6 +464,16 @@ const deliveredFreshRepeatResult = mergeAndDeduplicate([
   { source: "real", normPhone: "500000007", sku: "DELIVERED-SKU", orderId: "EO-NEW", createdAt: "2026-07-07", uploadGroupKey: "new-order-after-delivery" },
 ], [], deliveredOnlyKeys);
 assert.strictEqual(deliveredFreshRepeatResult.stats.realNew, 1, "delivered phone+SKU repeat should be allowed only when source identity/date proves it is a different order");
+const deliveredDifferentSourceSameDayResult = mergeAndDeduplicate([
+  { source: "real", normPhone: "500000007", sku: "DELIVERED-SKU", orderId: "EO-NEW-SAME-DAY", createdAt: "2026-07-06", uploadGroupKey: "same-day-different-source" },
+], [], deliveredOnlyKeys);
+assert.strictEqual(deliveredDifferentSourceSameDayResult.stats.realInTaager, 1, "different EasyOrders source ID must not bypass same-day delivered phone+SKU history");
+assert.strictEqual(deliveredDifferentSourceSameDayResult.orders.length, 0);
+const deliveredNoIdentityResult = mergeAndDeduplicate([
+  { source: "real", normPhone: "500000007", sku: "DELIVERED-SKU", uploadGroupKey: "delivered-no-identity" },
+], [], deliveredOnlyKeys);
+assert.strictEqual(deliveredNoIdentityResult.stats.realInTaager, 1, "repeat-allowed Taager history should block when no different date/source proves this is a fresh order");
+assert.strictEqual(deliveredNoIdentityResult.orders.length, 0);
 function assertRepeatAllowedStatus(status, bucketName) {
   const sheet = XLSX.utils.aoa_to_sheet([
     taagerExistingHeader,
@@ -478,6 +488,10 @@ function assertRepeatAllowedStatus(status, bucketName) {
     { source: "real", normPhone: "500000010", sku: `${bucketName}-SKU`, createdAt: "2026-07-08", uploadGroupKey: `${bucketName}-same-day` },
   ], [], repeatAllowedKeys);
   assert.strictEqual(sameDayResult.stats.realInTaager, 1, `${bucketName} same phone+SKU and same created day should stay skipped`);
+  const sameDayDifferentSourceResult = mergeAndDeduplicate([
+    { source: "real", normPhone: "500000010", sku: `${bucketName}-SKU`, orderId: `EO-${bucketName}-NEW-SAME-DAY`, createdAt: "2026-07-08", uploadGroupKey: `${bucketName}-same-day-source` },
+  ], [], repeatAllowedKeys);
+  assert.strictEqual(sameDayDifferentSourceResult.stats.realInTaager, 1, `${bucketName} different source ID should not bypass same created day`);
   const freshResult = mergeAndDeduplicate([
     { source: "real", normPhone: "500000010", sku: `${bucketName}-SKU`, orderId: `EO-${bucketName}-NEW`, createdAt: "2026-07-09", uploadGroupKey: `${bucketName}-new-day` },
   ], [], repeatAllowedKeys);
