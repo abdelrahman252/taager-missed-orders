@@ -392,6 +392,7 @@ const setupSource = fs.readFileSync(path.join(root, "src", "renderer", "pages", 
 const runSource = fs.readFileSync(path.join(root, "src", "renderer", "pages", "run.js"), "utf8");
 const uiRecoverySource = fs.readFileSync(path.join(root, "src", "bot", "easy-orders-ui-recovery.js"), "utf8");
 const easyOrdersExportSource = fs.readFileSync(path.join(root, "src", "bot", "easy-orders-export.js"), "utf8");
+const dashboardFetchSource = fs.readFileSync(path.join(root, "src", "bot", "dashboard-fetch.js"), "utf8");
 const flowSource = fs.readFileSync(path.join(root, "src", "bot", "easy-orders-affiliate-recovery-flow.js"), "utf8");
 const failedFlowSource = fs.readFileSync(path.join(root, "src", "bot", "taager-failed-orders-export-flow.js"), "utf8");
 const resultsSource = fs.readFileSync(path.join(root, "src", "renderer", "pages", "results.js"), "utf8");
@@ -431,6 +432,8 @@ assert(uiRecoverySource.includes('button[aria-label="Go to next page"]'), "affil
 assert(uiRecoverySource.includes('getByRole("button", { name: /^Options$/i })'), "real-order resend should open the Options menu first");
 assert(easyOrdersExportSource.includes('[aria-label="Change language"]'), "EasyOrders export should support the new sidebar language control");
 assert(easyOrdersExportSource.includes('[aria-label="Open menu"]'), "EasyOrders export should open the sidebar before switching language");
+assert(dashboardFetchSource.includes('a[href*=".xlsx"], a[href*="/excel/"]'), "dashboard EasyOrders export should scan direct Excel notification links");
+assert(dashboardFetchSource.includes("depth < 10"), "dashboard EasyOrders export should walk the new stacked notification container");
 assert(runnerSource.includes('input[name="full_name"], input#full_name'), "normal EasyOrders create should use the stable full_name field name");
 assert(runnerSource.includes('input[name="phone"], input#phone'), "normal EasyOrders create should use the stable phone field name");
 assert(uiRecoverySource.includes("reloadEasyOrdersPage"), "affiliate recovery should reload EasyOrders before retrying a crashed/timeout order");

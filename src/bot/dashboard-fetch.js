@@ -461,21 +461,38 @@ async function exportEasyOrdersOrders(page, exportFromDate) {
 
   const result = await page.evaluate(() => {
     function shortText(el) {
-      return (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
+      return (el.innerText || el.textContent || "")
+        .replace(/[\u200e\u200f\u061c]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
     }
-    const cards = Array.from(document.querySelectorAll("a[href], .MuiCard-root, [role='button']"));
-    for (const card of cards) {
-      const text = shortText(card).toLowerCase();
-      const href = card.href || card.querySelector && card.querySelector("a[href]") && card.querySelector("a[href]").href;
-      const isOrdersExport = text.includes("orders exported") ||
+    const isOrdersExport = (value) => {
+      const text = shortText({ innerText: value, textContent: value }).toLowerCase();
+      return text.includes("orders exported") ||
         text.includes("orders export") ||
         text.includes("created orders excel") ||
         text.includes("ملف اكسل للطلبات") ||
         text.includes("ملف إكسل للطلبات") ||
         text.includes("انشاء ملف اكسل") ||
         text.includes("إنشاء ملف إكسل");
-      const isMissed = text.includes("missed orders") || text.includes("الطلبات الفائتة");
-      if (href && isOrdersExport && !isMissed) return { href, text };
+    };
+    const isMissed = (value) => {
+      const text = shortText({ innerText: value, textContent: value }).toLowerCase();
+      return text.includes("missed orders") || text.includes("الطلبات الفائتة");
+    };
+    const absoluteHref = (link) => {
+      try { return new URL(String(link.getAttribute("href") || link.href || ""), window.location.href).href; }
+      catch (_) { return String(link.href || link.getAttribute("href") || ""); }
+    };
+    const links = Array.from(document.querySelectorAll('a[href*=".xlsx"], a[href*="/excel/"]'));
+    for (const link of links) {
+      let node = link;
+      for (let depth = 0; node && node !== document.body && depth < 10; depth++, node = node.parentElement) {
+        const text = shortText(node);
+        if (!isOrdersExport(text) || isMissed(text)) continue;
+        const href = absoluteHref(link);
+        if (href.startsWith("https://")) return { href, text };
+      }
     }
     return null;
   });

@@ -733,14 +733,15 @@ async function triggerEasyOrdersExport(page, exportFromDate, keyword) {
         return orders ? "orders" : "";
       }
 
-      const rows = Array.from(document.querySelectorAll("tr, [role='row'], li"));
-      for (const row of rows) {
-        const text = shortText(row);
-        if (cardKind(text) !== keyword) continue;
-        const links = Array.from(row.querySelectorAll('a[href*=".xlsx"], a[href*="/excel/"]'));
-        const fileLink = links.find(a => (a.href || "").startsWith("https://"));
-        if (fileLink) {
-          return { href: fileLink.href, text };
+      const links = Array.from(document.querySelectorAll('a[href*=".xlsx"], a[href*="/excel/"]'));
+      for (const fileLink of links) {
+        let node = fileLink;
+        for (let depth = 0; node && node !== document.body && depth < 10; depth++, node = node.parentElement) {
+          const text = shortText(node);
+          if (cardKind(text) !== keyword) continue;
+          if ((fileLink.href || "").startsWith("https://")) {
+            return { href: fileLink.href, text };
+          }
         }
       }
       return null;
