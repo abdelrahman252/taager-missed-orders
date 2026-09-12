@@ -343,22 +343,7 @@ function normalizeIdentityText(value) {
 
 async function ensureEasyOrdersEnglish(page) {
   try {
-    let langLabel = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      langLabel = await page.$eval('[aria-label="language-switcher"] p', (el) => el.innerText.trim()).catch(() => null);
-      if (langLabel !== null) break;
-      if (attempt < 2) await page.waitForTimeout(1500);
-    }
-    if (langLabel && langLabel !== "en") {
-      await page.click('[aria-label="language-switcher"]');
-      await page.waitForTimeout(800);
-      const clicked =
-        await page.locator('[role="menuitem"][aria-label="english"]').click().then(() => true).catch(() => false) ||
-        await page.locator('[role="menuitem"]:has-text("English")').click().then(() => true).catch(() => false) ||
-        await page.locator('[role="menuitem"]:has-text("en")').click().then(() => true).catch(() => false);
-      if (clicked) await page.waitForTimeout(1500);
-      else await page.keyboard.press("Escape").catch(() => {});
-    }
+    await easyOrdersFlow.ensureEnglish(page);
   } catch (e) {
     log(`EasyOrders language check skipped: ${e.message}`);
   }
@@ -388,12 +373,16 @@ async function easyOrdersLogin(page) {
   if (page.url().includes("store-selection")) {
     const storeName = normalizeIdentityText(config.easyStore || "");
     if (!storeName) throw new Error("EasyOrders store name is required for dashboard enrichment");
-    const cards = page.locator(".MuiCard-root");
+    const cards = page.locator(
+      ':is(.MuiCard-root, button, [role="button"]):has(h1, h2, h3, h4, h5, h6, [role="heading"])'
+    );
     const count = await cards.count();
     let found = false;
     for (let i = 0; i < count; i++) {
       const card = cards.nth(i);
-      const cardName = normalizeIdentityText(await card.locator("h6").innerText().catch(() => ""));
+      const cardName = normalizeIdentityText(
+        await card.locator('h1, h2, h3, h4, h5, h6, [role="heading"]').first().innerText().catch(() => "")
+      );
       if (cardName === storeName) {
         await card.click();
         found = true;
@@ -442,7 +431,9 @@ async function exportEasyOrdersOrders(page, exportFromDate) {
   await page.waitForTimeout(1500);
   await ensureEasyOrdersEnglish(page);
 
-  const pageExportBtn = page.locator('button.MuiButton-outlined:has-text("Export")').first();
+  const pageExportBtn = page.locator(
+    'button.MuiButton-outlined:has-text("Export"), main button:has-text("Export"), button:has-text("Export")'
+  ).first();
   await pageExportBtn.waitFor({ state: "visible", timeout: 10000 });
   await page.keyboard.press("Escape").catch(() => {});
   await pageExportBtn.click();

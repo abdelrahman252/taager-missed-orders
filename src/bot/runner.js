@@ -780,7 +780,10 @@ async function triggerEasyOrdersExport(page, exportFromDate, keyword) {
     // ── Wait for table + export button (retry up to 3 page reloads) ──
     for (let reload = 1; reload <= 3; reload++) {
       try {
-        await page.waitForSelector("table", { timeout: 15000 });
+        await page.waitForSelector(
+          'table, [role="list"], a[href^="#/orders/"]:not([href$="/create"]), a[href^="#/missed-orders/"]',
+          { timeout: 15000 }
+        );
         await page.waitForSelector('.RaList-main button:has-text("Export"), main button:has-text("Export"), button:has-text("Export")', { timeout: 15000 });
         break;
       } catch (e) {
@@ -801,7 +804,9 @@ async function triggerEasyOrdersExport(page, exportFromDate, keyword) {
     // The Export button is MuiButton-outlined (Create Order is MuiButton-contained, an <a> tag).
     // This is the most specific stable selector we can use without relying on dynamic class hashes.
     log(`🖱️ Clicking page-level Export button to open dialog...`);
-    const pageExportBtn = page.locator('button.MuiButton-outlined:has-text("Export")').first();
+    const pageExportBtn = page.locator(
+      'button.MuiButton-outlined:has-text("Export"), main button:has-text("Export"), button:has-text("Export")'
+    ).first();
     await pageExportBtn.waitFor({ state: "visible", timeout: 10000 });
     const pageExportText = await pageExportBtn.innerText().catch(() => "?");
     log(`   Found page Export button — text: "${pageExportText.replace(/\s+/g, " ").trim()}" — clicking`);
@@ -1295,8 +1300,10 @@ async function phase1_easyOrdersLogin(page) {
     // Give SPA extra time to hydrate before probing DOM
     await page.waitForTimeout(1500);
     const authDomPresent = await page.$(
-      '.MuiAppBar-root, [aria-label="language-switcher"], [data-testid="user-avatar"], ' +
-      '[class*="Dashboard"], [class*="OrderList"], .MuiDrawer-root, .MuiCard-root'
+      '.MuiAppBar-root, [aria-label="language-switcher"], [aria-label="Open menu"], ' +
+      '[aria-label="افتح القائمة"], [aria-label="User settings"], [aria-label="اعدادات المستخدم"], ' +
+      '[data-testid="user-avatar"], [class*="Dashboard"], [class*="OrderList"], ' +
+      '.MuiDrawer-root, .MuiCard-root, a[href="#/orders"], a[href="#/notifications"]'
     ) !== null;
     if (authDomPresent) {
       log("✅ Easy-orders: already logged in (URL + DOM verified), skipping login\n");
@@ -1322,7 +1329,9 @@ async function phase1_easyOrdersLogin(page) {
     log("🏪 Store selection page detected...");
 
     const storeName = (config.easyStore || "").trim().toLowerCase();
-    const cards = page.locator('.MuiCard-root');
+    const cards = page.locator(
+      ":is(.MuiCard-root, button, [role='button']):has(h1, h2, h3, h4, h5, h6, [role='heading'])"
+    );
     const count = await cards.count();
 
     if (!storeName) {
@@ -1334,7 +1343,7 @@ async function phase1_easyOrdersLogin(page) {
 
       for (let i = 0; i < count; i++) {
         const card     = cards.nth(i);
-        const nameEl   = card.locator('h6');
+        const nameEl   = card.locator('h1, h2, h3, h4, h5, h6, [role="heading"]').first();
         const cardName = (await nameEl.innerText().catch(() => "")).trim().toLowerCase();
 
         if (normalizeIdentityText(cardName) === normalizeIdentityText(storeName)) {
@@ -1437,8 +1446,10 @@ async function doEasyOrdersLogin(page) {
       // URL moved off login — now perform DOM verification before declaring success
       // Use MuiAppBar which only appears in the authenticated dashboard, not the login page
       const authDomPresent = await page.$(
-        '.MuiAppBar-root, [aria-label="language-switcher"], [class*="Dashboard"], ' +
-        '[class*="OrderList"], .MuiDrawer-root, .MuiCard-root'
+        '.MuiAppBar-root, [aria-label="language-switcher"], [aria-label="Open menu"], ' +
+        '[aria-label="افتح القائمة"], [aria-label="User settings"], [aria-label="اعدادات المستخدم"], ' +
+        '[class*="Dashboard"], [class*="OrderList"], .MuiDrawer-root, .MuiCard-root, ' +
+        'a[href="#/orders"], a[href="#/notifications"]'
       ) !== null || currentUrl.includes("store-selection");
       if (authDomPresent) {
         confirmed = true;
@@ -1466,42 +1477,12 @@ async function doEasyOrdersLogin(page) {
 // ════════════════════════════════════════
 async function ensureEasyOrdersEnglish(page) {
   try {
-    // If switcher not in DOM yet (slow client), retry up to 3 times with short waits
-    let langLabel = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      langLabel = await page.$eval(
-        '[aria-label="language-switcher"] p',
-        (el) => el.innerText.trim()
-      ).catch(() => null);
-
-      if (langLabel !== null) break;
-      if (attempt < 2) {
-        log(`⏳ Language switcher not found yet (attempt ${attempt + 1}/3) — waiting...`);
-        await page.waitForTimeout(1500);
-      }
-    }
-
-    if (langLabel === null) {
-      log("⚠️ Language switcher not found after retries — continuing anyway");
-      return false;
-    }
-
-    if (langLabel !== "en") {
-      log("🌐 Easy-orders switched to non-English — forcing English...");
-      await page.click('[aria-label="language-switcher"]');
-      await page.waitForTimeout(800);
-      const clicked =
-        await page.locator('[role="menuitem"][aria-label="english"]').click().then(() => true).catch(() => false) ||
-        await page.locator('[role="menuitem"]:has-text("English")').click().then(() => true).catch(() => false) ||
-        await page.locator('[role="menuitem"]:has-text("en")').click().then(() => true).catch(() => false);
-      if (clicked) {
-        await page.waitForTimeout(1500);
-        log("✅ Switched back to English");
-        return true; // caller should re-wait for page re-render
-      } else {
-        log("⚠️ Could not find English menu item — continuing anyway");
-        await page.keyboard.press("Escape");
-      }
+    const before = await page.evaluate(() => String(document.documentElement.lang || "").trim().toLowerCase()).catch(() => "");
+    await easyOrdersFlow.ensureEnglish(page);
+    const after = await page.evaluate(() => String(document.documentElement.lang || "").trim().toLowerCase()).catch(() => "");
+    if (!before.startsWith("en") && after.startsWith("en")) {
+      log("✅ Switched Easy-orders back to English");
+      return true;
     }
   } catch (e) {
     log(`⚠️ Language check error: ${e.message}`);
@@ -2349,7 +2330,12 @@ function resolveCityLabel(cityName) {
 // Clicks the city dropdown and selects by visible text (immune to UUID changes)
 async function selectCityByText(page, cityName) {
   const label = resolveCityLabel(cityName);
-  await page.locator('#government').click();
+  const governmentField = page.locator('#government, [name="government"]').first();
+  if (!(await governmentField.count().catch(() => 0))) {
+    log(`ℹ️ Easy-orders create form has no government field; leaving city unset for "${label}".`);
+    return false;
+  }
+  await governmentField.click();
   await page.waitForTimeout(800);
 
   // The open MUI listbox — find the li whose text contains our label
@@ -2360,6 +2346,7 @@ async function selectCityByText(page, cityName) {
   const option = listbox.locator(`li:has-text("${label}")`).first();
   await option.waitFor({ timeout: 8000 });
   await option.click();
+  return true;
 }
 
 // ════════════════════════════════════════
@@ -2547,18 +2534,18 @@ async function createSingleOrderAttempt(page, order, orderNum, attempt) {
   await verifyAndFixPrice(page, targetUnitPrice, targetSubtotal, orderNum);
 
   // ── 7. Fill customer info ──
-  const nameInput = page.locator('input#full_name');
+  const nameInput = page.locator('input[name="full_name"], input#full_name').first();
   await nameInput.waitFor({ timeout: 10000 });
   await nameInput.click({ clickCount: 3 });
   await nameInput.fill(finalName);
 
-  const phoneInput = page.locator('input#phone');
+  const phoneInput = page.locator('input[name="phone"], input#phone').first();
   await phoneInput.click({ clickCount: 3 });
   await phoneInput.fill(formatPhone(order.normPhone, TAAGER_COUNTRY) || "");
 
   await selectCityByText(page, finalCity);
 
-  const addressInput = page.locator('textarea#address');
+  const addressInput = page.locator('textarea[name="address"], textarea#address').first();
   await addressInput.click({ clickCount: 3 });
   await addressInput.fill(finalAddress);
 

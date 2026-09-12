@@ -4,6 +4,22 @@ const os = require("os");
 const path = require("path");
 const { isRetryableNetworkError } = require("./network-retry");
 
+const EASY_ORDERS_AUTH_DOM_SELECTOR = [
+  ".MuiAppBar-root",
+  '[aria-label="language-switcher"]',
+  '[aria-label="Open menu"]',
+  '[aria-label="افتح القائمة"]',
+  '[aria-label="User settings"]',
+  '[aria-label="اعدادات المستخدم"]',
+  '[data-testid="user-avatar"]',
+  '[class*="Dashboard"]',
+  '[class*="OrderList"]',
+  ".MuiDrawer-root",
+  ".MuiCard-root",
+  'a[href="#/orders"]',
+  'a[href="#/notifications"]',
+].join(", ");
+
 function parseEasyOrdersIdentityFromDocument() {
   // IMPORTANT FOR FUTURE MAINTENANCE:
   // The active EasyOrders store must be read from the account identity header
@@ -322,7 +338,9 @@ function createEasyOrdersExportFlow(options = {}) {
 
   async function readLanguageState(page) {
     return page.evaluate(() => {
-      const switcher = document.querySelector('[aria-label="language-switcher"]');
+      const switcher = document.querySelector(
+        '[aria-label="language-switcher"], [aria-label="Change language"], [aria-label="تغيير اللغة"]'
+      );
       const label = switcher && switcher.querySelector("p");
       return {
         label: String(label && (label.innerText || label.textContent) || "").trim().toLowerCase(),
@@ -342,16 +360,41 @@ function createEasyOrdersExportFlow(options = {}) {
 
     const alreadyEnglish = state.label === "en" || state.documentLanguage.startsWith("en");
     if (alreadyEnglish && !force) return true;
-    if (!state.label && alreadyEnglish) return true;
 
-    const switcher = page.locator('[aria-label="language-switcher"]').first();
-    if (!await switcher.count().catch(() => 0)) {
+    const languageSelectors = [
+      '[aria-label="language-switcher"]',
+      '[aria-label="Change language"]',
+      '[aria-label="تغيير اللغة"]',
+    ];
+    const findVisibleLanguageSwitcher = async () => {
+      for (const selector of languageSelectors) {
+        const candidate = page.locator(selector).first();
+        if (await candidate.isVisible({ timeout: 1000 }).catch(() => false)) return candidate;
+      }
+      return null;
+    };
+
+    let switcher = await findVisibleLanguageSwitcher();
+    if (!switcher) {
+      const sidebarToggle = page.locator(
+        '[aria-label="Open menu"], [aria-label="افتح القائمة"]'
+      ).first();
+      if (await sidebarToggle.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await sidebarToggle.click({ timeout: 5000 });
+        await page.waitForTimeout(400);
+      }
+      switcher = await findVisibleLanguageSwitcher();
+    }
+    if (!switcher) {
       throw new Error("EASY_ORDERS_ENGLISH_REQUIRED: language switcher was not available");
     }
 
-    await switcher.click();
+    if (await switcher.getAttribute("aria-expanded").catch(() => null) !== "true") {
+      await switcher.click();
+    }
     await page.waitForTimeout(800);
     const clicked =
+      await page.getByRole("menuitem", { name: /^English$/i }).first().click().then(() => true).catch(() => false) ||
       await page.locator('[role="menuitem"][aria-label="english"]').click().then(() => true).catch(() => false) ||
       await page.locator('[role="menuitem"]:has-text("English")').click().then(() => true).catch(() => false) ||
       await page.locator('[role="menuitem"]:has-text("en")').click().then(() => true).catch(() => false);
@@ -371,6 +414,8 @@ function createEasyOrdersExportFlow(options = {}) {
   async function revealIdentityMenu(page) {
     const selectors = [
       'button[aria-label="app_bar.user_settings"]',
+      'button[aria-label="User settings"]',
+      'button[aria-label="اعدادات المستخدم"]',
       '.MuiAppBar-root button[aria-label*="settings" i]',
       '[data-testid="user-avatar"]',
       '.MuiAppBar-root button:has(svg[data-testid*="Account" i])',
@@ -582,7 +627,7 @@ function createEasyOrdersExportFlow(options = {}) {
       clearIdentityCache("store selection page detected");
       throw new Error(`SESSION_STORE_SELECTION: on store selection page (${url})`);
     }
-    const authDomPresent = await page.$('.MuiAppBar-root, [aria-label="language-switcher"], [class*="Dashboard"], [class*="OrderList"], .MuiDrawer-root, .MuiCard-root') !== null;
+    const authDomPresent = await page.$(EASY_ORDERS_AUTH_DOM_SELECTOR) !== null;
     if (!authDomPresent) {
       clearIdentityCache("authenticated DOM missing");
       throw new Error(`SESSION_UNVERIFIED: no authenticated EasyOrders DOM at ${url}`);
@@ -615,7 +660,7 @@ function createEasyOrdersExportFlow(options = {}) {
     const url = page.url();
     if (url.includes("store-selection")) return true;
     if (url.includes("login")) return false;
-    return await page.$('.MuiAppBar-root, [aria-label="language-switcher"], [class*="Dashboard"], [class*="OrderList"], .MuiDrawer-root, .MuiCard-root') !== null;
+    return await page.$(EASY_ORDERS_AUTH_DOM_SELECTOR) !== null;
   }
 
   async function waitForLoginCompletion(page) {

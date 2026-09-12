@@ -205,12 +205,17 @@ async function setRows100(page) {
   const current = await page.locator(".MuiTablePagination-root input.MuiSelect-nativeInput").first()
     .getAttribute("value", { timeout: 4000 }).catch(() => "");
   if (String(current) !== "100") {
-    await assertVisible(page, ".MuiTablePagination-root [role='button'][aria-haspopup='listbox']", "rows per page select", 10000);
-    await page.locator(".MuiTablePagination-root [role='button'][aria-haspopup='listbox']").first().click();
-    await assertVisible(page, '[role="option"][data-value="100"]', "rows per page option 100", 10000);
-    await page.locator('[role="option"][data-value="100"]').first().click();
-    await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
-    await page.waitForTimeout(1200);
+    const trigger = page.locator(".MuiTablePagination-root [role='button'][aria-haspopup='listbox']").first();
+    if (await trigger.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await trigger.click();
+      await assertVisible(page, '[role="option"][data-value="100"]', "rows per page option 100", 10000);
+      await page.locator('[role="option"][data-value="100"]').first().click();
+      await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(1200);
+    } else {
+      logCheck("rows per page control", "warning", { message: "EasyOrders now uses fixed 25-item list pages; pagination will use Go to next page." });
+      return;
+    }
   }
   const after = await page.locator(".MuiTablePagination-root input.MuiSelect-nativeInput").first()
     .getAttribute("value", { timeout: 4000 }).catch(() => "");
@@ -220,6 +225,46 @@ async function setRows100(page) {
 async function readRows(page) {
   return page.evaluate(() => {
     const text = (el) => String(el && (el.innerText || el.textContent) || "").replace(/\s+/g, " ").trim();
+    const ownText = (el) => Array.from(el && el.childNodes || [])
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => String(node.textContent || "").replace(/[\u200e\u200f\u061c]/g, "").trim())
+      .filter(Boolean)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const missedEntries = Array.from(document.querySelectorAll('a[href^="#/missed-orders/"]'));
+    if (missedEntries.length) {
+      return missedEntries.map((entry, index) => {
+        const primary = entry.querySelector(".MuiListItemText-primary");
+        const chips = Array.from(entry.querySelectorAll(".MuiChip-label"));
+        return {
+          index,
+          status: text(chips[0]),
+          name: ownText(primary && primary.firstElementChild) || ownText(primary),
+          phone: text(entry.querySelector(".MuiListItemText-secondary")),
+          createdAt: "",
+          detailUrl: entry.getAttribute("href") || "",
+          text: text(entry),
+        };
+      });
+    }
+    const realEntries = Array.from(document.querySelectorAll('a[href^="#/orders/"]:not([href$="/create"])'));
+    if (realEntries.length) {
+      return realEntries.map((entry, index) => {
+        const paragraphs = Array.from(entry.querySelectorAll("p")).map(text).filter(Boolean);
+        return {
+          index,
+          status: text(entry.querySelector(".MuiChip-label")),
+          shortId: paragraphs[0] || "",
+          name: paragraphs[1] || "",
+          customerText: `${paragraphs[1] || ""} ${paragraphs[2] || ""}`.trim(),
+          phone: paragraphs[2] || "",
+          createdAt: paragraphs.find((value) => /\d{1,2}\/\d{1,2}\/\d{4}/.test(value)) || "",
+          detailUrl: entry.getAttribute("href") || "",
+          text: text(entry),
+        };
+      });
+    }
     return Array.from(document.querySelectorAll(".RaDatagrid-tableWrapper tbody tr.RaDatagrid-clickableRow, tbody tr.RaDatagrid-clickableRow")).map((row, index) => {
       const cells = Array.from(row.querySelectorAll("td"));
       return {
@@ -305,9 +350,13 @@ function rowMatchesMissedTarget(row, target, country) {
 async function runLiveSmoke() {
   fs.writeFileSync(path.join(artifactDir, "report.json"), JSON.stringify(report, null, 2));
   const dryRun = buildDryRun({ ...DEFAULTS, from: args.from, to: args.to, country: args.country });
-  if (dryRun.failures.length) {
+  const allowFixtureDrift = args["allow-fixture-drift"] === true || args.allowFixtureDrift === true;
+  if (dryRun.failures.length && !allowFixtureDrift) {
     dryRun.failures.forEach((message) => fail("sheet dry-run prerequisite", message));
     return;
+  }
+  if (dryRun.failures.length && allowFixtureDrift) {
+    dryRun.failures.forEach((message) => logCheck("sheet dry-run prerequisite", "warning", { message }));
   }
   report.sheetDryRun = dryRun.summary;
   const realTarget = dryRun.preparedReal.find((order) => !((order.items || [order]).some((item) => (Number(item.qty || 1) || 1) > 10)) && order.orderId);
@@ -331,14 +380,16 @@ async function runLiveSmoke() {
     await page.goto("https://app.easy-orders.net/#/orders", { waitUntil: "domcontentloaded", timeout: 45000 });
     await applyFilters(page, args.from, args.to);
     await setRows100(page);
-    await assertVisible(page, ".RaDatagrid-tableWrapper table.RaDatagrid-table, table", "orders table selector", 20000);
+    await assertVisible(page, 'a[href^="#/orders/"]:not([href$="/create"]), .RaDatagrid-tableWrapper table.RaDatagrid-table, table', "orders list selector", 20000);
     const orderRows = await readRows(page);
     logCheck("orders table row scrape", orderRows.length > 0 ? "ok" : "failed", { rows: orderRows.length, sample: orderRows.slice(0, 3) });
     await screenshot(page, "orders-list-filtered");
 
     await page.goto(`https://app.easy-orders.net/#/orders/${realTarget.orderId}`, { waitUntil: "domcontentloaded", timeout: 45000 });
     await assertVisible(page, page.getByRole("button", { name: /^Edit Order$/i }), "real detail Edit Order button", 20000);
+    await page.getByRole("button", { name: /^Options$/i }).click();
     await assertVisible(page, page.getByRole("button", { name: /^Resend Order to Affiliates$/i }), "real detail Resend button", 10000);
+    await page.keyboard.press("Escape").catch(() => {});
     await screenshot(page, "real-detail");
     await page.getByRole("button", { name: /^Edit Order$/i }).first().click();
     await inspectModal(page, realTarget, "real");
@@ -347,7 +398,7 @@ async function runLiveSmoke() {
     await assertVisible(page, 'button[aria-label="add filter"], button.add-filter', "missed add filter selector", 20000);
     await applyFilters(page, args.from, args.to);
     await setRows100(page);
-    await assertVisible(page, ".RaDatagrid-tableWrapper table.RaDatagrid-table, table", "missed table selector", 20000);
+    await assertVisible(page, 'a[href^="#/missed-orders/"], .RaDatagrid-tableWrapper table.RaDatagrid-table, table', "missed list selector", 20000);
     const missedRows = await readRows(page);
     const matchedMissed = missedTargets
       .map((target) => ({ target, row: missedRows.find((row) => rowMatchesMissedTarget(row, target, args.country)) }))
@@ -372,7 +423,7 @@ async function runLiveSmoke() {
         });
         return;
       }
-      await page.locator(".RaDatagrid-tableWrapper tbody tr.RaDatagrid-clickableRow, tbody tr.RaDatagrid-clickableRow").nth(missedRow.index).click();
+      await page.locator('a[href^="#/missed-orders/"]').nth(missedRow.index).click();
       await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
       await page.waitForTimeout(1000);
       await assertVisible(page, page.getByRole("button", { name: /^Edit$/i }), "missed detail Edit button", 20000);

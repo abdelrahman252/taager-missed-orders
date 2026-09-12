@@ -12,6 +12,10 @@ const EASY_BASE = "https://app.easy-orders.net/#";
 const ROWS_PER_PAGE = 100;
 const DEFAULT_STEP_DELAY_MS = 900;
 const QUANTITY_MANUAL_REVIEW_REASONS = ["normal_flow_prepared_quantity_is_suspicious", "quantity_tier_price_not_verified"];
+const EASY_ORDERS_LIST_ENTRY_SELECTORS = {
+  real: 'a[href^="#/orders/"]:not([href$="/create"])',
+  missed: 'a[href^="#/missed-orders/"]',
+};
 
 function ymd(date) {
   const d = date instanceof Date ? date : new Date(date);
@@ -176,14 +180,28 @@ function createEasyOrdersUiRecovery(options = {}) {
     await page.waitForTimeout(stepDelayMs + 300);
   }
 
+  function listEntryLocator(page, kind) {
+    return page.locator(EASY_ORDERS_LIST_ENTRY_SELECTORS[kind]);
+  }
+
+  async function waitForListReady(page, kind) {
+    const entryReady = await listEntryLocator(page, kind).first()
+      .waitFor({ state: "visible", timeout: 20000 })
+      .then(() => true)
+      .catch(() => false);
+    if (entryReady) return;
+    await page.locator(
+      `[role="list"], .RaDatagrid-tableWrapper table.RaDatagrid-table, table`
+    ).last().waitFor({ state: "visible", timeout: 10000 });
+  }
+
   async function openList(page, kind, fromDate, toDate) {
     const hashPath = kind === "missed" ? "/missed-orders" : "/orders";
     emit(`easyorders.recovery.${kind}.list`, "started", `Opening EasyOrders ${kind} list`);
     await openEasyOrdersPath(page, hashPath);
     await applyDateFilters(page, fromDate, toDate);
     await setRowsPerPage100(page);
-    await page.locator(".RaDatagrid-tableWrapper table.RaDatagrid-table, table").first()
-      .waitFor({ state: "visible", timeout: 20000 });
+    await waitForListReady(page, kind);
     emit(`easyorders.recovery.${kind}.list`, "ok", `EasyOrders ${kind} list ready`);
     return page;
   }
@@ -191,6 +209,31 @@ function createEasyOrdersUiRecovery(options = {}) {
   async function readMissedRows(page) {
     return page.evaluate(() => {
       const text = (el) => String(el && (el.innerText || el.textContent) || "").replace(/\s+/g, " ").trim();
+      const ownText = (el) => Array.from(el && el.childNodes || [])
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => String(node.textContent || "").replace(/[\u200e\u200f\u061c]/g, "").trim())
+        .filter(Boolean)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const entries = Array.from(document.querySelectorAll('a[href^="#/missed-orders/"]'));
+      if (entries.length) {
+        return entries.map((entry, index) => {
+          const primary = entry.querySelector(".MuiListItemText-primary");
+          const primaryChild = primary && primary.firstElementChild;
+          const chips = Array.from(entry.querySelectorAll(".MuiChip-label"));
+          return {
+            index,
+            status: text(chips[0]),
+            reason: text(chips[1]),
+            name: ownText(primaryChild) || ownText(primary),
+            phone: text(entry.querySelector(".MuiListItemText-secondary")),
+            createdAt: "",
+            detailUrl: entry.getAttribute("href") || "",
+            text: text(entry),
+          };
+        });
+      }
       const rows = Array.from(document.querySelectorAll(".RaDatagrid-tableWrapper tbody tr.RaDatagrid-clickableRow, tbody tr.RaDatagrid-clickableRow"));
       return rows.map((row, index) => {
         const cells = Array.from(row.querySelectorAll("td"));
@@ -209,6 +252,27 @@ function createEasyOrdersUiRecovery(options = {}) {
   async function readRealRows(page) {
     return page.evaluate(() => {
       const text = (el) => String(el && (el.innerText || el.textContent) || "").replace(/\s+/g, " ").trim();
+      const entries = Array.from(document.querySelectorAll('a[href^="#/orders/"]:not([href$="/create"])'));
+      if (entries.length) {
+        return entries.map((entry, index) => {
+          const paragraphs = Array.from(entry.querySelectorAll("p")).map(text).filter(Boolean);
+          const createdAt = paragraphs.find((value) => /\d{1,2}\/\d{1,2}\/\d{4}/.test(value)) || "";
+          const status = text(entry.querySelector(".MuiChip-label"));
+          const shortId = paragraphs[0] || "";
+          const name = paragraphs[1] || "";
+          const phone = paragraphs[2] || "";
+          return {
+            index,
+            status,
+            shortId,
+            customerText: `${name} ${phone}`.trim(),
+            phone,
+            createdAt,
+            detailUrl: entry.getAttribute("href") || "",
+            text: text(entry),
+          };
+        });
+      }
       const rows = Array.from(document.querySelectorAll(".RaDatagrid-tableWrapper tbody tr.RaDatagrid-clickableRow, tbody tr.RaDatagrid-clickableRow"));
       return rows.map((row, index) => {
         const cells = Array.from(row.querySelectorAll("td"));
@@ -227,7 +291,9 @@ function createEasyOrdersUiRecovery(options = {}) {
   }
 
   async function goToNextPage(page) {
-    const next = page.locator('button[aria-label="Next"]:not([disabled])').first();
+    const next = page.locator(
+      'button[aria-label="Next"]:not([disabled]), button[aria-label="Go to next page"]:not([disabled])'
+    ).first();
     if (await next.isVisible({ timeout: 1000 }).catch(() => false)) {
       await next.click({ timeout: 10000 });
       await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
@@ -661,6 +727,13 @@ function createEasyOrdersUiRecovery(options = {}) {
         };
       }
     }
+    const optionsButton = page.getByRole("button", { name: /^Options$/i }).first();
+    const directButton = page.getByRole("button", { name: /^Resend Order to Affiliates$/i }).first();
+    if (!(await directButton.isVisible({ timeout: 1000 }).catch(() => false)) &&
+        await optionsButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await optionsButton.click({ timeout: 10000 });
+      await page.waitForTimeout(400);
+    }
     const button = page.getByRole("button", { name: /^Resend Order to Affiliates$/i }).first();
     if (!(await button.isVisible({ timeout: 10000 }).catch(() => false))) {
       log(`EasyOrders recovery real manual review: ${candidate.easyShortId || candidate.easyOrderUuid || candidate.normPhone || ""} -> Resend Order to Affiliates button not available`);
@@ -952,7 +1025,7 @@ function createEasyOrdersUiRecovery(options = {}) {
           `completed missed as real ${candidate.name || candidate.normPhone || row.shortId || ""}`,
           async (recoveryAttempt) => {
             if (!(recoveryAttempt > 1 && /#\/orders\/[^/]+/i.test(page.url()))) {
-              const tableRows = page.locator(".RaDatagrid-tableWrapper tbody tr.RaDatagrid-clickableRow, tbody tr.RaDatagrid-clickableRow");
+              const tableRows = listEntryLocator(page, "real");
               await tableRows.nth(row.index).click({ timeout: 10000 });
               await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
               await page.waitForTimeout(stepDelayMs);
@@ -987,8 +1060,7 @@ function createEasyOrdersUiRecovery(options = {}) {
           await openList(page, "real", fromDate, toDate);
           for (let i = 1; i < pageNo; i++) await goToNextPage(page);
         });
-        await page.locator(".RaDatagrid-tableWrapper table.RaDatagrid-table, table").first()
-          .waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+        await waitForListReady(page, "real").catch(() => {});
       }
       if (!(await goToNextPage(page))) break;
       pageNo++;
@@ -1048,7 +1120,7 @@ function createEasyOrdersUiRecovery(options = {}) {
           `missed order ${candidate.name || candidate.normPhone || row.phone || index + 1}`,
           async (recoveryAttempt) => {
             if (!(recoveryAttempt > 1 && /#\/missed-orders\/[^/]+/i.test(page.url()))) {
-              const tableRows = page.locator(".RaDatagrid-tableWrapper tbody tr.RaDatagrid-clickableRow, tbody tr.RaDatagrid-clickableRow");
+              const tableRows = listEntryLocator(page, "missed");
               await tableRows.nth(index).click({ timeout: 10000 });
               await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
               await page.waitForTimeout(stepDelayMs);
@@ -1082,8 +1154,7 @@ function createEasyOrdersUiRecovery(options = {}) {
           await openList(page, "missed", fromDate, toDate);
           for (let i = 1; i < pageNo; i++) await goToNextPage(page);
         });
-        await page.locator(".RaDatagrid-tableWrapper table.RaDatagrid-table, table").first()
-          .waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+        await waitForListReady(page, "missed").catch(() => {});
         await page.waitForTimeout(Math.min(stepDelayMs, 800));
       }
       if (!(await goToNextPage(page))) break;
@@ -1129,7 +1200,7 @@ function createEasyOrdersUiRecovery(options = {}) {
           `read-only missed order ${candidate.name || candidate.normPhone || row.phone || index + 1}`,
           async (readAttempt) => {
             if (!(readAttempt > 1 && /#\/missed-orders\/[^/]+/i.test(page.url()))) {
-              const tableRows = page.locator(".RaDatagrid-tableWrapper tbody tr.RaDatagrid-clickableRow, tbody tr.RaDatagrid-clickableRow");
+              const tableRows = listEntryLocator(page, "missed");
               await tableRows.nth(index).click({ timeout: 10000 });
               await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
               await page.waitForTimeout(stepDelayMs);
@@ -1162,8 +1233,7 @@ function createEasyOrdersUiRecovery(options = {}) {
           await openList(page, "missed", fromDate, toDate);
           for (let i = 1; i < pageNo; i++) await goToNextPage(page);
         });
-        await page.locator(".RaDatagrid-tableWrapper table.RaDatagrid-table, table").first()
-          .waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+        await waitForListReady(page, "missed").catch(() => {});
         await page.waitForTimeout(Math.min(stepDelayMs, 800));
       }
       if (!(await goToNextPage(page))) break;
@@ -1210,7 +1280,7 @@ function createEasyOrdersUiRecovery(options = {}) {
           `read-only real order ${candidate.easyShortId || candidate.easyOrderUuid || candidate.normPhone || index + 1}`,
           async (readAttempt) => {
             if (!(readAttempt > 1 && /#\/orders\/[^/]+/i.test(page.url()))) {
-              const tableRows = page.locator(".RaDatagrid-tableWrapper tbody tr.RaDatagrid-clickableRow, tbody tr.RaDatagrid-clickableRow");
+              const tableRows = listEntryLocator(page, "real");
               await tableRows.nth(row.index).click({ timeout: 10000 });
               await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
               await page.waitForTimeout(stepDelayMs);
@@ -1248,8 +1318,7 @@ function createEasyOrdersUiRecovery(options = {}) {
           await openList(page, "real", fromDate, toDate);
           for (let i = 1; i < pageNo; i++) await goToNextPage(page);
         });
-        await page.locator(".RaDatagrid-tableWrapper table.RaDatagrid-table, table").first()
-          .waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+        await waitForListReady(page, "real").catch(() => {});
         await page.waitForTimeout(Math.min(stepDelayMs, 800));
       }
       if (!(await goToNextPage(page))) break;

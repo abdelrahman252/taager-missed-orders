@@ -391,6 +391,7 @@ const runnerSource = fs.readFileSync(path.join(root, "src", "bot", "runner.js"),
 const setupSource = fs.readFileSync(path.join(root, "src", "renderer", "pages", "setup.js"), "utf8");
 const runSource = fs.readFileSync(path.join(root, "src", "renderer", "pages", "run.js"), "utf8");
 const uiRecoverySource = fs.readFileSync(path.join(root, "src", "bot", "easy-orders-ui-recovery.js"), "utf8");
+const easyOrdersExportSource = fs.readFileSync(path.join(root, "src", "bot", "easy-orders-export.js"), "utf8");
 const flowSource = fs.readFileSync(path.join(root, "src", "bot", "easy-orders-affiliate-recovery-flow.js"), "utf8");
 const failedFlowSource = fs.readFileSync(path.join(root, "src", "bot", "taager-failed-orders-export-flow.js"), "utf8");
 const resultsSource = fs.readFileSync(path.join(root, "src", "renderer", "pages", "results.js"), "utf8");
@@ -424,6 +425,14 @@ assert(uiRecoverySource.includes("waitForEasyOrdersDetail"), "affiliate recovery
 assert(uiRecoverySource.includes("no_trusted_product_reference"), "unknown modal products should be blocked as uncertain instead of sent as-is");
 assert(uiRecoverySource.includes("expectedOrder.address || expectedCity"), "affiliate recovery should fill missing EasyOrders address from city like the old Taager flow");
 assert(uiRecoverySource.includes("withEasyOrdersOrderRetry"), "affiliate recovery should retry transient EasyOrders UI failures per order");
+assert(uiRecoverySource.includes('a[href^="#/orders/"]:not([href$="/create"])'), "affiliate recovery should read the new real-order list links");
+assert(uiRecoverySource.includes('a[href^="#/missed-orders/"]'), "affiliate recovery should read the new missed-order list links");
+assert(uiRecoverySource.includes('button[aria-label="Go to next page"]'), "affiliate recovery should support EasyOrders new pagination control");
+assert(uiRecoverySource.includes('getByRole("button", { name: /^Options$/i })'), "real-order resend should open the Options menu first");
+assert(easyOrdersExportSource.includes('[aria-label="Change language"]'), "EasyOrders export should support the new sidebar language control");
+assert(easyOrdersExportSource.includes('[aria-label="Open menu"]'), "EasyOrders export should open the sidebar before switching language");
+assert(runnerSource.includes('input[name="full_name"], input#full_name'), "normal EasyOrders create should use the stable full_name field name");
+assert(runnerSource.includes('input[name="phone"], input#phone'), "normal EasyOrders create should use the stable phone field name");
 assert(uiRecoverySource.includes("reloadEasyOrdersPage"), "affiliate recovery should reload EasyOrders before retrying a crashed/timeout order");
 assert(uiRecoverySource.includes("completed_waiting_verification"), "completed missed orders should wait for Taager verification before real-order resend");
 assert(uiRecoverySource.includes("processCompletedMissedAsReal"), "unresolved completed missed orders should be recovered from the converted real order detail on retry");
