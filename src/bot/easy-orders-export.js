@@ -158,8 +158,9 @@ function createEasyOrdersExportFlow(options = {}) {
   const emit = typeof options.emit === "function" ? options.emit : () => {};
   const flow = options.flow || "easyorders";
   const exportAttempts = Number(options.exportAttempts || 3);
-  const exportNotificationPolls = Number(options.exportNotificationPolls || 4);
-  const exportNotificationPollMs = Number(options.exportNotificationPollMs || 2500);
+  const exportNotificationPolls = Number(options.exportNotificationPolls || 6);
+  const exportNotificationPollMs = Math.max(250, Number(options.exportNotificationPollMs || 900));
+  const exportNotificationRefreshMs = Math.max(800, Number(options.exportNotificationRefreshMs || 2200));
   const exportCooldownMs = Number(options.exportCooldownMs || 6 * 60 * 1000);
   const storeSelectionNavigationTimeoutMs = Math.max(
     1000,
@@ -369,7 +370,10 @@ function createEasyOrdersExportFlow(options = {}) {
     const findVisibleLanguageSwitcher = async () => {
       for (const selector of languageSelectors) {
         const candidate = page.locator(selector).first();
-        if (await candidate.isVisible({ timeout: 1000 }).catch(() => false)) return candidate;
+        const visible = typeof candidate.isVisible === "function"
+          ? await candidate.isVisible({ timeout: 1000 }).catch(() => false)
+          : await candidate.count().then((count) => count > 0).catch(() => false);
+        if (visible) return candidate;
       }
       return null;
     };
@@ -389,12 +393,18 @@ function createEasyOrdersExportFlow(options = {}) {
       throw new Error("EASY_ORDERS_ENGLISH_REQUIRED: language switcher was not available");
     }
 
-    if (await switcher.getAttribute("aria-expanded").catch(() => null) !== "true") {
+    const expanded = typeof switcher.getAttribute === "function"
+      ? await switcher.getAttribute("aria-expanded").catch(() => null)
+      : null;
+    if (expanded !== "true") {
       await switcher.click();
     }
     await page.waitForTimeout(800);
+    const englishMenu = typeof page.getByRole === "function"
+      ? page.getByRole("menuitem", { name: /^English$/i }).first()
+      : page.locator('[role="menuitem"]:has-text("English")').first();
     const clicked =
-      await page.getByRole("menuitem", { name: /^English$/i }).first().click().then(() => true).catch(() => false) ||
+      await englishMenu.click().then(() => true).catch(() => false) ||
       await page.locator('[role="menuitem"][aria-label="english"]').click().then(() => true).catch(() => false) ||
       await page.locator('[role="menuitem"]:has-text("English")').click().then(() => true).catch(() => false) ||
       await page.locator('[role="menuitem"]:has-text("en")').click().then(() => true).catch(() => false);
@@ -785,6 +795,9 @@ function createEasyOrdersExportFlow(options = {}) {
         const text = row.text;
         if (kind(text) !== keyword) continue;
         const href = hrefOf(row.element);
+        const lowerHref = href.toLowerCase();
+        if (keyword === "missed-orders" && !lowerHref.includes("missed-orders")) continue;
+        if (keyword === "orders" && lowerHref.includes("missed-orders")) continue;
         if (href) return { href, text };
       }
       return null;
@@ -825,8 +838,7 @@ function createEasyOrdersExportFlow(options = {}) {
         })
         .filter((row) => row.text)
         .filter((row) => row.length >= 8 && row.length <= 2000)
-        .sort((a, b) => a.top - b.top || a.length - b.length)
-        .slice(0, 8);
+        .sort((a, b) => a.top - b.top || a.length - b.length);
       const matchingRows = rows.filter((row) => {
         const text = lower(row.text);
         if (keyword === "missed-orders") {
@@ -858,6 +870,7 @@ function createEasyOrdersExportFlow(options = {}) {
 
   async function waitForExportLink(page, keyword, attempt) {
     let lastSummary = null;
+    let lastRefreshAt = 0;
     for (let poll = 1; poll <= exportNotificationPolls; poll++) {
       stage("easyorders.notifications", "started", `Checking notifications ${poll}/${exportNotificationPolls}`, {
         attempt,
@@ -865,11 +878,24 @@ function createEasyOrdersExportFlow(options = {}) {
         poll,
         maxPolls: exportNotificationPolls,
       });
-      await reloadWithNetworkRetries(page, "EasyOrders notifications");
+      // EasyOrders can finish the export between the first and second
+      // notifications-page load. Keep that proven two-load fallback, then
+      // avoid reloading on every subsequent DOM poll.
+      const needsRefresh = poll === 1 || poll === 2 || (Date.now() - lastRefreshAt) >= exportNotificationRefreshMs;
+      if (needsRefresh) {
+        await reloadWithNetworkRetries(page, "EasyOrders notifications", {
+          attempts: 2,
+          timeout: 30000,
+          waitMs: 1500,
+        });
+        lastRefreshAt = Date.now();
+      }
       await page.waitForTimeout(exportNotificationPollMs);
-      await ensureEnglish(page).catch((error) => {
-        log(`EasyOrders notification language check skipped: ${error.message}`);
-      });
+      if (poll === 1) {
+        await ensureEnglish(page).catch((error) => {
+          log(`EasyOrders notification language check skipped: ${error.message}`);
+        });
+      }
       const result = await findExportLink(page, keyword);
       lastSummary = await summarizeNotifications(page, keyword);
       log(`EasyOrders notifications poll ${poll}/${exportNotificationPolls} for ${keyword}: ` +

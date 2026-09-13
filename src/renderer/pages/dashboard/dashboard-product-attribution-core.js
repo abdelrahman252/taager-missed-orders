@@ -134,15 +134,22 @@
       };
     });
     var tokenOwners = {};
+    var skuIndex = {};
     entries.forEach(function (entry) {
       entry.tokens.forEach(function (token) {
         tokenOwners[token] = (tokenOwners[token] || 0) + 1;
+      });
+      entry.skus.forEach(function (sku) {
+        if (!skuIndex[sku.compact]) skuIndex[sku.compact] = [];
+        skuIndex[sku.compact].push({ entry: entry, sku: sku });
       });
     });
     return {
       version: VERSION,
       entries: entries,
-      tokenOwners: tokenOwners
+      tokenOwners: tokenOwners,
+      skuIndex: skuIndex,
+      skuKeys: Object.keys(skuIndex).sort(function (a, b) { return b.length - a.length; })
     };
   }
 
@@ -261,16 +268,29 @@
     return exact.length === 1 ? exact[0] : null;
   }
 
-  function skuMatch(normalizedCampaign, compactCampaign, entries) {
+  function skuMatch(normalizedCampaign, compactCampaign, entries, index) {
     var matches = [];
-    entries.forEach(function (entry) {
-      entry.skus.forEach(function (sku) {
-        var separated = hasTerm(normalizedCampaign, sku.normalized);
-        if (separated || compactCampaign.indexOf(sku.compact) !== -1) {
-          matches.push({ entry: entry, sku: sku, separated: separated });
-        }
+    var allowed = entries.length === (index && index.entries || []).length ? null : new Set(entries);
+    var skuKeys = index && Array.isArray(index.skuKeys) ? index.skuKeys : [];
+    if (skuKeys.length) {
+      skuKeys.forEach(function (skuCompact) {
+        if (compactCampaign.indexOf(skuCompact) === -1) return;
+        (index.skuIndex[skuCompact] || []).forEach(function (candidate) {
+          if (allowed && !allowed.has(candidate.entry)) return;
+          var separated = hasTerm(normalizedCampaign, candidate.sku.normalized);
+          matches.push({ entry: candidate.entry, sku: candidate.sku, separated: separated });
+        });
       });
-    });
+    } else {
+      entries.forEach(function (entry) {
+        entry.skus.forEach(function (sku) {
+          var separated = hasTerm(normalizedCampaign, sku.normalized);
+          if (separated || compactCampaign.indexOf(sku.compact) !== -1) {
+            matches.push({ entry: entry, sku: sku, separated: separated });
+          }
+        });
+      });
+    }
     if (!matches.length) return null;
     var maximal = pruneNestedSkuMatches(matches);
     var bySku = {};
@@ -376,7 +396,7 @@
     var compactCampaign = compactText(rawCampaign);
     var scope = scopeFor(value, options);
     var entries = index.entries.filter(function (entry) { return inScope(entry, scope); });
-    var skuResult = skuMatch(normalizedCampaign, compactCampaign, entries);
+    var skuResult = skuMatch(normalizedCampaign, compactCampaign, entries, index);
     if (skuResult) return skuResult;
     if (hasUnknownSkuToken(value)) return unmatched("unknown_sku");
     return nameMatch(normalizedCampaign, entries, index);

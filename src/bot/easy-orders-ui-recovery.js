@@ -184,6 +184,21 @@ function createEasyOrdersUiRecovery(options = {}) {
     return page.locator(EASY_ORDERS_LIST_ENTRY_SELECTORS[kind]);
   }
 
+  // EasyOrders v2.4.8 renders records as clickable table rows instead of
+  // detail anchors. Keep the anchor path for older deployments, but select
+  // the row path when the current page has no anchors.
+  async function clickListEntry(page, kind, index) {
+    const anchors = listEntryLocator(page, kind);
+    if (await anchors.count().catch(() => 0)) {
+      await anchors.nth(index).click({ timeout: 10000 });
+      return;
+    }
+    const rows = page.locator(
+      ".RaDatagrid-tableWrapper tbody tr.RaDatagrid-clickableRow, tbody tr.RaDatagrid-clickableRow"
+    );
+    await rows.nth(index).click({ timeout: 10000 });
+  }
+
   async function waitForListReady(page, kind) {
     const entryReady = await listEntryLocator(page, kind).first()
       .waitFor({ state: "visible", timeout: 20000 })
@@ -1025,8 +1040,7 @@ function createEasyOrdersUiRecovery(options = {}) {
           `completed missed as real ${candidate.name || candidate.normPhone || row.shortId || ""}`,
           async (recoveryAttempt) => {
             if (!(recoveryAttempt > 1 && /#\/orders\/[^/]+/i.test(page.url()))) {
-              const tableRows = listEntryLocator(page, "real");
-              await tableRows.nth(row.index).click({ timeout: 10000 });
+              await clickListEntry(page, "real", row.index);
               await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
               await page.waitForTimeout(stepDelayMs);
             }
@@ -1120,8 +1134,7 @@ function createEasyOrdersUiRecovery(options = {}) {
           `missed order ${candidate.name || candidate.normPhone || row.phone || index + 1}`,
           async (recoveryAttempt) => {
             if (!(recoveryAttempt > 1 && /#\/missed-orders\/[^/]+/i.test(page.url()))) {
-              const tableRows = listEntryLocator(page, "missed");
-              await tableRows.nth(index).click({ timeout: 10000 });
+              await clickListEntry(page, "missed", index);
               await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
               await page.waitForTimeout(stepDelayMs);
             }
@@ -1200,8 +1213,7 @@ function createEasyOrdersUiRecovery(options = {}) {
           `read-only missed order ${candidate.name || candidate.normPhone || row.phone || index + 1}`,
           async (readAttempt) => {
             if (!(readAttempt > 1 && /#\/missed-orders\/[^/]+/i.test(page.url()))) {
-              const tableRows = listEntryLocator(page, "missed");
-              await tableRows.nth(index).click({ timeout: 10000 });
+              await clickListEntry(page, "missed", index);
               await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
               await page.waitForTimeout(stepDelayMs);
             }
@@ -1280,8 +1292,7 @@ function createEasyOrdersUiRecovery(options = {}) {
           `read-only real order ${candidate.easyShortId || candidate.easyOrderUuid || candidate.normPhone || index + 1}`,
           async (readAttempt) => {
             if (!(readAttempt > 1 && /#\/orders\/[^/]+/i.test(page.url()))) {
-              const tableRows = listEntryLocator(page, "real");
-              await tableRows.nth(row.index).click({ timeout: 10000 });
+              await clickListEntry(page, "real", row.index);
               await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
               await page.waitForTimeout(stepDelayMs);
             }
@@ -1336,11 +1347,77 @@ function createEasyOrdersUiRecovery(options = {}) {
     return { resolvedOrders, skippedManual, inspected };
   }
 
-  async function processRealOrders(page, candidates) {
-    emit("easyorders.recovery.real", "started", `Processing ${candidates.length} real orders`);
+  async function processRealOrders(page, candidates, fromDate, toDate) {
+    const list = Array.isArray(candidates) ? candidates : [];
+    emit("easyorders.recovery.real", "started", `Processing ${list.length} real orders`);
     const attempted = [];
     const skippedManual = [];
-    const list = candidates || [];
+
+    // KHOD receives EasyOrders export rows without the platform UUID. In the
+    // current UI those rows must be matched in the paginated table first;
+    // older deployments can still use the direct UUID/detail URL path below.
+    if (list.some((candidate) => !candidate.easyOrderUuid && !candidate.detailUrl)) {
+      await openList(page, "real", fromDate, toDate);
+      const pending = [...list];
+      let pageNo = 1;
+      while (pageNo <= 100 && pending.length > 0) {
+        const rows = await readRealRows(page);
+        log(`EasyOrders recovery real lookup page ${pageNo}: ${rows.length} rows, pending=${pending.length}`);
+        for (const row of rows) {
+          const candidate = findPreparedRealCandidateMatch(row, pending);
+          if (!candidate) continue;
+          pending.splice(pending.indexOf(candidate), 1);
+          const result = await withEasyOrdersOrderRetry(
+            page,
+            `real order ${candidate.name || candidate.normPhone || row.shortId || row.index}`,
+            async (recoveryAttempt) => {
+              if (!(recoveryAttempt > 1 && /#\/orders\/[^/]+/i.test(page.url()))) {
+                await clickListEntry(page, "real", row.index);
+                await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
+                await page.waitForTimeout(stepDelayMs);
+              }
+              const detailUrl = page.url();
+              const uuidMatch = detailUrl.match(/\/orders\/([^/?#]+)/i);
+              return resendRealOrder(page, {
+                ...candidate,
+                detailUrl,
+                easyOrderUuid: candidate.easyOrderUuid || (uuidMatch ? uuidMatch[1] : ""),
+              }, { attempt: recoveryAttempt, edit: true });
+            },
+            (error) => ({
+              ...candidate,
+              detailUrl: page.url(),
+              actionStatus: "skipped_manual",
+              actionMessage: `EasyOrders real detail did not recover after reload: ${error.message}`,
+              attempts: 1,
+            })
+          );
+          if (result.actionStatus === "skipped_manual") skippedManual.push(result);
+          else attempted.push(result);
+          reportAttemptResult(result, "real");
+          await page.goBack({ waitUntil: "domcontentloaded", timeout: 30000 }).catch(async () => {
+            await openList(page, "real", fromDate, toDate);
+            for (let i = 1; i < pageNo; i++) await goToNextPage(page);
+          });
+          await waitForListReady(page, "real").catch(() => {});
+          await page.waitForTimeout(Math.min(stepDelayMs, 800));
+        }
+        if (!(await goToNextPage(page))) break;
+        pageNo++;
+      }
+      for (const candidate of pending) {
+        const result = {
+          ...candidate,
+          actionStatus: "skipped_manual",
+          actionMessage: "Prepared real order was not found in EasyOrders real orders table",
+        };
+        skippedManual.push(result);
+        reportAttemptResult(result, "real");
+      }
+      emit("easyorders.recovery.real", "ok", `Real orders attempted: ${attempted.length}, manual=${skippedManual.length}`);
+      return { attempted, skippedManual };
+    }
+
     for (let i = 0; i < list.length; i++) {
       const candidate = list[i];
       const skus = (candidate.items || []).map((item) => item.sku).filter(Boolean).join(", ");

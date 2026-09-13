@@ -609,6 +609,7 @@ function createDashboardQueryService(options) {
     const ndrTo = dateKey((input && (input.ndrDateTo || input.ndrTo)) || "");
     const rows = [];
     const ndrRows = [];
+    const periodFlags = new WeakMap();
     scope.accountIds.forEach((accountId) => {
       const snapshot = accounts[accountId] && accounts[accountId].snapshot;
       (Array.isArray(snapshot) ? snapshot : []).forEach((row) => {
@@ -623,11 +624,16 @@ function createDashboardQueryService(options) {
           dashboardAccountId: accountId,
           accountLabel: text(row.accountLabel || row.accountEmail || account.label || account.easyEmail || accountId),
         }, account, input || {});
+        periodFlags.set(normalized, {
+          inPrimaryPeriod: inPrimaryRange,
+          inCreatedPeriod: inCreatedDateRange,
+          inExpectedNdrRange,
+        });
         if (inPrimaryRange || inCreatedDateRange) rows.push(normalized);
         if (inExpectedNdrRange) ndrRows.push(normalized);
       });
     });
-    return { rows, ndrRows, scope, accounts };
+    return { rows, ndrRows, scope, accounts, periodFlags };
   }
 
   function scopedCampaigns(scope, accounts, requestedPlatform, input) {
@@ -950,7 +956,7 @@ function createDashboardQueryService(options) {
         "requestChannel", "timeoutMs", "allRows"
       ].forEach((key) => { delete baseInput[key]; });
       const base = cached("products-base", baseInput, () => {
-      const { rows, ndrRows, scope, accounts } = scopedRows(input, { includeNdrUnion: true, includeCreatedUnion: true });
+      const { rows, ndrRows, scope, accounts, periodFlags } = scopedRows(input, { includeNdrUnion: true, includeCreatedUnion: true });
       const products = new Map();
       const globalOrderKeys = new Set();
       const globalNetOrderKeys = new Set();
@@ -962,6 +968,7 @@ function createDashboardQueryService(options) {
       let globalDeliveredCommission = 0;
       const reportingCurrency = cleanCurrency(input && (input.reportingCurrency || input.currency) || "SAR", "SAR");
       const financialCurrency = cleanCurrency(input && (input.productFinancialCurrency || input.financialCurrency) || reportingCurrency, reportingCurrency);
+      const productNameOverrides = sanitizeProductNameOverrides(input && input.productNameOverrides);
       const financialInput = {
         ...(input || {}),
         egpRate: number(input && (input.productFinancialEgpRate || input.egpRate)) || (input && input.egpRate),
@@ -976,7 +983,7 @@ function createDashboardQueryService(options) {
         const name = productNameOverride(
           sku,
           rowProduct(row) || "Unknown Product",
-          sanitizeProductNameOverrides(input && input.productNameOverrides)
+          productNameOverrides
         );
         const country = lower(row.taagerCountry || row.country || "unknown");
         // Key matches country-aware SKU scheme to keep countries separate
@@ -1011,8 +1018,9 @@ function createDashboardQueryService(options) {
         const product = products.get(key);
         const bucket = statusBucket(row);
         const productOrderKey = orderKey(row, index);
-        const inPrimaryPeriod = inRange(row, scope);
-        const inCreatedPeriod = inCreatedRange(row, scope);
+        const flags = periodFlags.get(row) || {};
+        const inPrimaryPeriod = flags.inPrimaryPeriod != null ? flags.inPrimaryPeriod : inRange(row, scope);
+        const inCreatedPeriod = flags.inCreatedPeriod != null ? flags.inCreatedPeriod : inCreatedRange(row, scope);
         if (inCreatedPeriod) globalOrderKeys.add(productOrderKey);
         if (inCreatedPeriod && bucket !== "canceled_by_you") globalNetOrderKeys.add(productOrderKey);
         if (inCreatedPeriod && isConfirmedBucket(bucket)) globalConfirmedOrderKeys.add(productOrderKey);
@@ -1059,7 +1067,9 @@ function createDashboardQueryService(options) {
           product.calculatorEarnedProfitAfterTax += rowProfit(row);
         }
         // Bug B fix: track DR base and delivered count within the NDR cohort period
-        const inNdrCohort = inNdrRange(row, ndrFrom, ndrTo);
+        const inNdrCohort = !ndrFrom && !ndrTo
+          ? true
+          : (flags.inExpectedNdrRange != null ? flags.inExpectedNdrRange : inNdrRange(row, ndrFrom, ndrTo));
         if (inNdrCohort && bucket !== "canceled_by_you") {
           globalNdrOrderKeys.add(productOrderKey);
           if (isConfirmedBucket(bucket)) globalNdrConfirmedOrderKeys.add(productOrderKey);
