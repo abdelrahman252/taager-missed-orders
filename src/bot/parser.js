@@ -1266,7 +1266,39 @@ function parseRealOrders(buffer, dateFrom, dateTo) {
     const status = String(row["Status"] || "").toLowerCase();
     if (status === "cancelled" || status === "canceled") { skipped.status++; continue; }
     const phoneMetas = normalizePhoneCandidatesWithMeta(row["Phone"], COUNTRY);
-    if (!phoneMetas.length) { skipped.phone++; continue; }
+    if (!phoneMetas.length) {
+      skipped.phone++;
+      // Keep an un-normalizable phone in the review queue instead of dropping
+      // the whole EasyOrders row. The user can correct the phone in Results
+      // and submit only that reviewed row.
+      const reviewItems = explodeRealOrderRow(row, {
+        digits: "",
+        uncertain: true,
+        correction: "phone_parse_failed",
+      });
+      const rowsForReview = reviewItems.length ? reviewItems : [{
+        source: "real",
+        orderId: String(row["Order ID"] || row["ID"] || row["External Order ID"] || "").trim(),
+        rawPhone: row["Phone"],
+        name: String(row["FullName"] || "").trim(),
+        sku: String(row["SKU"] || "").trim(),
+        productName: String(row["Product Name"] || "").trim(),
+        qty: parseQty(row["Quantity"]),
+        subtotal: parseMoney(row["Total Cost"]),
+        city: String(row["City"] || row["Government"] || "").trim(),
+        address: String(row["Address"] || "").trim(),
+      }];
+      rowsForReview.forEach((order) => {
+        orders.push({
+          ...applyCustomerIdentityReview(order),
+          manualReview: true,
+          uncertain: true,
+          reason: "phone_parse_failed",
+          actionMessage: "Phone could not be normalized automatically. Correct it before upload.",
+        });
+      });
+      continue;
+    }
     if (phoneMetas.some((meta) => meta.uncertain)) uncertainPhones++;
     if (phoneMetas.length > 1) ambiguousPhones++;
 
@@ -1331,10 +1363,15 @@ function parseMissedOrders(buffer, dateFrom, dateTo) {
       skippedOrders.push({
         name: String(row["Full Name"] || "").trim(),
         rawPhone: String(row["Phone"] || "").trim(),
+        normalizedPhone: "",
+        sku: skuFromUtm,
         productName: productText,
         city: String(row["Government"] || row["City"] || "").trim(),
         address: String(row["Address"] || "").trim(),
         reason: "phone_parse_failed",
+        actionMessage: "Phone could not be normalized automatically. Correct it before upload.",
+        manualReview: true,
+        uncertain: true,
       });
       continue;
     }
@@ -1860,12 +1897,17 @@ function mergeAndDeduplicate(realOrders, resolvedMissed, existingPhones) {
     skippedOrders.push({
       ...groupedOrder,
       rawPhone: groupedOrder.rawPhone || groupedOrder.phone || groupedOrder.normPhone || "",
-      normalizedPhone: groupedOrder.normPhone || groupedOrder.phone || "",
+      normalizedPhone: detail.normalizedPhone != null
+        ? detail.normalizedPhone
+        : (groupedOrder.normPhone || groupedOrder.phone || ""),
       reason,
       existingSkus: detail.existingSkus || "",
       missingSkus: detail.missingSkus || "",
       duplicateSkus: detail.duplicateSkus || "",
       actionMessage: detail.actionMessage || "",
+      manualReview: detail.manualReview === true || groupedOrder.manualReview === true,
+      uncertain: detail.uncertain === true || groupedOrder.uncertain === true,
+      customerQuality: detail.customerQuality || groupedOrder.customerQuality,
     });
   }
 
@@ -1999,8 +2041,27 @@ function mergeAndDeduplicate(realOrders, resolvedMissed, existingPhones) {
     for (const items of conflictItemsById.values()) {
       const groupedOrder = buildGroupedCartOrders(mergeItemList(items))[0];
       stats[`${source}PartialInTaager`]++;
+      const phoneCandidateConflict = items.some((item) => (
+        item && item.phoneAmbiguous === true && String(item.phoneAmbiguityGroupId || "").trim()
+      ));
       skippedGroupOrder(groupedOrder, "duplicate_easyorders_uuid_conflicting_phone", {
-        actionMessage: "Same EasyOrders order ID produced conflicting phone candidates; review before upload.",
+        // Only a conflict caused by the phone parser is a customer-data
+        // correction. Other source-ID conflicts remain ordinary skipped rows.
+        manualReview: phoneCandidateConflict,
+        uncertain: phoneCandidateConflict,
+        normalizedPhone: phoneCandidateConflict ? String(groupedOrder.rawPhone || "").trim() : undefined,
+        customerQuality: phoneCandidateConflict ? {
+          ...(groupedOrder.customerQuality || {}),
+          identity: {
+            ok: false,
+            reason: "invalid_customer_data",
+            issues: ["phone:ambiguous_candidates"],
+            message: "Phone has more than one plausible correction; review it before upload.",
+          },
+        } : undefined,
+        actionMessage: phoneCandidateConflict
+          ? "Phone has more than one plausible correction; review it before upload."
+          : "Same EasyOrders order ID produced conflicting phone candidates; review before upload.",
       });
     }
     for (const items of groups.values()) acceptGroup(items, source);
