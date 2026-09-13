@@ -2497,11 +2497,21 @@ async function createSingleOrderAttempt(page, order, orderNum, attempt) {
     await assertEasyOrdersSession(page);
   }
 
-  await page.waitForSelector('button:has-text("Choose Products")', { timeout: 15000 });
+  // EasyOrders now defaults some accounts to Arabic. Keep the create flow
+  // language-independent and use the current labels as fallbacks below.
+  const switchedLang = await ensureEasyOrdersEnglish(page);
+  if (switchedLang) await page.waitForTimeout(1200);
+
+  const chooseProductsSelector = [
+    'button:has-text("Choose Products")',
+    'button:has-text("اختر المنتجات")',
+    'button:has-text("اختر المنتج")',
+  ].join(", ");
+  await page.locator(chooseProductsSelector).first().waitFor({ timeout: 15000 });
   await page.waitForTimeout(800);
 
   // ── 2. Click "Choose Products" ──
-  await page.click('button:has-text("Choose Products")');
+  await page.locator(chooseProductsSelector).first().click();
   await page.waitForTimeout(1200);
 
   // ── 3. Search + select product (multi-strategy inside selectProductInModal) ──
@@ -2511,10 +2521,18 @@ async function createSingleOrderAttempt(page, order, orderNum, attempt) {
   }
 
   // ── 4. Click "Add Products" ──
-  await page.waitForSelector('button:has-text("Add Products")', { timeout: 8000 });
-  await page.click('button:has-text("Add Products")');
+  const addProductsSelector = [
+    'button:has-text("Add Products")',
+    'button:has-text("إضافة المنتجات")',
+    'button:has-text("اضافة المنتجات")',
+  ].join(", ");
+  await page.locator(addProductsSelector).first().waitFor({ timeout: 8000 });
+  await page.locator(addProductsSelector).first().click();
   // Wait for modal to close — detected by the qty input appearing
-  const qtyInput = page.locator('div[aria-label="Quantity"] input[type="number"]');
+  const qtyInput = page.locator([
+    'div[aria-label="Quantity"] input[type="number"]:not([disabled])',
+    'input[type="number"][min="1"]:not([disabled])',
+  ].join(", ")).first();
   await qtyInput.waitFor({ timeout: 12000 });
 
   // ── 5. Set quantity ──
@@ -2557,7 +2575,12 @@ async function createSingleOrderAttempt(page, order, orderNum, attempt) {
   }
 
   // ── 10. Submit ──
-  const submitBtn = page.locator('button[type="submit"]:has-text("Submit Order")');
+  const submitBtn = page.locator([
+    'button[type="submit"]:has-text("Submit Order")',
+    'button[type="submit"]:has-text("Send Order")',
+    'button[type="submit"]:has-text("إرسال الطلب")',
+    'button[type="submit"]:has-text("ارسال الطلب")',
+  ].join(", ")).first();
   await submitBtn.waitFor({ timeout: 8000 });
   // Make sure the button is not disabled
   const isDisabled = await submitBtn.isDisabled();
