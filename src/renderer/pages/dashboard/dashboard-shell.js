@@ -22,7 +22,6 @@
     { id: 'products',   key: 'nav.products',   iconName: 'package'    },
     { id: 'cities',     key: 'nav.cities',     iconName: 'mapPin'     },
     { id: 'commission', key: 'nav.commission', iconName: 'barChart'   },
-    { id: 'marketing',  key: 'nav.marketing',  iconName: 'activity'   },
     { id: 'saudiipickMarketing', key: 'nav.saudiipickMarketing', iconName: 'activity' },
     { id: 'campaigns',  key: 'nav.campaigns',  iconName: 'megaphone'  },
     { id: 'dailyPerformance', key: 'nav.dailyPerformance', iconName: 'calendar' },
@@ -181,6 +180,10 @@
   }
 
   function normalizeSection(sectionId) {
+    // Keep old deep links and assistant actions working, but render the
+    // canonical Saudi iPick marketing page instead of reviving the legacy
+    // Marketing Connections screen.
+    if (sectionId === 'marketing') sectionId = 'saudiipickMarketing';
     return sectionAllowed(sectionId) ? sectionId : 'master';
   }
 

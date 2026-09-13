@@ -6107,6 +6107,11 @@ function getCachedMarketingStatus(accountId, platform) {
   return marketing[platform] || null;
 }
 
+function getCachedSaudiIPickMarketingStatus(accountId, platform) {
+  const cached = getCachedMarketingStatus(accountId, platform);
+  return cached && cached.provider === "saudiipick" ? cached : null;
+}
+
 function stableMarketingValue(value) {
   if (Array.isArray(value)) return value.map(stableMarketingValue);
   if (!value || typeof value !== "object") return value;
@@ -6620,7 +6625,7 @@ async function callSaudiIPickMarketing(action, accountId, platform = "snapchat",
 
   const account = getStoredAccountById(dashboardAccountId);
   const dashboardAccountKey = marketingStableAccountKey(dashboardAccountId);
-  const previous = getCachedMarketingStatus(dashboardAccountId, platform);
+  const previous = getCachedSaudiIPickMarketingStatus(dashboardAccountId, platform);
   const payload = {
     action,
     platform,
@@ -6763,216 +6768,129 @@ function delayMarketingRetry(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function saveSaudiIPickMarketingMappingState(accountId, platform = "snapchat", sourceAccounts = []) {
+  const dashboardAccountId = marketingAccountKey(accountId);
+  if (!dashboardAccountId) return { ok: false, error: "SELECT_ACCOUNT_TO_MAP" };
+  const previous = getCachedSaudiIPickMarketingStatus(dashboardAccountId, platform) || {};
+  const account = getStoredAccountById(dashboardAccountId);
+  const dashboardAccountKey = marketingStableAccountKey(dashboardAccountId);
+  const selected = (Array.isArray(sourceAccounts) ? sourceAccounts : [])
+    .map((source) => normalizeNativeSourceAccount(source, "SAR", platform))
+    .filter(Boolean);
+  const next = {
+    ...previous,
+    ok: true,
+    provider: "saudiipick",
+    platform,
+    status: selected.length ? "connected" : "disconnected",
+    sourceAccountId: selected.length === 1 ? selected[0].id : "",
+    sourceAccountName: selected.length === 1 ? selected[0].name : accountDisplayName(account, dashboardAccountId),
+    mappedAccounts: selected,
+    selectedSourceAccounts: selected,
+    selectedSourceAccountIds: selected.map((source) => source.id),
+    availableAccounts: previous.availableAccounts || selected,
+    linkedAccounts: previous.linkedAccounts || selected,
+    mappings: mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAccountKey, selected, platform),
+    statusCheckedAt: new Date().toISOString(),
+  };
+  saveCachedMarketingStatus(dashboardAccountId, platform, next);
+  return { ok: true, ...getCachedSaudiIPickMarketingStatus(dashboardAccountId, platform), provider: "saudiipick" };
+}
+
 ipcMain.handle("get-marketing-status", async (_, accountId, platform = "tiktok", options = {}) => {
   const dashboardAccountId = marketingAccountKey(accountId, true);
   if (!dashboardAccountId) return { ok: false, error: "SELECT_ACCOUNT" };
-  const mode = ["cached", "revalidate", "force"].includes(options && options.mode) ? options.mode : "revalidate";
-  const cached = getCachedMarketingStatus(dashboardAccountId, platform);
-  if (cached && mode === "cached") {
-    return { ok: true, ...cached, cache: { ...(cached.cache || {}), status: "local", providerRequestCount: 0 } };
-  }
-  // A cached lookup is deliberately local-only. Dashboard startup uses this
-  // mode to decide whether marketing work exists at all; contacting Windsor
-  // here made brand-new, disconnected accounts wait on three remote requests
-  // before the dashboard could become usable.
-  if (!cached && mode === "cached") {
-    return {
-      ok: true,
-      accountId: dashboardAccountId,
-      platform,
-      status: "disconnected",
-      statusCheckedAt: new Date().toISOString(),
-      linkedAccounts: [],
-      mappedAccounts: [],
-      mappings: {},
-      selectedSourceAccounts: [],
-      summary: null,
-      cache: { status: "local-miss", providerRequestCount: 0 },
-    };
-  }
-  if (cached && mode === "revalidate" && marketingStatusIsFresh(cached) && cached.status !== "disconnected") {
-    return { ok: true, ...cached, cache: { ...(cached.cache || {}), status: "local", providerRequestCount: 0 } };
-  }
   try {
-    const result = await callMarketingBackend("status", dashboardAccountId, platform, { mode });
-    if (result && result.ok) {
-      if (dashboardAccountId === "__all__") {
-        saveCachedAllMarketingMappingStatus(platform, result, { preserveExistingSummary: true });
-      } else {
-        saveCachedMarketingStatus(dashboardAccountId, platform, result);
-      }
-    } else if (result && result.reconnectRequired) {
-      return result;
-    } else {
-      const cached = getCachedMarketingStatus(dashboardAccountId, platform);
-      if (cached) return { ok: true, ...cached, offline: true, error: result && result.error || "STATUS_UNAVAILABLE" };
-    }
-    return result;
+    return await callSaudiIPickMarketing("status", dashboardAccountId, platform, options || {});
   } catch (error) {
-    log.error("[Marketing][Main] status failed", { accountId: dashboardAccountId, platform, error: error.message });
-    const cached = getCachedMarketingStatus(dashboardAccountId, platform);
-    if (cached) return { ok: true, ...cached, offline: true, error: error.message };
-    return { ok: false, error: error.message };
+    log.error("[SaudiIPick][Marketing] compatibility status failed", { accountId: dashboardAccountId, platform, error: error.message });
+    return { ok: false, provider: "saudiipick", platform, error: error.message };
   }
 });
 
 ipcMain.handle("connect-marketing-platform", async (_, accountId, platform = "tiktok") => {
   try {
-    return await callMarketingBackend("connect", accountId, platform);
+    return await callSaudiIPickMarketing("status", accountId, platform, { mode: "force" });
   } catch (error) {
-    log.error("[Marketing][Main] connect failed", { accountId, platform, error: error.message });
-    return { ok: false, error: error.message };
+    log.error("[SaudiIPick][Marketing] compatibility connect failed", { accountId, platform, error: error.message });
+    return { ok: false, provider: "saudiipick", platform, error: error.message };
   }
 });
 
 ipcMain.handle("claim-marketing-source-account", async (_, accountId, platform = "tiktok", sourceAccountId = "") => {
   const dashboardAccountId = marketingAccountKey(accountId, true);
   if (!dashboardAccountId) return { ok: false, error: "SELECT_ACCOUNT" };
-  try {
-    const result = await callMarketingBackend("claim_source_account", dashboardAccountId, platform, { sourceAccountId });
-    if (result && result.ok) saveCachedMarketingStatus(dashboardAccountId, platform, result);
-    return result;
-  } catch (error) {
-    log.error("[Marketing][Main] claim failed", { accountId: dashboardAccountId, platform, sourceAccountId, error: error.message });
-    return { ok: false, error: error.message };
-  }
+  return {
+    ok: false,
+    provider: "saudiipick",
+    platform,
+    sourceAccountId,
+    error: "SAUDIIPICK_MAPPING_REQUIRED"
+  };
 });
 
 ipcMain.handle("release-marketing-source-account", async (_, accountId, platform = "tiktok", sourceAccountId = "") => {
   const dashboardAccountId = marketingAccountKey(accountId, true);
   if (!dashboardAccountId || dashboardAccountId === "__all__") return { ok: false, error: "SELECT_ACCOUNT_TO_RELEASE" };
-  try {
-    const result = await callMarketingBackend("release_source_account", dashboardAccountId, platform, { sourceAccountId });
-    if (result && result.ok) saveCachedMarketingStatus(dashboardAccountId, platform, result);
-    return result;
-  } catch (error) {
-    log.error("[Marketing][Main] release failed", { accountId: dashboardAccountId, platform, sourceAccountId, error: error.message });
-    return { ok: false, error: error.message };
-  }
+  return {
+    ok: false,
+    provider: "saudiipick",
+    platform,
+    sourceAccountId,
+    error: "SAUDIIPICK_MAPPING_REQUIRED"
+  };
 });
 
 ipcMain.handle("save-marketing-mapping", async (_, accountId, platform = "tiktok", sourceAccountIds = []) => {
-  const dashboardAccountId = marketingAccountKey(accountId);
-  if (!dashboardAccountId) return { ok: false, error: "SELECT_ACCOUNT_TO_MAP" };
   try {
     const sourceAccounts = Array.isArray(sourceAccountIds) ? sourceAccountIds.map((source) =>
       typeof source === "string" ? { id: source } : source) : [];
-    const result = await callMarketingBackend("save_mapping", dashboardAccountId, platform, { sourceAccounts });
-    if (result && result.ok) saveCachedMarketingStatus(dashboardAccountId, platform, result);
-    return result;
+    return await saveSaudiIPickMarketingMappingState(accountId, platform, sourceAccounts);
   } catch (error) {
-    log.error("[Marketing][Main] mapping save failed", { accountId: dashboardAccountId, platform, error: error.message });
-    return { ok: false, error: error.message };
+    log.error("[SaudiIPick][Marketing] compatibility mapping save failed", { accountId, platform, error: error.message });
+    return { ok: false, provider: "saudiipick", platform, error: error.message };
   }
 });
 
 ipcMain.handle("save-all-marketing-mappings", async (_, platform = "tiktok", mappings = []) => {
-  try {
-    const result = await callMarketingBackend("save_mappings", "__all__", platform, { mappings });
-    if (result && result.ok) saveCachedAllMarketingMappingStatus(platform, result);
-    return result;
-  } catch (error) {
-    log.error("[Marketing][Main] all mappings save failed", { platform, error: error.message });
-    return { ok: false, error: error.message };
-  }
+  return {
+    ok: false,
+    provider: "saudiipick",
+    platform,
+    error: "SAUDIIPICK_ACCOUNT_MAPPING_REQUIRED",
+    mappingCount: Array.isArray(mappings) ? mappings.length : 0
+  };
 });
 
 ipcMain.handle("sync-marketing-data", async (_, accountId, platform = "tiktok", range = {}) => {
-  const dashboardAccountId = marketingAccountKey(accountId);
-  if (!dashboardAccountId) return { ok: false, error: "SELECT_SINGLE_ACCOUNT" };
   try {
-    const incrementalEnabled = marketingIncrementalSyncEnabled();
-    const requestedMode = range && range.mode === "full" ? "full" : "incremental";
-    const cached = getCachedMarketingStatus(dashboardAccountId, platform);
-    const cachedSummary = cached && cached.summary || {};
-    const sameRange = String(cachedSummary.dateFrom || "") === String(range && range.dateFrom || "") &&
-      String(cachedSummary.dateTo || "") === String(range && range.dateTo || "");
-    const currencyChanged = String(cachedSummary.currency || "").toUpperCase() !== String(range && range.targetCurrency || "").toUpperCase() ||
-      marketingRatesChanged(cachedSummary, range || {});
-    let result = await callMarketingBackend("sync", dashboardAccountId, platform, {
-      ...(range || {}),
-      mode: incrementalEnabled ? requestedMode : undefined,
-      recomposeOnly: incrementalEnabled && requestedMode === "incremental" && sameRange && currencyChanged,
-    });
-    if (marketingSyncShouldRetry(result)) {
-      log.warn("[Marketing][Main] sync retrying after transient failure", {
-        accountId: dashboardAccountId,
-        platform,
-        error: result && result.error || "",
-      });
-      await delayMarketingRetry(700);
-      result = await callMarketingBackend("sync", dashboardAccountId, platform, {
-        ...(range || {}),
-        mode: incrementalEnabled ? requestedMode : undefined,
-        recomposeOnly: incrementalEnabled && requestedMode === "incremental" && sameRange && currencyChanged,
-      });
-    }
-    if (result && result.ok) saveCachedMarketingStatus(dashboardAccountId, platform, result);
-    else if (result && result.reconnectRequired) return result;
-    else {
-      const cached = getCachedMarketingStatus(dashboardAccountId, platform);
-      if (cached) return { ok: false, ...cached, error: result && result.error || "SYNC_FAILED" };
-    }
-    return result;
+    return await callSaudiIPickMarketing("sync", accountId, platform, range || {});
   } catch (error) {
-    log.error("[Marketing][Main] sync failed", { accountId: dashboardAccountId, platform, error: error.message });
-    return { ok: false, error: error.message };
+    log.error("[SaudiIPick][Marketing] compatibility sync failed", { accountId, platform, error: error.message });
+    return { ok: false, provider: "saudiipick", platform, error: error.message };
   }
 });
 
 ipcMain.handle("sync-all-marketing-data", async (_, platform = "tiktok", range = {}) => {
+  const accountSettings = normalizeMarketingAccountSettings(range && range.accountSettings);
+  const accountIds = accountSettings.map((setting) => setting.dashboardAccountId).filter(Boolean);
+  if (!accountIds.length) return { ok: false, provider: "saudiipick", platform, error: "SAUDIIPICK_ACCOUNT_REQUIRED" };
   try {
-    const incrementalEnabled = marketingIncrementalSyncEnabled();
-    const requestedMode = range && range.mode === "full" ? "full" : "incremental";
-    const accountSettings = normalizeMarketingAccountSettings(range && range.accountSettings);
-    const cacheComparisons = accountSettings.map((setting) => {
-      const cached = getCachedMarketingStatus(setting.dashboardAccountId, platform);
-      const summary = cached && cached.summary || {};
-      return {
-        sameRange: String(summary.dateFrom || "") === String(range && range.dateFrom || "") &&
-          String(summary.dateTo || "") === String(range && range.dateTo || ""),
-        currencyChanged: String(summary.currency || "").toUpperCase() !== String(setting.currency || "").toUpperCase() ||
-          marketingRatesChanged(summary, {
-            exchangeRates: setting.exchangeRates,
-            egpRate: setting.egpRate,
-          }),
-      };
-    });
-    let result = await callMarketingBackend("sync_all", "__all__", platform, {
-      ...(range || {}),
-      mode: incrementalEnabled ? requestedMode : undefined,
-      recomposeOnly: incrementalEnabled && requestedMode === "incremental" &&
-        cacheComparisons.length > 0 &&
-        cacheComparisons.every((item) => item.sameRange) &&
-        cacheComparisons.some((item) => item.currencyChanged),
-      accountSettings,
-    });
-    if (marketingSyncShouldRetry(result)) {
-      log.warn("[Marketing][Main] sync all retrying after transient failure", {
-        platform,
-        error: result && result.error || "",
-      });
-      await delayMarketingRetry(700);
-      result = await callMarketingBackend("sync_all", "__all__", platform, {
-        ...(range || {}),
-        mode: incrementalEnabled ? requestedMode : undefined,
-        recomposeOnly: incrementalEnabled && requestedMode === "incremental" &&
-          cacheComparisons.length > 0 &&
-          cacheComparisons.every((item) => item.sameRange) &&
-          cacheComparisons.some((item) => item.currencyChanged),
-        accountSettings,
-      });
+    const accountStatuses = {};
+    for (const accountId of accountIds) {
+      accountStatuses[accountId] = await callSaudiIPickMarketing("sync", accountId, platform, range || {});
     }
-    if (result && result.ok && result.accountStatuses) {
-      Object.keys(result.accountStatuses).forEach((accountId) => {
-        saveCachedMarketingStatus(accountId, platform, result.accountStatuses[accountId]);
-      });
-      saveCachedMarketingStatus("__all__", platform, result);
-    }
-    return result;
+    const failed = Object.values(accountStatuses).filter((result) => !result || !result.ok);
+    return {
+      ok: failed.length === 0,
+      provider: "saudiipick",
+      platform,
+      accountStatuses,
+      error: failed.length ? failed.map((result) => result && result.error || "SYNC_FAILED").join("; ") : ""
+    };
   } catch (error) {
-    log.error("[Marketing][Main] sync all failed", { platform, error: error.message });
-    return { ok: false, error: error.message };
+    log.error("[SaudiIPick][Marketing] compatibility sync all failed", { platform, error: error.message });
+    return { ok: false, provider: "saudiipick", platform, error: error.message };
   }
 });
 
@@ -7005,14 +6923,14 @@ ipcMain.handle("clear-saudiipick-marketing-token", async () => {
 ipcMain.handle("get-saudiipick-marketing-status", async (_, accountId, platform = "snapchat", options = {}) => {
   const dashboardAccountId = marketingAccountKey(accountId, true);
   if (!dashboardAccountId) return { ok: false, error: "SELECT_ACCOUNT" };
-  const cached = getCachedMarketingStatus(dashboardAccountId, platform);
+  const cached = getCachedSaudiIPickMarketingStatus(dashboardAccountId, platform);
   if (cached && options && options.mode === "cached") {
     return { ok: true, ...cached, provider: cached.provider || "saudiipick", cache: { ...(cached.cache || {}), status: "local", providerRequestCount: 0 } };
   }
   try {
     const result = await callSaudiIPickMarketing("status", dashboardAccountId, platform, options || {});
     if (result && result.ok) {
-      const nextCached = getCachedMarketingStatus(dashboardAccountId, platform) || {};
+      const nextCached = getCachedSaudiIPickMarketingStatus(dashboardAccountId, platform) || {};
       return {
         ...result,
         ...nextCached,
@@ -7031,39 +6949,14 @@ ipcMain.handle("get-saudiipick-marketing-status", async (_, accountId, platform 
 });
 
 ipcMain.handle("save-saudiipick-marketing-mapping", async (_, accountId, platform = "snapchat", sourceAccounts = []) => {
-  const dashboardAccountId = marketingAccountKey(accountId);
-  if (!dashboardAccountId) return { ok: false, error: "SELECT_ACCOUNT_TO_MAP" };
-  const previous = getCachedMarketingStatus(dashboardAccountId, platform) || {};
-  const account = getStoredAccountById(dashboardAccountId);
-  const dashboardAccountKey = marketingStableAccountKey(dashboardAccountId);
-  const selected = (Array.isArray(sourceAccounts) ? sourceAccounts : [])
-    .map((source) => normalizeNativeSourceAccount(source, "SAR", platform))
-    .filter(Boolean);
-  const next = {
-    ...previous,
-    ok: true,
-    provider: "saudiipick",
-    platform,
-    status: selected.length ? "connected" : "disconnected",
-    sourceAccountId: selected.length === 1 ? selected[0].id : "",
-    sourceAccountName: selected.length === 1 ? selected[0].name : accountDisplayName(account, dashboardAccountId),
-    mappedAccounts: selected,
-    selectedSourceAccounts: selected,
-    selectedSourceAccountIds: selected.map((source) => source.id),
-    availableAccounts: previous.availableAccounts || selected,
-    linkedAccounts: previous.linkedAccounts || selected,
-    mappings: mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAccountKey, selected, platform),
-    statusCheckedAt: new Date().toISOString(),
-  };
-  saveCachedMarketingStatus(dashboardAccountId, platform, next);
-  return { ok: true, ...getCachedMarketingStatus(dashboardAccountId, platform), provider: "saudiipick" };
+  return await saveSaudiIPickMarketingMappingState(accountId, platform, sourceAccounts);
 });
 
 ipcMain.handle("sync-saudiipick-marketing-data", async (_, accountId, platform = "snapchat", range = {}) => {
   const dashboardAccountId = marketingAccountKey(accountId);
   if (!dashboardAccountId) return { ok: false, error: "SELECT_SINGLE_ACCOUNT" };
   try {
-    const previous = getCachedMarketingStatus(dashboardAccountId, platform) || {};
+    const previous = getCachedSaudiIPickMarketingStatus(dashboardAccountId, platform) || {};
     const dashboardAccountKey = marketingStableAccountKey(dashboardAccountId);
     let sourceAccounts = Array.isArray(range && range.sourceAccounts) && range.sourceAccounts.length
       ? range.sourceAccounts
@@ -7078,7 +6971,7 @@ ipcMain.handle("sync-saudiipick-marketing-data", async (_, accountId, platform =
     return result;
   } catch (error) {
     log.error("[SaudiIPick][Marketing] sync failed", { accountId: dashboardAccountId, platform, error: error.message });
-    const cached = getCachedMarketingStatus(dashboardAccountId, platform);
+    const cached = getCachedSaudiIPickMarketingStatus(dashboardAccountId, platform);
     if (cached) return { ok: false, ...cached, provider: "saudiipick", error: error.message };
     return { ok: false, provider: "saudiipick", platform, error: error.message };
   }
@@ -7096,7 +6989,6 @@ ipcMain.handle("open-external-url", async (_, externalUrl) => {
       return { ok: true };
     }
     const allowedHosts = new Set([
-      "onboard.windsor.ai",
       "saudiipick.com",
       "www.saudiipick.com",
       "taager.com",

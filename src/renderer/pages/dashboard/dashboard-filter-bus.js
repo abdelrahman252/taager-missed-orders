@@ -853,6 +853,16 @@
   function normalizeMarketingStatus(value, accountId, platform) {
     value = value || {};
     platform = normalizeMarketingPlatform(platform || value.platform);
+    var legacyWindsorError = typeof value.error === 'string' && /^WINDSOR_/.test(value.error);
+    if ((platform === 'snapchat' || platform === 'tiktok' || platform === 'facebook') && value.provider !== 'saudiipick' &&
+        (value.summary || value.status === 'connected' || value.status === 'pending' || legacyWindsorError)) {
+      value = {
+        provider: 'saudiipick',
+        platform: platform,
+        status: 'disconnected',
+        error: 'SAUDIIPICK_PROVIDER_REQUIRED'
+      };
+    }
     var summary = value.summary && typeof value.summary === 'object' ? value.summary : null;
     var adSpend = summary ? Number(summary.adSpend) : NaN;
     var purchases = summary ? Number(summary.purchases) : NaN;
@@ -1403,6 +1413,15 @@
     };
   }
 
+  // Saudi iPick is the only supported marketing provider for the dashboard.
+  // Keep this decision independent from cached provider state so a stale
+  // Windsor payload cannot silently become the source for calculators again.
+  function usesSaudiIPickMarketing(platform) {
+    return (platform === 'snapchat' || platform === 'tiktok' || platform === 'facebook') &&
+      window.api &&
+      typeof window.api.getSaudiIPickMarketingStatus === 'function';
+  }
+
   window.DashboardMarketingState = {
     platforms: MARKETING_PLATFORMS.slice(),
     get: function (accountId, platform) {
@@ -1426,8 +1445,8 @@
             status: 'disconnected',
             loading: false,
             reconnectRequired: true,
-            errorCode: value.error || 'WINDSOR_RECONNECT_REQUIRED',
-            error: value.error || 'WINDSOR_RECONNECT_REQUIRED'
+            errorCode: value.error || 'SAUDIIPICK_TOKEN_REQUIRED',
+            error: value.error || 'SAUDIIPICK_TOKEN_REQUIRED'
           });
         } else {
         var previousHasConnectedState = previous.status && previous.status !== 'disconnected' ||
@@ -1601,6 +1620,19 @@
             return self.get('__all__');
           });
         }
+        platform = normalizeMarketingPlatform(platform);
+        if (usesSaudiIPickMarketing(platform)) {
+          var nativeAccounts = dashboardMarketingAccounts();
+          if (!nativeAccounts.length) return Promise.resolve(self.get('__all__', platform));
+          return Promise.all(nativeAccounts.map(function (account) {
+            var childId = String(account && (account.id || account.accountId || account.key || '') || '');
+            return childId
+              ? self.load(childId, platform, options).catch(function () { return null; })
+              : Promise.resolve(null);
+          })).then(function () {
+            return self.get('__all__', platform);
+          });
+        }
       }
       if (!platform) {
         var selfAll = this;
@@ -1633,13 +1665,8 @@
         }
         return _marketingQueuedForceLoads[loadKey];
       }
-      var useSaudiIPickNative = (platform === 'snapchat' || platform === 'tiktok') &&
-        current.provider === 'saudiipick' &&
-        window.api &&
-        typeof window.api.getSaudiIPickMarketingStatus === 'function';
-      if (!useSaudiIPickNative && (!window.api || typeof window.api.getMarketingStatus !== 'function')) {
-        return Promise.resolve(current);
-      }
+      var useSaudiIPickNative = usesSaudiIPickMarketing(platform);
+      if (!useSaudiIPickNative) return Promise.resolve(current);
       var requestMode = options.force ? 'force' : (options.revalidate ? 'revalidate' : 'cached');
       var requestSeq = Number(_marketingLoadSeq[loadKey] || 0);
       // Even a local cached lookup is asynchronous across IPC. Mark it as
@@ -1717,13 +1744,16 @@
         range = Object.assign({}, range || {}, { sourceAccounts: sourceAccounts });
       }
       range = Object.assign({ mode: 'incremental' }, range || {});
-      var currentForSync = this.get(id, platform);
-      var useSaudiIPickNativeSync = (platform === 'snapchat' || platform === 'tiktok') &&
-        currentForSync.provider === 'saudiipick' &&
+      var useSaudiIPickNativeSync = usesSaudiIPickMarketing(platform) &&
         window.api &&
         typeof window.api.syncSaudiIPickMarketingData === 'function';
-      if (!useSaudiIPickNativeSync && (!window.api || typeof window.api.syncMarketingData !== 'function')) {
-        return Promise.resolve(this.set({ ok: false, error: 'SYNC_UNAVAILABLE', platform: platform }, id, platform));
+      if (!useSaudiIPickNativeSync) {
+        return Promise.resolve(this.set({
+          ok: false,
+          provider: 'saudiipick',
+          error: 'SAUDIIPICK_NATIVE_BRIDGE_UNAVAILABLE',
+          platform: platform
+        }, id, platform));
       }
       this.setLoading(true, id, platform);
       var self = this;
@@ -1731,37 +1761,33 @@
       var requestSeq = ++_marketingSyncSeq;
       _marketingSyncRequests[requestKey] = requestSeq;
       console.info('[Marketing][Store] sync request', { accountId: id, platform: platform, range: range || {}, requestSeq: requestSeq });
-      if (id === '__all__' && typeof window.api.syncAllMarketingData === 'function') {
-        var allRange = Object.assign({}, range || {}, {
-          accountSettings: Array.isArray(range && range.accountSettings) && range.accountSettings.length
-            ? range.accountSettings
-            : buildMarketingSyncAllSettings(id, platform)
-        });
-        return window.api.syncAllMarketingData(platform, allRange).then(function (response) {
-          console.info('[Marketing][Store] sync_all response', marketingLogSummary(response));
-          if (_marketingSyncRequests[requestKey] !== requestSeq) return self.get(id, platform);
-          if (response && response.ok && response.accountStatuses) {
-            Object.keys(response.accountStatuses).forEach(function (accountKey) {
-              self.set(response.accountStatuses[accountKey], accountKey, platform);
-            });
-          }
-          var next = self.set(response && response.ok ? response : Object.assign({}, response || {}, {
+      if (id === '__all__') {
+        var nativeAccountsForSync = dashboardMarketingAccounts();
+        if (!nativeAccountsForSync.length) {
+          return Promise.resolve(self.set({
             ok: false,
-            error: response && response.error ? response.error : 'SYNC_FAILED'
-          }), id, platform);
-          if (response && response.ok && window.DashboardRoiState && typeof window.DashboardRoiState.notify === 'function') {
-            window.DashboardRoiState.notify(id);
-          }
-          return next;
+            provider: 'saudiipick',
+            error: 'SAUDIIPICK_ACCOUNT_REQUIRED',
+            platform: platform
+          }, id, platform));
+        }
+        return Promise.all(nativeAccountsForSync.map(function (account) {
+          var childId = String(account && (account.id || account.accountId || account.key || '') || '');
+          return childId ? self.sync(childId, range, platform) : Promise.resolve(null);
+        })).then(function () {
+          self.setLoading(false, id, platform);
+          return self.get(id, platform);
         }).catch(function (error) {
-          console.error('[Marketing][Store] sync_all failed', error);
-          if (_marketingSyncRequests[requestKey] !== requestSeq) return self.get(id, platform);
-          return self.set({ ok: false, error: error.message || String(error), platform: platform }, id, platform);
+          self.setLoading(false, id, platform);
+          return self.set({
+            ok: false,
+            provider: 'saudiipick',
+            error: error && error.message || String(error || 'SYNC_FAILED'),
+            platform: platform
+          }, id, platform);
         });
       }
-      var syncRequest = useSaudiIPickNativeSync
-        ? window.api.syncSaudiIPickMarketingData(id, platform, range || {})
-        : window.api.syncMarketingData(id, platform, range || {});
+      var syncRequest = window.api.syncSaudiIPickMarketingData(id, platform, range || {});
       return syncRequest.then(function (response) {
         console.info('[Marketing][Store] sync response', marketingLogSummary(response));
         if (_marketingSyncRequests[requestKey] !== requestSeq) return self.get(id, platform);

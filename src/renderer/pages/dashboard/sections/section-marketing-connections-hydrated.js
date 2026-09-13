@@ -44,6 +44,18 @@
     if (clean === 'MARKETING_PROVIDER_CAPACITY_FULL') {
       return tr('marketing.providerCapacityFull', 'Connection capacity is currently full. Please contact support to increase your connection limits.');
     }
+    if (clean === 'SAUDIIPICK_TOKEN_REQUIRED') {
+      return tr('marketing.saudiIPickTokenRequired', 'Saudi iPick desktop token is required. Open the Saudi iPick API section, save the token, then refresh marketing status.');
+    }
+    if (clean === 'INVALID_SAUDIIPICK_TOKEN') {
+      return tr('marketing.invalidSaudiIPickToken', 'The Saudi iPick desktop token is invalid. It must start with sipdt_.');
+    }
+    if (clean === 'SAUDIIPICK_PROVIDER_REQUIRED') {
+      return tr('marketing.saudiIPickProviderRequired', 'This marketing result came from the old provider. Refresh through Saudi iPick before using ad spend in the calculators.');
+    }
+    if (clean === 'SAUDIIPICK_MAPPING_REQUIRED' || clean === 'SAUDIIPICK_ACCOUNT_MAPPING_REQUIRED') {
+      return tr('marketing.saudiIPickMappingRequired', 'Map the advertising account in the Saudi iPick API section before syncing.');
+    }
     if (clean === 'SOURCE_ACCOUNT_NOT_FOUND') {
       return tr('marketing.sourceAccountNotFound', 'Ad account not found. Check the ID, or connect the right account first.');
     }
@@ -883,7 +895,7 @@
     function scheduleSyncPreparationMessage(platform) {
       var timer = setTimeout(function () {
         if (!busyLabel) return;
-        busyLabel = tr('marketing.loadingSyncPreparingRange', 'Windsor is preparing the complete selected date range. First sync can take a little while.');
+        busyLabel = tr('marketing.loadingSyncPreparingRange', 'Saudi iPick is preparing the complete selected date range. First sync can take a little while.');
         if (store && typeof store.setLoading === 'function') {
           store.setLoading(true, selectedAccountId, platform);
         } else {

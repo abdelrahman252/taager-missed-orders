@@ -126,6 +126,13 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     !marketingState.manualOverride &&
     Number(marketingState.summary.adSpend || 0) > 0
   );
+  var marketingDataUnavailable = !!(
+    marketingState &&
+    !marketingState.manualOverride &&
+    (marketingState.status !== "connected" ||
+      !marketingState.summary ||
+      Number(marketingState.summary.adSpend || 0) <= 0)
+  );
   var sourceBreakdown =
     marketingState &&
     marketingState.summary &&
@@ -1177,7 +1184,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
   }
 
   // -- 5. Gauge SVG ------------------------------------------------------------
-  function gaugeHtml(roi) {
+  function gaugeHtml(roi, unavailable) {
     var cx = 190,
       cy = 165,
       R = 120,
@@ -1209,15 +1216,15 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
         p2.y.toFixed(2)
       );
     }
-    var clamped = Math.min(Math.max(roi, -100), 300);
+    var clamped = unavailable ? 0 : Math.min(Math.max(roi, -100), 300);
     var pct = (clamped + 100) / 400;
     var needleDeg = START + pct * SPAN;
     var tip = pt(R - 5, needleDeg),
       bl = pt(6, needleDeg + 90),
       br = pt(6, needleDeg - 90);
-    var roiColor = roi < 0 ? "#ef4444" : roi < 50 ? "#f59e0b" : "#00e676";
+    var roiColor = unavailable ? "#94a3b8" : roi < 0 ? "#ef4444" : roi < 50 ? "#f59e0b" : "#00e676";
     var formattedRoi =
-      (roi < 0 ? "-" : roi > 0 ? "+" : "") + Math.abs(roi).toFixed(0) + "%";
+      unavailable ? "—" : (roi < 0 ? "-" : roi > 0 ? "+" : "") + Math.abs(roi).toFixed(0) + "%";
     var isLight =
       document.documentElement.getAttribute("data-theme") === "light";
     var needleFill = isLight ? "#1e293b" : "white";
@@ -1302,7 +1309,9 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       '" text-anchor="middle" fill="' +
       roiColor +
       '" font-size="13" font-weight="700" font-family="Inter, IBM Plex Sans Arabic, sans-serif">' +
-      (roi < 0
+      (unavailable
+        ? s7Txt("Unavailable", "غير متاح")
+        : roi < 0
         ? s7Txt("Losing", "خاسر")
         : roi < 50
           ? s7Txt("Near break-even", "قريب من التعادل")
@@ -1988,8 +1997,19 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     var insights = [];
     var ndrPct = s7RatioPctValue(s.ndr);
 
-    // 1. Core profitability state
-    if (c.netProfit < 0) {
+    // 1. Core profitability state. Do not call a zero/missing marketing
+    // result profitable: a disconnected Saudi iPick feed is not zero spend.
+    if (marketingDataUnavailable) {
+      insights.push({
+        type: "negative",
+        icon: S7_ICONS.warning,
+        cat: s7Txt("MARKETING DATA UNAVAILABLE", "بيانات التسويق غير متاحة"),
+        text: s7Txt(
+          "No verified Saudi iPick ad spend is available. Save the Saudi iPick desktop token and sync the selected period before judging campaign profitability.",
+          "لا يتوفر إنفاق إعلاني موثق من Saudi iPick. احفظ رمز سطح المكتب ثم زامن الفترة المحددة قبل تقييم ربحية الحملات."
+        )
+      });
+    } else if (c.netProfit < 0) {
       insights.push({
         type: "critical",
         icon: S7_ICONS.critical,
@@ -2474,7 +2494,7 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     }
 
     var gaugeWrap = document.getElementById("s7-gauge-wrap");
-    if (gaugeWrap) gaugeWrap.innerHTML = gaugeHtml(res.roi);
+    if (gaugeWrap) gaugeWrap.innerHTML = gaugeHtml(res.roi, marketingDataUnavailable);
 
     var retEl = document.getElementById("s7-out-return");
     if (retEl) {
@@ -2546,7 +2566,16 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       tipTitle = s7Txt("Campaign Status", "حالة الحملة"),
       tipBg,
       tipBorder;
-    if (res.roi < 0) {
+    if (marketingDataUnavailable) {
+      tip = s7Txt(
+        "Marketing data unavailable. Save the Saudi iPick desktop token and sync the selected period before judging campaign status.",
+        "بيانات التسويق غير متاحة. احفظ رمز سطح المكتب لـ Saudi iPick ثم زامن الفترة المحددة قبل تقييم حالة الحملة."
+      );
+      tipIcon = S7_ICONS.warning;
+      tipBg = "rgba(245,158,11,0.1)";
+      tipBorder = "rgba(245,158,11,0.2)";
+      if (tipEl) tipEl.parentElement.querySelector("div:first-child").style.color = "#f59e0b";
+    } else if (res.roi < 0) {
       tip = s7Txt(
         "This budget is creating a loss. Improve targeting or increase delivery rate (NDR) before adding more spend.",
         "هذه الميزانية تسبب خسارة. حسّن الاستهداف أو ارفع معدل التسليم (NDR) قبل إضافة إنفاق أكبر.",

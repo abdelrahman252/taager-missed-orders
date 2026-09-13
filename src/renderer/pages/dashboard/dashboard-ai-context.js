@@ -11,7 +11,7 @@
     { id: "products", label: "Product analytics", path: "/dashboard/products" },
     { id: "cities", label: "City analytics", path: "/dashboard/cities" },
     { id: "commission", label: "Commission trend", path: "/dashboard/commission" },
-    { id: "marketing", label: "Marketing connections", path: "/dashboard/marketing" },
+    { id: "saudiipickMarketing", label: "Saudi iPick API", path: "/dashboard/saudiipickMarketing" },
     { id: "campaigns", label: "Campaign intelligence", path: "/dashboard/campaigns" },
     { id: "calculator", label: "ROI calculator", path: "/dashboard/calculator" },
     { id: "productForecast", label: "Product forecast", path: "/dashboard/product-forecast" },
