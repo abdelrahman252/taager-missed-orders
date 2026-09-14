@@ -252,20 +252,28 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     });
   };
 
-  window._resStartManualReviewUpload = async function (tableId) {
+  window._resStartManualReviewUpload = async function (tableId, requestedDestination = "") {
     const rows = collectManualReviewRows(tableId, true);
     if (!rows.length || !window.api?.runBot) {
       showToast(translated("results.manual_review_no_rows", "No reviewed rows selected."));
       return;
     }
-    showToast(translated("results.manual_review_upload_started", "Starting reviewed-row upload..."));
+    const destination = requestedDestination === "affiliate-recovery"
+      || rows.some((row) => row.destination === "affiliate-recovery" || row.recoverySource === "affiliate-recovery")
+      ? "affiliate-recovery"
+      : "cart";
+    const isAffiliateRecovery = destination === "affiliate-recovery";
+    showToast(isAffiliateRecovery
+      ? translated("results.manual_review_recovery_started", "Starting reviewed affiliate recovery...")
+      : translated("results.manual_review_upload_started", "Starting reviewed-row upload..."));
     const result = await window.api.runBot({
       dateFrom,
       dateTo,
       accountIds: data?._accountId ? [data._accountId] : [],
       manualReviewMode: true,
       manualReviewOrders: rows,
-      easyOrdersAffiliateRecoveryEnabled: false,
+      manualReviewDestination: destination,
+      easyOrdersAffiliateRecoveryEnabled: isAffiliateRecovery,
     });
     if (result && result.success) {
       window.renderResults({ ...(result.data || {}), _accountId: data?._accountId || result.accountId || "", _accountLabel: data?._accountLabel || result.accountLabel || "" }, dateFrom, dateTo, onRunAgain, onHome);
@@ -274,13 +282,17 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     }
   };
 
-  function manualReviewActionButtons(tableId) {
+  function manualReviewActionButtons(tableId, destination = "cart") {
     if (!tableId) return "";
+    const isAffiliateRecovery = destination === "affiliate-recovery";
+    const label = isAffiliateRecovery
+      ? translated("results.run_reviewed_recovery", "Run Affiliate Recovery")
+      : translated("results.start_reviewed_upload", "Run Reviewed Orders");
     return `
       <button type="button" class="btn res-manual-select-action" onclick="window._resSetManualReviewSelection('${tableId}', true)">${translated("results.select_all", "Select All")}</button>
       <button type="button" class="btn res-manual-clear-action" onclick="window._resSetManualReviewSelection('${tableId}', false)">${translated("results.deselect_all", "Deselect All")}</button>
       <button type="button" class="btn res-table-download" onclick="window._resDownloadManualReviewTable('${tableId}')">⬇️ ${translated("results.download_edited_table", "Download Edited")}</button>
-      <button type="button" class="btn" style="background:rgba(249,115,22,0.16);border-color:#f97316;color:#fb923c" onclick="window._resStartManualReviewUpload('${tableId}')">${translated("results.start_reviewed_upload", "Start Reviewed")}</button>
+      <button type="button" class="btn" style="background:rgba(249,115,22,0.16);border-color:#f97316;color:#fb923c" onclick="window._resStartManualReviewUpload('${tableId}','${destination}')">${label}</button>
     `;
   }
 
@@ -393,6 +405,16 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         background: rgba(148,163,184,0.10);
         border-color: rgba(148,163,184,0.28);
         color: var(--text2);
+      }
+      .skipped-orders-table [data-manual-select] {
+        width: 18px;
+        height: 18px;
+        margin: 0 4px;
+        transform: scale(1.2);
+        transform-origin: center;
+        accent-color: #f97316;
+        cursor: pointer;
+        vertical-align: middle;
       }
       .dash-section.results-collapsible .dash-section-header {
         cursor: pointer;
@@ -884,8 +906,15 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const city = row.city || row.region || "";
       const address = row.address || row.notes || "";
       const editable = isManualReviewRow(row);
-      return `<tr ${attrs} style="${isManualReview ? "background:rgba(249,115,22,0.07)" : (row.uncertain ? "background:rgba(255,170,0,0.05)" : "")}">
-        <td class="skip-outcome" style="color:${outcomeColor}" title="${outcomeText}">${editable ? `<input data-manual-select type="checkbox" style="accent-color:#f97316">` : outcomeText}</td>
+      const manualMetadata = editable ? [
+        ["easyOrderUuid", row.easyOrderUuid || row.orderUuid || row.orderId || ""],
+        ["easyShortId", row.easyShortId || row.shortId || row.ID || ""],
+        ["detailUrl", row.detailUrl || ""],
+        ["recoverySource", row.recoverySource || row.source || ""],
+        ["destination", row.destination || "cart"],
+      ].map(([field, value]) => manualReviewHiddenField(field, value)).join("") : "";
+      return `<tr ${attrs} style="${isManualReview ? "background:rgba(255,255,255,0.018)" : (row.uncertain ? "background:rgba(255,255,255,0.012)" : "")}">
+        <td class="skip-outcome" style="color:${outcomeColor}" title="${outcomeText}">${editable ? `<input data-manual-select type="checkbox" style="accent-color:#f97316">${manualMetadata}` : outcomeText}</td>
         <td class="skip-source" title="${title(row.source)}">${row.source || "—"}</td>
         <td class="skip-name" title="${title(row.name)}">${editable ? manualReviewInput("name", row.name || "") : (row.name || "—")}</td>
         <td class="skip-phone" style="color:var(--text)" title="${title(phone)}">${editable ? manualReviewInput("phone", phone) : phone}</td>
@@ -915,7 +944,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           <div style="display:flex;gap:8px;align-items:center">
             <div style="font-size:var(--type-caption);color:var(--text2)">${hasManualReview ? translated("results.manual_review_need_review", "{count} need manual review").replace("{count}", skippedOrders.count) : t("results.skipped_followup")}</div>
             ${tableDownloadButton(downloadId)}
-            ${manualReviewActionButtons(manualTableId)}
+            ${manualReviewActionButtons(manualTableId, rows.some((row) => row?.destination === "affiliate-recovery") ? "affiliate-recovery" : "cart")}
           </div>
         </div>
         <div class="dash-section-body no-pad" style="overflow-x:auto;padding-bottom:10px;scrollbar-gutter:stable">
@@ -1582,9 +1611,16 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const subtotal = subtotalFor(row);
       const city = row.city || row.region || "";
       const address = row.address || row.notes || "";
+      const manualMetadata = [
+        ["easyOrderUuid", row.easyOrderUuid || row.orderUuid || row.orderId || ""],
+        ["easyShortId", row.easyShortId || row.shortId || row.ID || ""],
+        ["detailUrl", row.detailUrl || ""],
+        ["recoverySource", row.recoverySource || row.source || ""],
+        ["destination", "affiliate-recovery"],
+      ].map(([field, value]) => manualReviewHiddenField(field, value)).join("");
       return `
-      <tr data-manual-row="1" data-manual-source="${htmlEsc(row.source || row.recoverySource || "")}" data-manual-reason="${htmlEsc(reasonText)}" ${attrs || ""} style="background:rgba(249,115,22,0.06)">
-        <td><input data-manual-select type="checkbox" style="accent-color:#f97316"></td>
+      <tr data-manual-row="1" data-manual-source="${htmlEsc(row.source || row.recoverySource || "")}" data-manual-reason="${htmlEsc(reasonText)}" ${attrs || ""} style="background:rgba(255,255,255,0.018)">
+        <td><input data-manual-select type="checkbox" style="accent-color:#f97316">${manualMetadata}</td>
         ${td(row.source || row.recoverySource)}
         <td>${manualReviewInput("name", row.name || "")}</td>
         <td class="skip-phone">${manualReviewInput("phone", phone)}</td>
@@ -1601,11 +1637,11 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     return `
       <div class="dash-section" style="border-color:#f97316">
         <div class="dash-section-header" style="background:rgba(249,115,22,0.08)">
-          <div class="dash-section-title" style="color:#f97316"><span>⚠️</span> ${translated("results.manual_review_title", "Needs Manual Review")}</div>
+          <div class="dash-section-title" style="color:#f97316"><span>⚠️</span> ${translated("results.affiliate_recovery_manual_review_title", "Affiliate Recovery — Needs Manual Review")}</div>
           <div style="display:flex;gap:8px;align-items:center">
             <div style="font-size:var(--type-caption);color:var(--text2)">${countText}</div>
             ${tableDownloadButton(downloadId)}
-            ${manualReviewActionButtons(manualTableId)}
+            ${manualReviewActionButtons(manualTableId, "affiliate-recovery")}
           </div>
         </div>
         <div class="dash-section-body no-pad" style="overflow-x:auto;padding-bottom:10px;scrollbar-gutter:stable">

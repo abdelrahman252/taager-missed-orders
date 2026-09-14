@@ -1,6 +1,6 @@
 "use strict";
 
-const { normalizePhone, normalizePhoneWithMeta, COUNTRY_PHONE_RULES } = require("./phone");
+const { normalizePhone, normalizePhoneWithMeta, formatPhone } = require("./phone");
 const {
   cleanText,
   quantityEditDecision,
@@ -357,8 +357,9 @@ function createEasyOrdersUiRecovery(options = {}) {
   function easyOrdersPhone(value) {
     const normalized = normalizePhone(value, country);
     if (!normalized) return cleanText(value);
-    const phoneRules = COUNTRY_PHONE_RULES[country] || {};
-    return phoneRules.domesticPrefix ? `${phoneRules.domesticPrefix}${normalized}` : normalized;
+    // EasyOrders displays domestic phones, but its Taager integration validates
+    // the outbound value as an international number (e.g. 9665xxxxxxxx).
+    return formatPhone(normalized, country) || normalized;
   }
 
   async function inspectModalItems(page) {
@@ -1103,6 +1104,47 @@ function createEasyOrdersUiRecovery(options = {}) {
     const pending = [...candidates];
     const attempted = [];
     const skippedManual = [];
+    for (const candidate of [...pending].filter((item) => item && item.detailUrl)) {
+      const pendingIndex = pending.indexOf(candidate);
+      if (pendingIndex >= 0) pending.splice(pendingIndex, 1);
+      const directConverted = await withEasyOrdersOrderRetry(
+        page,
+        `direct missed order ${candidate.easyShortId || candidate.easyOrderUuid || candidate.normPhone || candidate.detailUrl}`,
+        async (recoveryAttempt) => {
+          if (!(recoveryAttempt > 1 && /#\/missed-orders\/[^/]+/i.test(page.url()))) {
+            await goto(page, candidate.detailUrl);
+            await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
+            await page.waitForTimeout(stepDelayMs);
+          }
+          return convertMissedDetail(page, candidate, { attempt: recoveryAttempt, edit: true });
+        },
+        (error) => ({
+          ...candidate,
+          detailUrl: page.url(),
+          actionStatus: "skipped_manual",
+          actionMessage: `Direct EasyOrders missed detail did not recover after reload: ${error.message}`,
+          attempts: 1,
+        })
+      );
+      if (directConverted.actionStatus === "skipped_completed") {
+        attempted.push({
+          ...directConverted,
+          actionStatus: "completed_waiting_verification",
+          actionMessage: "Missed detail is already Completed; will search real orders only if Taager verification misses it",
+          completedNeedsRealRetry: true,
+          retryAsReal: true,
+        });
+      } else if (directConverted.actionStatus === "skipped_manual") {
+        skippedManual.push(directConverted);
+      } else {
+        attempted.push(directConverted);
+      }
+      reportAttemptResult(directConverted, "missed");
+      await page.goBack({ waitUntil: "domcontentloaded", timeout: 30000 }).catch(async () => {
+        await openList(page, "missed", fromDate, toDate);
+      });
+      await waitForListReady(page, "missed").catch(() => {});
+    }
     let pageNo = 1;
     const maxPages = 100;
     while (pageNo <= maxPages && pending.length > 0) {

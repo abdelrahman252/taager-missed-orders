@@ -4557,6 +4557,124 @@ async function enrichCartRowsFromEasyOrdersLive(page, skippedRows, catalog, taag
   }
 }
 
+function normalizeManualReviewRecoveryRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map((row, index) => {
+    const source = String(row && (row.recoverySource || row.source) || "real").trim().toLowerCase() === "missed" ? "missed" : "real";
+    const easyOrderUuid = String(row && (row.easyOrderUuid || row.orderUuid || row.orderId || row.id) || "").trim();
+    const detailUrl = String(row && row.detailUrl || "").trim() || (easyOrderUuid ? `https://app.easy-orders.net/#/${source === "missed" ? "missed-orders" : "orders"}/${easyOrderUuid}` : "");
+    const rawPhone = String(row && (row.phone || row.normalizedPhone || row.normPhone || row.rawPhone) || "").trim();
+    const normPhone = normalizePhone(rawPhone, TAAGER_COUNTRY);
+    const qty = Math.max(1, Math.floor(numberOrZero(row && (row.qty || row.suggestedQty || row.easyOrdersQty || 1))) || 1);
+    const subtotal = numberOrZero(row && (row.subtotal || row.suggestedSubtotal || row.easyOrdersSubtotal || row.price));
+    const unitPrice = numberOrZero(row && row.unitPrice) || (subtotal > 0 ? subtotal / qty : 0);
+    const productName = String(row && (row.productName || row.product) || "").trim();
+    const sku = String(row && (row.sku || row.suggestedSku) || "").trim();
+    const name = String(row && (row.name || row.customerName) || "").trim() || formatPhone(normPhone, TAAGER_COUNTRY) || normPhone;
+    const city = String(row && (row.city || row.region) || "").trim();
+    return {
+      ...(row || {}),
+      manualReviewIndex: row && row.manualReviewIndex != null ? row.manualReviewIndex : index,
+      source,
+      recoverySource: source,
+      easyOrderUuid,
+      easyShortId: String(row && (row.easyShortId || row.shortId || row.ID) || "").trim(),
+      detailUrl,
+      name,
+      rawPhone,
+      normPhone,
+      normalizedPhone: normPhone,
+      phone: formatPhone(normPhone, TAAGER_COUNTRY) || rawPhone,
+      sku,
+      productName,
+      qty,
+      unitPrice,
+      subtotal: subtotal || unitPrice * qty,
+      city,
+      region: String(row && row.region || "").trim(),
+      address: String(row && (row.address || row.notes || row.note) || city || "").trim(),
+      date: row && (row.date || row.createdAt || row.easyCreatedAt) || "",
+      createdAt: row && row.createdAt || "",
+      easyCreatedAt: row && (row.easyCreatedAt || row.createdAt || row.date) || "",
+      destination: "affiliate-recovery",
+    };
+  });
+}
+
+async function runManualReviewAffiliateRecovery(page, dateFrom, dateTo, taagerStartDate, taagerEndDate) {
+  const preparedOrders = normalizeManualReviewRecoveryRows(config.manualReviewOrders);
+  log(`Manual review affiliate recovery: selected=${preparedOrders.length}, directEasyOrdersTargets=${preparedOrders.filter((row) => row.easyOrderUuid || row.detailUrl).length}`);
+  emitStage("affiliate-recovery.manual-review", "started", `Running ${preparedOrders.length} reviewed rows through EasyOrders affiliate recovery`);
+
+  await phase1_easyOrdersLogin(page);
+  page = activePage || page;
+  const recoveryFlow = createEasyOrdersAffiliateRecoveryFlow({
+    log,
+    stage: emitStage,
+    progress: (msg) => process.send && process.send({ type: "order-progress", mode: "affiliate-recovery", ...msg }),
+    country: TAAGER_COUNTRY,
+    gotoEasyOrders: async (recoveryPage, url) => {
+      await gotoWithNetworkRetries(recoveryPage, url, "EasyOrders manual affiliate recovery", { attempts: 3, timeout: 45000, waitMs: 5000 });
+      return recoveryPage;
+    },
+    gotoTaager: (recoveryPage, pathOrUrl) => taagerGoto(recoveryPage, pathOrUrl),
+    readDownloadToBuffer,
+    exportTaagerOrders: (recoveryPage, from, to) => createRunnerTaagerOrdersExportFlow().exportOrders(recoveryPage, from, to),
+    parseTaagerOrderKeys,
+  });
+  const recovery = await recoveryFlow.run(page, {
+    preparedOrders,
+    skippedOrders: [],
+    normalFlowStats: {},
+    initialTaagerKeys: new Set(),
+    catalog: {},
+    taagerCatalog: {},
+    fallbackProvince: "",
+    fallbackProvinceBySku: {},
+    fromDate: dateFrom,
+    toDate: dateTo,
+    taagerFromDate: taagerStartDate,
+    taagerToDate: taagerEndDate,
+    taagerFromText: formatDataDay(taagerStartDate),
+    taagerToText: formatDataDay(taagerEndDate),
+  });
+  const skippedRows = recovery.skippedRows || [];
+  const failedRows = recovery.failedRows || [];
+  const outputRows = recovery.verifiedRows || [];
+  const resultRows = recovery.attemptedRows || outputRows;
+  const skippedBuffer = skippedRows.length ? buildSkippedExcel(skippedRows) : null;
+  emitStage("affiliate-recovery.manual-review", "ok", `Reviewed affiliate recovery finished: verified=${recovery.verifiedCount || 0}, manual=${recovery.blockedReviewCount || 0}`);
+  process.send && process.send({
+    type: "result",
+    data: {
+      orders: outputRows.length,
+      taagerCountry: TAAGER_COUNTRY,
+      manualReviewMode: true,
+      stats: { affiliateRecoveryReviewed: preparedOrders.length, affiliateRecoveryVerified: outputRows.length },
+      productSummary: recovery.productSummary || [],
+      buffer: null,
+      confirmedOrderRows: outputRows,
+      orderRows: outputRows,
+      attemptedOrderRows: resultRows,
+      failedOrders: {
+        count: failedRows.length,
+        summary: failedRows,
+        errorRows: failedRows,
+        source: "manual-affiliate-recovery",
+        buffer: null,
+      },
+      skippedOrders: {
+        count: skippedRows.length,
+        rows: skippedRows,
+        buffer: skippedBuffer ? Array.from(skippedBuffer) : null,
+        filePath: "",
+      },
+      affiliateRecovery: recovery,
+      taagerSnapshot: null,
+      taagerDashboardSnapshot: null,
+    },
+  });
+}
+
 async function runManualReviewUpload(page, dateFrom, dateTo, taagerStartDate, taagerEndDate) {
   const prepared = normalizeManualReviewUploadRows(config.manualReviewOrders);
   const manualRows = prepared.orders;
@@ -5359,10 +5477,14 @@ if (config.mode === "second-taager-cart-upload") {
   if (config.manualReviewMode === true && Array.isArray(config.manualReviewOrders)) {
     try {
       log("\n========================================");
-      log("  MANUAL REVIEW UPLOAD MODE");
+      log(`  MANUAL REVIEW ${config.manualReviewDestination === "affiliate-recovery" ? "AFFILIATE RECOVERY" : "CART UPLOAD"} MODE`);
       log(`  Reviewed rows: ${config.manualReviewOrders.length}`);
       log("========================================\n");
-      await runManualReviewUpload(page, dateFrom, dateTo, taagerStartDate, taagerEndDate);
+      if (config.manualReviewDestination === "affiliate-recovery") {
+        await runManualReviewAffiliateRecovery(page, dateFrom, dateTo, taagerStartDate, taagerEndDate);
+      } else {
+        await runManualReviewUpload(page, dateFrom, dateTo, taagerStartDate, taagerEndDate);
+      }
     } catch (err) {
       if (!stopRequested) {
         const message = friendlyErrorMessage(err);

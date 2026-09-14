@@ -7440,7 +7440,7 @@ function createBotRunLogWriter(account, dateFrom, dateTo, suffix = "") {
   return { filePath, write };
 }
 
-ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAffiliateRecoveryEnabled: runAffiliateRecoveryEnabled, manualReviewOrders, manualReviewMode } = {}) => {
+ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAffiliateRecoveryEnabled: runAffiliateRecoveryEnabled, manualReviewOrders, manualReviewMode, manualReviewDestination } = {}) => {
   if (!(await isLicenseValid())) return { success: false, error: "LICENSE_INVALID" };
   if (licenseStore.get("teamLeaderEnabled", false) === true) {
     return { success: false, error: "TEAM_LEADER_DASHBOARD_ONLY" };
@@ -7457,6 +7457,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
     ? manualReviewOrders.filter((row) => row && typeof row === "object").slice(0, 500)
     : [];
   const manualReviewUploadMode = manualReviewMode === true && manualReviewUploadRows.length > 0;
+  const normalizedManualReviewDestination = manualReviewDestination === "affiliate-recovery" ? "affiliate-recovery" : "cart";
   const missingOrdersUploadEnabled = store.get("missingOrdersUploadEnabled", false) === true;
   const easyOrdersAffiliateRecoveryEnabled = runAffiliateRecoveryEnabled === true || store.get("easyOrdersAffiliateRecoveryEnabled", false) === true;
   const secondTaagerProfilePathFor = (accountId) => path.join(app.getPath("userData"), `bot-profile-${accountId}-second-taager-cart`);
@@ -7468,6 +7469,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
       missingOrdersUploadEnabled: missedOrdersDestination === "legacy_missing_orders",
       secondTaagerCartEnabled: missedOrdersDestination === "second_taager_cart",
       easyOrdersAffiliateRecoveryEnabled,
+      manualReviewDestination: normalizedManualReviewDestination,
       secondTaagerPassword: acc.secondTaagerPassword || (acc.id ? store.get(`pwd_second_taager_${acc.id}`, "") : ""),
       secondTaagerProfilePath: acc.id ? secondTaagerProfilePathFor(acc.id) : "",
     };
@@ -7622,6 +7624,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
       autoConfirm,
       missingOrdersUploadEnabled,
       easyOrdersAffiliateRecoveryEnabled,
+      manualReviewDestination: normalizedManualReviewDestination,
       manualReviewMode: manualReviewUploadMode,
       manualReviewOrders: manualReviewUploadMode ? manualReviewUploadRows : [],
       needsSnapshot: false,

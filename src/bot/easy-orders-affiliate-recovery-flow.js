@@ -21,6 +21,11 @@ function mergeItems(existingItems, nextItems) {
   });
 }
 
+function extractEasyOrdersUuid(value) {
+  const match = String(value == null ? "" : value).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  return match ? match[0] : "";
+}
+
 function dedupePreparedRealOrders(prepared, country = "sa") {
   const passthrough = [];
   const byUuid = new Map();
@@ -248,7 +253,7 @@ function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
       ...order,
       source,
       recoverySource: source,
-      easyOrderUuid: order.easyOrderUuid || order.orderUuid || order.orderId || "",
+      easyOrderUuid: extractEasyOrdersUuid(order.easyOrderUuid || order.orderUuid || order.orderId || ""),
       easyShortId: order.easyShortId || order.shortId || order.short_id || order.ID || "",
       name: order.name || nameFallback,
       city,
