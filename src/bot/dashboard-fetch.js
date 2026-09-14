@@ -733,58 +733,89 @@ async function ensureTaagerCountrySelected(page, where = "taager") {
   throw new Error(`TAAGER_COUNTRY_MISMATCH: expected ${expectedCountry}/${expectedCartCode}, detected path=${state.pathCountry || "unknown"}, select=${state.selectedCode || "unknown"}, button="${state.buttonText || "unknown"}"`);
 }
 
-async function pickDateInTaagerCalendarLegacy(page, targetDate) {
+function throwIfTaagerDashboardPickerAborted(signal) {
+  if (signal && signal.aborted) {
+    const error = new Error("TAAGER_DATE_RANGE_ABORTED: Taager date picker operation was cancelled");
+    error.code = "TAAGER_DATE_RANGE_ABORTED";
+    throw error;
+  }
+}
+
+async function boundedTaagerDashboardPickerClick(locator, description, signal) {
+  throwIfTaagerDashboardPickerAborted(signal);
+  try {
+    await locator.click({ timeout: 2500 });
+  } catch (error) {
+    throwIfTaagerDashboardPickerAborted(signal);
+    const clicked = await locator.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest" });
+      element.click();
+      return true;
+    }).catch(() => false);
+    if (!clicked) throw new Error(`TAAGER_DATE_CLICK_FAILED: ${description}: ${error.message}`);
+  }
+  throwIfTaagerDashboardPickerAborted(signal);
+}
+
+async function pickDateInTaagerCalendarLegacy(page, targetDate, signal) {
   const targetDataDay = formatDataDay(targetDate);
   await page.waitForSelector('[role="grid"]', { timeout: 10000 });
   for (let i = 0; i < 24; i++) {
+    throwIfTaagerDashboardPickerAborted(signal);
     if ((await page.locator(`[data-day="${targetDataDay}"]`).count()) > 0) break;
     const firstCell = await page.locator("[data-day]").first().getAttribute("data-day").catch(() => null);
     if (!firstCell) break;
     const goBack = new Date(targetDataDay) < new Date(firstCell);
     const selector = goBack ? 'button[name="previous-month"]' : 'button[name="next-month"]';
-    const clicked = await page.locator(selector).click().then(() => true).catch(() => false);
+    const clicked = await page.locator(selector).click({ timeout: 2500 }).then(() => true).catch(() => false);
     if (!clicked) {
       const buttons = page.locator('[role="grid"]').locator("..").locator("button");
       await (goBack ? buttons.first() : buttons.last()).click();
     }
     await page.waitForTimeout(250);
   }
-  await page.locator(`[data-day="${targetDataDay}"]`).first().click();
+  await boundedTaagerDashboardPickerClick(page.locator(`[data-day="${targetDataDay}"]`).first(), `date ${targetDataDay}`, signal);
 }
 
-async function clickTaagerMonthNav(page, direction) {
+async function clickTaagerMonthNav(page, direction, signal) {
+  throwIfTaagerDashboardPickerAborted(signal);
   const visibleDialog = page.locator('[role="dialog"]:has([role="grid"])').last();
   const exactSelector = direction === "previous"
     ? 'button[name="previous-month"], button[aria-label*="Previous Month"], button[aria-label*="Previous"]'
     : 'button[name="next-month"], button[aria-label*="Next Month"], button[aria-label*="Next"]';
   const exact = visibleDialog.locator(exactSelector).first();
   if ((await exact.count()) > 0) {
-    await exact.click();
+    await boundedTaagerDashboardPickerClick(exact, `${direction} month`, signal);
     return;
   }
 
   const navButtons = visibleDialog.locator('nav button');
   const count = await navButtons.count();
   if (count >= 2) {
-    await (direction === "previous" ? navButtons.first() : navButtons.nth(count - 1)).click();
+    await boundedTaagerDashboardPickerClick(
+      direction === "previous" ? navButtons.first() : navButtons.nth(count - 1),
+      `${direction} month fallback`,
+      signal
+    );
     return;
   }
 
   throw new Error(`Could not find Taager ${direction} month button`);
 }
 
-async function pickDateInTaagerCalendar(page, targetDate) {
+async function pickDateInTaagerCalendar(page, targetDate, signal) {
   const targetDataDay = formatDataDay(targetDate);
   await page.waitForSelector('[role="grid"]', { timeout: 10000 });
   await page.waitForTimeout(300);
 
   for (let i = 0; i < 24; i++) {
+    throwIfTaagerDashboardPickerAborted(signal);
     const visibleDialog = page.locator('[role="dialog"]:has([role="grid"])').last();
     const targetButton = visibleDialog
       .locator(`[role="gridcell"][data-day="${targetDataDay}"]:not([data-outside]):not([data-disabled]) button:not([disabled])`)
       .first();
     if ((await targetButton.count()) > 0) {
-      await targetButton.click();
+      await boundedTaagerDashboardPickerClick(targetButton, `date ${targetDataDay}`, signal);
       await page.waitForTimeout(400);
       return;
     }
@@ -797,7 +828,7 @@ async function pickDateInTaagerCalendar(page, targetDate) {
     const goBack = targetDataDay < firstCell;
     if (!goBack && targetDataDay <= lastCell) break;
 
-    await clickTaagerMonthNav(page, goBack ? "previous" : "next");
+    await clickTaagerMonthNav(page, goBack ? "previous" : "next", signal);
     await page.waitForTimeout(300);
   }
 
@@ -867,7 +898,7 @@ async function clickTaagerOrdersV2DateField(page, kind) {
   return false;
 }
 
-async function pickTaagerDateRangeV2(page, dateFrom, dateTo) {
+async function pickTaagerDateRangeV2(page, dateFrom, dateTo, signal) {
   log("Taager orders date picker: using new UI");
   await clearTaagerInterruptionBounded(page, "orders-v2-date-pill");
   const pill = page.locator("#orders-v2-date-pill").first();
@@ -879,7 +910,7 @@ async function pickTaagerDateRangeV2(page, dateFrom, dateTo) {
   if (!await clickTaagerOrdersV2DateField(page, "from")) {
     throw new Error("TAAGER_DATE_BUTTON_MISSING: could not find the new UI from-date button");
   }
-  await pickDateInTaagerCalendar(page, dateFrom);
+  await pickDateInTaagerCalendar(page, dateFrom, signal);
   await page.waitForTimeout(300);
 
   const now = new Date();
@@ -892,7 +923,7 @@ async function pickTaagerDateRangeV2(page, dateFrom, dateTo) {
     if (!await clickTaagerOrdersV2DateField(page, "to")) {
       throw new Error("TAAGER_DATE_BUTTON_MISSING: could not find the new UI to-date button");
     }
-    await pickDateInTaagerCalendar(page, dateTo);
+    await pickDateInTaagerCalendar(page, dateTo, signal);
     await page.waitForTimeout(300);
   } else {
     log(`Taager orders date picker: dateTo is today (${dateTo ? formatDataDay(dateTo) : "none"}) or empty in new UI, leaving to date empty.`);
@@ -906,16 +937,16 @@ async function pickTaagerDateRangeV2(page, dateFrom, dateTo) {
   return { uiVersion: "new", skipSearch: true };
 }
 
-async function pickTaagerDateRange(page, dateFrom, dateTo) {
+async function pickTaagerDateRange(page, dateFrom, dateTo, signal) {
   if (await hasTaagerOrdersV2DateFilter(page)) {
-    return pickTaagerDateRangeV2(page, dateFrom, dateTo);
+    return pickTaagerDateRangeV2(page, dateFrom, dateTo, signal);
   }
 
   log("Taager orders date picker: using old UI");
   if (!await clickTaagerDateRangeButton(page, "from")) {
     throw new Error("TAAGER_DATE_BUTTON_MISSING: could not find the from-date button");
   }
-  await pickDateInTaagerCalendar(page, dateFrom);
+  await pickDateInTaagerCalendar(page, dateFrom, signal);
   await page.waitForTimeout(300);
 
   const now = new Date();
@@ -928,7 +959,7 @@ async function pickTaagerDateRange(page, dateFrom, dateTo) {
     if (!await clickTaagerDateRangeButton(page, "to")) {
       throw new Error("TAAGER_DATE_BUTTON_MISSING: could not find the to-date button");
     }
-    await pickDateInTaagerCalendar(page, dateTo);
+    await pickDateInTaagerCalendar(page, dateTo, signal);
     await page.waitForTimeout(300);
   } else {
     log(`Taager pickDateRange: dateTo is today (${dateTo ? formatDataDay(dateTo) : "none"}) or empty, leaving "to date" empty.`);
@@ -1426,14 +1457,25 @@ async function recoverTaagerForRetry(page, stage, targetPath, error, attempt, ma
 }
 
 async function readDownloadToBuffer(download) {
-  const stream = await download.createReadStream();
-  const chunks = [];
-  await new Promise((resolve, reject) => {
-    stream.on("data", (chunk) => chunks.push(chunk));
-    stream.on("end", resolve);
-    stream.on("error", reject);
-  });
-  return Buffer.concat(chunks);
+  try {
+    const stream = await download.createReadStream();
+    const chunks = [];
+    await new Promise((resolve, reject) => {
+      stream.on("data", (chunk) => chunks.push(chunk));
+      stream.on("end", resolve);
+      stream.on("error", reject);
+    });
+    return Buffer.concat(chunks);
+  } catch (streamError) {
+    const downloadPath = await download.path().catch(() => null);
+    if (downloadPath && fs.existsSync(downloadPath)) {
+      log(`Dashboard Taager download stream failed; reading completed file from ${downloadPath}`);
+      return fs.readFileSync(downloadPath);
+    }
+    const failure = await download.failure().catch(() => null);
+    const suffix = failure ? ` (${failure})` : "";
+    throw new Error(`TAAGER_DOWNLOAD_FAILED: ${streamError.message}${suffix}`);
+  }
 }
 
 async function gotoDashboardTaagerOrders(page) {

@@ -26,17 +26,39 @@ function createTaagerOrdersExportFlow(options = {}) {
   }
 
   async function withTaagerFlowTimeout(label, timeoutMs, fn) {
+    const controller = new AbortController();
     let timer = null;
-    return Promise.race([
-      Promise.resolve().then(fn),
-      new Promise((_, reject) => {
+    let timedOut = false;
+    const operation = Promise.resolve().then(() => fn(controller.signal));
+    const timeout = new Promise((_, reject) => {
         timer = setTimeout(() => {
-          reject(new Error(`TAAGER_STEP_TIMEOUT: ${label} exceeded ${timeoutMs}ms`));
+          timedOut = true;
+          controller.abort();
+          const error = new Error(`TAAGER_STEP_TIMEOUT: ${label} exceeded ${timeoutMs}ms`);
+          error.code = "TAAGER_STEP_TIMEOUT";
+          reject(error);
         }, timeoutMs);
-      }),
-    ]).finally(() => {
+      });
+    return Promise.race([operation, timeout]).finally(() => {
       if (timer) clearTimeout(timer);
+      // A timed-out picker may still be unwinding a bounded Playwright action.
+      // Attach a rejection handler so its late failure cannot become an
+      // unhandled rejection while the retry flow is recovering the page.
+      if (timedOut) operation.catch(() => {});
     });
+  }
+
+  function classifyExportError(error) {
+    const message = String(error && error.message || error || "");
+    if (/Target page, context or browser has been closed|browser.*closed|page.*closed/i.test(message)) {
+      return "TAAGER_BROWSER_CRASH";
+    }
+    if (/TAAGER_STEP_TIMEOUT|date range selection|calendar|date picker/i.test(message)) {
+      return "TAAGER_DATE_RANGE_FAILED";
+    }
+    if (/download/i.test(message)) return "TAAGER_DOWNLOAD_FAILED";
+    if (/net::|timeout|internet|connection/i.test(message)) return "TAAGER_NETWORK_ERROR";
+    return "TAAGER_EXPORT_FAILED";
   }
 
   async function exportAttempt(page, dateFrom, dateTo, attempt) {
@@ -73,7 +95,7 @@ function createTaagerOrdersExportFlow(options = {}) {
     const dateRangeResult = await withTaagerFlowTimeout(
       "Taager orders date range selection",
       Number(options.dateRangeTimeout || 20000),
-      () => pickDateRange(page, dateFrom, dateTo)
+      (signal) => pickDateRange(page, dateFrom, dateTo, signal)
     );
     const uiVersion = dateRangeResult && dateRangeResult.uiVersion ? dateRangeResult.uiVersion : "old";
     stage("taager.orders.date-range", "ok", `Date range selected using ${uiVersion} UI`);
@@ -138,7 +160,8 @@ function createTaagerOrdersExportFlow(options = {}) {
         page = await recoverForRetry(page, error, attempt, maxAttempts);
       }
     }
-    throw new Error(`${finalErrorPrefix} after ${maxAttempts} attempts. Last error: ${lastError ? lastError.message : "unknown error"}`);
+    const errorType = classifyExportError(lastError);
+    throw new Error(`${errorType}: ${finalErrorPrefix} after ${maxAttempts} attempts. Last error: ${lastError ? lastError.message : "unknown error"}`);
   }
 
   return {
