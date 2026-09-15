@@ -157,11 +157,17 @@ function createEasyOrdersExportFlow(options = {}) {
   const log = typeof options.log === "function" ? options.log : () => {};
   const emit = typeof options.emit === "function" ? options.emit : () => {};
   const flow = options.flow || "easyorders";
-  const exportAttempts = Number(options.exportAttempts || 3);
-  const exportNotificationPolls = Number(options.exportNotificationPolls || 6);
-  const exportNotificationPollMs = Math.max(250, Number(options.exportNotificationPollMs || 900));
-  const exportNotificationRefreshMs = Math.max(800, Number(options.exportNotificationRefreshMs || 2200));
-  const exportCooldownMs = Number(options.exportCooldownMs || 6 * 60 * 1000);
+  // A single accepted export must never be submitted again just because its
+  // notification is late. Re-triggering creates duplicate files and makes a
+  // run appear frozen behind EasyOrders' five-minute rate limit.
+  const exportAttempts = Math.max(1, Number(options.exportAttempts || 1));
+  const exportNotificationPolls = Math.max(1, Number(options.exportNotificationPolls || 12));
+  const exportNotificationPollMs = Math.max(250, Number(options.exportNotificationPollMs || 1200));
+  const exportNotificationRefreshMs = Math.max(1200, Number(options.exportNotificationRefreshMs || 4000));
+  const exportNotificationMaxWaitMs = Math.max(
+    15000,
+    Number(options.exportNotificationMaxWaitMs || 45000)
+  );
   const storeSelectionNavigationTimeoutMs = Math.max(
     1000,
     Number(options.storeSelectionNavigationTimeoutMs) || 45000
@@ -324,15 +330,18 @@ function createEasyOrdersExportFlow(options = {}) {
     }
   }
 
-  async function reloadWithNetworkRetries(page, label) {
-    for (let attempt = 1; attempt <= 3; attempt++) {
+  async function reloadWithNetworkRetries(page, label, opts = {}) {
+    const attempts = Math.max(1, Number(opts.attempts || 3));
+    const timeout = Math.max(1000, Number(opts.timeout || 30000));
+    const waitMs = Math.max(250, Number(opts.waitMs || 5000));
+    for (let attempt = 1; attempt <= attempts; attempt++) {
       try {
-        await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+        await page.reload({ waitUntil: "domcontentloaded", timeout });
         return;
       } catch (error) {
-        if (!isNetworkNavigationError(error) || attempt >= 3) throw error;
-        log(`Network issue while reloading ${label} (${attempt}/3): ${error.message}`);
-        await page.waitForTimeout(5000);
+        if (!isNetworkNavigationError(error) || attempt >= attempts) throw error;
+        log(`Network issue while reloading ${label} (${attempt}/${attempts}): ${error.message}`);
+        await page.waitForTimeout(waitMs);
       }
     }
   }
@@ -737,8 +746,29 @@ function createEasyOrdersExportFlow(options = {}) {
     await page.click(`.react-datepicker__day--${dayClass}:not(.react-datepicker__day--outside-month)`);
   }
 
-  async function findExportLink(page, keyword) {
+  async function collectExistingExportLinks(page, keyword) {
     return page.evaluate(({ keyword }) => {
+      const normalize = (value) => String(value || "")
+        .replace(/[\u200E\u200F\u061C]/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+      const hrefFor = (row) => Array.from(row.querySelectorAll("a[href]"))
+        .map((link) => String(link.href || link.getAttribute("href") || ""))
+        .find((href) => href && href.toLowerCase().includes(".xlsx")) || "";
+      const rows = Array.from(document.querySelectorAll("table tbody tr, table tr, [role='row']"));
+      return rows.map((row) => {
+        const href = hrefFor(row);
+        const text = normalize(row.innerText || row.textContent || "");
+        const isMissed = href.toLowerCase().includes("missed-orders") || text.includes("missed orders report") || text.includes("missed order report") || text.includes("الطلبات الفائتة") || text.includes("تقرير الطلبات الفائتة");
+        const matches = keyword === "missed-orders" ? isMissed : !!href && !isMissed && (text.includes("orders") || text.includes("excel") || text.includes("اكسل") || text.includes("إكسل"));
+        return matches ? href : "";
+      }).filter(Boolean);
+    }, { keyword }).catch(() => []);
+  }
+
+  async function findExportLink(page, keyword, ignoredHrefs = []) {
+    return page.evaluate(({ keyword, ignoredHrefs }) => {
       const visible = (element) => {
         if (!element || !element.isConnected) return false;
         const style = window.getComputedStyle(element);
@@ -772,24 +802,21 @@ function createEasyOrdersExportFlow(options = {}) {
           return String(link.href || link.getAttribute("href") || "");
         }
       };
-      const candidateSet = new Set(Array.from(document.querySelectorAll(
-        "tr, [role='row'], li, .MuiCard-root, .MuiPaper-root, [class*='notification'], [class*='Notification']"
-      )));
-      for (const action of Array.from(document.querySelectorAll("a[href], button, [role='button']"))) {
-        let node = action;
-        for (let depth = 0; node && node !== document.body && depth < 8; depth++, node = node.parentElement) {
-          candidateSet.add(node);
-        }
-      }
-      const candidates = Array.from(candidateSet)
+      // EasyOrders renders notifications as table rows. The old implementation
+      // expanded every action into up to eight ancestor candidates, which made
+      // the same notification appear many times and could select a stale card
+      // from elsewhere on the page. Read one row per notification and use the
+      // first matching row in the page's newest-first order.
+      const rowSelector = "table tbody tr, table tr, [role='row']";
+      const candidates = Array.from(document.querySelectorAll(rowSelector))
         .filter((element) => visible(element))
         .map((element) => {
           const text = normalize(element.innerText || element.textContent || "");
           const rect = element.getBoundingClientRect();
-          return { element, text, top: rect.top, length: text.length };
+          return { element, text, top: rect.top };
         })
-        .filter((item) => item.text && item.length >= 8 && item.length <= 2000)
-        .sort((a, b) => a.top - b.top || a.length - b.length);
+        .filter((item) => item.text && item.text.length >= 8 && item.text.length <= 2000)
+        .sort((a, b) => a.top - b.top);
 
       for (const row of candidates) {
         const text = row.text;
@@ -798,10 +825,11 @@ function createEasyOrdersExportFlow(options = {}) {
         const lowerHref = href.toLowerCase();
         if (keyword === "missed-orders" && !lowerHref.includes("missed-orders")) continue;
         if (keyword === "orders" && lowerHref.includes("missed-orders")) continue;
+        if (ignoredHrefs.includes(href)) continue;
         if (href) return { href, text };
       }
       return null;
-    }, { keyword });
+    }, { keyword, ignoredHrefs });
   }
 
   async function summarizeNotifications(page, keyword) {
@@ -817,16 +845,7 @@ function createEasyOrdersExportFlow(options = {}) {
         .replace(/\s+/g, " ")
         .trim();
       const lower = (value) => normalize(value).toLowerCase();
-      const candidateSet = new Set(Array.from(document.querySelectorAll(
-        "tr, [role='row'], li, .MuiCard-root, .MuiPaper-root, [class*='notification'], [class*='Notification']"
-      )));
-      for (const action of Array.from(document.querySelectorAll("a[href], button, [role='button']"))) {
-        let node = action;
-        for (let depth = 0; node && node !== document.body && depth < 8; depth++, node = node.parentElement) {
-          candidateSet.add(node);
-        }
-      }
-      const rows = Array.from(candidateSet)
+      const rows = Array.from(document.querySelectorAll("table tbody tr, table tr, [role='row']"))
         .filter((row) => visible(row))
         .map((row) => {
           const text = normalize(row.innerText || row.textContent || "");
@@ -868,10 +887,12 @@ function createEasyOrdersExportFlow(options = {}) {
     }));
   }
 
-  async function waitForExportLink(page, keyword, attempt) {
+  async function waitForExportLink(page, keyword, attempt, ignoredHrefs = []) {
     let lastSummary = null;
     let lastRefreshAt = 0;
+    const startedAt = Date.now();
     for (let poll = 1; poll <= exportNotificationPolls; poll++) {
+      if (Date.now() - startedAt >= exportNotificationMaxWaitMs) break;
       stage("easyorders.notifications", "started", `Checking notifications ${poll}/${exportNotificationPolls}`, {
         attempt,
         maxAttempts: exportAttempts,
@@ -896,7 +917,7 @@ function createEasyOrdersExportFlow(options = {}) {
           log(`EasyOrders notification language check skipped: ${error.message}`);
         });
       }
-      const result = await findExportLink(page, keyword);
+      const result = await findExportLink(page, keyword, ignoredHrefs);
       lastSummary = await summarizeNotifications(page, keyword);
       log(`EasyOrders notifications poll ${poll}/${exportNotificationPolls} for ${keyword}: ` +
         `matches=${lastSummary && lastSummary.matchingCount != null ? lastSummary.matchingCount : "?"}, ` +
@@ -915,11 +936,26 @@ function createEasyOrdersExportFlow(options = {}) {
         return { href: result.href, summary: lastSummary };
       }
     }
+    log(`EasyOrders notification wait ended for ${keyword} after ${Date.now() - startedAt}ms without a matching card.`);
     return { href: "", summary: lastSummary };
   }
 
   async function triggerExport(page, exportFromDate, keyword) {
     const pageUrl = keyword === "missed-orders" ? "https://app.easy-orders.net/#/missed-orders" : "https://app.easy-orders.net/#/orders";
+    let existingNotificationHrefs = [];
+    // Do not accept an older same-day workbook while EasyOrders is still
+    // generating the new one. The notification page keeps many real/missed
+    // cards with identical report dates, so the baseline must be captured
+    // before submitting this export request.
+    try {
+      if (!page.url().includes("notifications")) {
+        await gotoWithNetworkRetries(page, "https://app.easy-orders.net/#/notifications", "EasyOrders notification baseline");
+      }
+      existingNotificationHrefs = await collectExistingExportLinks(page, keyword);
+      log(`EasyOrders notification baseline for ${keyword}: ${existingNotificationHrefs.length} existing workbook link(s).`);
+    } catch (error) {
+      log(`EasyOrders notification baseline unavailable for ${keyword}; continuing with first matching card only: ${error.message || error}`);
+    }
     let lastFailure = "";
     for (let attempt = 1; attempt <= exportAttempts; attempt++) {
       stage("easyorders.export.attempt", "started", `Attempt ${attempt}/${exportAttempts} for ${keyword}`, {
@@ -936,7 +972,11 @@ function createEasyOrdersExportFlow(options = {}) {
         await login(page);
         await gotoWithNetworkRetries(page, pageUrl, `EasyOrders ${keyword} after login`);
       }
-      await ensureEnglish(page, { force: true });
+      // Login already establishes English. Re-check the current DOM without
+      // forcing the language menu open on every real/missed export; reopening
+      // that menu adds latency and can interrupt the export button on the new
+      // EasyOrders layout.
+      await ensureEnglish(page);
       stage("easyorders.export.dialog", "started", `Opening export dialog for ${keyword}`);
       const exportButton = page.locator('button.MuiButton-outlined:has-text("Export"), main button:has-text("Export"), button:has-text("Export")').first();
       await exportButton.waitFor({ state: "visible", timeout: 15000 });
@@ -963,7 +1003,7 @@ function createEasyOrdersExportFlow(options = {}) {
       if (!page.url().includes("notifications")) {
         await gotoWithNetworkRetries(page, "https://app.easy-orders.net/#/notifications", "EasyOrders notifications");
       }
-      const linkResult = rateLimited ? { href: "", summary: await summarizeNotifications(page, keyword) } : await waitForExportLink(page, keyword, attempt);
+      const linkResult = rateLimited ? { href: "", summary: await summarizeNotifications(page, keyword) } : await waitForExportLink(page, keyword, attempt, existingNotificationHrefs);
       if (linkResult && linkResult.href) {
         emit({ type: "export-timestamp", timestamp: Date.now() });
         return linkResult.href;
@@ -980,11 +1020,14 @@ function createEasyOrdersExportFlow(options = {}) {
         screenshotPath,
         notificationSummary: summary,
       });
-      if (attempt < exportAttempts) {
-        const waitMs = exportCooldownMs;
-        emit({ type: "cooldown", seconds: waitMs / 1000, attempt, maxAttempts: exportAttempts });
-        await page.waitForTimeout(waitMs);
-      }
+      // The request was already accepted when there is no rate-limit toast.
+      // Do not submit the same export again after a missing/late notification.
+      // If EasyOrders explicitly rate-limited the request, surface that state
+      // immediately so the user can retry later without blocking the app.
+      const errorCode = rateLimited
+        ? "EASY_ORDERS_EXPORT_RATE_LIMITED"
+        : "EASY_ORDERS_NOTIFICATION_TIMEOUT";
+      throw new Error(`${errorCode}: ${keyword} export was not downloadable after the bounded notification wait. ${lastFailure}`);
     }
     throw new Error(`EASY_ORDERS_EXPORT_STUCK: ${keyword} failed after ${exportAttempts} attempts. Last state: ${lastFailure || "unknown"}`);
   }

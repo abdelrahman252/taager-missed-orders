@@ -604,8 +604,19 @@ function isOrderSentAwaitingVerification(row) {
     || /convert clicked/i.test(message);
 }
 
+function isResendActionError(row) {
+  const status = cleanText(row && (row.finalStatus || row.actionStatus || row.status || row.reason)).toLowerCase();
+  return status === "resend_error";
+}
+
+function isManualReviewFailure(failedRow) {
+  const text = cleanText(`${failedRow && (failedRow.failureCode || "")} ${failedRow && (failedRow.error || "")}`).toLowerCase();
+  return /invalid-phone-number|non[- ]valid phone|phone number.*invalid|invalid.*phone|phone.*required|phone.*missing/.test(text);
+}
+
 function recoveryUncertainStatus(row) {
   if (isAlreadyRealOrderUnverified(row)) return "already_in_real_orders_unverified";
+  if (isResendActionError(row)) return "resend_error";
   if (isOrderSentAwaitingVerification(row)) return "awaiting_taager_verification";
   return "not_found_after_retry";
 }
@@ -631,6 +642,18 @@ function classifyRecoveryAttempts(attempts, verifiedTaagerKeys, failedRows = [],
         finalStatus: uncertainActionStatus,
         uncertain: true,
         uploadedWithWarning: true,
+      });
+    } else if (failedMatch && isManualReviewFailure(failedMatch)) {
+      unresolved.push({
+        ...attempt,
+        finalStatus: "resend_error",
+        uncertain: true,
+        uploadedWithWarning: false,
+        failureCode: failedMatch.failureCode || failedMatch.error || "invalid_phone_number",
+        failedOrderRow: failedMatch.row,
+        failedStoreOrderCode: failedMatch.storeOrderCode || "",
+        actionMessage: failedMatch.error || failedMatch.failureCode || "Taager rejected the phone number; edit it before running again",
+        reason: "taager_phone_validation_failed",
       });
     } else if (failedMatch) {
       failedInTaager.push({
@@ -799,6 +822,8 @@ module.exports = {
   filterFailedRowsForAttempts,
   isAlreadyRealOrderUnverified,
   isOrderSentAwaitingVerification,
+  isResendActionError,
+  isManualReviewFailure,
   buildAffiliateRecoveryResult,
   recoveryResultRows,
   recoveryProductSummary,

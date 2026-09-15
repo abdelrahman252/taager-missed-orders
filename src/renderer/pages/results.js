@@ -2018,6 +2018,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const totalInTaager  = getTaagerOrderCount(stats);
       const totalDupes   = (stats.realDupe||0) + (stats.missedDupe||0);
       const recoveryMetrics = recoveryMetricsFor(accData, totalNew, failedOrders);
+      const hasReviewQueue = hasSkipped || !!(recoveryMetrics && recoveryMetrics.blockedReview > 0) ||
+        !!(missingOrdersUpload && (missingOrdersUpload.previewOnly || missingOrdersUpload.status === "preview_only_auto_confirm_off"));
       const totalAttempt = recoveryMetrics ? recoveryMetrics.attempted : totalNew + failedOrders.count;
       const successRate  = totalAttempt > 0 ? Math.round(totalNew / totalAttempt * 100) : 100;
       const attemptedRows = accData.attemptedOrderRows || accData.orderRows || [];
@@ -2193,14 +2195,20 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
               </div>
             </div>
 
-            ${totalNew === 0 ? `
+            ${totalNew === 0 ? (hasReviewQueue ? `
+            <div class="dash-section">
+              <div class="dash-section-body" style="text-align:center;padding:22px">
+                <div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);margin-bottom:4px">⚠️ Orders are waiting for review</div>
+                <div class="text-muted text-sm">No order was uploaded automatically. Review the rows below, edit them if needed, and run the selected action again.</div>
+              </div>
+            </div>` : `
             <div class="dash-section">
               <div class="dash-section-body" style="text-align:center;padding:28px">
                 <div style="font-size:var(--type-display);margin-bottom:8px">🎉</div>
                 <div style="font-size:var(--type-component-title);font-weight:var(--weight-semibold);margin-bottom:4px">${t("results.all_caught")}</div>
                 <div class="text-muted text-sm">${t("results.no_orders")}</div>
               </div>
-            </div>` : `
+            </div>`) : `
             <div class="dash-section">
               <div class="dash-section-header">
                 <div class="dash-section-title"><span style="color:var(--success)">✅</span> ${uploadedOrdersTitle}</div>

@@ -180,7 +180,7 @@ function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
     return [
       ...(classification.failedInTaager || []),
       ...(classification.unresolved || []),
-    ].filter((row) => row.finalStatus !== "failed_in_taager");
+    ].filter((row) => row.finalStatus !== "failed_in_taager" && row.finalStatus !== "resend_error");
   }
 
   function mapValue(mapOrObject, key) {

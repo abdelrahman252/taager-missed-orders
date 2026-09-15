@@ -1316,7 +1316,9 @@ async function relaunchTaagerAutomationPage(stage, targetPath) {
 //   Button:   button[type="submit"]  text="تسجيل الدخول"
 // ════════════════════════════════════════
 async function phase1_easyOrdersLogin(page) {
-  return easyOrdersFlow.login(page);
+  await easyOrdersFlow.login(page);
+  log("✅ EasyOrders identity guard passed at phase1 (email + active store verified by shared flow).");
+  return;
   /* Legacy inline implementation retained temporarily for reference. */
   log("\n═══════════════════════════════════════");
   log("  PHASE 1 — Easy-Orders Login");
@@ -2384,7 +2386,9 @@ async function selectCityByText(page, cityName) {
 // SESSION PROBE — EASY-ORDERS
 // ════════════════════════════════════════
 async function assertEasyOrdersSession(page) {
-  return easyOrdersFlow.assertSession(page);
+  await easyOrdersFlow.assertSession(page);
+  log("✅ EasyOrders session guard passed (authenticated DOM and identity flow verified or cached).");
+  return;
 }
 */
 if (false) {
@@ -2844,7 +2848,9 @@ async function verifyFinalTotal(page, targetSubtotal, orderNum) {
 // EasyOrders export guard retained from the fresh clone runner.
 // It is not Taager affiliate logic; phase 2/3 still depend on it.
 async function assertEasyOrdersSession(page) {
-  return easyOrdersFlow.assertSession(page);
+  await easyOrdersFlow.assertSession(page);
+  log("✅ EasyOrders session guard passed (authenticated DOM and identity flow verified or cached).");
+  return;
 }
 
 function assertUsableTaagerPage(page, where = "taager") {
@@ -6349,6 +6355,18 @@ if (config.mode === "second-taager-cart-upload") {
           stats,
           buffer: null,
           productSummary: [],
+          confirmedOrderRows: [],
+          orderRows: [],
+          attemptedOrderRows: [],
+          failedOrders: {
+            count: 0,
+            summary: [],
+            errorRows: [],
+            source: "none",
+            failedDir: "",
+            failedPath: "",
+            buffer: null,
+          },
           skippedOrders: {
             count: allSkippedOrders.length,
             rows: allSkippedOrders,

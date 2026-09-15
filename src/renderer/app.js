@@ -4817,9 +4817,11 @@ async function _saveRunResultsFromResult(data, dateFrom, dateTo, selectedAccount
 
   function recoveryManualRows(resultData) {
     const recovery = resultData?.affiliateRecovery;
-    return recovery && recovery.enabled === true && Array.isArray(recovery.manualReviewRows)
-      ? recovery.manualReviewRows
-      : [];
+    if (!recovery || recovery.enabled !== true) return [];
+    const rows = Array.isArray(recovery.blockedReviewRows)
+      ? recovery.blockedReviewRows
+      : recovery.manualReviewRows;
+    return Array.isArray(rows) ? rows : [];
   }
 
   function reasonFor(row, fallback) {
@@ -4834,6 +4836,7 @@ async function _saveRunResultsFromResult(data, dateFrom, dateTo, selectedAccount
       return "Open the failed order details and review it manually.";
     }
     if (outcome === "submitted_uncertain") return "Check Taager or Missing Orders before treating this as confirmed.";
+    if (outcome === "needs_manual_review") return "Edit this row in Manual Review, then run it again.";
     if (outcome === "skipped_warning") return "Review the warning and fix the row before retrying.";
     return "";
   }
@@ -4887,7 +4890,7 @@ async function _saveRunResultsFromResult(data, dateFrom, dateTo, selectedAccount
       ...attempts.map((row, i) => normalizeOrder(row, "attempted", i)),
       ...confirmed.map((row, i) => normalizeOrder(row, "confirmed_in_taager", i)),
       ...submittedUncertain.map((row, i) => normalizeOrder(row, "submitted_uncertain", i)),
-      ...recoveryRows.map((row, i) => normalizeOrder(row, "submitted_uncertain", i)),
+      ...recoveryRows.map((row, i) => normalizeOrder(row, "needs_manual_review", i)),
       ...skipped.map((row, i) => normalizeOrder(row, "skipped_warning", i)),
       ...failed.map((row, i) => normalizeOrder(row, "failed_on_taager", i)),
     ];

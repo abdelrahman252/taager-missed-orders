@@ -129,7 +129,9 @@
         if (wanted === "attempted") return order.outcome === "attempted";
         if (wanted === "confirmed") return order.outcome === "confirmed_in_taager";
         if (wanted === "failed") return order.outcome === "failed_on_taager";
-        return order.outcome === "submitted_uncertain" || order.outcome === "skipped_warning";
+        return order.outcome === "submitted_uncertain"
+          || order.outcome === "needs_manual_review"
+          || order.outcome === "skipped_warning";
       });
     }
 

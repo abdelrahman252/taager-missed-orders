@@ -102,7 +102,10 @@ function createEasyOrdersUiRecovery(options = {}) {
       const uuidOk = !expectedUuid || href.includes(expectedUuid);
       const hasRealControls = /Order ID:/i.test(bodyText) && /Edit Order/i.test(bodyText);
       const hasMissedControls = /Order Details/i.test(bodyText) && /Edit/i.test(bodyText);
-      const hasAction = /Resend Order to Affiliates|Convert to Order|Completed/i.test(bodyText);
+      // EasyOrders changed the real-order action from the old English label to
+      // the localized webhook label. Keep both variants because accounts can
+      // still be served by either UI bundle.
+      const hasAction = /Resend Order to Affiliates|Resend Order to Webhook|اعادة\s+ارسال\s+الطلب\s+للويب\s+هوك|إعادة\s+ارسال\s+الطلب\s+للويب\s+هوك|إعادة\s+إرسال\s+الطلب\s+للويب\s+هوك|Convert to Order|Completed/i.test(bodyText);
       return pathOk && uuidOk && (hasRealControls || hasMissedControls || hasAction);
     }, { expectedPath, expectedUuid }, { timeout }).then(() => true).catch(() => false);
     if (ready) {
@@ -119,24 +122,36 @@ function createEasyOrdersUiRecovery(options = {}) {
 
   async function ensureFilterField(page, dataKey, label) {
     const field = page.locator(`[data-source="${dataKey}"] input[type="date"]`).first();
-    if (await field.isVisible({ timeout: 1000 }).catch(() => false)) return;
-    const addFilter = page.locator('button[aria-label="add filter"], button.add-filter').first();
+    if (await field.count().catch(() => 0)) return;
+    const addFilterCandidates = [
+      page.getByRole("button", { name: /add filter|إضافة فلتر|اضافة فلتر/i }).first(),
+      page.getByText(/add filter|إضافة فلتر|اضافة فلتر/i).first(),
+      page.locator('button[aria-label="add filter"], button.add-filter, [role="button"]').first(),
+    ];
+    let addFilter = null;
+    for (const candidate of addFilterCandidates) {
+      if (await candidate.isVisible({ timeout: 1000 }).catch(() => false)) {
+        addFilter = candidate;
+        break;
+      }
+    }
+    if (!addFilter) throw new Error(`EasyOrders add filter control not visible for ${label}`);
     await addFilter.waitFor({ state: "visible", timeout: 15000 });
     await addFilter.click({ timeout: 10000 });
-    if (await field.isVisible({ timeout: 1000 }).catch(() => false)) {
+    if (await field.count().catch(() => 0)) {
       await page.keyboard.press("Escape").catch(() => {});
       return;
     }
     const item = page.locator(`[role="menuitem"][data-key="${dataKey}"], li[data-key="${dataKey}"]`).first();
     const itemVisible = await item.waitFor({ state: "visible", timeout: 10000 }).then(() => true).catch(() => false);
-    if (!itemVisible && await field.isVisible({ timeout: 1000 }).catch(() => false)) {
+    if (!itemVisible && await field.count().catch(() => 0)) {
       await page.keyboard.press("Escape").catch(() => {});
       return;
     }
     if (!itemVisible) throw new Error(`EasyOrders filter menu item not visible for ${label}`);
     await item.click({ timeout: 10000 });
     await page.locator(`[data-source="${dataKey}"] input[type="date"]`).first()
-      .waitFor({ state: "visible", timeout: 10000 });
+      .waitFor({ state: "attached", timeout: 10000 });
     log(`EasyOrders recovery: added ${label} filter`);
   }
 
@@ -335,6 +350,50 @@ function createEasyOrdersUiRecovery(options = {}) {
       .join(" | ")).catch(() => "");
   }
 
+  function realResendButton(page) {
+    // The current EasyOrders page exposes this as:
+    // "اعادة ارسال الطلب للويب هوك". Do not depend on generated MUI classes.
+    return page.getByRole("button", {
+      name: /Resend Order to Affiliates|Resend Order to Webhook|اعادة\s+ارسال\s+الطلب\s+للويب\s+هوك|إعادة\s+ارسال\s+الطلب\s+للويب\s+هوك|إعادة\s+إرسال\s+الطلب\s+للويب\s+هوك/i,
+    }).first();
+  }
+
+  function resendSuccessToast(text) {
+    return /order sent|sent successfully|successfully sent|تم\s+(?:إ|ا)رسال(?:\s+الطلب)?|تمت\s+(?:إ|ا)عادة\s+(?:إ|ا)رسال|(?:إ|ا)عادة\s+(?:إ|ا)رسال\s+الطلب|webhook/i.test(String(text || ""));
+  }
+
+  async function readResendActionResponses(page, responses) {
+    const summaries = [];
+    for (const response of responses || []) {
+      try {
+        const request = response.request();
+        const method = String(request.method() || "GET").toUpperCase();
+        const status = Number(response.status() || 0);
+        if (method === "GET" && status < 400) continue;
+        let body = "";
+        if (status >= 400 || method !== "GET") {
+          body = String(await response.text().catch(() => "") || "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 1000);
+        }
+        summaries.push({ method, status, url: response.url(), body });
+      } catch (_) {}
+    }
+    return summaries;
+  }
+
+  function resendActionFailure(responses) {
+    const failed = (responses || []).find((response) => Number(response.status || 0) >= 400);
+    if (!failed) return "";
+    let message = failed.body || `EasyOrders resend request failed with HTTP ${failed.status}`;
+    try {
+      const parsed = JSON.parse(failed.body || "");
+      message = parsed.error || parsed.message || parsed.detail || failed.body || message;
+    } catch (_) {}
+    return `${message} [HTTP ${failed.status}]`;
+  }
+
   function itemMatchesReference(modalItem, reference) {
     const haystack = `${modalItem.text} ${modalItem.productName} ${modalItem.sku}`.toLowerCase();
     const sku = cleanText(reference.sku).toLowerCase();
@@ -357,9 +416,14 @@ function createEasyOrdersUiRecovery(options = {}) {
   function easyOrdersPhone(value) {
     const normalized = normalizePhone(value, country);
     if (!normalized) return cleanText(value);
-    // EasyOrders displays domestic phones, but its Taager integration validates
-    // the outbound value as an international number (e.g. 9665xxxxxxxx).
-    return formatPhone(normalized, country) || normalized;
+    // EasyOrders' edit form requires the local customer format. For Saudi this
+    // must be 05xxxxxxxx, not 9665xxxxxxxx. Internal matching still uses the
+    // normalized country-core digits and Taager receives its own export format.
+    const international = formatPhone(normalized, country) || "";
+    const dialCode = international.endsWith(normalized)
+      ? international.slice(0, -normalized.length)
+      : "";
+    return `${dialCode ? "0" : ""}${normalized}` || international || normalized;
   }
 
   async function inspectModalItems(page) {
@@ -744,26 +808,62 @@ function createEasyOrdersUiRecovery(options = {}) {
       }
     }
     const optionsButton = page.getByRole("button", { name: /^Options$/i }).first();
-    const directButton = page.getByRole("button", { name: /^Resend Order to Affiliates$/i }).first();
+    const directButton = realResendButton(page);
     if (!(await directButton.isVisible({ timeout: 1000 }).catch(() => false)) &&
         await optionsButton.isVisible({ timeout: 5000 }).catch(() => false)) {
       await optionsButton.click({ timeout: 10000 });
       await page.waitForTimeout(400);
     }
-    const button = page.getByRole("button", { name: /^Resend Order to Affiliates$/i }).first();
+    const button = realResendButton(page);
     if (!(await button.isVisible({ timeout: 10000 }).catch(() => false))) {
-      log(`EasyOrders recovery real manual review: ${candidate.easyShortId || candidate.easyOrderUuid || candidate.normPhone || ""} -> Resend Order to Affiliates button not available`);
-      return { ...candidate, detailUrl: page.url(), actionStatus: "skipped_manual", actionMessage: "Resend Order to Affiliates button not available", attempts: options.attempt || 1 };
+      log(`EasyOrders recovery real manual review: ${candidate.easyShortId || candidate.easyOrderUuid || candidate.normPhone || ""} -> resend-to-webhook button not available`);
+      return { ...candidate, detailUrl: page.url(), actionStatus: "skipped_manual", actionMessage: "Resend order to affiliates/webhook button not available", attempts: options.attempt || 1 };
     }
     const before = await currentToastText(page);
-    await button.click({ timeout: 10000 });
-    const toast = await waitForToast(page, before, 20000);
-    log(`EasyOrders recovery real resend result: ${candidate.easyShortId || candidate.easyOrderUuid || candidate.normPhone || ""} -> ${toast || "Resend clicked, no toast captured"}`);
+    const actionResponses = [];
+    const onResponse = (response) => {
+      const request = response.request();
+      const method = String(request.method() || "GET").toUpperCase();
+      const status = Number(response.status() || 0);
+      // Ignore unrelated analytics calls. The resend endpoint is served by
+      // EasyOrders (including its API subdomains), so the host is the stable
+      // boundary while generated request paths remain intentionally opaque.
+      const isEasyOrdersResponse = /easy-orders\.net/i.test(response.url());
+      if (isEasyOrdersResponse && (method !== "GET" || status >= 400)) actionResponses.push(response);
+    };
+    page.on("response", onResponse);
+    let toast = "";
+    try {
+      await button.click({ timeout: 10000 });
+      // EasyOrders may confirm the action through the network without showing a
+      // snackbar. Give the request a short window, then use the toast if it
+      // appears later in the same window.
+      toast = await Promise.race([
+        waitForToast(page, before, 8000),
+        page.waitForTimeout(8000).then(() => ""),
+      ]);
+    } finally {
+      page.off("response", onResponse);
+    }
+    const responseSummaries = await readResendActionResponses(page, actionResponses);
+    const responseFailure = resendActionFailure(responseSummaries);
+    const successfulResponse = responseSummaries.some((response) =>
+      response.status >= 200 && response.status < 300 && response.method !== "GET"
+    );
+    if (responseSummaries.length) {
+      log(`EasyOrders recovery real resend network: ${candidate.easyShortId || candidate.easyOrderUuid || candidate.normPhone || ""} -> ${responseSummaries.map((response) => `${response.method} ${response.status}${response.body ? ` ${response.body}` : ""}`).join(" | ")}`);
+    }
+    if (responseFailure) {
+      log(`EasyOrders recovery real resend failed: ${candidate.easyShortId || candidate.easyOrderUuid || candidate.normPhone || ""} -> ${responseFailure}`);
+    } else {
+      log(`EasyOrders recovery real resend result: ${candidate.easyShortId || candidate.easyOrderUuid || candidate.normPhone || ""} -> ${toast || (successfulResponse ? "Resend request accepted" : "Resend clicked, no toast captured")}`);
+    }
     return {
       ...candidate,
       detailUrl: page.url(),
-      actionStatus: /order sent/i.test(toast) ? "sent" : "sent_unverified",
-      actionMessage: toast || "Resend clicked",
+      actionStatus: responseFailure ? "resend_error" : (resendSuccessToast(toast) || successfulResponse ? "sent" : "sent_unverified"),
+      actionMessage: responseFailure || toast || (successfulResponse ? "Resend request accepted by EasyOrders" : "Resend clicked"),
+      actionResponse: responseSummaries,
       attempts: options.attempt || 1,
     };
   }

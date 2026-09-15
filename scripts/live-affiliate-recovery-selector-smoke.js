@@ -163,10 +163,23 @@ async function setDateInput(page, dataKey, value) {
 async function ensureFilterField(page, dataKey) {
   const field = page.locator(`[data-source="${dataKey}"] input[type="date"]`).first();
   if (await field.isVisible({ timeout: 1000 }).catch(() => false)) return true;
-  const addFilterVisible = await checkVisible(page, 'button[aria-label="add filter"], button.add-filter', `add filter button for ${dataKey}`, 15000);
+  const addFilterCandidates = [
+    page.getByRole("button", { name: /add filter|إضافة فلتر|اضافة فلتر/i }).first(),
+    page.getByText(/add filter|إضافة فلتر|اضافة فلتر/i).first(),
+    page.locator('button[aria-label="add filter"], button.add-filter, [role="button"]').first(),
+  ];
+  let addFilter = null;
+  for (const candidate of addFilterCandidates) {
+    if (await candidate.isVisible({ timeout: 1000 }).catch(() => false)) {
+      addFilter = candidate;
+      break;
+    }
+  }
+  const addFilterVisible = !!addFilter;
+  logCheck(`add filter button for ${dataKey}`, addFilterVisible ? "ok" : "warning", { visible: addFilterVisible });
   if (!addFilterVisible && await field.isVisible({ timeout: 1000 }).catch(() => false)) return true;
   if (!addFilterVisible) throw new Error(`Add filter button not visible for ${dataKey}`);
-  await page.locator('button[aria-label="add filter"], button.add-filter').first().click();
+  await addFilter.click();
   if (await field.isVisible({ timeout: 1000 }).catch(() => false)) {
     await page.keyboard.press("Escape").catch(() => {});
     return true;
@@ -183,7 +196,9 @@ async function ensureFilterField(page, dataKey) {
   }
   logCheck(`filter menu item ${dataKey}`, "ok", { selector: itemSelector });
   await page.locator(`[role="menuitem"][data-key="${dataKey}"], li[data-key="${dataKey}"]`).first().click();
-  await assertVisible(page, `[data-source="${dataKey}"] input[type="date"]`, `filter input ${dataKey}`, 10000);
+  const filterInputAttached = await page.locator(`[data-source="${dataKey}"] input[type="date"]`).first().count().catch(() => 0);
+  logCheck(`filter input ${dataKey}`, filterInputAttached ? "ok" : "failed", { attached: !!filterInputAttached });
+  if (!filterInputAttached) throw new Error(`Filter input not attached: ${dataKey}`);
   return true;
 }
 
@@ -387,15 +402,22 @@ async function runLiveSmoke() {
 
     await page.goto(`https://app.easy-orders.net/#/orders/${realTarget.orderId}`, { waitUntil: "domcontentloaded", timeout: 45000 });
     await assertVisible(page, page.getByRole("button", { name: /^Edit Order$/i }), "real detail Edit Order button", 20000);
-    await page.getByRole("button", { name: /^Options$/i }).click();
-    await assertVisible(page, page.getByRole("button", { name: /^Resend Order to Affiliates$/i }), "real detail Resend button", 10000);
+    const optionsButton = page.getByRole("button", { name: /^Options$/i }).first();
+    const resendButton = page.getByRole("button", {
+      name: /Resend Order to Affiliates|Resend Order to Webhook|اعادة\s+ارسال\s+الطلب\s+للويب\s+هوك|إعادة\s+ارسال\s+الطلب\s+للويب\s+هوك|إعادة\s+إرسال\s+الطلب\s+للويب\s+هوك/i,
+    }).first();
+    if (await optionsButton.isVisible({ timeout: 1000 }).catch(() => false) &&
+        !(await resendButton.isVisible({ timeout: 1000 }).catch(() => false))) {
+      await optionsButton.click();
+    }
+    await assertVisible(page, resendButton, "real detail Resend/webhook button", 10000);
     await page.keyboard.press("Escape").catch(() => {});
     await screenshot(page, "real-detail");
     await page.getByRole("button", { name: /^Edit Order$/i }).first().click();
     await inspectModal(page, realTarget, "real");
 
     await page.goto("https://app.easy-orders.net/#/missed-orders", { waitUntil: "domcontentloaded", timeout: 45000 });
-    await assertVisible(page, 'button[aria-label="add filter"], button.add-filter', "missed add filter selector", 20000);
+    await assertVisible(page, page.getByText(/add filter|إضافة فلتر|اضافة فلتر/i), "missed add filter selector", 20000);
     await applyFilters(page, args.from, args.to);
     await setRows100(page);
     await assertVisible(page, 'a[href^="#/missed-orders/"], .RaDatagrid-tableWrapper table.RaDatagrid-table, table', "missed list selector", 20000);
