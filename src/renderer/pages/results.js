@@ -200,7 +200,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       .map((item) => item.row);
   }
 
-  function collectManualReviewRows(tableId, selectedOnly) {
+  function collectManualReviewRows(tableId, selectedOnly, destinationFilter = "") {
     const table = document.querySelector(`[data-manual-table="${tableId}"]`);
     if (!table) return [];
     const trs = Array.from(table.querySelectorAll('tbody tr[data-manual-row="1"]'));
@@ -217,6 +217,12 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       row.source = tr.getAttribute("data-manual-source") || row.source || "manual-review";
       row.reason = tr.getAttribute("data-manual-reason") || "";
       return row;
+    }).filter((row) => {
+      if (!destinationFilter) return true;
+      const destination = row.destination === "affiliate-recovery" || row.recoverySource === "affiliate-recovery"
+        ? "affiliate-recovery"
+        : "cart";
+      return destination === destinationFilter;
     });
   }
 
@@ -253,7 +259,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   };
 
   window._resStartManualReviewUpload = async function (tableId, requestedDestination = "") {
-    const rows = collectManualReviewRows(tableId, true);
+    const rows = collectManualReviewRows(tableId, true, requestedDestination);
     if (!rows.length || !window.api?.runBot) {
       showToast(translated("results.manual_review_no_rows", "No reviewed rows selected."));
       return;
@@ -284,15 +290,23 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
   function manualReviewActionButtons(tableId, destination = "cart") {
     if (!tableId) return "";
+    const registeredRows = Array.isArray(window._resManualReviewTables?.[tableId])
+      ? window._resManualReviewTables[tableId]
+      : [];
+    const hasAffiliateRows = registeredRows.some((row) => row?.destination === "affiliate-recovery" || row?.recoverySource === "affiliate-recovery");
+    const hasCartRows = registeredRows.some((row) => !(row?.destination === "affiliate-recovery" || row?.recoverySource === "affiliate-recovery"));
     const isAffiliateRecovery = destination === "affiliate-recovery";
-    const label = isAffiliateRecovery
-      ? translated("results.run_reviewed_recovery", "Run Affiliate Recovery")
-      : translated("results.start_reviewed_upload", "Run Reviewed Orders");
+    const actionButtons = hasAffiliateRows && hasCartRows
+      ? `
+      <button type="button" class="btn" style="background:rgba(249,115,22,0.16);border-color:#f97316;color:#fb923c" onclick="window._resStartManualReviewUpload('${tableId}','cart')">${translated("results.start_reviewed_upload", "Run Reviewed Orders")}</button>
+      <button type="button" class="btn" style="background:rgba(249,115,22,0.16);border-color:#f97316;color:#fb923c" onclick="window._resStartManualReviewUpload('${tableId}','affiliate-recovery')">${translated("results.run_reviewed_recovery", "Run Affiliate Recovery")}</button>`
+      : `
+      <button type="button" class="btn" style="background:rgba(249,115,22,0.16);border-color:#f97316;color:#fb923c" onclick="window._resStartManualReviewUpload('${tableId}','${destination}')">${isAffiliateRecovery ? translated("results.run_reviewed_recovery", "Run Affiliate Recovery") : translated("results.start_reviewed_upload", "Run Reviewed Orders")}</button>`;
     return `
       <button type="button" class="btn res-manual-select-action" onclick="window._resSetManualReviewSelection('${tableId}', true)">${translated("results.select_all", "Select All")}</button>
       <button type="button" class="btn res-manual-clear-action" onclick="window._resSetManualReviewSelection('${tableId}', false)">${translated("results.deselect_all", "Deselect All")}</button>
       <button type="button" class="btn res-table-download" onclick="window._resDownloadManualReviewTable('${tableId}')">⬇️ ${translated("results.download_edited_table", "Download Edited")}</button>
-      <button type="button" class="btn" style="background:rgba(249,115,22,0.16);border-color:#f97316;color:#fb923c" onclick="window._resStartManualReviewUpload('${tableId}','${destination}')">${label}</button>
+      ${actionButtons}
     `;
   }
 
@@ -813,6 +827,26 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   ensureResultsPaginationStyle();
   attachResultPagination();
 
+  function mergeManualReviewRows(skippedOrders, recovery) {
+    const normalRows = Array.isArray(skippedOrders?.rows) ? skippedOrders.rows : [];
+    const recoveryRows = recovery && recovery.enabled === true
+      ? (recovery.blockedReviewRows || recovery.manualReviewRows || [])
+      : [];
+    if (!recoveryRows.length) return skippedOrders;
+    const normalizedRecoveryRows = recoveryRows.map((row) => ({
+      ...row,
+      manualReview: true,
+      destination: "affiliate-recovery",
+      recoverySource: "affiliate-recovery",
+    }));
+    const rows = [...normalRows, ...normalizedRecoveryRows];
+    return {
+      ...(skippedOrders || {}),
+      rows,
+      count: rows.length,
+    };
+  }
+
   function buildSkippedOrdersHtml(skippedOrders) {
     if (!skippedOrders || !skippedOrders.count) return "";
     const rows = manualReviewQualitySort(skippedOrders.rows || []);
@@ -868,7 +902,10 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     };
     const isManualReviewRow = (row) => {
       const reasonKey = reasonKeyFor(row);
-      return row && (row.manualReview === true || (row.uncertain && manualReviewReasons.has(String(reasonKey || ""))));
+      return row && (row.manualReview === true
+        || row.destination === "affiliate-recovery"
+        || row.recoverySource === "affiliate-recovery"
+        || (row.uncertain && manualReviewReasons.has(String(reasonKey || ""))));
     };
     const messageFor = (row) => {
       const reasonKey = normalizedRecoveryReasonKey(reasonKeyFor(row) || row?.actionMessage || row?.message || row?.skuTierDecision?.message);
@@ -933,7 +970,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     const sectionColor = hasManualReview ? "#f97316" : "var(--warning)";
     const sectionBg = hasManualReview ? "rgba(249,115,22,0.08)" : "rgba(255,170,0,0.06)";
     const sectionTitle = hasManualReview
-      ? translated("results.manual_review_title", "Needs Manual Review")
+      ? translated("results.uncertain_orders_title", "Uncertain Orders — Needs Manual Review")
       : (typeof t("results.couldnt_process_title") === "function" ? t("results.couldnt_process_title")(skippedOrders.count) : t("results.couldnt_process_title"));
     return `
       <div class="dash-section" style="border-color:${sectionColor};margin-top:12px">
@@ -2229,9 +2266,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
       ${buildRecoveryUnresolvedHtml(accData.affiliateRecovery)}
 
-      ${buildRecoveryUncertainHtml(accData.affiliateRecovery)}
-
-        ${buildSkippedOrdersHtml(skippedOrders)}
+      ${buildSkippedOrdersHtml(mergeManualReviewRows(skippedOrders, accData.affiliateRecovery))}
 
         <!-- CONFIRMED ORDERS TABLE -->
         ${buildOrdersTableHtml(accData.confirmedOrderRows || successfulRows, translated("results.confirmed_orders_table", "New Orders Confirmed in Taager"))}
@@ -2679,9 +2714,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
       ${buildRecoveryUnresolvedHtml(data.affiliateRecovery)}
 
-      ${buildRecoveryUncertainHtml(data.affiliateRecovery)}
-
-      ${buildSkippedOrdersHtml(skippedOrders)}
+      ${buildSkippedOrdersHtml(mergeManualReviewRows(skippedOrders, data.affiliateRecovery))}
 
       <!-- CONFIRMED ORDERS TABLE -->
       ${buildOrdersTableHtml(data.confirmedOrderRows || successfulRows, translated("results.confirmed_orders_table", "New Orders Confirmed in Taager"))}
