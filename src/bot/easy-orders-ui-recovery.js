@@ -216,10 +216,17 @@ function createEasyOrdersUiRecovery(options = {}) {
   }
 
   async function waitForListReady(page, kind) {
-    const entryReady = await listEntryLocator(page, kind).first()
-      .waitFor({ state: "visible", timeout: 20000 })
-      .then(() => true)
-      .catch(() => false);
+    // EasyOrders now renders the list as clickable table rows instead of the
+    // older anchor-based cards. Waiting for anchors first costs the full
+    // 20-second timeout on every return from a detail page in the new UI.
+    const anchors = listEntryLocator(page, kind).first();
+    const rows = page.locator(
+      ".RaDatagrid-tableWrapper tbody tr.RaDatagrid-clickableRow, tbody tr.RaDatagrid-clickableRow"
+    ).first();
+    const entryReady = await Promise.any([
+      rows.waitFor({ state: "visible", timeout: 20000 }),
+      anchors.waitFor({ state: "visible", timeout: 20000 }),
+    ]).then(() => true).catch(() => false);
     if (entryReady) return;
     await page.locator(
       `[role="list"], .RaDatagrid-tableWrapper table.RaDatagrid-table, table`
