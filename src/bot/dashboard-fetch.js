@@ -92,6 +92,35 @@ let dashboardSheetProcessingFns = null;
 let activeContext = null;
 let activePage = null;
 let taagerIdentityVerified = false;
+const intentionalContextClosures = new WeakSet();
+const instrumentedDashboardPages = new WeakSet();
+
+function installDashboardPageDiagnostics(page, label) {
+  if (!page || instrumentedDashboardPages.has(page) || typeof page.on !== "function") return;
+  instrumentedDashboardPages.add(page);
+  page.on("close", () => {
+    log(`[Dashboard Chrome] page closed (${page === activePage ? "active page" : "other page"}; ${label})`);
+  });
+  page.on("crash", () => {
+    log(`[Dashboard Chrome] page crashed (${page === activePage ? "active page" : "other page"}; ${label})`);
+  });
+}
+
+function installDashboardBrowserDiagnostics(context, label) {
+  if (!context || typeof context.on !== "function") return;
+  context.on("close", () => {
+    const intentional = intentionalContextClosures.has(context);
+    log(`[Dashboard Chrome] context closed (${intentional ? "intentional" : "unexpected"}; ${label})`);
+  });
+  context.on("page", (page) => installDashboardPageDiagnostics(page, label));
+  const browser = typeof context.browser === "function" ? context.browser() : null;
+  if (browser && typeof browser.on === "function") {
+    browser.on("disconnected", () => {
+      const intentional = intentionalContextClosures.has(context);
+      log(`[Dashboard Chrome] browser disconnected (${intentional ? "intentional" : "unexpected"}; ${label})`);
+    });
+  }
+}
 
 function processDashboardSheets(...args) {
   if (!dashboardSheetProcessingFns) dashboardSheetProcessingFns = require("./dashboard-sheet-processing");
@@ -225,10 +254,12 @@ async function launchDashboardContext(profilePath, chromePath) {
         executablePath: chromePath,
         windowSize: "1400,900",
       });
+      installDashboardBrowserDiagnostics(context, "recovery launch");
       await addChromeFingerprintSpoofing(context);
       await installTaagerInterruptionAutoDismiss(context, { log });
       installUnexpectedBlankPageGuard(context, { getActivePage: () => activePage, log, delayMs: 5000 });
       const page = await getOrCreateAutomationPage(context, { log });
+      installDashboardPageDiagnostics(page, "recovery launch");
       await installTaagerInterruptionAutoDismiss(page, { log });
       page.setViewportSize({ width: 1400, height: 900 }).catch(() => {});
       activeContext = context;
@@ -249,6 +280,7 @@ async function closeActiveContextForManualGoogle() {
   const context = activeContext;
   activeContext = null;
   activePage = null;
+  intentionalContextClosures.add(context);
   await context.close().catch(() => {});
 }
 
@@ -260,6 +292,8 @@ async function relaunchTaagerAutomationPage(stage, targetPath) {
   const profilePath = config.profilePath;
   if (!profilePath) throw new Error(`TAAGER_PAGE_CLOSED: cannot recover ${stage}; profilePath is missing`);
   log(`Taager ${stage}: browser page is closed or crashed - relaunching Chrome profile and reopening ${targetPath}`);
+  // A new browser process/profile must prove the configured Taager identity again.
+  taagerIdentityVerified = false;
   await closeActiveContextForManualGoogle();
   const relaunched = await launchDashboardContext(profilePath, config.chromePath || findChrome());
   const page = relaunched.page;
@@ -1351,11 +1385,9 @@ function isBrowserClosedError(error) {
     lower.includes("target closed") ||
     lower.includes("page closed") ||
     lower.includes("browser has been closed") ||
-    lower.includes("browser closed");
-}
-
-function dashboardAccountClosedMessage() {
-  return "DASHBOARD_ACCOUNT_BROWSER_CLOSED: Chrome was closed for this account. Skipping to the next account.";
+    lower.includes("browser closed") ||
+    lower.includes("page crashed") ||
+    lower.includes("browser disconnected");
 }
 
 function isRecoverableTaagerError(error, page) {
@@ -1385,10 +1417,6 @@ async function recoverTaagerForRetry(page, stage, targetPath, error, attempt, ma
   if (!isClosedAutomationPage(recoveryPage)) {
     await debugScreenshot(recoveryPage, `taager-${stage}-attempt-${attempt}`).catch(() => {});
   }
-  if (isBrowserClosedError(error) || isClosedAutomationPage(recoveryPage)) {
-    log(`Taager ${stage}: Chrome was closed; failing this account so Dashboard Update can continue with the next account.`);
-    throw new Error(dashboardAccountClosedMessage());
-  }
   if (!isRecoverableTaagerError(error, recoveryPage)) throw error;
   if (attempt >= maxAttempts) return recoveryPage;
   await waitBeforeTaagerOrdersRetry(recoveryPage || activePage || { waitForTimeout: async () => {} }, error, attempt, maxAttempts, {
@@ -1396,8 +1424,8 @@ async function recoverTaagerForRetry(page, stage, targetPath, error, attempt, ma
     stageLabel: `Taager ${stage}`,
   });
 
-  if (isClosedAutomationPage(recoveryPage)) {
-    log(`Taager ${stage}: recovery page is closed; relaunching and reopening ${targetPath}`);
+  if (isBrowserClosedError(error) || isClosedAutomationPage(recoveryPage)) {
+    log(`Taager ${stage}: browser/page closed during the attempt; relaunching the configured Chrome profile and reopening ${targetPath}`);
     recoveryPage = await relaunchTaagerAutomationPage(stage, targetPath);
   } else {
     assertUsableTaagerPage(recoveryPage, `${stage}-recovery`);
@@ -1615,12 +1643,14 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
     executablePath: chromePath,
     windowSize: "1400,900",
   });
+  installDashboardBrowserDiagnostics(context, "initial launch");
 
   await addChromeFingerprintSpoofing(context);
   await installTaagerInterruptionAutoDismiss(context, { log });
   installUnexpectedBlankPageGuard(context, { getActivePage: () => activePage, log, delayMs: 5000 });
 
   let page = await getOrCreateAutomationPage(context, { log });
+  installDashboardPageDiagnostics(page, "initial launch");
   await installTaagerInterruptionAutoDismiss(page, { log });
   page.setViewportSize({ width: 1400, height: 900 }).catch(() => {});
   activeContext = context;
@@ -1722,11 +1752,15 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
       exportDateTo: toDateKey(exportDateTo),
     });
   } catch (err) {
-    const fatalMessage = isBrowserClosedError(err) ? dashboardAccountClosedMessage() : (err.message || String(err));
+    const fatalMessage = isBrowserClosedError(err)
+      ? "DASHBOARD_ACCOUNT_BROWSER_CLOSED: Dashboard Chrome closed unexpectedly and could not be recovered for this account. Skipping to the next account."
+      : (err.message || String(err));
     log(`FATAL: ${fatalMessage}`);
     emitStage("dashboard.fetch", "failed", fatalMessage);
     process.send && process.send({ type: "error", error: fatalMessage });
   } finally {
-    await (activeContext || context).close().catch(() => {});
+    const contextToClose = activeContext || context;
+    if (contextToClose) intentionalContextClosures.add(contextToClose);
+    await contextToClose.close().catch(() => {});
   }
 })();

@@ -853,6 +853,15 @@
   function normalizeMarketingStatus(value, accountId, platform) {
     value = value || {};
     platform = normalizeMarketingPlatform(platform || value.platform);
+    if (platform === 'facebook') {
+      value = {
+        provider: 'saudiipick',
+        platform: platform,
+        status: 'disconnected',
+        error: 'PLATFORM_NOT_AVAILABLE',
+        errorCode: 'PLATFORM_NOT_AVAILABLE'
+      };
+    }
     var legacyWindsorError = typeof value.error === 'string' && /^WINDSOR_/.test(value.error);
     if ((platform === 'snapchat' || platform === 'tiktok' || platform === 'facebook') && value.provider !== 'saudiipick' &&
         (value.summary || value.status === 'connected' || value.status === 'pending' || legacyWindsorError)) {
@@ -1265,9 +1274,10 @@
       });
     }
     var activeStatuses = statuses.filter(function (status) {
-      return status.status === 'connected' && status.summary && !status.manualOverride;
+      return status.platform !== 'facebook' && status.status === 'connected' && status.summary && !status.manualOverride && !status.offline;
     });
-    var connectedStatuses = statuses.filter(function (status) { return status.status === 'connected'; });
+    var connectedStatuses = statuses.filter(function (status) { return status.platform !== 'facebook' && status.status === 'connected'; });
+    var supportedStatuses = statuses.filter(function (status) { return status.platform !== 'facebook'; });
     var linkedAccounts = [];
     var mappings = {};
     var selectedSourceAccounts = [];
@@ -1292,6 +1302,7 @@
     var latestSyncAt = null;
 
     statuses.forEach(function (status) {
+      if (status.platform === 'facebook') return;
       (status.linkedAccounts || []).forEach(function (account) {
         linkedAccounts.push(Object.assign({ platform: status.platform }, account));
       });
@@ -1369,9 +1380,11 @@
       cache: null,
       stale: statuses.some(function (status) { return !!status.stale; }),
       offline: statuses.some(function (status) { return !!status.offline; }),
-      error: statuses.map(function (status) { return status.error || ''; }).filter(Boolean).join('; '),
-      errorCode: statuses.map(function (status) { return status.errorCode || ''; }).filter(Boolean).join('; '),
-      reconnectRequired: statuses.some(function (status) { return !!status.reconnectRequired; }),
+      // A failed platform must not make another platform's verified spend
+      // appear unavailable. Keep per-platform errors on their own cards.
+      error: activeStatuses.length ? '' : supportedStatuses.map(function (status) { return status.error || ''; }).filter(Boolean).join('; '),
+      errorCode: activeStatuses.length ? '' : supportedStatuses.map(function (status) { return status.errorCode || ''; }).filter(Boolean).join('; '),
+      reconnectRequired: supportedStatuses.some(function (status) { return !!status.reconnectRequired; }),
       loading: statuses.some(function (status) { return !!status.loading; }),
       manualOverride: readManualMarketingOverride(accountId)
     };
@@ -1417,9 +1430,20 @@
   // Keep this decision independent from cached provider state so a stale
   // Windsor payload cannot silently become the source for calculators again.
   function usesSaudiIPickMarketing(platform) {
-    return (platform === 'snapchat' || platform === 'tiktok' || platform === 'facebook') &&
+    return (platform === 'snapchat' || platform === 'tiktok') &&
       window.api &&
       typeof window.api.getSaudiIPickMarketingStatus === 'function';
+  }
+
+  function unsupportedMarketingPlatformStatus(accountId) {
+    return window.DashboardMarketingState.set({
+      ok: false,
+      provider: 'saudiipick',
+      platform: 'facebook',
+      status: 'disconnected',
+      error: 'PLATFORM_NOT_AVAILABLE',
+      errorCode: 'PLATFORM_NOT_AVAILABLE'
+    }, accountId, 'facebook');
   }
 
   window.DashboardMarketingState = {
@@ -1443,6 +1467,7 @@
         if (value.reconnectRequired) {
           value = Object.assign({}, previous, value, {
             status: 'disconnected',
+            summary: null,
             loading: false,
             reconnectRequired: true,
             errorCode: value.error || 'SAUDIIPICK_TOKEN_REQUIRED',
@@ -1611,6 +1636,19 @@
     },
     load: function (accountId, platform, options) {
       var id = marketingAccountId(accountId);
+      if (platform && normalizeMarketingPlatform(platform) === 'facebook') {
+        var facebookSelf = this;
+        if (id === '__all__') {
+          var facebookAccounts = dashboardMarketingAccounts();
+          if (!facebookAccounts.length) unsupportedMarketingPlatformStatus('__all__');
+          facebookAccounts.forEach(function (account) {
+            var childId = String(account && (account.id || account.accountId || account.key || '') || '');
+            if (childId) unsupportedMarketingPlatformStatus(childId);
+          });
+          return Promise.resolve(facebookSelf.get('__all__', 'facebook'));
+        }
+        return Promise.resolve(unsupportedMarketingPlatformStatus(id));
+      }
       if (id === '__all__') {
         var self = this;
         if (!platform) {
@@ -1728,6 +1766,7 @@
         })).then(function () { return selfAll.get(id); });
       }
       platform = normalizeMarketingPlatform(platform);
+      if (platform === 'facebook') return Promise.resolve(unsupportedMarketingPlatformStatus(id));
       if (id !== '__all__' && !(range && Array.isArray(range.sourceAccounts))) {
         var currentStatus = this.get(id, platform);
         var mappedSourceAccounts = currentStatus && currentStatus.selectedSourceAccounts || [];

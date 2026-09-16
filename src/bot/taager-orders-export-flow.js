@@ -50,7 +50,7 @@ function createTaagerOrdersExportFlow(options = {}) {
 
   function classifyExportError(error) {
     const message = String(error && error.message || error || "");
-    if (/Target page, context or browser has been closed|browser.*closed|page.*closed/i.test(message)) {
+    if (/Target page, context or browser has been closed|browser.*closed|page.*closed|page.*crashed|browser.*disconnected/i.test(message)) {
       return "TAAGER_BROWSER_CRASH";
     }
     if (/TAAGER_STEP_TIMEOUT|date range selection|calendar|date picker/i.test(message)) {

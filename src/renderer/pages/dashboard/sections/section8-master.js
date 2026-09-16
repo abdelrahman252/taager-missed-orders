@@ -159,12 +159,17 @@ window.renderSection8 = function (mountEl, data, ctx) {
     ? window.DashboardMarketingState.get(_roiAccountId)
     : null;
   var marketingSpendPending = !!(marketingState && marketingState.loading && !marketingState.manualOverride);
-  var marketingSpendUnavailable = !!(marketingState && marketingState.status === 'connected' && marketingState.error && !marketingState.manualOverride && !marketingSpendPending);
+  var marketingSpendUnavailable = !!(!marketingState || (!marketingState.manualOverride && !marketingSpendPending && (
+    marketingState.status !== 'connected' || !marketingState.summary ||
+    marketingState.reconnectRequired || marketingState.offline || marketingState.error ||
+    Number(marketingState.summary && marketingState.summary.adSpend || 0) <= 0
+  )));
   var syncedSpendActive = !!(
     marketingState &&
     marketingState.status === "connected" &&
     marketingState.summary &&
-    !marketingState.manualOverride
+    !marketingState.manualOverride &&
+    !marketingState.offline
   );
   var sourceBreakdown =
     marketingState &&
@@ -279,7 +284,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
   ];
 
   var deliveredSalesInTarget = convert((overview.totalDeliveredSales && overview.totalDeliveredSales.value) || 0, nativeCurrency, targetCurrency);
-  var netRoasUnavailable = !(roiLive.adSpend > 0);
+  var netRoasUnavailable = marketingSpendUnavailable || !(roiLive.adSpend > 0);
   var netRoas = netRoasUnavailable ? 0 : (deliveredSalesInTarget / roiLive.adSpend);
   var netRoasDelta = overview.netRoas && overview.netRoas.delta != null ? Number(overview.netRoas.delta || 0) : 0;
 
@@ -1195,7 +1200,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
     '</div>' +
     '<div style="display:grid;grid-template-columns:minmax(0,1.05fr) minmax(260px,.95fr);gap:18px;align-items:stretch;flex:1;" class="s8-roi-preview-grid">' +
       '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-content:start;">' +
-        roiMetricCard(s8Txt('Ad spend', 'الإنفاق الإعلاني'), roiMoney(roiDefaultBudget), s8Txt('from calculator', 'من الحاسبة'), '#3b82f6', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>') +
+        roiMetricCard(s8Txt('Ad spend', 'الإنفاق الإعلاني'), roiMoney(roiDefaultBudget), syncedSpendActive ? s8Txt('Saudi iPick live spend', 'إنفاق مباشر من Saudi iPick') : s8Txt('Saved calculator budget', 'الميزانية المحفوظة في الحاسبة'), '#3b82f6', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>') +
         roiMetricCard(s8Txt('Delivered orders', 'الطلبات المسلمة'), fmtCount(roiDeliveredOrders), fmtCount(roiTotalOrders) + ' × ' + ndrVal, ndrMetricColor, '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>') +
         roiMetricCard(s8Txt('Revenue', 'الإيرادات'), roiMoney(roiRevenue), s8Txt('delivered × simulator profit after tax per delivered order', 'المسلم × ربح المحاكاة بعد الضريبة لكل طلب مسلم'), '#06b6d4', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-7"/></svg>') +
         roiMetricCard(s8Txt('Net profit', 'صافي الربح'), roiMoney(roiNetProfit), s8Txt('revenue - spend', 'الإيرادات - الإنفاق'), roiProfitColor, '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"/><path d="M8.21 13.89 7 23l5-3 5 3-1.21-9.12"/></svg>') +
@@ -1224,14 +1229,6 @@ window.renderSection8 = function (mountEl, data, ctx) {
       '</div>' +
     '</div>' +
   '</div>';
-
-  if (marketingSpendPending || marketingSpendUnavailable) {
-    roiWidgetHtml = '<div id="s8-roi-preview" style="background:#0a0f18;border:1px solid rgba(96,165,250,.22);border-radius:var(--dash-radius-xl);padding:24px;height:100%;min-height:250px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;">' +
-      (marketingSpendPending ? window.dashboardMarketingLoadingHtml() : window.dashboardMarketingUnavailableHtml()) +
-      '<div style="font-size:var(--type-caption);color:rgba(255,255,255,.48);max-width:360px;line-height:1.6;">' + s8Txt('ROI, CPA, net profit, and ROAS will appear when the connected marketing spend is ready.', 'سيظهر العائد وتكلفة الطلب وصافي الربح والعائد الإعلاني عند اكتمال تحميل الإنفاق التسويقي المتصل.') + '</div>' +
-      '<button id="s8-btn-calculator" type="button" style="border:1px solid rgba(168,85,247,.45);background:rgba(168,85,247,.12);color:#e9d5ff;border-radius:var(--dash-radius-md);padding:9px 14px;font:inherit;font-size:var(--type-caption);font-weight:var(--weight-semibold);cursor:pointer;">' + s8Txt('Open Account Calculator', 'فتح حاسبة الحساب') + '</button>' +
-    '</div>';
-  }
 
   var gmvSnapshot = window.DashboardGmvTargetState && typeof window.DashboardGmvTargetState.snapshot === 'function'
     ? window.DashboardGmvTargetState.snapshot(d)

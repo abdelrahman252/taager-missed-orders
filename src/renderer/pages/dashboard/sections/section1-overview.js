@@ -100,12 +100,17 @@ window.renderSection1 = function (mountEl, data, ctx) {
   var roiLiveRaw = (window.DashboardRoiState && window.DashboardRoiState.get(activeAccId)) || {};
   var marketingState = window.DashboardMarketingState ? window.DashboardMarketingState.get(activeAccId) : null;
   var marketingSpendPending = !!(marketingState && marketingState.loading && !marketingState.manualOverride);
-  var marketingSpendUnavailable = !!(marketingState && marketingState.status === 'connected' && marketingState.error && !marketingState.manualOverride && !marketingSpendPending);
+  var marketingSpendUnavailable = !!(!marketingState || (!marketingState.manualOverride && !marketingSpendPending && (
+    marketingState.status !== 'connected' || !marketingState.summary ||
+    marketingState.reconnectRequired || marketingState.offline || marketingState.error ||
+    Number(marketingState.summary && marketingState.summary.adSpend || 0) <= 0
+  )));
   var syncedSpendActive = !!(
     marketingState &&
     marketingState.status === "connected" &&
     marketingState.summary &&
-    !marketingState.manualOverride
+    !marketingState.manualOverride &&
+    !marketingState.offline
   );
   var sourceBreakdown = marketingState && marketingState.summary && Array.isArray(marketingState.summary.sourceBreakdown)
     ? marketingState.summary.sourceBreakdown
@@ -150,7 +155,7 @@ window.renderSection1 = function (mountEl, data, ctx) {
 
   var nativeCurrency = (data && data.meta && data.meta.activeCurrency) || window.dashboardActiveCurrency || targetCurrency || 'SAR';
   var deliveredSalesInTarget = convertCurrency((d.totalDeliveredSales && d.totalDeliveredSales.value) || 0, nativeCurrency, targetCurrency);
-  var netRoasUnavailable = !(finalAdSpend > 0);
+  var netRoasUnavailable = marketingSpendUnavailable || !(finalAdSpend > 0);
   var netRoas = netRoasUnavailable ? 0 : (deliveredSalesInTarget / finalAdSpend);
   var netRoasDelta = d.netRoas && d.netRoas.delta != null ? Number(d.netRoas.delta || 0) : 0;
 

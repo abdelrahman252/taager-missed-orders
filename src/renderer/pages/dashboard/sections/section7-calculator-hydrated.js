@@ -124,14 +124,17 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     marketingState.status === "connected" &&
     marketingState.summary &&
     !marketingState.manualOverride &&
+    !marketingState.offline &&
     Number(marketingState.summary.adSpend || 0) > 0
   );
   var marketingDataUnavailable = !!(
-    marketingState &&
-    !marketingState.manualOverride &&
-    (marketingState.status !== "connected" ||
-      !marketingState.summary ||
-      Number(marketingState.summary.adSpend || 0) <= 0)
+    !marketingState ||
+    (!marketingState.manualOverride &&
+      (marketingState.status !== "connected" ||
+        marketingState.offline ||
+        marketingState.reconnectRequired ||
+        !marketingState.summary ||
+        Number(marketingState.summary.adSpend || 0) <= 0))
   );
   var sourceBreakdown =
     marketingState &&
@@ -2494,7 +2497,10 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
     }
 
     var gaugeWrap = document.getElementById("s7-gauge-wrap");
-    if (gaugeWrap) gaugeWrap.innerHTML = gaugeHtml(res.roi, marketingDataUnavailable);
+    // This gauge is the calculator's scenario ROI, driven by its saved/editable
+    // budget. Missing live ad data is explained in the warning below, not used
+    // to blank a valid manual scenario calculation.
+    if (gaugeWrap) gaugeWrap.innerHTML = gaugeHtml(res.roi, false);
 
     var retEl = document.getElementById("s7-out-return");
     if (retEl) {

@@ -6356,6 +6356,11 @@ function getSaudiIPickDesktopToken() {
   return String(dashboardStore.get("saudiIPickMarketing.desktopToken", "") || process.env.SAUDIIPICK_DESKTOP_TOKEN || "").trim();
 }
 
+function isSaudiIPickTokenRejected(result) {
+  const code = String(result && (result.errorCode || result.error || result.code || result.message) || "");
+  return /desktop[_\s-]*token[_\s-]*invalid|invalid[_\s-]*saudiipick[_\s-]*token/i.test(code);
+}
+
 function maskToken(value) {
   const clean = String(value || "");
   if (!clean) return "";
@@ -6651,9 +6656,35 @@ async function callSaudiIPickMarketing(action, accountId, platform = "snapchat",
     token: maskToken(token),
   });
 
-  const result = await httpsJsonRequest("POST", `${SAUDIIPICK_MARKETING_API_BASE}/api/desktop/marketing/${platform}`, payload, {
-    Authorization: `Bearer ${token}`,
-  });
+  let result;
+  try {
+    result = await httpsJsonRequest("POST", `${SAUDIIPICK_MARKETING_API_BASE}/api/desktop/marketing/${platform}`, payload, {
+      Authorization: `Bearer ${token}`,
+    });
+  } catch (error) {
+    if (!isSaudiIPickTokenRejected({ error: error && error.message })) throw error;
+    // Non-2xx responses are surfaced by httpsJsonRequest as Error objects;
+    // normalize them here too so the cached-status fallback cannot mask them.
+    result = { ok: false, error: "INVALID_SAUDIIPICK_TOKEN" };
+  }
+
+  if (isSaudiIPickTokenRejected(result)) {
+    // The service error is authoritative: do not let an older local summary
+    // make an expired/revoked desktop token look like an offline connection.
+    result = {
+      ...result,
+      ok: false,
+      provider: "saudiipick",
+      platform,
+      status: "disconnected",
+      summary: null,
+      stale: false,
+      offline: false,
+      reconnectRequired: true,
+      error: "INVALID_SAUDIIPICK_TOKEN",
+      errorCode: "INVALID_SAUDIIPICK_TOKEN",
+    };
+  }
 
   log.info("[SaudiIPick][Marketing] response", {
     action,
@@ -6939,6 +6970,24 @@ ipcMain.handle("get-saudiipick-marketing-status", async (_, accountId, platform 
         availableAccounts: result.availableAccounts || nextCached.availableAccounts || [],
         linkedAccounts: result.linkedAccounts || nextCached.linkedAccounts || [],
       };
+    }
+    if (isSaudiIPickTokenRejected(result)) {
+      const disconnected = {
+        ...(cached || {}),
+        ok: false,
+        provider: "saudiipick",
+        platform,
+        status: "disconnected",
+        summary: null,
+        stale: false,
+        offline: false,
+        reconnectRequired: true,
+        error: "INVALID_SAUDIIPICK_TOKEN",
+        errorCode: "INVALID_SAUDIIPICK_TOKEN",
+        statusCheckedAt: new Date().toISOString(),
+      };
+      saveCachedMarketingStatus(dashboardAccountId, platform, disconnected);
+      return disconnected;
     }
     return cached ? { ok: true, ...cached, offline: true, error: result && result.error || "" } : result;
   } catch (error) {
