@@ -11,6 +11,7 @@ const { normalizeProductName, productNamesMatch } = require("./parser");
 const EASY_BASE = "https://app.easy-orders.net/#";
 const ROWS_PER_PAGE = 100;
 const DEFAULT_STEP_DELAY_MS = 900;
+const ACTION_CONFIRMATION_TIMEOUT_MS = 3500;
 const QUANTITY_MANUAL_REVIEW_REASONS = ["normal_flow_prepared_quantity_is_suspicious", "quantity_tier_price_not_verified"];
 const EASY_ORDERS_LIST_ENTRY_SELECTORS = {
   real: 'a[href^="#/orders/"]:not([href$="/create"])',
@@ -348,6 +349,33 @@ function createEasyOrdersUiRecovery(options = {}) {
       .map((el) => String(el.innerText || el.textContent || "").replace(/\s+/g, " ").trim())
       .filter(Boolean)
       .join(" | ")).catch(() => "");
+  }
+
+  function watchEasyOrdersAction(page) {
+    const responses = [];
+    let resolveSuccessfulResponse;
+    const successfulResponse = new Promise((resolve) => {
+      resolveSuccessfulResponse = resolve;
+    });
+    let resolved = false;
+    const onResponse = (response) => {
+      const request = response.request();
+      const method = String(request.method() || "GET").toUpperCase();
+      const status = Number(response.status() || 0);
+      const isEasyOrdersResponse = /easy-orders\.net/i.test(response.url());
+      if (!isEasyOrdersResponse || (method === "GET" && status < 400)) return;
+      responses.push(response);
+      if (!resolved && status >= 200 && status < 300 && method !== "GET") {
+        resolved = true;
+        resolveSuccessfulResponse(response);
+      }
+    };
+    page.on("response", onResponse);
+    return {
+      responses,
+      successfulResponse,
+      stop: () => page.off("response", onResponse),
+    };
   }
 
   function realResendButton(page) {
@@ -733,12 +761,32 @@ function createEasyOrdersUiRecovery(options = {}) {
     if (allEdits.length > 0) {
       const before = await currentToastText(page);
       await page.waitForTimeout(800);
-      await page.getByRole("button", { name: /^Save$/i }).first().click({ timeout: 10000 });
-      const toast = await waitForToast(page, before, 12000);
+      const saveAction = watchEasyOrdersAction(page);
+      let saveOutcome = { kind: "timeout" };
+      try {
+        await page.getByRole("button", { name: /^Save$/i }).first().click({ timeout: 10000 });
+        saveOutcome = await Promise.race([
+          waitForToast(page, before, ACTION_CONFIRMATION_TIMEOUT_MS)
+            .then((value) => ({ kind: "toast", value })),
+          saveAction.successfulResponse.then(() => ({ kind: "response", value: "" })),
+          page.locator('input[name^="cart_items["][name$="].quantity"]').first()
+            .waitFor({ state: "hidden", timeout: ACTION_CONFIRMATION_TIMEOUT_MS })
+            .then(() => ({ kind: "modal-closed", value: "" }))
+            .catch(() => ({ kind: "timeout", value: "" })),
+        ]);
+      } finally {
+        saveAction.stop();
+      }
+      const saveResponses = await readResendActionResponses(page, saveAction.responses);
+      const saveSucceeded = (saveOutcome.kind === "toast" && Boolean(saveOutcome.value)) ||
+        saveOutcome.kind === "response" ||
+        saveOutcome.kind === "modal-closed" ||
+        saveResponses.some((response) => response.status >= 200 && response.status < 300 && response.method !== "GET");
+      const toast = saveOutcome.kind === "toast" ? String(saveOutcome.value || "") : "";
       if (toast && !/saved|updated|success|order/i.test(toast)) {
         validationErrors.push({ message: toast });
       }
-      log(`EasyOrders recovery modal save result: ${toast || "no toast"}`);
+      log(`EasyOrders recovery modal save result: ${toast || (saveSucceeded ? "confirmed" : "no confirmation")}`);
       if (validationErrors.length > 0) {
         await page.getByRole("button", { name: /^Cancel$/i }).first().click({ timeout: 5000 }).catch(async () => {
           await page.keyboard.press("Escape").catch(() => {});
@@ -755,9 +803,25 @@ function createEasyOrdersUiRecovery(options = {}) {
           message: validationErrors.map((row) => row.message).filter(Boolean).join(" | ") || "EasyOrders save validation failed",
         };
       }
-      await page.waitForTimeout(stepDelayMs);
+      if (!saveSucceeded) {
+        await page.getByRole("button", { name: /^Cancel$/i }).first().click({ timeout: 5000 }).catch(async () => {
+          await page.keyboard.press("Escape").catch(() => {});
+        });
+        return {
+          edited: true,
+          sentAsIs: false,
+          manualReview: true,
+          validationErrors,
+          edits: allEdits,
+          skippedEdits: inspection.skippedEdits,
+          manualReviewItems: [],
+          modalItems: inspection.modalItems,
+          message: "EasyOrders save was not confirmed; order was not sent",
+        };
+      }
+      await page.waitForTimeout(Math.min(stepDelayMs, 300));
       await page.locator('input[name^="cart_items["][name$="].quantity"]').first()
-        .waitFor({ state: "hidden", timeout: 8000 }).catch(() => {});
+        .waitFor({ state: "hidden", timeout: ACTION_CONFIRMATION_TIMEOUT_MS }).catch(() => {});
     } else {
       await page.getByRole("button", { name: /^Cancel$/i }).first().click({ timeout: 10000 }).catch(async () => {
         await page.keyboard.press("Escape").catch(() => {});
@@ -820,32 +884,22 @@ function createEasyOrdersUiRecovery(options = {}) {
       return { ...candidate, detailUrl: page.url(), actionStatus: "skipped_manual", actionMessage: "Resend order to affiliates/webhook button not available", attempts: options.attempt || 1 };
     }
     const before = await currentToastText(page);
-    const actionResponses = [];
-    const onResponse = (response) => {
-      const request = response.request();
-      const method = String(request.method() || "GET").toUpperCase();
-      const status = Number(response.status() || 0);
-      // Ignore unrelated analytics calls. The resend endpoint is served by
-      // EasyOrders (including its API subdomains), so the host is the stable
-      // boundary while generated request paths remain intentionally opaque.
-      const isEasyOrdersResponse = /easy-orders\.net/i.test(response.url());
-      if (isEasyOrdersResponse && (method !== "GET" || status >= 400)) actionResponses.push(response);
-    };
-    page.on("response", onResponse);
+    const resendAction = watchEasyOrdersAction(page);
     let toast = "";
+    let resendOutcome = { kind: "timeout" };
     try {
       await button.click({ timeout: 10000 });
-      // EasyOrders may confirm the action through the network without showing a
-      // snackbar. Give the request a short window, then use the toast if it
-      // appears later in the same window.
-      toast = await Promise.race([
-        waitForToast(page, before, 8000),
-        page.waitForTimeout(8000).then(() => ""),
+      resendOutcome = await Promise.race([
+        waitForToast(page, before, ACTION_CONFIRMATION_TIMEOUT_MS)
+          .then((value) => ({ kind: "toast", value })),
+        resendAction.successfulResponse.then(() => ({ kind: "response", value: "" })),
+        page.waitForTimeout(ACTION_CONFIRMATION_TIMEOUT_MS).then(() => ({ kind: "timeout", value: "" })),
       ]);
     } finally {
-      page.off("response", onResponse);
+      resendAction.stop();
     }
-    const responseSummaries = await readResendActionResponses(page, actionResponses);
+    toast = resendOutcome.kind === "toast" ? String(resendOutcome.value || "") : "";
+    const responseSummaries = await readResendActionResponses(page, resendAction.responses);
     const responseFailure = resendActionFailure(responseSummaries);
     const successfulResponse = responseSummaries.some((response) =>
       response.status >= 200 && response.status < 300 && response.method !== "GET"
@@ -909,14 +963,34 @@ function createEasyOrdersUiRecovery(options = {}) {
       };
     }
     const before = await currentToastText(page);
-    await convert.click({ timeout: 10000 });
-    const toast = await waitForToast(page, before, 20000);
-    log(`EasyOrders recovery missed convert result: ${candidate.name || candidate.normPhone || ""} -> ${toast || "Convert clicked, no toast captured"}`);
+    const convertAction = watchEasyOrdersAction(page);
+    let convertOutcome = { kind: "timeout" };
+    try {
+      await convert.click({ timeout: 10000 });
+      convertOutcome = await Promise.race([
+        waitForToast(page, before, ACTION_CONFIRMATION_TIMEOUT_MS)
+          .then((value) => ({ kind: "toast", value })),
+        convertAction.successfulResponse.then(() => ({ kind: "response", value: "" })),
+        page.waitForTimeout(ACTION_CONFIRMATION_TIMEOUT_MS).then(() => ({ kind: "timeout", value: "" })),
+      ]);
+    } finally {
+      convertAction.stop();
+    }
+    const toast = convertOutcome.kind === "toast" ? String(convertOutcome.value || "") : "";
+    const convertResponses = await readResendActionResponses(page, convertAction.responses);
+    const convertFailure = resendActionFailure(convertResponses);
+    const convertSucceeded = (convertOutcome.kind === "toast" && Boolean(convertOutcome.value)) ||
+      convertOutcome.kind === "response" ||
+      convertResponses.some((response) => response.status >= 200 && response.status < 300 && response.method !== "GET");
+    if (convertResponses.length) {
+      log(`EasyOrders recovery missed convert network: ${candidate.name || candidate.normPhone || ""} -> ${convertResponses.map((response) => `${response.method} ${response.status}${response.body ? ` ${response.body}` : ""}`).join(" | ")}`);
+    }
+    log(`EasyOrders recovery missed convert result: ${candidate.name || candidate.normPhone || ""} -> ${convertFailure || toast || (convertSucceeded ? "Convert request accepted" : "Convert clicked, no confirmation")}`);
     return {
       ...candidate,
       detailUrl: page.url(),
-      actionStatus: toast && /error|failed|validation|min|max|required/i.test(toast) ? "convert_error" : "converted",
-      actionMessage: toast || "Convert clicked",
+      actionStatus: convertFailure || (toast && /error|failed|validation|min|max|required/i.test(toast)) ? "convert_error" : "converted",
+      actionMessage: convertFailure || toast || (convertSucceeded ? "Convert request accepted" : "Convert clicked without confirmation"),
       attempts: options.attempt || 1,
     };
   }

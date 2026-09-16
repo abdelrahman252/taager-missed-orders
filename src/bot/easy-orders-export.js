@@ -987,7 +987,10 @@ function createEasyOrdersExportFlow(options = {}) {
       await dateInputs.first().click();
       stage("easyorders.export.date", "started", `Selecting export start date ${formatDataDay(exportFromDate)}`);
       await pickDate(page, exportFromDate);
-      await dialog.locator("h2").click().catch(() => {});
+      // The new EasyOrders dialog may not render an h2. Keep this only as a
+      // best-effort calendar dismissal; the default Playwright timeout here
+      // otherwise burns ~30 seconds before the export button is clicked.
+      await dialog.locator("h2").click({ timeout: 1000 }).catch(() => {});
       await dialog.locator(".MuiDialogActions-root button").click();
       await dialog.waitFor({ state: "hidden", timeout: 8000 }).catch(() => {});
       await page.waitForTimeout(1000);

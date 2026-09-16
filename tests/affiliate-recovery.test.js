@@ -426,12 +426,17 @@ assert(uiRecoverySource.includes("waitForEasyOrdersDetail"), "affiliate recovery
 assert(uiRecoverySource.includes("no_trusted_product_reference"), "unknown modal products should be blocked as uncertain instead of sent as-is");
 assert(uiRecoverySource.includes("expectedOrder.address || expectedCity"), "affiliate recovery should fill missing EasyOrders address from city like the old Taager flow");
 assert(uiRecoverySource.includes("withEasyOrdersOrderRetry"), "affiliate recovery should retry transient EasyOrders UI failures per order");
+assert(uiRecoverySource.includes("watchEasyOrdersAction"), "EasyOrders actions should observe API responses instead of waiting only for toasts");
+assert(uiRecoverySource.includes("ACTION_CONFIRMATION_TIMEOUT_MS = 3500"), "EasyOrders actions should use a short bounded confirmation timeout");
+assert(!uiRecoverySource.includes("waitForToast(page, before, 12000)"), "EasyOrders save should not wait twelve seconds for a missing toast");
+assert(!uiRecoverySource.includes("waitForToast(page, before, 20000)"), "EasyOrders convert should not wait twenty seconds for a missing toast");
 assert(uiRecoverySource.includes('a[href^="#/orders/"]:not([href$="/create"])'), "affiliate recovery should read the new real-order list links");
 assert(uiRecoverySource.includes('a[href^="#/missed-orders/"]'), "affiliate recovery should read the new missed-order list links");
 assert(uiRecoverySource.includes('button[aria-label="Go to next page"]'), "affiliate recovery should support EasyOrders new pagination control");
 assert(uiRecoverySource.includes('getByRole("button", { name: /^Options$/i })'), "real-order resend should open the Options menu first");
 assert(easyOrdersExportSource.includes('[aria-label="Change language"]'), "EasyOrders export should support the new sidebar language control");
 assert(easyOrdersExportSource.includes('[aria-label="Open menu"]'), "EasyOrders export should open the sidebar before switching language");
+assert(easyOrdersExportSource.includes('dialog.locator("h2").click({ timeout: 1000 })'), "EasyOrders export should not spend the default timeout looking for an optional dialog heading");
 assert(dashboardFetchSource.includes('a[href*=".xlsx"], a[href*="/excel/"]'), "dashboard EasyOrders export should scan direct Excel notification links");
 assert(dashboardFetchSource.includes("depth < 10"), "dashboard EasyOrders export should walk the new stacked notification container");
 assert(runnerSource.includes('input[name="full_name"], input#full_name'), "normal EasyOrders create should use the stable full_name field name");
