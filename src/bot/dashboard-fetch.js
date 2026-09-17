@@ -179,8 +179,14 @@ async function gotoWithNetworkRetries(page, url, label, options = {}) {
       return;
     } catch (error) {
       if (!isNetworkNavigationError(error) || attempt >= attempts) throw error;
+      const interrupted = /interrupted by another navigation|navigation is interrupted/i.test(String(error && error.message || error));
       log(`Network issue while loading ${label} (${attempt}/${attempts}): ${error.message} - retrying in ${Math.round(waitMs / 1000)}s...`);
-      await page.waitForTimeout(waitMs);
+      if (interrupted) {
+        await page.waitForLoadState("domcontentloaded", { timeout: 10000 }).catch(() => {});
+        await page.waitForTimeout(350).catch(() => {});
+      } else {
+        await page.waitForTimeout(waitMs);
+      }
     }
   }
 }
@@ -196,8 +202,14 @@ async function reloadWithNetworkRetries(page, label, options = {}) {
       return;
     } catch (error) {
       if (!isNetworkNavigationError(error) || attempt >= attempts) throw error;
+      const interrupted = /interrupted by another navigation|navigation is interrupted/i.test(String(error && error.message || error));
       log(`Network issue while reloading ${label} (${attempt}/${attempts}): ${error.message} - retrying in ${Math.round(waitMs / 1000)}s...`);
-      await page.waitForTimeout(waitMs);
+      if (interrupted) {
+        await page.waitForLoadState("domcontentloaded", { timeout: 10000 }).catch(() => {});
+        await page.waitForTimeout(350).catch(() => {});
+      } else {
+        await page.waitForTimeout(waitMs);
+      }
     }
   }
 }
@@ -456,82 +468,16 @@ async function pickDateInEasyOrdersCalendar(page, targetDt) {
 
 async function downloadToBuffer(page, url) {
   const response = await page.context().request.get(url, { timeout: 60000 });
+  if (!response.ok()) throw new Error(`EASY_ORDERS_DOWNLOAD_HTTP_${response.status()}: ${url}`);
   const body = await response.body();
+  if (!body || !body.length) throw new Error(`EASY_ORDERS_DOWNLOAD_EMPTY: ${url}`);
   return Buffer.from(body);
 }
 
 async function exportEasyOrdersOrders(page, exportFromDate) {
-  await gotoWithNetworkRetries(page, "https://app.easy-orders.net/#/orders", "EasyOrders orders page");
-  await page.waitForTimeout(1500);
-  await ensureEasyOrdersEnglish(page);
-
-  const pageExportBtn = page.locator(
-    'button.MuiButton-outlined:has-text("Export"), main button:has-text("Export"), button:has-text("Export")'
-  ).first();
-  await pageExportBtn.waitFor({ state: "visible", timeout: 10000 });
-  await page.keyboard.press("Escape").catch(() => {});
-  await pageExportBtn.click();
-  const dialog = page.locator('div[role="dialog"]').first();
-  await dialog.waitFor({ state: "visible", timeout: 8000 });
-  const dateInputs = dialog.locator(".react-datepicker-wrapper input");
-  await dateInputs.first().click();
-  await page.waitForTimeout(500);
-  await pickDateInEasyOrdersCalendar(page, exportFromDate);
-  await dialog.locator("h2").click().catch(() => {});
-  await page.waitForTimeout(500);
-  const dialogExportBtn = dialog.locator(".MuiDialogActions-root button");
-  await dialogExportBtn.waitFor({ state: "visible", timeout: 5000 });
-  await dialogExportBtn.click();
-  await dialog.waitFor({ state: "hidden", timeout: 8000 });
-
-  await page.waitForTimeout(1500);
-  if (!page.url().includes("notifications")) {
-    await gotoWithNetworkRetries(page, "https://app.easy-orders.net/#/notifications", "EasyOrders notifications");
-  }
-  await reloadWithNetworkRetries(page, "EasyOrders notifications", { attempts: 3, timeout: 30000, waitMs: 5000 });
-  await page.waitForTimeout(2500);
-  await reloadWithNetworkRetries(page, "EasyOrders notifications", { attempts: 3, timeout: 30000, waitMs: 5000 });
-  await page.waitForTimeout(2500);
-
-  const result = await page.evaluate(() => {
-    function shortText(el) {
-      return (el.innerText || el.textContent || "")
-        .replace(/[\u200e\u200f\u061c]/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-    }
-    const isOrdersExport = (value) => {
-      const text = shortText({ innerText: value, textContent: value }).toLowerCase();
-      return text.includes("orders exported") ||
-        text.includes("orders export") ||
-        text.includes("created orders excel") ||
-        text.includes("ملف اكسل للطلبات") ||
-        text.includes("ملف إكسل للطلبات") ||
-        text.includes("انشاء ملف اكسل") ||
-        text.includes("إنشاء ملف إكسل");
-    };
-    const isMissed = (value) => {
-      const text = shortText({ innerText: value, textContent: value }).toLowerCase();
-      return text.includes("missed orders") || text.includes("الطلبات الفائتة");
-    };
-    const absoluteHref = (link) => {
-      try { return new URL(String(link.getAttribute("href") || link.href || ""), window.location.href).href; }
-      catch (_) { return String(link.href || link.getAttribute("href") || ""); }
-    };
-    const links = Array.from(document.querySelectorAll('a[href*=".xlsx"], a[href*="/excel/"]'));
-    for (const link of links) {
-      let node = link;
-      for (let depth = 0; node && node !== document.body && depth < 10; depth++, node = node.parentElement) {
-        const text = shortText(node);
-        if (!isOrdersExport(text) || isMissed(text)) continue;
-        const href = absoluteHref(link);
-        if (href.startsWith("https://")) return { href, text };
-      }
-    }
-    return null;
-  });
-  if (!result || !result.href) throw new Error("EasyOrders export notification was not found");
-  return downloadToBuffer(page, result.href);
+  // Keep this legacy helper on the same implementation as the active flow.
+  // The previous copy forced two long sleeps and could select a stale card.
+  return easyOrdersFlow.exportOrders(page, exportFromDate);
 }
 
 function normalizeTaagerCode(value) {
@@ -1484,7 +1430,7 @@ async function recoverTaagerForRetry(page, stage, targetPath, error, attempt, ma
   return recoveryPage;
 }
 
-async function readDownloadToBuffer(download) {
+async function readDownloadToBuffer(download, options = {}) {
   try {
     const stream = await download.createReadStream();
     const chunks = [];
@@ -1499,6 +1445,28 @@ async function readDownloadToBuffer(download) {
     if (downloadPath && fs.existsSync(downloadPath)) {
       log(`Dashboard Taager download stream failed; reading completed file from ${downloadPath}`);
       return fs.readFileSync(downloadPath);
+    }
+    const downloadUrl = String(options.url || (typeof download.url === "function" ? download.url() : "") || "").trim();
+    if (downloadUrl && typeof fetch === "function") {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 60000);
+        const cookieHeader = Array.isArray(options.cookies)
+          ? options.cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ")
+          : "";
+        const response = await fetch(downloadUrl, {
+          redirect: "follow",
+          headers: cookieHeader ? { Cookie: cookieHeader } : undefined,
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timer));
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const body = Buffer.from(await response.arrayBuffer());
+        if (!body.length) throw new Error("empty response body");
+        log(`Dashboard Taager download stream failed; recovered ${body.length} bytes from the download URL`);
+        return body;
+      } catch (fallbackError) {
+        log(`Dashboard Taager download URL fallback failed: ${fallbackError.message}`);
+      }
     }
     const failure = await download.failure().catch(() => null);
     const suffix = failure ? ` (${failure})` : "";
@@ -1731,7 +1699,7 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
     }
     emitStage("dashboard.parse", "ok", `Parsed ${processed.rows.length} dashboard rows`, { rows: processed.rows.length });
     if (processed.enrichmentDiagnostics.status === "ok") {
-      log(`Dashboard enrichment - EasyOrders named ${processed.enrichmentDiagnostics.productNameMatches || 0} rows, cache hits ${processed.enrichmentDiagnostics.cacheHits || 0}, learned ${processed.enrichmentDiagnostics.learnedSkuNames || 0} SKUs, and matched ${processed.enrichmentDiagnostics.paymentMatches || 0} payment rows`);
+      log(`Dashboard enrichment - EasyOrders named ${processed.enrichmentDiagnostics.productNameMatches || 0}/${processed.rows.length} rows, cache hits ${processed.enrichmentDiagnostics.cacheHits || 0}, learned ${processed.enrichmentDiagnostics.learnedSkuNames || 0} SKUs, matched ${processed.enrichmentDiagnostics.paymentMatches || 0}/${processed.rows.length} payment rows, unmatched payment rows=${processed.enrichmentDiagnostics.unmatchedPaymentRows || 0}`);
     }
     if (enrichmentError) {
       processed.enrichmentDiagnostics = Object.assign({}, processed.enrichmentDiagnostics, { error: enrichmentError });
@@ -1739,6 +1707,7 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
 
     emitStage("dashboard.result", "started", "Sending dashboard result to main process");
     emitStage("dashboard.result", "ok", "Dashboard result ready");
+    log(`Dashboard result ready: rows=${processed.rows.length}; sending snapshot to main process`);
     process.send && process.send({
       type: "dashboard-result",
       rows: processed.rows,
@@ -1751,6 +1720,7 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
       exportDateFrom: toDateKey(exportDateFrom),
       exportDateTo: toDateKey(exportDateTo),
     });
+    log("Dashboard result sent to main process");
   } catch (err) {
     const fatalMessage = isBrowserClosedError(err)
       ? "DASHBOARD_ACCOUNT_BROWSER_CLOSED: Dashboard Chrome closed unexpectedly and could not be recovered for this account. Skipping to the next account."

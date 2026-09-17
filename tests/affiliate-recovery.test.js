@@ -409,10 +409,14 @@ assert(runnerSource.includes("no_trusted_product_reference"), "recovery mode sho
 assert(runnerSource.includes("taagerBlockingPhones"), "recovery uncertainty logic should still avoid phone-only duplicates that are already active in Taager");
 assert(runnerSource.includes("fallbackProvince: taagerAnalyticsMap.provinceFallback"), "runner should pass delivered-order province fallback into recovery");
 assert(runnerSource.includes("fallbackProvinceBySku: taagerAnalyticsMap.provinceFallbackBySku"), "runner should pass SKU province fallback into recovery");
-assert(runnerSource.indexOf("const dedupeResult = mergeAndDeduplicate") < runnerSource.indexOf("recoveryFlow.run"), "affiliate recovery should run after normal-flow dedupe");
+// There is a separate manual-review-only recovery entry point before the
+// normal run. Scope this ordering assertion to the normal-run block so that
+// the verifier does not confuse those two legitimate flows.
+const normalRunSource = runnerSource.slice(runnerSource.indexOf("const baseSkippedOrders"));
+assert(normalRunSource.indexOf("const dedupeResult = mergeAndDeduplicate") < normalRunSource.indexOf("recoveryFlow.run"), "affiliate recovery should run after normal-flow dedupe");
 assert(uiRecoverySource.includes("matched_normal_flow_prepared_order"), "affiliate recovery edits should be driven by the normal-flow prepared order");
 assert(uiRecoverySource.includes("normalizePhoneWithMeta"), "affiliate recovery should detect rescued/uncertain modal phone values");
-assert(uiRecoverySource.includes("COUNTRY_PHONE_RULES"), "affiliate recovery should format EasyOrders modal phone values from shared country phone rules");
+assert(uiRecoverySource.includes("formatPhone") && uiRecoverySource.includes("easyOrdersPhone"), "affiliate recovery should format EasyOrders modal phone values from shared country phone rules");
 assert(uiRecoverySource.includes("phone_rescued_trailing_zero_rewrite"), "affiliate recovery should rewrite short EasyOrders phone values instead of treating rescued normalization as clean");
 assert(uiRecoverySource.includes("phone_display_rewrite"), "affiliate recovery should rewrite ugly-but-normalizable EasyOrders phone values before resending");
 assert(uiRecoverySource.includes("normal_flow_prepared_quantity_is_suspicious"), "affiliate recovery should stop unsafe prepared quantities for manual review");
@@ -437,8 +441,8 @@ assert(uiRecoverySource.includes('getByRole("button", { name: /^Options$/i })'),
 assert(easyOrdersExportSource.includes('[aria-label="Change language"]'), "EasyOrders export should support the new sidebar language control");
 assert(easyOrdersExportSource.includes('[aria-label="Open menu"]'), "EasyOrders export should open the sidebar before switching language");
 assert(easyOrdersExportSource.includes('dialog.locator("h2").click({ timeout: 1000 })'), "EasyOrders export should not spend the default timeout looking for an optional dialog heading");
-assert(dashboardFetchSource.includes('a[href*=".xlsx"], a[href*="/excel/"]'), "dashboard EasyOrders export should scan direct Excel notification links");
-assert(dashboardFetchSource.includes("depth < 10"), "dashboard EasyOrders export should walk the new stacked notification container");
+assert(dashboardFetchSource.includes("easyOrdersFlow.exportOrders") && easyOrdersExportSource.includes("href.toLowerCase().includes(\".xlsx\")"), "dashboard EasyOrders export should scan direct Excel notification links through the shared exporter");
+assert(!dashboardFetchSource.includes("depth < 10") && easyOrdersExportSource.includes("table tbody tr, table tr, [role='row']"), "dashboard EasyOrders export should use the shared notification row scanner");
 assert(runnerSource.includes('input[name="full_name"], input#full_name'), "normal EasyOrders create should use the stable full_name field name");
 assert(runnerSource.includes('input[name="phone"], input#phone'), "normal EasyOrders create should use the stable phone field name");
 assert(uiRecoverySource.includes("reloadEasyOrdersPage"), "affiliate recovery should reload EasyOrders before retrying a crashed/timeout order");

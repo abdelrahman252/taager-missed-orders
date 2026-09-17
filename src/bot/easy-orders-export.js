@@ -164,6 +164,10 @@ function createEasyOrdersExportFlow(options = {}) {
   const exportNotificationPolls = Math.max(1, Number(options.exportNotificationPolls || 12));
   const exportNotificationPollMs = Math.max(250, Number(options.exportNotificationPollMs || 1200));
   const exportNotificationRefreshMs = Math.max(1200, Number(options.exportNotificationRefreshMs || 4000));
+  // EasyOrders can update the notification list in two separate React passes.
+  // Always perform the two proven refreshes, but wait for the table state rather
+  // than sleeping for several seconds between them.
+  const requiredNotificationRefreshes = 2;
   const exportNotificationMaxWaitMs = Math.max(
     15000,
     Number(options.exportNotificationMaxWaitMs || 45000)
@@ -324,8 +328,17 @@ function createEasyOrdersExportFlow(options = {}) {
         return;
       } catch (error) {
         if (!isNetworkNavigationError(error) || attempt >= attempts) throw error;
+        const interrupted = /interrupted by another navigation|navigation is interrupted/i.test(String(error && error.message || error));
         log(`Network issue while loading ${label} (${attempt}/${attempts}): ${error.message}`);
-        await page.waitForTimeout(waitMs);
+        if (interrupted) {
+          // A competing SPA navigation is already in progress. Let it settle
+          // instead of waiting the full network retry delay and starting a
+          // second navigation that interrupts it again.
+          await page.waitForLoadState("domcontentloaded", { timeout: 10000 }).catch(() => {});
+          await page.waitForTimeout(350).catch(() => {});
+        } else {
+          await page.waitForTimeout(waitMs);
+        }
       }
     }
   }
@@ -340,8 +353,14 @@ function createEasyOrdersExportFlow(options = {}) {
         return;
       } catch (error) {
         if (!isNetworkNavigationError(error) || attempt >= attempts) throw error;
+        const interrupted = /interrupted by another navigation|navigation is interrupted/i.test(String(error && error.message || error));
         log(`Network issue while reloading ${label} (${attempt}/${attempts}): ${error.message}`);
-        await page.waitForTimeout(waitMs);
+        if (interrupted) {
+          await page.waitForLoadState("domcontentloaded", { timeout: 10000 }).catch(() => {});
+          await page.waitForTimeout(350).catch(() => {});
+        } else {
+          await page.waitForTimeout(waitMs);
+        }
       }
     }
   }
@@ -890,6 +909,7 @@ function createEasyOrdersExportFlow(options = {}) {
   async function waitForExportLink(page, keyword, attempt, ignoredHrefs = []) {
     let lastSummary = null;
     let lastRefreshAt = 0;
+    let firstMatchingResult = null;
     const startedAt = Date.now();
     for (let poll = 1; poll <= exportNotificationPolls; poll++) {
       if (Date.now() - startedAt >= exportNotificationMaxWaitMs) break;
@@ -902,7 +922,7 @@ function createEasyOrdersExportFlow(options = {}) {
       // EasyOrders can finish the export between the first and second
       // notifications-page load. Keep that proven two-load fallback, then
       // avoid reloading on every subsequent DOM poll.
-      const needsRefresh = poll === 1 || poll === 2 || (Date.now() - lastRefreshAt) >= exportNotificationRefreshMs;
+      const needsRefresh = poll <= requiredNotificationRefreshes || (Date.now() - lastRefreshAt) >= exportNotificationRefreshMs;
       if (needsRefresh) {
         await reloadWithNetworkRetries(page, "EasyOrders notifications", {
           attempts: 2,
@@ -927,13 +947,35 @@ function createEasyOrdersExportFlow(options = {}) {
       } else if (lastSummary && Array.isArray(lastSummary.firstRows) && lastSummary.firstRows.length) {
         log(`EasyOrders notification visible rows: ${lastSummary.firstRows.join(" | ")}`);
       }
+      if (result && result.href && poll < requiredNotificationRefreshes) {
+        // Keep the first candidate only as a fallback. The required second
+        // refresh must still happen before accepting the workbook.
+        firstMatchingResult = result;
+        continue;
+      }
       if (result && result.href) {
+        log(`EasyOrders selected ${keyword} notification after refresh ${poll}: ${result.href}`);
         stage("easyorders.notifications", "ok", "Export notification link found", {
           attempt,
           poll,
           notificationText: result.text || "",
+          refreshes: poll,
         });
         return { href: result.href, summary: lastSummary };
+      }
+      if (poll >= requiredNotificationRefreshes && firstMatchingResult) {
+        // A notification can briefly disappear while the second table render
+        // settles. The second refresh was completed, so use the validated first
+        // candidate instead of waiting through the full notification timeout.
+        log(`EasyOrders selected ${keyword} notification from refresh 1 fallback after refresh ${poll}: ${firstMatchingResult.href}`);
+        stage("easyorders.notifications", "ok", "Export notification link found", {
+          attempt,
+          poll,
+          notificationText: firstMatchingResult.text || "",
+          refreshes: poll,
+          fallback: true,
+        });
+        return { href: firstMatchingResult.href, summary: lastSummary };
       }
     }
     log(`EasyOrders notification wait ended for ${keyword} after ${Date.now() - startedAt}ms without a matching card.`);
@@ -1040,12 +1082,19 @@ function createEasyOrdersExportFlow(options = {}) {
       try {
         stage("easyorders.download", "started", `Downloading EasyOrders export (${attempt}/3)`);
         const response = await page.context().request.get(url, { timeout: 60000 });
+        const status = response.status();
+        if (!response.ok()) {
+          const error = new Error(`EASY_ORDERS_DOWNLOAD_HTTP_${status}: ${url}`);
+          error.retryable = status === 408 || status === 429 || status >= 500;
+          throw error;
+        }
         const buffer = Buffer.from(await response.body());
+        if (!buffer.length) throw new Error(`EASY_ORDERS_DOWNLOAD_EMPTY: ${url}`);
         stage("easyorders.download", "ok", `Downloaded ${buffer.length} bytes`, { bytes: buffer.length });
         return buffer;
       } catch (error) {
         stage("easyorders.download", attempt >= 3 ? "failed" : "retry", error.message || String(error), { attempt, maxAttempts: 3 });
-        if (!isNetworkNavigationError(error) || attempt >= 3) throw error;
+        if (!(isNetworkNavigationError(error) || error.retryable === true) || attempt >= 3) throw error;
         await page.waitForTimeout(8000);
       }
     }

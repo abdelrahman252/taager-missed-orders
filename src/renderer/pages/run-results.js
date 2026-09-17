@@ -22,6 +22,7 @@
       historyPage: 1,
       loadingDetail: false,
     };
+    let firstIndexLoad = true;
 
     function tr(key, args) {
       return window.t_ops ? window.t_ops("runResults." + key, args) : key;
@@ -469,8 +470,35 @@
     async function loadIndex() {
       const range = rangeForFilter(state.activeFilter);
       const filter = range ? { dateFrom: dateParam(range.from), dateTo: dateParam(range.to) } : {};
-      const response = await window.api.getRunResultsIndex(filter).catch(() => ({ ok: false, runs: [] }));
+      let response = await window.api.getRunResultsIndex(filter).catch(() => ({ ok: false, runs: [] }));
       state.runs = response && Array.isArray(response.runs) ? response.runs : [];
+
+      // Match Analytics/Operations behavior: a newly opened Results page
+      // should not look empty merely because the latest successful run is
+      // outside the default "This month" filter.
+      if (firstIndexLoad && !state.runs.length && state.activeFilter !== "custom") {
+        const allResponse = await window.api.getRunResultsIndex({}).catch(() => ({ ok: false, runs: [] }));
+        const allRuns = allResponse && Array.isArray(allResponse.runs) ? allResponse.runs : [];
+        const latest = allRuns
+          .filter(run => Number(run && run.runTimestamp))
+          .sort((a, b) => Number(b.runTimestamp) - Number(a.runTimestamp))[0];
+        if (latest) {
+          const latestDate = new Date(Number(latest.runTimestamp));
+          const candidates = ["today", "yesterday", "last7", "thisMonth"];
+          const matched = candidates.find(candidate => {
+            const candidateRange = rangeForFilter(candidate);
+            return candidateRange && latestDate >= candidateRange.from && latestDate <= candidateRange.to;
+          });
+          state.activeFilter = matched || "thisMonth";
+          const fallbackRange = rangeForFilter(state.activeFilter);
+          response = await window.api.getRunResultsIndex(fallbackRange ? {
+            dateFrom: dateParam(fallbackRange.from),
+            dateTo: dateParam(fallbackRange.to),
+          } : {}).catch(() => ({ ok: false, runs: [] }));
+          state.runs = response && Array.isArray(response.runs) ? response.runs : [];
+        }
+      }
+      firstIndexLoad = false;
       const run = selectedRun();
       state.selectedRunId = run ? run.runId : "";
       state.activeBucket = defaultBucket(run);

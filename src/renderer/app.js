@@ -4733,6 +4733,9 @@ async function _saveAnalyticsFromResult(data, selectedAccountIds, runTimestamp) 
         taagerSnapshot:    r.data?.taagerSnapshot || null,
         taagerDashboardSnapshot: r.data?.taagerDashboardSnapshot || null,
       });
+      if (!saveRes || saveRes.ok === false) {
+        throw new Error(`Analytics persistence failed for ${identity.accountLabel}: ${saveRes?.error || "unknown error"}`);
+      }
       if (saveRes && saveRes.dashboardRowsSaved > 0 && window.invalidateDashboardCache) window.invalidateDashboardCache();
     }
     window.dispatchEvent(new CustomEvent("taager-analytics-runs-updated"));
@@ -4764,6 +4767,9 @@ async function _saveAnalyticsFromResult(data, selectedAccountIds, runTimestamp) 
     taagerSnapshot:    data.taagerSnapshot || null,
     taagerDashboardSnapshot: data.taagerDashboardSnapshot || null,
   });
+  if (!saveRes || saveRes.ok === false) {
+    throw new Error(`Analytics persistence failed for ${identity.accountLabel}: ${saveRes?.error || "unknown error"}`);
+  }
   if (saveRes && saveRes.dashboardRowsSaved > 0 && window.invalidateDashboardCache) window.invalidateDashboardCache();
   window.dispatchEvent(new CustomEvent("taager-analytics-runs-updated"));
 }
@@ -4895,7 +4901,7 @@ async function _saveRunResultsFromResult(data, dateFrom, dateTo, selectedAccount
       ...failed.map((row, i) => normalizeOrder(row, "failed_on_taager", i)),
     ];
 
-    await window.api.saveRunResults({
+    const saveRes = await window.api.saveRunResults({
       runId: `${identity.accountId || "account"}-${runIdSuffix}`,
       accountId: identity.accountId,
       accountLabel: identity.accountLabel,
@@ -4924,6 +4930,9 @@ async function _saveRunResultsFromResult(data, dateFrom, dateTo, selectedAccount
         skippedWorkbookPath: resultData?.skippedOrders?.filePath || "",
       },
     });
+    if (!saveRes || saveRes.ok === false) {
+      throw new Error(`Run Results persistence failed for ${identity.accountLabel}: ${saveRes?.error || "unknown error"}`);
+    }
   }
 
   if (data && data._multiAccount && Array.isArray(data._accountResults)) {
@@ -4937,16 +4946,20 @@ async function _saveRunResultsFromResult(data, dateFrom, dateTo, selectedAccount
   window.dispatchEvent(new CustomEvent("taager-run-results-updated"));
 }
 
-function goToResults(data, dateFrom, dateTo, selectedAccountIds) {
+async function goToResults(data, dateFrom, dateTo, selectedAccountIds) {
   const runTimestamp = Date.now();
-  // Fire-and-forget: save run data for Analytics/Operations pages
-  _saveAnalyticsFromResult(data, selectedAccountIds, runTimestamp).catch(e => {
-    console.warn("[Analytics] save failed silently:", e);
-    if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(e, { operation: "analytics.saveFromResult" });
-  });
-  _saveRunResultsFromResult(data, dateFrom, dateTo, selectedAccountIds, runTimestamp).catch(e => {
-    console.warn("[RunResults] save failed silently:", e);
-    if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(e, { operation: "runResults.saveFromResult" });
+  // Persist before showing the completed result. Previously these were
+  // fire-and-forget calls, so Analytics/Operations/Run Results could open while
+  // their records were still being written and appear empty.
+  const saves = await Promise.allSettled([
+    _saveAnalyticsFromResult(data, selectedAccountIds, runTimestamp),
+    _saveRunResultsFromResult(data, dateFrom, dateTo, selectedAccountIds, runTimestamp),
+  ]);
+  saves.forEach((save, index) => {
+    if (save.status !== "rejected") return;
+    const operation = index === 0 ? "analytics.saveFromResult" : "runResults.saveFromResult";
+    console.warn(`[${index === 0 ? "Analytics" : "RunResults"}] save failed:`, save.reason);
+    if (window.TaagerMonitoring) window.TaagerMonitoring.captureException(save.reason, { operation });
   });
   const onRunAgain = () => { goToRun(dateFrom, dateTo, selectedAccountIds); };
   const onHome     = () => { sessionDate = null; goToSetup("run"); };

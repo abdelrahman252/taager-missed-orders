@@ -1685,11 +1685,18 @@ function createEasyOrdersUiRecovery(options = {}) {
           retried.push({ ...attempt, actionStatus: "retry_skipped", actionMessage: "Missing missed-order detail URL", attempts: 2 });
           continue;
         }
-        await goto(page, attempt.detailUrl);
         retried.push(await withEasyOrdersOrderRetry(
           page,
           `retry missed order ${attempt.name || attempt.normPhone || attempt.detailUrl}`,
-          () => convertMissedDetail(page, { ...attempt, attempts: 2 }, { attempt: 2, edit: false }),
+          async (recoveryAttempt) => {
+            // Keep this navigation inside the retry wrapper. A prior EasyOrders
+            // route change may still be settling after a detached-page retry;
+            // letting this goto escape made the next missed order fatal.
+            await goto(page, attempt.detailUrl);
+            await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
+            await page.waitForTimeout(stepDelayMs);
+            return convertMissedDetail(page, { ...attempt, attempts: 2 }, { attempt: recoveryAttempt, edit: false });
+          },
           (error) => ({ ...attempt, actionStatus: "retry_skipped", actionMessage: `EasyOrders missed retry did not recover after reload: ${error.message}`, attempts: 2 })
         ));
       } else {

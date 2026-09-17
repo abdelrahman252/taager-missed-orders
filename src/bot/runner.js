@@ -280,8 +280,16 @@ async function gotoWithNetworkRetries(page, url, label, options = {}) {
       if (!isNetworkNavigationError(error) || attempt >= attempts) {
         throw error;
       }
+      const interrupted = /interrupted by another navigation|navigation is interrupted/i.test(String(error && error.message || error));
+      if (interrupted) {
+        // Playwright can reject page.goto while the competing SPA navigation
+        // is still committing. Let that navigation settle before issuing the
+        // next route change; otherwise retries can interrupt one another.
+        await page.waitForLoadState("domcontentloaded", { timeout: 10000 }).catch(() => {});
+        await page.waitForTimeout(350).catch(() => {});
+      }
       log(`Network issue while loading ${label} (${attempt}/${attempts}): ${error.message} - retrying in ${Math.round(waitMs / 1000)}s...`);
-      await page.waitForTimeout(waitMs);
+      await page.waitForTimeout(interrupted ? Math.min(waitMs, 500) : waitMs);
     }
   }
 }
@@ -970,16 +978,20 @@ async function triggerEasyOrdersExport(page, exportFromDate, keyword) {
       // ── 8. Two guaranteed reloads before grabbing ──
       log(`🔄 Reload #1 of notifications...`);
       await reloadWithNetworkRetries(page, "Reload #1 of notifications", { attempts: 3, timeout: 30000, waitMs: 5000 });
-      await page.waitForTimeout(2500);
+      await page.locator("table tbody tr, [role='row'], [role='list']").first()
+        .waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+      await page.waitForTimeout(300);
       const switchedR1 = await ensureEasyOrdersEnglish(page);
-      if (switchedR1) await page.waitForTimeout(2000);
+      if (switchedR1) await page.waitForTimeout(500);
       log(`✅ Reload #1 done — URL: ${page.url()}`);
 
       log(`🔄 Reload #2 of notifications...`);
       await reloadWithNetworkRetries(page, "Reload #2 of notifications", { attempts: 3, timeout: 30000, waitMs: 5000 });
-      await page.waitForTimeout(2500);
+      await page.locator("table tbody tr, [role='row'], [role='list']").first()
+        .waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+      await page.waitForTimeout(300);
       const switchedR2 = await ensureEasyOrdersEnglish(page);
-      if (switchedR2) await page.waitForTimeout(2000);
+      if (switchedR2) await page.waitForTimeout(500);
       log(`✅ Reload #2 done — URL: ${page.url()}`);
 
       // ── 9. Grab the first matching card ──
@@ -1027,10 +1039,17 @@ async function downloadToBuffer(page, url) {
   for (let attempt = 1; attempt <= MAX_DL_ATTEMPTS; attempt++) {
     try {
       const response = await page.context().request.get(url, { timeout: 60000 });
+      const status = response.status();
+      if (!response.ok()) {
+        const error = new Error(`TAAGER_DOWNLOAD_HTTP_${status}: ${url}`);
+        error.retryable = status === 408 || status === 429 || status >= 500;
+        throw error;
+      }
       const body     = await response.body();
+      if (!body || !body.length) throw new Error(`TAAGER_DOWNLOAD_EMPTY: ${url}`);
       return Buffer.from(body);
     } catch (e) {
-      if (isNetworkNavigationError(e) && attempt < MAX_DL_ATTEMPTS) {
+      if ((isNetworkNavigationError(e) || e.retryable === true) && attempt < MAX_DL_ATTEMPTS) {
         log(`File download failed (attempt ${attempt}/${MAX_DL_ATTEMPTS}): ${e.message} - retrying in 8s...`);
         await new Promise(r => setTimeout(r, 8000));
       } else {
@@ -3459,7 +3478,7 @@ async function recoverTaagerForRetry(page, stage, targetPath, error, attempt, ma
   return recoveryPage;
 }
 
-async function readDownloadToBuffer(download) {
+async function readDownloadToBuffer(download, options = {}) {
   try {
     const stream = await download.createReadStream();
     const chunks = [];
@@ -3477,6 +3496,28 @@ async function readDownloadToBuffer(download) {
     if (downloadPath && fs.existsSync(downloadPath)) {
       log(`Taager download stream failed; reading completed file from ${downloadPath}`);
       return fs.readFileSync(downloadPath);
+    }
+    const downloadUrl = String(options.url || (typeof download.url === "function" ? download.url() : "") || "").trim();
+    if (downloadUrl && typeof fetch === "function") {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 60000);
+        const cookieHeader = Array.isArray(options.cookies)
+          ? options.cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ")
+          : "";
+        const response = await fetch(downloadUrl, {
+          redirect: "follow",
+          headers: cookieHeader ? { Cookie: cookieHeader } : undefined,
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timer));
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const body = Buffer.from(await response.arrayBuffer());
+        if (!body.length) throw new Error("empty response body");
+        log(`Taager download stream failed; recovered ${body.length} bytes from the download URL`);
+        return body;
+      } catch (fallbackError) {
+        log(`Taager download URL fallback failed: ${fallbackError.message}`);
+      }
     }
     const failure = await download.failure().catch(() => null);
     const suffix = failure ? ` (${failure})` : "";

@@ -5061,6 +5061,7 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
         }
       } else if (msg.type === "dashboard-result") {
         let rows = normalizeDashboardProfitRows(msg.rows || []);
+        let snapshotSaveError = "";
         try {
           const rangeFrom = msg.dateFrom || dateFrom || "";
           const rangeTo = msg.dateTo || dateTo || "";
@@ -5123,6 +5124,7 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
           }
           msg._analyticsEnriched = enriched;
         } catch (e) {
+          snapshotSaveError = e.message || String(e);
           console.error("[Dashboard] Failed to save snapshot:", e.message);
           monitoring.captureException(e, { operation: "dashboard.fetch.saveSnapshot", extra: { accountId: dashboardAccountId } });
           notifyAdminErrorAlert({
@@ -5138,7 +5140,8 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
           });
         }
         safeResolve({
-          success: true,
+          success: !snapshotSaveError,
+          ...(snapshotSaveError ? { error: `DASHBOARD_SNAPSHOT_SAVE_FAILED: ${snapshotSaveError}` } : {}),
           rows: rows.length,
           enriched: Number(msg._analyticsEnriched || 0),
           snapshotMonth: msg.snapshotMonth,

@@ -129,6 +129,9 @@ function createTaagerOrdersExportFlow(options = {}) {
       timeout: 30000,
       log,
     });
+    // Keep a cookie snapshot so a download can be recovered independently if
+    // Chrome closes immediately after emitting the download event.
+    const downloadCookies = await page.context().cookies().catch(() => []);
     const downloadPromise = page.waitForEvent("download", { timeout: 120000 });
     log(`Taager orders export attempt ${attempt}/${maxAttempts}: clicking export`);
     await safeTaagerClick(page, selectors.exportButton, "Taager export button", {
@@ -139,7 +142,10 @@ function createTaagerOrdersExportFlow(options = {}) {
     });
     stage("taager.orders.download", "started", "Waiting for download event");
     const download = await downloadPromise;
-    const buffer = await readDownloadToBuffer(download);
+    const buffer = await readDownloadToBuffer(download, {
+      cookies: downloadCookies,
+      url: typeof download.url === "function" ? download.url() : "",
+    });
     log(`Taager orders downloaded: ${buffer.length} bytes`);
     stage("taager.orders.download", "ok", `Downloaded ${buffer.length} bytes`, { bytes: buffer.length });
     return buffer;

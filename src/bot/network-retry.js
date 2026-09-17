@@ -13,6 +13,8 @@ function isRetryableNetworkError(error) {
     "eai_again",
     "socket hang up",
     "tls handshake timeout",
+    "interrupted by another navigation",
+    "navigation is interrupted",
     "net::",
   ].some((needle) => message.includes(needle));
 }
