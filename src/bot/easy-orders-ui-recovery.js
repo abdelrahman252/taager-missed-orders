@@ -35,6 +35,7 @@ function createEasyOrdersUiRecovery(options = {}) {
   const onAttemptResult = typeof options.onAttemptResult === "function" ? options.onAttemptResult : () => {};
   const catalog = options.catalog || {};
   const taagerCatalog = options.taagerCatalog || {};
+  let rememberedPage = null;
 
   function emit(stageName, status, message, extra = {}) {
     stage(stageName, status, message, extra);
@@ -54,25 +55,49 @@ function createEasyOrdersUiRecovery(options = {}) {
     return /timeout|target closed|page closed|browser has been closed|crash|detached|execution context was destroyed|navigation|net::|err_connection|internet_issue/.test(message);
   }
 
+  function isClosedPage(page) {
+    return !page || (typeof page.isClosed === "function" && page.isClosed());
+  }
+
+  function rememberPage(page) {
+    if (!isClosedPage(page)) rememberedPage = page;
+    return page;
+  }
+
+  function activeRecoveryPage(page) {
+    if (isClosedPage(page) && !isClosedPage(rememberedPage)) return rememberedPage;
+    return page;
+  }
+
+  async function gotoEasyOrdersUrl(page, url) {
+    page = activeRecoveryPage(page);
+    const nextPage = await goto(page, url);
+    return rememberPage(nextPage || page);
+  }
+
   async function reloadEasyOrdersPage(page, label) {
+    page = activeRecoveryPage(page);
     const currentUrl = page.url();
     log(`EasyOrders recovery reload: ${label}; url=${currentUrl || "unknown"}`);
     await page.reload({ waitUntil: "domcontentloaded", timeout: 45000 }).catch(async (error) => {
       log(`EasyOrders recovery reload failed for ${label}: ${error.message}; reopening current URL`);
-      if (currentUrl) await goto(page, currentUrl);
+      if (currentUrl) page = await gotoEasyOrdersUrl(page, currentUrl);
       else throw error;
     });
     await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(stepDelayMs + 500).catch(() => {});
+    rememberPage(page);
+    return page;
   }
 
   async function withEasyOrdersOrderRetry(page, label, action, manualFallback) {
+    page = activeRecoveryPage(page);
     try {
       return await action(1);
     } catch (error) {
       if (!isTransientEasyOrdersError(error)) throw error;
       log(`EasyOrders recovery transient failure at ${label}: ${error.message}. Reloading and retrying this order once.`);
-      await reloadEasyOrdersPage(page, label).catch(() => {});
+      page = await reloadEasyOrdersPage(page, label).catch(() => activeRecoveryPage(page));
       try {
         return await action(2);
       } catch (retryError) {
@@ -87,7 +112,7 @@ function createEasyOrdersUiRecovery(options = {}) {
 
   async function openEasyOrdersPath(page, hashPath) {
     const url = `${EASY_BASE}${hashPath}`;
-    await goto(page, url);
+    page = await gotoEasyOrdersUrl(page, url);
     await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(stepDelayMs).catch(() => {});
     return page;
@@ -236,7 +261,7 @@ function createEasyOrdersUiRecovery(options = {}) {
   async function openList(page, kind, fromDate, toDate) {
     const hashPath = kind === "missed" ? "/missed-orders" : "/orders";
     emit(`easyorders.recovery.${kind}.list`, "started", `Opening EasyOrders ${kind} list`);
-    await openEasyOrdersPath(page, hashPath);
+    page = await openEasyOrdersPath(page, hashPath);
     await applyDateFilters(page, fromDate, toDate);
     await setRowsPerPage100(page);
     await waitForListReady(page, kind);
@@ -848,6 +873,7 @@ function createEasyOrdersUiRecovery(options = {}) {
   }
 
   async function resendRealOrder(page, candidate, options = {}) {
+    page = activeRecoveryPage(page);
     const url = candidate.easyOrderUuid
       ? `${EASY_BASE}/orders/${candidate.easyOrderUuid}`
       : candidate.detailUrl;
@@ -855,7 +881,7 @@ function createEasyOrdersUiRecovery(options = {}) {
     const skus = (candidate.items || []).map((item) => item.sku).filter(Boolean).join(", ");
     emit("easyorders.recovery.real.detail", "started", `Opening real order ${candidate.easyShortId || candidate.easyOrderUuid}`);
     log(`EasyOrders recovery real target: ${candidate.name || ""} / ${candidate.normPhone || candidate.phone || ""} / ${skus || "no SKU"} / ${candidate.easyOrderUuid || candidate.detailUrl || ""}`);
-    await goto(page, url);
+    page = await gotoEasyOrdersUrl(page, url);
     await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
     await page.locator("body").waitFor({ state: "visible", timeout: 10000 });
     if (!(await waitForEasyOrdersDetail(page, "real", candidate))) {
@@ -1201,12 +1227,13 @@ function createEasyOrdersUiRecovery(options = {}) {
   }
 
   async function processCompletedMissedAsReal(page, candidates, fromDate, toDate) {
+    page = activeRecoveryPage(page);
     const list = candidates || [];
     const attempted = [];
     const skippedManual = [];
     if (!list.length) return { attempted, skippedManual };
     log(`EasyOrders recovery: ${list.length} completed missed rows will be searched in real orders for resend.`);
-    await openList(page, "real", fromDate, toDate);
+    page = await openList(page, "real", fromDate, toDate);
     const pending = [...list];
     let pageNo = 1;
     const maxPages = 100;
@@ -1276,12 +1303,13 @@ function createEasyOrdersUiRecovery(options = {}) {
   }
 
   async function processMissedOrders(page, candidates, fromDate, toDate) {
+    page = activeRecoveryPage(page);
     emit("easyorders.recovery.missed", "started", `Processing ${candidates.length} prepared missed orders`);
     if (!Array.isArray(candidates) || candidates.length === 0) {
       emit("easyorders.recovery.missed", "ok", "No prepared missed orders need recovery");
       return { attempted: [], skippedCompleted: [], skippedManual: [] };
     }
-    await openList(page, "missed", fromDate, toDate);
+    page = await openList(page, "missed", fromDate, toDate);
     const pending = [...candidates];
     const attempted = [];
     const skippedManual = [];
@@ -1293,7 +1321,7 @@ function createEasyOrdersUiRecovery(options = {}) {
         `direct missed order ${candidate.easyShortId || candidate.easyOrderUuid || candidate.normPhone || candidate.detailUrl}`,
         async (recoveryAttempt) => {
           if (!(recoveryAttempt > 1 && /#\/missed-orders\/[^/]+/i.test(page.url()))) {
-            await goto(page, candidate.detailUrl);
+            page = await gotoEasyOrdersUrl(page, candidate.detailUrl);
             await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
             await page.waitForTimeout(stepDelayMs);
           }
@@ -1571,6 +1599,7 @@ function createEasyOrdersUiRecovery(options = {}) {
   }
 
   async function processRealOrders(page, candidates, fromDate, toDate) {
+    page = activeRecoveryPage(page);
     const list = Array.isArray(candidates) ? candidates : [];
     emit("easyorders.recovery.real", "started", `Processing ${list.length} real orders`);
     const attempted = [];
@@ -1580,7 +1609,7 @@ function createEasyOrdersUiRecovery(options = {}) {
     // current UI those rows must be matched in the paginated table first;
     // older deployments can still use the direct UUID/detail URL path below.
     if (list.some((candidate) => !candidate.easyOrderUuid && !candidate.detailUrl)) {
-      await openList(page, "real", fromDate, toDate);
+      page = await openList(page, "real", fromDate, toDate);
       const pending = [...list];
       let pageNo = 1;
       while (pageNo <= 100 && pending.length > 0) {
@@ -1673,6 +1702,7 @@ function createEasyOrdersUiRecovery(options = {}) {
   }
 
   async function retryAttempts(page, attempts, options = {}) {
+    page = activeRecoveryPage(page);
     const retried = [];
     for (const attempt of attempts || []) {
       if (attempt.completedNeedsRealRetry || attempt.missingConvertNeedsRealRetry) {
@@ -1692,7 +1722,7 @@ function createEasyOrdersUiRecovery(options = {}) {
             // Keep this navigation inside the retry wrapper. A prior EasyOrders
             // route change may still be settling after a detached-page retry;
             // letting this goto escape made the next missed order fatal.
-            await goto(page, attempt.detailUrl);
+            page = await gotoEasyOrdersUrl(page, attempt.detailUrl);
             await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
             await page.waitForTimeout(stepDelayMs);
             return convertMissedDetail(page, { ...attempt, attempts: 2 }, { attempt: recoveryAttempt, edit: false });

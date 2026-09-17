@@ -3548,6 +3548,30 @@ function createRunnerTaagerOrdersExportFlow() {
   });
 }
 
+async function ensureRunnerAutomationPageAlive(page, label, targetPath = "/orders") {
+  const candidate = !isClosedAutomationPage(activePage) ? activePage : page;
+  if (!isClosedAutomationPage(candidate)) {
+    activePage = candidate;
+    return candidate;
+  }
+  log(`Taager ${label}: automation page closed after download/navigation; relaunching Chrome profile`);
+  return relaunchTaagerAutomationPage(label, targetPath);
+}
+
+async function exportTaagerOrdersKeepingPageAlive(page, dateFrom, dateTo, label = "orders-export") {
+  const usablePage = !isClosedAutomationPage(activePage) ? activePage : page;
+  const buffer = await createRunnerTaagerOrdersExportFlow().exportOrders(usablePage, dateFrom, dateTo);
+  await ensureRunnerAutomationPageAlive(usablePage, `${label}-post-download`, "/orders");
+  return buffer;
+}
+
+async function gotoEasyOrdersKeepingPageAlive(page, url, label = "EasyOrders affiliate recovery") {
+  page = await ensureRunnerAutomationPageAlive(page, `${label}-before-goto`, "/orders");
+  await gotoWithNetworkRetries(page, url, label, { attempts: 3, timeout: 45000, waitMs: 5000 });
+  activePage = page;
+  return page;
+}
+
 async function taagerOrdersExportAttempt(page, exportFromDate, dateTo, attempt, maxAttempts) {
   return createRunnerTaagerOrdersExportFlow().exportAttempt(page, exportFromDate, dateTo, attempt, maxAttempts);
 }
@@ -3561,7 +3585,7 @@ async function phase4_taager(page, exportFromDate, dateTo) {
   page = await taagerLogin(page);
   emitStage("taager.login", "ok", "Taager login confirmed");
   emitStage("taager.orders.export", "started", "Exporting Taager orders");
-  const buffer = await createRunnerTaagerOrdersExportFlow().exportOrders(page, exportFromDate, dateTo);
+  const buffer = await exportTaagerOrdersKeepingPageAlive(page, exportFromDate, dateTo, "phase4-orders-export");
   emitStage("taager.orders.export", "ok", `Taager export downloaded ${buffer.length} bytes`, { bytes: buffer.length });
   return buffer;
 }
@@ -4697,12 +4721,11 @@ async function runManualReviewAffiliateRecovery(page, dateFrom, dateTo, taagerSt
     progress: (msg) => process.send && process.send({ type: "order-progress", mode: "affiliate-recovery", ...msg }),
     country: TAAGER_COUNTRY,
     gotoEasyOrders: async (recoveryPage, url) => {
-      await gotoWithNetworkRetries(recoveryPage, url, "EasyOrders manual affiliate recovery", { attempts: 3, timeout: 45000, waitMs: 5000 });
-      return recoveryPage;
+      return gotoEasyOrdersKeepingPageAlive(recoveryPage, url, "EasyOrders manual affiliate recovery");
     },
     gotoTaager: (recoveryPage, pathOrUrl) => taagerGoto(recoveryPage, pathOrUrl),
     readDownloadToBuffer,
-    exportTaagerOrders: (recoveryPage, from, to) => createRunnerTaagerOrdersExportFlow().exportOrders(recoveryPage, from, to),
+    exportTaagerOrders: (recoveryPage, from, to) => exportTaagerOrdersKeepingPageAlive(recoveryPage, from, to, "manual-affiliate-recovery-verify"),
     parseTaagerOrderKeys,
   });
   const recovery = await recoveryFlow.run(page, {
@@ -4929,7 +4952,7 @@ async function exportTaagerCartVerificationSnapshot(page, exportFromDate, export
         dateFrom: formatDataDay(exportFromDate),
         dateTo: formatDataDay(exportToDate),
       });
-      const buffer = await createRunnerTaagerOrdersExportFlow().exportOrders(page, exportFromDate, exportToDate);
+      const buffer = await exportTaagerOrdersKeepingPageAlive(page, exportFromDate, exportToDate, `cart-verification-${label}`);
       if (process.env.TAAGER_CART_VERIFICATION_DIR) {
         try {
           fs.mkdirSync(process.env.TAAGER_CART_VERIFICATION_DIR, { recursive: true });
@@ -6057,12 +6080,11 @@ if (config.mode === "second-taager-cart-upload") {
             progress: (msg) => process.send && process.send({ type: "order-progress", mode: "affiliate-recovery", ...msg }),
             country: TAAGER_COUNTRY,
             gotoEasyOrders: async (recoveryPage, url) => {
-              await gotoWithNetworkRetries(recoveryPage, url, "EasyOrders affiliate recovery", { attempts: 3, timeout: 45000, waitMs: 5000 });
-              return recoveryPage;
+              return gotoEasyOrdersKeepingPageAlive(recoveryPage, url, "EasyOrders affiliate recovery");
             },
             gotoTaager: (recoveryPage, pathOrUrl) => taagerGoto(recoveryPage, pathOrUrl),
             readDownloadToBuffer,
-            exportTaagerOrders: (recoveryPage, from, to) => createRunnerTaagerOrdersExportFlow().exportOrders(recoveryPage, from, to),
+            exportTaagerOrders: (recoveryPage, from, to) => exportTaagerOrdersKeepingPageAlive(recoveryPage, from, to, "affiliate-recovery-verify"),
             parseTaagerOrderKeys,
           });
           affiliateRecovery = await recoveryFlow.run(page, {
@@ -6296,12 +6318,11 @@ if (config.mode === "second-taager-cart-upload") {
         progress: (msg) => process.send && process.send({ type: "order-progress", mode: "affiliate-recovery", ...msg }),
         country: TAAGER_COUNTRY,
         gotoEasyOrders: async (recoveryPage, url) => {
-          await gotoWithNetworkRetries(recoveryPage, url, "EasyOrders affiliate recovery", { attempts: 3, timeout: 45000, waitMs: 5000 });
-          return recoveryPage;
+          return gotoEasyOrdersKeepingPageAlive(recoveryPage, url, "EasyOrders affiliate recovery");
         },
         gotoTaager: (recoveryPage, pathOrUrl) => taagerGoto(recoveryPage, pathOrUrl),
         readDownloadToBuffer,
-        exportTaagerOrders: (recoveryPage, from, to) => createRunnerTaagerOrdersExportFlow().exportOrders(recoveryPage, from, to),
+        exportTaagerOrders: (recoveryPage, from, to) => exportTaagerOrdersKeepingPageAlive(recoveryPage, from, to, "affiliate-recovery-verify"),
         parseTaagerOrderKeys,
       });
 

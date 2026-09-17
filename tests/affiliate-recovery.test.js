@@ -440,7 +440,11 @@ assert(uiRecoverySource.includes('button[aria-label="Go to next page"]'), "affil
 assert(uiRecoverySource.includes('getByRole("button", { name: /^Options$/i })'), "real-order resend should open the Options menu first");
 assert(easyOrdersExportSource.includes('[aria-label="Change language"]'), "EasyOrders export should support the new sidebar language control");
 assert(easyOrdersExportSource.includes('[aria-label="Open menu"]'), "EasyOrders export should open the sidebar before switching language");
-assert(easyOrdersExportSource.includes('dialog.locator("h2").click({ timeout: 1000 })'), "EasyOrders export should not spend the default timeout looking for an optional dialog heading");
+assert(easyOrdersExportSource.includes("clickExportDialogSubmit(page, dialog, keyword)") && easyOrdersExportSource.includes("await clickExportDialogSubmit(page, dialog, keyword)"), "EasyOrders export submit helper must receive the active page for bounded retries");
+assert(easyOrdersExportSource.includes('dialog.locator(\'input[type="text"]\')'), "EasyOrders export should use the current direct date inputs");
+assert(easyOrdersExportSource.includes("readOptionalExportToast") && easyOrdersExportSource.includes("isVisible({ timeout: 1200 })"), "EasyOrders export should not spend Playwright's default timeout waiting for an optional toast");
+assert(easyOrdersExportSource.includes("refreshNotificationsForPoll") && easyOrdersExportSource.includes("timeout: 8000"), "EasyOrders notification refreshes should be bounded per poll");
+assert(easyOrdersExportSource.includes("أغسطس") && easyOrdersExportSource.includes("EASY_ORDERS_EXPORT_DATE_HEADER_UNREADABLE"), "EasyOrders export date picker should parse Arabic month headers and fail fast when unreadable");
 assert(dashboardFetchSource.includes("easyOrdersFlow.exportOrders") && easyOrdersExportSource.includes("href.toLowerCase().includes(\".xlsx\")"), "dashboard EasyOrders export should scan direct Excel notification links through the shared exporter");
 assert(!dashboardFetchSource.includes("depth < 10") && easyOrdersExportSource.includes("table tbody tr, table tr, [role='row']"), "dashboard EasyOrders export should use the shared notification row scanner");
 assert(runnerSource.includes('input[name="full_name"], input#full_name'), "normal EasyOrders create should use the stable full_name field name");
@@ -463,6 +467,8 @@ assert(failedFlowSource.includes("orders-search-button"), "failed-orders diagnos
 assert(failedFlowSource.includes("export-to-excel-button"), "failed-orders diagnosis should use the stable Taager Excel export button id");
 assert(failedFlowSource.includes('[data-day="${target}"]'), "failed-orders diagnosis should select calendar days by stable data-day");
 assert(failedFlowSource.includes("leaving to date empty"), "failed-orders diagnosis should leave the end date empty like normal Taager orders export");
+assert(easyOrdersExportSource.includes("clickExportDialogSubmit") && easyOrdersExportSource.includes("EASY_ORDERS_EXPORT_SUBMIT_UNAVAILABLE"), "EasyOrders export submit should use bounded semantic retries");
+assert(!easyOrdersExportSource.includes('dialog.locator(".MuiDialogActions-root button").click()'), "EasyOrders export should not use an unbounded dialog action click");
 assert(runnerSource.includes("recoveryPreview: true"), "affiliate recovery should send a run-page preview table");
 assert(runnerSource.includes("config.autoConfirm !== true") && runnerSource.includes("preview_only_auto_confirm_off"), "affiliate recovery should stop after preview when Auto-Confirm is OFF");
 assert(runnerSource.includes("Auto-confirm is OFF - affiliate recovery stopped after preview"), "affiliate recovery preview-only safeguard should be logged clearly");
