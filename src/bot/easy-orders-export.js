@@ -802,7 +802,8 @@ function createEasyOrdersExportFlow(options = {}) {
   }
 
   async function clickExportDialogSubmit(page, dialog, keyword) {
-    const semantic = dialog.locator("button").filter({
+    const actionButtons = dialog.locator(".MuiDialogActions-root button");
+    const semantic = actionButtons.filter({
       hasText: /export|generate|create|download|تصدير|إنشاء|تحميل/i,
     }).last();
     const fallback = dialog.locator('button[type="submit"], .MuiDialogActions-root button').last();
