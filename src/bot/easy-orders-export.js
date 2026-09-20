@@ -833,6 +833,33 @@ function createEasyOrdersExportFlow(options = {}) {
     throw new Error(`EASY_ORDERS_EXPORT_SUBMIT_UNAVAILABLE: ${keyword}: ${lastError && lastError.message || "dialog submit button was not actionable"}`);
   }
 
+  async function clickExportButton(page, exportButton, keyword) {
+    let lastError = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await exportButton.waitFor({ state: "visible", timeout: 2500 });
+        await exportButton.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+        if (!(await exportButton.isEnabled().catch(() => true))) {
+          await page.waitForTimeout(250);
+          continue;
+        }
+        await exportButton.click({ timeout: 2500 });
+        return;
+      } catch (error) {
+        lastError = error;
+        const clicked = await exportButton.evaluate((element) => {
+          if (!element || element.disabled || element.getAttribute("aria-disabled") === "true") return false;
+          element.scrollIntoView({ block: "center", inline: "nearest" });
+          element.click();
+          return true;
+        }).catch(() => false);
+        if (clicked) return;
+        await page.waitForTimeout(150);
+      }
+    }
+    throw new Error(`EASY_ORDERS_EXPORT_BUTTON_UNAVAILABLE: ${keyword}: ${lastError && lastError.message || "Export button was not actionable"}`);
+  }
+
   async function readOptionalExportToast(page) {
     const toastLocator = page.locator('[role="alert"], .MuiSnackbarContent-root, .Toastify__toast').first();
     if (!(await toastLocator.isVisible({ timeout: 1200 }).catch(() => false))) return "";
@@ -1106,9 +1133,13 @@ function createEasyOrdersExportFlow(options = {}) {
       stage("easyorders.export.dialog", "started", `Opening export dialog for ${keyword}`);
       const exportButton = page.locator('button.MuiButton-outlined:has-text("Export"), main button:has-text("Export"), button:has-text("Export")').first();
       await exportButton.waitFor({ state: "visible", timeout: 15000 });
-      await exportButton.click();
+      await clickExportButton(page, exportButton, keyword);
       const dialog = page.locator('div[role="dialog"]').first();
-      await dialog.waitFor({ state: "visible", timeout: 8000 });
+      try {
+        await dialog.waitFor({ state: "visible", timeout: 8000 });
+      } catch (error) {
+        throw new Error(`EASY_ORDERS_EXPORT_DIALOG_NOT_OPEN: ${keyword}: ${error.message || error}`);
+      }
       // EasyOrders now renders the datepicker inputs directly inside the
       // dialog; the old `.react-datepicker-wrapper input` wrapper is gone.
       const dateInputs = dialog.locator('input[type="text"]');
