@@ -12,10 +12,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - name: Install locked dependencies
-        run: npm ci
+        run: |
+          for attempt in 1 2 3; do
+            echo "Dependency install attempt $attempt..."
+            npm ci && exit 0
+            sleep 10
+          done
+          exit 1
+        shell: bash
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
       - name: Create env files
@@ -56,10 +63,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - name: Install locked dependencies
-        run: npm ci
+        run: |
+          for attempt in 1 2 3; do
+            echo "Dependency install attempt $attempt..."
+            npm ci && exit 0
+            sleep 10
+          done
+          exit 1
+        shell: bash
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
       - name: Create env files
@@ -73,11 +87,23 @@ jobs:
           echo "TAAGER_MARKETING_INCREMENTAL_SYNC=1" >> .env
         shell: bash
       - name: Build Windows
-        run: npm exec -- electron-builder --win --x64 --publish never
+        run: |
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            Write-Host "Windows build attempt $attempt..."
+            Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue
+            npm exec -- electron-builder --win --x64 --publish=never
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Start-Sleep -Seconds 10
+          }
+          exit 1
+        shell: pwsh
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
       - name: Upload Windows files to release
-        run: gh release upload "${{ github.event.release.tag_name }}" (Get-ChildItem dist\*.exe,dist\*.blockmap,dist\latest.yml | ForEach-Object { $_.FullName }) --clobber --repo "${{ github.repository }}"
+        run: |
+          $files = @(Get-ChildItem dist\*.exe,dist\*.blockmap,dist\latest.yml -ErrorAction SilentlyContinue)
+          if ($files.Count -eq 0) { throw "Windows build produced no release artifacts." }
+          gh release upload "${{ github.event.release.tag_name }}" ($files | ForEach-Object { $_.FullName }) --clobber --repo "${{ github.repository }}"
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
