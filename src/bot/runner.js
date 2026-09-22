@@ -89,6 +89,7 @@ const CMS_PROVIDER = String(config.cmsProvider || "easyorders").trim().toLowerCa
 
 const MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS = 3;
 const TAAGER_POPUP_RETRY_WAIT_MS = 0;
+const RUNNER_DOWNLOADS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "khod-taager-runner-"));
 const TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR = [
   "#orders-v2-date-pill",
   "#orders-search-button",
@@ -850,9 +851,9 @@ async function triggerEasyOrdersExport(page, exportFromDate, keyword) {
     // The Export button is MuiButton-outlined (Create Order is MuiButton-contained, an <a> tag).
     // This is the most specific stable selector we can use without relying on dynamic class hashes.
     log(`🖱️ Clicking page-level Export button to open dialog...`);
-    const pageExportBtn = page.locator(
-      'button.MuiButton-outlined:has-text("Export"), main button:has-text("Export"), button:has-text("Export")'
-    ).first();
+    const pageExportBtn = page.locator('button.MuiButton-outlined:visible')
+      .filter({ hasText: /^\s*Export\s*$/i })
+      .first();
     await pageExportBtn.waitFor({ state: "visible", timeout: 10000 });
     const pageExportText = await pageExportBtn.innerText().catch(() => "?");
     log(`   Found page Export button — text: "${pageExportText.replace(/\s+/g, " ").trim()}" — clicking`);
@@ -865,7 +866,7 @@ async function triggerEasyOrdersExport(page, exportFromDate, keyword) {
     // MUST use state:"visible" — "attached" (the default) passes even for hidden dialogs
     // that React keeps in the DOM from a previous render cycle.
     log(`⏳ Waiting for export dialog to become visible...`);
-    const dialog = page.locator('div[role="dialog"]').first();
+    const dialog = page.locator('div[role="dialog"]:visible').first();
     try {
       await dialog.waitFor({ state: "visible", timeout: 8000 });
     } catch {
@@ -917,7 +918,9 @@ async function triggerEasyOrdersExport(page, exportFromDate, keyword) {
     }
 
     // ── 4. Click the Export button inside the dialog ──
-    const dialogExportBtn = dialog.locator('.MuiDialogActions-root button');
+    const dialogExportBtn = dialog.locator('.MuiDialogActions-root button:visible')
+      .filter({ hasText: /^\s*Export\s*$/i })
+      .last();
     await dialogExportBtn.waitFor({ state: "visible", timeout: 5000 });
     const dialogExportText = await dialogExportBtn.innerText().catch(() => "?");
     log(`🖱️ Dialog action button found — text: "${dialogExportText.replace(/\s+/g, " ").trim()}" — clicking...`);
@@ -1270,6 +1273,7 @@ async function launchRunnerContext(profilePath, chromePath) {
         executablePath: chromePath,
         windowSize: "1280,800",
         viewport: null,
+        downloadsPath: RUNNER_DOWNLOADS_DIR,
       });
       activeContext = context;
       activePage = null;
@@ -3525,6 +3529,43 @@ async function readDownloadToBuffer(download, options = {}) {
   }
 }
 
+async function recoverRunnerDownloadedBuffer(meta = {}) {
+  const startedAt = Number(meta.startedAt || Date.now());
+  const deadline = Date.now() + 10000;
+  let lastSize = -1;
+  let stableReads = 0;
+
+  while (Date.now() < deadline) {
+    const candidates = fs.readdirSync(RUNNER_DOWNLOADS_DIR, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && !entry.name.endsWith(".crdownload"))
+      .map((entry) => {
+        const filePath = path.join(RUNNER_DOWNLOADS_DIR, entry.name);
+        const stat = fs.statSync(filePath);
+        return { filePath, mtimeMs: stat.mtimeMs, size: stat.size };
+      })
+      .filter((entry) => entry.mtimeMs >= startedAt - 1000 && entry.size > 0)
+      .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+    const candidate = candidates[0];
+    if (candidate) {
+      if (candidate.size === lastSize) stableReads += 1;
+      else stableReads = 0;
+      lastSize = candidate.size;
+      if (stableReads >= 1) {
+        const buffer = fs.readFileSync(candidate.filePath);
+        // XLSX files are ZIP containers and start with the PK signature. This
+        // prevents an unrelated partial/error response from being accepted.
+        if (buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b) {
+          log(`Taager download rescued from ${candidate.filePath} (${buffer.length} bytes)`);
+          return buffer;
+        }
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return null;
+}
+
 function createRunnerTaagerOrdersExportFlow() {
   return createTaagerOrdersExportFlow({
     flow: "runner",
@@ -3540,6 +3581,7 @@ function createRunnerTaagerOrdersExportFlow() {
     recoverForRetry: (page, error, attempt, maxAttempts) =>
       recoverTaagerForRetry(page, "orders-export", "/orders", error, attempt, maxAttempts),
     readDownloadToBuffer,
+    recoverDownloadedBuffer: recoverRunnerDownloadedBuffer,
     maxAttempts: MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS,
     searchButtonSelector: TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR,
     searchEnabledSelector: TAAGER_ORDERS_SEARCH_ENABLED_SELECTOR,

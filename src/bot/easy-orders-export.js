@@ -802,11 +802,13 @@ function createEasyOrdersExportFlow(options = {}) {
   }
 
   async function clickExportDialogSubmit(page, dialog, keyword) {
-    const actionButtons = dialog.locator(".MuiDialogActions-root button");
+    // Scope the submit to the active dialog action row. The page also has an
+    // Export button with identical text, so never resolve this from `page`.
+    const actionButtons = dialog.locator('.MuiDialogActions-root button:visible');
     const semantic = actionButtons.filter({
       hasText: /export|generate|create|download|تصدير|إنشاء|تحميل/i,
     }).last();
-    const fallback = dialog.locator('button[type="submit"], .MuiDialogActions-root button').last();
+    const fallback = dialog.locator('.MuiDialogActions-root button:visible').last();
     const submit = (await semantic.count().catch(() => 0)) > 0 ? semantic : fallback;
     let lastError = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -1132,10 +1134,13 @@ function createEasyOrdersExportFlow(options = {}) {
       // EasyOrders layout.
       await ensureEnglish(page);
       stage("easyorders.export.dialog", "started", `Opening export dialog for ${keyword}`);
-      const exportButton = page.locator('button.MuiButton-outlined:has-text("Export"), main button:has-text("Export"), button:has-text("Export")').first();
+      // The page-level control is the outlined button beside Create Order.
+      // Keep it outside the dialog flow; the modal's submit button is a text
+      // button and must be resolved only after the dialog is visible.
+      const exportButton = page.locator('button.MuiButton-outlined:visible').filter({ hasText: /^\s*Export\s*$/i }).first();
       await exportButton.waitFor({ state: "visible", timeout: 15000 });
       await clickExportButton(page, exportButton, keyword);
-      const dialog = page.locator('div[role="dialog"]').first();
+      const dialog = page.locator('div[role="dialog"]:visible').first();
       try {
         await dialog.waitFor({ state: "visible", timeout: 8000 });
       } catch (error) {

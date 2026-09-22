@@ -12,6 +12,9 @@ function createTaagerOrdersExportFlow(options = {}) {
   const stabilizeBeforeDateRange = options.stabilizeBeforeDateRange;
   const recoverForRetry = options.recoverForRetry;
   const readDownloadToBuffer = options.readDownloadToBuffer;
+  const recoverDownloadedBuffer = typeof options.recoverDownloadedBuffer === "function"
+    ? options.recoverDownloadedBuffer
+    : null;
   const maxAttempts = Number(options.maxAttempts || 3);
   const flow = options.flow || "runner";
   const finalErrorPrefix = options.finalErrorPrefix || "Taager orders export failed";
@@ -132,20 +135,40 @@ function createTaagerOrdersExportFlow(options = {}) {
     // Keep a cookie snapshot so a download can be recovered independently if
     // Chrome closes immediately after emitting the download event.
     const downloadCookies = await page.context().cookies().catch(() => []);
+    const downloadStartedAt = Date.now();
     const downloadPromise = page.waitForEvent("download", { timeout: 120000 });
     log(`Taager orders export attempt ${attempt}/${maxAttempts}: clicking export`);
-    await safeTaagerClick(page, selectors.exportButton, "Taager export button", {
-      timeout: 30000,
-      clickTimeout: 5000,
-      noWaitAfter: true,
-      log,
-    });
-    stage("taager.orders.download", "started", "Waiting for download event");
-    const download = await downloadPromise;
-    const buffer = await readDownloadToBuffer(download, {
-      cookies: downloadCookies,
-      url: typeof download.url === "function" ? download.url() : "",
-    });
+    let buffer;
+    try {
+      await safeTaagerClick(page, selectors.exportButton, "Taager export button", {
+        timeout: 30000,
+        clickTimeout: 5000,
+        noWaitAfter: true,
+        log,
+      });
+      stage("taager.orders.download", "started", "Waiting for download event");
+      const download = await downloadPromise;
+      buffer = await readDownloadToBuffer(download, {
+        cookies: downloadCookies,
+        url: typeof download.url === "function" ? download.url() : "",
+      });
+    } catch (downloadError) {
+      // Chrome can disappear after Taager has already started writing the
+      // attachment. When the browser target closes before Playwright returns
+      // a Download object, recover the completed file from the dedicated
+      // downloads directory instead of issuing the export a second time.
+      if (!recoverDownloadedBuffer) throw downloadError;
+      // The listener may still reject after a click-triggered page close.
+      // Consume that late rejection while checking the filesystem fallback.
+      downloadPromise.catch(() => {});
+      buffer = await recoverDownloadedBuffer({
+        startedAt: downloadStartedAt,
+        error: downloadError,
+        attempt,
+      });
+      if (!buffer || !buffer.length) throw downloadError;
+      log(`Taager orders export attempt ${attempt}/${maxAttempts}: recovered completed download after browser/page closure`);
+    }
     log(`Taager orders downloaded: ${buffer.length} bytes`);
     stage("taager.orders.download", "ok", `Downloaded ${buffer.length} bytes`, { bytes: buffer.length });
     return buffer;

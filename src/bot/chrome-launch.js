@@ -60,6 +60,10 @@ function buildPersistentContextOptions(options = {}) {
   if (Object.prototype.hasOwnProperty.call(options, "viewport")) {
     launchOptions.viewport = options.viewport;
   }
+  if (options.downloadsPath) {
+    launchOptions.downloadsPath = options.downloadsPath;
+    launchOptions.acceptDownloads = true;
+  }
 
   return launchOptions;
 }
