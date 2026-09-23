@@ -1215,14 +1215,35 @@ function createEasyOrdersExportFlow(options = {}) {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         stage("easyorders.download", "started", `Downloading EasyOrders export (${attempt}/3)`);
-        const response = await page.context().request.get(url, { timeout: 60000 });
-        const status = response.status();
-        if (!response.ok()) {
-          const error = new Error(`EASY_ORDERS_DOWNLOAD_HTTP_${status}: ${url}`);
-          error.retryable = status === 408 || status === 429 || status >= 500;
-          throw error;
+        let buffer;
+        // The notification link is a signed object-storage URL. Download it
+        // with the process HTTP client so a page/context closing during the
+        // export cannot dispose the Playwright API request context underneath
+        // this operation.
+        if (typeof fetch === "function") {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 60000);
+          try {
+            const response = await fetch(url, { redirect: "follow", signal: controller.signal });
+            if (!response.ok) {
+              const error = new Error(`EASY_ORDERS_DOWNLOAD_HTTP_${response.status}: ${url}`);
+              error.retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+              throw error;
+            }
+            buffer = Buffer.from(await response.arrayBuffer());
+          } finally {
+            clearTimeout(timer);
+          }
+        } else {
+          const response = await page.context().request.get(url, { timeout: 60000 });
+          const status = response.status();
+          if (!response.ok()) {
+            const error = new Error(`EASY_ORDERS_DOWNLOAD_HTTP_${status}: ${url}`);
+            error.retryable = status === 408 || status === 429 || status >= 500;
+            throw error;
+          }
+          buffer = Buffer.from(await response.body());
         }
-        const buffer = Buffer.from(await response.body());
         if (!buffer.length) throw new Error(`EASY_ORDERS_DOWNLOAD_EMPTY: ${url}`);
         stage("easyorders.download", "ok", `Downloaded ${buffer.length} bytes`, { bytes: buffer.length });
         return buffer;

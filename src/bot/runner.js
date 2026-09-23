@@ -4768,7 +4768,7 @@ async function runManualReviewAffiliateRecovery(page, dateFrom, dateTo, taagerSt
     gotoTaager: (recoveryPage, pathOrUrl) => taagerGoto(recoveryPage, pathOrUrl),
     readDownloadToBuffer,
     exportTaagerOrders: (recoveryPage, from, to) => exportTaagerOrdersKeepingPageAlive(recoveryPage, from, to, "manual-affiliate-recovery-verify"),
-    parseTaagerOrderKeys,
+    parseTaagerOrderKeys: parser().parseTaagerOrderKeys,
   });
   const recovery = await recoveryFlow.run(page, {
     preparedOrders,
