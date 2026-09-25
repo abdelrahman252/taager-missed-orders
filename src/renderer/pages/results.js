@@ -64,7 +64,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   function formatFailReason(reason) {
     const text = String(reason || "").trim();
     if (!text) return t("results.error_occurred");
-    if (/INTERNET_ISSUE|ERR_CONNECTION|net::|timeout/i.test(text)) {
+    if (/INTERNET_ISSUE|ERR_CONNECTION|ERR_TIMED_OUT|ETIMEDOUT|net::/i.test(text)) {
       return translated(
         "results.internet_issue",
         "Internet connection or website timeout. The bot retries recoverable pages automatically; if the run stops, check your internet and run again."

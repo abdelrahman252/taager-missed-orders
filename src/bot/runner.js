@@ -317,8 +317,14 @@ async function reloadWithNetworkRetries(page, label, options = {}) {
 
 function friendlyErrorMessage(error) {
   const message = String(error && error.message || error || "");
-  if (/TAAGER_BROWSER_CRASH|Target page, context or browser has been closed|browser.*closed|page.*closed/i.test(message)) {
+  if (/TAAGER_BROWSER_CRASH/i.test(message)) {
     return "TAAGER_BROWSER_CRASH: Chrome closed or crashed while Taager was processing. The export was not verified; please run it again.";
+  }
+  if (/Target page, context or browser has been closed|browser.*closed|page.*closed|target closed/i.test(message)) {
+    return "BROWSER_CRASH: Chrome closed or crashed during automation. Check the recent stage/logs to identify whether Taager or EasyOrders was active, then run again.";
+  }
+  if (/TAAGER_TARGET_TIMEOUT|TAAGER_BLOCKING_OVERLAY/i.test(message)) {
+    return message;
   }
   if (/TAAGER_DATE_RANGE_FAILED|TAAGER_STEP_TIMEOUT|TAAGER_DATE_RANGE_ABORTED|date range selection|date picker|calendar/i.test(message)) {
     return "TAAGER_DATE_RANGE_FAILED: Taager's date picker did not finish. The run was stopped before using an unverified export.";

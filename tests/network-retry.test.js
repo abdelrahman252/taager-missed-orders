@@ -24,6 +24,8 @@ const nonRetryableMessages = [
   "Expected selector to be visible",
   "Order button not available",
   "HTTP 422 validation failed",
+  "locator.waitFor: Timeout 1500ms exceeded",
+  "TAAGER_TARGET_TIMEOUT: orders controls missing after 15000ms",
 ];
 
 for (const message of nonRetryableMessages) {

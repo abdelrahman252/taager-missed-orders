@@ -64,6 +64,17 @@ function createTaagerOrdersExportFlow(options = {}) {
     return "TAAGER_EXPORT_FAILED";
   }
 
+  function assertWorkbookBuffer(buffer) {
+    if (!Buffer.isBuffer(buffer) || buffer.length < 4) {
+      throw new Error("TAAGER_DOWNLOAD_INVALID: Taager returned an empty or incomplete workbook");
+    }
+    const isZipWorkbook = buffer[0] === 0x50 && buffer[1] === 0x4b;
+    const isLegacyWorkbook = buffer[0] === 0xd0 && buffer[1] === 0xcf && buffer[2] === 0x11 && buffer[3] === 0xe0;
+    if (!isZipWorkbook && !isLegacyWorkbook) {
+      throw new Error("TAAGER_DOWNLOAD_INVALID: Taager download was not an Excel workbook");
+    }
+  }
+
   async function exportAttempt(page, dateFrom, dateTo, attempt) {
     stage("taager.orders.attempt", "started", `Attempt ${attempt}/${maxAttempts}`);
     log(`Taager orders export attempt ${attempt}/${maxAttempts}: starting`);
@@ -169,7 +180,8 @@ function createTaagerOrdersExportFlow(options = {}) {
       if (!buffer || !buffer.length) throw downloadError;
       log(`Taager orders export attempt ${attempt}/${maxAttempts}: recovered completed download after browser/page closure`);
     }
-    log(`Taager orders downloaded: ${buffer.length} bytes`);
+    assertWorkbookBuffer(buffer);
+    log(`Taager orders downloaded and workbook signature verified: ${buffer.length} bytes`);
     stage("taager.orders.download", "ok", `Downloaded ${buffer.length} bytes`, { bytes: buffer.length });
     return buffer;
   }
@@ -186,7 +198,19 @@ function createTaagerOrdersExportFlow(options = {}) {
           maxAttempts,
         });
         if (attempt >= maxAttempts) break;
-        page = await recoverForRetry(page, error, attempt, maxAttempts);
+        try {
+          page = await recoverForRetry(page, error, attempt, maxAttempts) || page;
+        } catch (recoveryError) {
+          // Recovery verification is diagnostic, not a fourth fatal stage.
+          // The next attempt begins with gotoOrders(), which can repair a
+          // still-live page or trigger browser relaunch recovery if it closed.
+          lastError = recoveryError;
+          log(`Taager orders recovery after attempt ${attempt}/${maxAttempts} did not become ready: ${recoveryError.message || recoveryError}`);
+          stage("taager.orders.recovery", "warning", recoveryError.message || String(recoveryError), {
+            attempt,
+            maxAttempts,
+          });
+        }
       }
     }
     const errorType = classifyExportError(lastError);
