@@ -62,6 +62,18 @@ function options(overrides = {}) {
     "an HTML/login response must never be reported as a successful workbook download"
   );
 
+  const uiNotReadyFlow = createTaagerOrdersExportFlow(options({
+    maxAttempts: 1,
+    waitForTaagerTarget: async () => {
+      throw new Error("TAAGER_TARGET_TIMEOUT: Taager orders page ready was not visible");
+    },
+  }));
+  await assert.rejects(
+    uiNotReadyFlow.exportOrders(activePage, new Date("2026-09-01"), new Date("2026-09-02")),
+    /TAAGER_UI_NOT_READY:.*TAAGER_TARGET_TIMEOUT/,
+    "a missing orders-page control must not be mislabeled as a network outage"
+  );
+
   console.log("Taager orders export flow tests passed");
 })().catch((error) => {
   console.error(error);

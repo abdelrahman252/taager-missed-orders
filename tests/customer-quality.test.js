@@ -23,9 +23,10 @@ assert(assessCustomerName("منبتسيابنتسيابمش").issues.includes("l
 assert(assessCustomerName("Yghggb").issues.includes("short_latin_keyboard_smash"));
 assert(assessCustomerName("AB AB").issues.includes("repeated_short_token"));
 assert.strictEqual(assessCustomerOrder({ name: "أحمد محمد علي", rawPhone: "0536679002", normPhone: "536679002" }).ok, true);
+assert.strictEqual(assessCustomerOrder({ name: "Ramadan Ghersan", rawPhone: "0531088792", normPhone: "531088792" }).ok, true, "the visible Ramadan name/phone combination should not be rejected as fake");
 assert.strictEqual(assessCustomerOrder({ name: "Test User", rawPhone: "0536679002", normPhone: "536679002" }).ok, false);
 assert.strictEqual(assessCustomerOrder({ name: "Mitch Jefferson", rawPhone: "0501234567", normPhone: "501234567" }).ok, false);
-assert(assessCustomerOrder({ name: "Mitch Jefferson", rawPhone: "0501234567", normPhone: "501234567" }).issues.includes("phone:sequential_digit_run"));
+assert(assessCustomerOrder({ name: "Ahmed Mohamed Al-Otaibi", rawPhone: "0501234567", normPhone: "501234567" }).issues.includes("phone:sequential_digit_run"));
 assert.strictEqual(assessCustomerOrder({ name: "Yghggb", rawPhone: "555635999", normPhone: "555635999" }).ok, false);
 assert.strictEqual(assessCustomerOrder({ name: "تب", rawPhone: "956236585665", normPhone: "562365856" }).ok, true);
 assert.strictEqual(assessCustomerOrder({ name: "مساء الخير", rawPhone: "05488484584", normPhone: "548848458" }).ok, true);
@@ -74,6 +75,18 @@ const missedParsed = parseMissedOrders(
   new Date(2026, 7, 20),
 );
 assert.strictEqual(missedParsed.orders.length, 1);
+const missedPhoneFailureSheet = XLSX.utils.aoa_to_sheet([
+  missedHeader,
+  ["false", "2026-08-12", "[Valid Product]", "88", "Customer", "Riyadh", "Address", ""],
+]);
+const missedPhoneFailureBook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(missedPhoneFailureBook, missedPhoneFailureSheet, "Missed");
+const missedPhoneFailure = parseMissedOrders(
+  XLSX.write(missedPhoneFailureBook, { type: "buffer", bookType: "xlsx" }),
+  new Date(2026, 7, 1),
+  new Date(2026, 7, 20),
+);
+assert.strictEqual(missedPhoneFailure.skippedOrders[0].source, "missed", "missed phone failures must retain their source for the results table");
 const missedResolved = resolveMissedOrders(missedParsed.orders, catalog, {});
 assert.strictEqual(missedResolved.resolved.length, 0);
 assert.strictEqual(missedResolved.skippedOrders[0].reason, "invalid_customer_data");

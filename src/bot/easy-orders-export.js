@@ -3,6 +3,11 @@
 const os = require("os");
 const path = require("path");
 const { isRetryableNetworkError } = require("./network-retry");
+const {
+  closeExportDatePicker,
+  clickExportDialogSubmit,
+  waitForExportOrdersDialog,
+} = require("./easy-orders-export-dialog");
 
 const EASY_ORDERS_AUTH_DOM_SELECTOR = [
   ".MuiAppBar-root",
@@ -306,6 +311,31 @@ function createEasyOrdersExportFlow(options = {}) {
     return isRetryableNetworkError(error);
   }
 
+  function isExecutionContextNavigationError(error) {
+    return /execution context was destroyed|cannot find context with specified id|most likely because of a navigation/i
+      .test(String(error && error.message || error || ""));
+  }
+
+  async function evaluateWithNavigationRetry(page, label, evaluate) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        return await evaluate();
+      } catch (error) {
+        if (!isExecutionContextNavigationError(error) || attempt >= 2 || (page.isClosed && page.isClosed())) {
+          if (isExecutionContextNavigationError(error) && attempt >= 2 && !(page.isClosed && page.isClosed())) {
+            log(`EasyOrders ${label}: scan skipped after repeated navigation races: ${error.message}`);
+            return null;
+          }
+          throw error;
+        }
+        log(`EasyOrders ${label}: page navigated during scan; waiting for the new document (${attempt}/2).`);
+        await page.waitForLoadState("domcontentloaded", { timeout: 10000 }).catch(() => {});
+        await page.waitForTimeout(350).catch(() => {});
+      }
+    }
+    return null;
+  }
+
   async function debugScreenshot(page, label) {
     try {
       const filePath = path.join(os.tmpdir(), `kbot-debug-${label}-${Date.now()}.png`);
@@ -349,7 +379,7 @@ function createEasyOrdersExportFlow(options = {}) {
     const waitMs = Math.max(250, Number(opts.waitMs || 5000));
     for (let attempt = 1; attempt <= attempts; attempt++) {
       try {
-        await page.reload({ waitUntil: "domcontentloaded", timeout });
+        await page.reload({ waitUntil: opts.waitUntil || "domcontentloaded", timeout });
         return;
       } catch (error) {
         if (!isNetworkNavigationError(error) || attempt >= attempts) throw error;
@@ -801,41 +831,6 @@ function createEasyOrdersExportFlow(options = {}) {
     log(`EasyOrders date picker: selected ${formatDataDay(targetDate)}`);
   }
 
-  async function clickExportDialogSubmit(page, dialog, keyword) {
-    // Scope the submit to the active dialog action row. The page also has an
-    // Export button with identical text, so never resolve this from `page`.
-    const actionButtons = dialog.locator('.MuiDialogActions-root button:visible');
-    const semantic = actionButtons.filter({
-      hasText: /export|generate|create|download|تصدير|إنشاء|تحميل/i,
-    }).last();
-    const fallback = dialog.locator('.MuiDialogActions-root button:visible').last();
-    const submit = (await semantic.count().catch(() => 0)) > 0 ? semantic : fallback;
-    let lastError = null;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        await submit.waitFor({ state: "visible", timeout: 2500 });
-        await submit.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
-        if (!(await submit.isEnabled().catch(() => true))) {
-          await page.waitForTimeout(250);
-          continue;
-        }
-        await submit.click({ timeout: 2500 });
-        return;
-      } catch (error) {
-        lastError = error;
-        const clicked = await submit.evaluate((element) => {
-          if (!element || element.disabled || element.getAttribute("aria-disabled") === "true") return false;
-          element.scrollIntoView({ block: "center", inline: "nearest" });
-          element.click();
-          return true;
-        }).catch(() => false);
-        if (clicked) return;
-        await page.waitForTimeout(150);
-      }
-    }
-    throw new Error(`EASY_ORDERS_EXPORT_SUBMIT_UNAVAILABLE: ${keyword}: ${lastError && lastError.message || "dialog submit button was not actionable"}`);
-  }
-
   async function clickExportButton(page, exportButton, keyword) {
     let lastError = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -875,11 +870,25 @@ function createEasyOrdersExportFlow(options = {}) {
         attempts: 1,
         timeout: 8000,
         waitMs: 500,
+        waitUntil: "commit",
       });
+      await page.waitForLoadState("domcontentloaded", { timeout: 12000 });
+      await page.locator("body").waitFor({ state: "visible", timeout: 5000 });
+      await page.waitForTimeout(350);
       return true;
     } catch (error) {
       log(`EasyOrders notifications refresh ${poll} skipped after bounded wait: ${error.message || error}`);
-      return false;
+      // page.reload can time out after navigation has already committed. Do
+      // not evaluate the old document's DOM while Chromium is replacing its
+      // execution context; wait for the new document to settle first.
+      const settled = await page.waitForLoadState("domcontentloaded", { timeout: 10000 })
+        .then(() => true)
+        .catch(() => false);
+      if (!settled || (page.isClosed && page.isClosed())) return false;
+      await page.locator("body").waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(350).catch(() => {});
+      log(`EasyOrders notifications refresh ${poll}: navigation settled after the reload timeout.`);
+      return true;
     }
   }
 
@@ -905,7 +914,7 @@ function createEasyOrdersExportFlow(options = {}) {
   }
 
   async function findExportLink(page, keyword, ignoredHrefs = []) {
-    return page.evaluate(({ keyword, ignoredHrefs }) => {
+    return evaluateWithNavigationRetry(page, "notification link scan", () => page.evaluate(({ keyword, ignoredHrefs }) => {
       const visible = (element) => {
         if (!element || !element.isConnected) return false;
         const style = window.getComputedStyle(element);
@@ -966,11 +975,11 @@ function createEasyOrdersExportFlow(options = {}) {
         if (href) return { href, text };
       }
       return null;
-    }, { keyword, ignoredHrefs });
+    }, { keyword, ignoredHrefs }));
   }
 
   async function summarizeNotifications(page, keyword) {
-    return page.evaluate(({ keyword }) => {
+    const summary = await evaluateWithNavigationRetry(page, "notification summary", () => page.evaluate(({ keyword }) => {
       const visible = (element) => {
         if (!element || !element.isConnected) return false;
         const style = window.getComputedStyle(element);
@@ -1019,9 +1028,9 @@ function createEasyOrdersExportFlow(options = {}) {
         firstRows: rows.slice(0, 5).map((row) => row.text.slice(0, 220)),
         firstMatchingRows: matchingRows.slice(0, 3).map((row) => row.text.slice(0, 260)),
       };
-    }, { keyword }).catch((error) => ({
-      error: error && error.message ? error.message : String(error || "notification summary failed"),
-    }));
+    }, { keyword }));
+    if (summary) return summary;
+    return { error: "EasyOrders notification summary skipped during navigation" };
   }
 
   async function waitForExportLink(page, keyword, attempt, ignoredHrefs = []) {
@@ -1042,8 +1051,13 @@ function createEasyOrdersExportFlow(options = {}) {
       // avoid reloading on every subsequent DOM poll.
       const needsRefresh = poll <= requiredNotificationRefreshes || (Date.now() - lastRefreshAt) >= exportNotificationRefreshMs;
       if (needsRefresh) {
-        await refreshNotificationsForPoll(page, poll);
+        const refreshed = await refreshNotificationsForPoll(page, poll);
         lastRefreshAt = Date.now();
+        if (!refreshed) {
+          log(`EasyOrders notification poll ${poll} skipped because the page is still navigating.`);
+          await page.waitForTimeout(exportNotificationPollMs).catch(() => {});
+          continue;
+        }
       }
       await page.waitForTimeout(exportNotificationPollMs);
       if (poll === 1) {
@@ -1140,12 +1154,7 @@ function createEasyOrdersExportFlow(options = {}) {
       const exportButton = page.locator('button.MuiButton-outlined:visible').filter({ hasText: /^\s*Export\s*$/i }).first();
       await exportButton.waitFor({ state: "visible", timeout: 15000 });
       await clickExportButton(page, exportButton, keyword);
-      const dialog = page.locator('div[role="dialog"]:visible').first();
-      try {
-        await dialog.waitFor({ state: "visible", timeout: 8000 });
-      } catch (error) {
-        throw new Error(`EASY_ORDERS_EXPORT_DIALOG_NOT_OPEN: ${keyword}: ${error.message || error}`);
-      }
+      const dialog = await waitForExportOrdersDialog(page, keyword);
       // EasyOrders now renders the datepicker inputs directly inside the
       // dialog; the old `.react-datepicker-wrapper input` wrapper is gone.
       const dateInputs = dialog.locator('input[type="text"]');
@@ -1156,14 +1165,9 @@ function createEasyOrdersExportFlow(options = {}) {
       stage("easyorders.export.date", "started", `Selecting export start date ${formatDataDay(exportFromDate)}`);
       await pickDate(page, exportFromDate);
       log(`EasyOrders export date selected for ${keyword}; closing calendar`);
-      // The new EasyOrders dialog may keep the calendar mounted while its
-      // action row is re-rendering. Escape closes the calendar without waiting
-      // on a brittle heading selector, then the submit helper uses a bounded
-      // semantic click instead of Playwright's 30-second default action wait.
-      await Promise.race([
-        page.keyboard.press("Escape").catch(() => {}),
-        page.waitForTimeout(1000),
-      ]);
+      // Wait for the date picker to actually disappear before locating the
+      // modal submit button; Escape returning does not mean the UI has settled.
+      await closeExportDatePicker(page, keyword);
       log(`EasyOrders export calendar close attempted for ${keyword}; submitting dialog`);
       await clickExportDialogSubmit(page, dialog, keyword);
       log(`EasyOrders export submit clicked for ${keyword}; waiting for dialog to close`);

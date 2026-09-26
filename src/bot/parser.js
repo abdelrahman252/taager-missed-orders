@@ -1361,6 +1361,7 @@ function parseMissedOrders(buffer, dateFrom, dateTo) {
     if (!phoneMetas.length) {
       skipped.phone++;
       skippedOrders.push({
+        source: "missed",
         name: String(row["Full Name"] || "").trim(),
         rawPhone: String(row["Phone"] || "").trim(),
         normalizedPhone: "",

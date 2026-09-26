@@ -1,7 +1,9 @@
 "use strict";
 
 const { chromium } = require("playwright-core");
+const { pinnedAutomationBrowserPath } = require("./automation-browser-path");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const {
   addChromeFingerprintSpoofing,
@@ -69,6 +71,7 @@ const DASHBOARD_ENRICHMENT_PROVIDER = String(config.dashboardEnrichmentProvider 
 const EASY_ORDERS_LOOKBACK_DAYS = Number(config.easyOrdersLookbackDays || 60) > 0 ? Number(config.easyOrdersLookbackDays || 60) : 60;
 const MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS = 3;
 const TAAGER_POPUP_RETRY_WAIT_MS = 0;
+const DASHBOARD_TAAGER_DOWNLOADS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "khod-dashboard-taager-"));
 const TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR = [
   "#orders-v2-date-pill",
   "#orders-search-button",
@@ -99,11 +102,20 @@ function installDashboardPageDiagnostics(page, label) {
   if (!page || instrumentedDashboardPages.has(page) || typeof page.on !== "function") return;
   instrumentedDashboardPages.add(page);
   page.on("close", () => {
-    log(`[Dashboard Chrome] page closed (${page === activePage ? "active page" : "other page"}; ${label})`);
+    log(`[Dashboard Chrome] page closed (${page === activePage ? "active page" : "other page"}; ${label}; url=${safeDashboardPageLocation(page)})`);
   });
   page.on("crash", () => {
-    log(`[Dashboard Chrome] page crashed (${page === activePage ? "active page" : "other page"}; ${label})`);
+    log(`[Dashboard Chrome] page crashed (${page === activePage ? "active page" : "other page"}; ${label}; url=${safeDashboardPageLocation(page)})`);
   });
+}
+
+function safeDashboardPageLocation(page) {
+  try {
+    const current = new URL(page.url());
+    return `${current.origin}${current.pathname}`;
+  } catch (_) {
+    return "unavailable";
+  }
 }
 
 function installDashboardBrowserDiagnostics(context, label) {
@@ -128,6 +140,8 @@ function processDashboardSheets(...args) {
 }
 
 function findChrome() {
+  const pinnedBrowser = pinnedAutomationBrowserPath();
+  if (pinnedBrowser) return pinnedBrowser;
   const { execSync } = require("child_process");
   if (process.platform === "win32") {
     const paths = [
@@ -265,6 +279,7 @@ async function launchDashboardContext(profilePath, chromePath) {
       const context = await launchPersistentChromeContext(chromium, profilePath, {
         executablePath: chromePath,
         windowSize: "1400,900",
+        downloadsPath: DASHBOARD_TAAGER_DOWNLOADS_DIR,
       });
       installDashboardBrowserDiagnostics(context, "recovery launch");
       await addChromeFingerprintSpoofing(context);
@@ -1431,6 +1446,26 @@ async function recoverTaagerForRetry(page, stage, targetPath, error, attempt, ma
 }
 
 async function readDownloadToBuffer(download, options = {}) {
+  // Persist the download before reading it: Taager may close/navigate the
+  // target page as soon as the export starts, invalidating context-owned
+  // streams even though the browser has already begun writing the workbook.
+  if (typeof download.saveAs === "function") {
+    const savedPath = path.join(
+      DASHBOARD_TAAGER_DOWNLOADS_DIR,
+      `taager-dashboard-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.xlsx`
+    );
+    try {
+      await download.saveAs(savedPath);
+      const savedBuffer = fs.readFileSync(savedPath);
+      if (savedBuffer.length) {
+        log(`Dashboard Taager download persisted before parsing (${savedBuffer.length} bytes)`);
+        return savedBuffer;
+      }
+      throw new Error("saved download was empty");
+    } catch (saveError) {
+      log(`Dashboard Taager download saveAs failed; trying stream and recovery paths: ${saveError.message}`);
+    }
+  }
   try {
     const stream = await download.createReadStream();
     const chunks = [];
@@ -1610,6 +1645,7 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
   let context = await launchPersistentChromeContext(chromium, profilePath, {
     executablePath: chromePath,
     windowSize: "1400,900",
+    downloadsPath: DASHBOARD_TAAGER_DOWNLOADS_DIR,
   });
   installDashboardBrowserDiagnostics(context, "initial launch");
 

@@ -44,8 +44,15 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     const unresolved = Number(recovery.unresolvedCount || 0) || 0;
     const blockedReview = Number(recovery.blockedReviewCount || recovery.skippedManualCount || 0) || 0;
     const totalAttempted = Math.max(attempted, verified + failed + unresolved);
-    if (totalAttempted <= 0) return null;
-    return { attempted: totalAttempted, verified, failed, unresolved, blockedReview, previewOnly: recovery.previewOnly === true };
+    return {
+      attempted: totalAttempted,
+      verified,
+      failed,
+      unresolved,
+      blockedReview,
+      previewOnly: recovery.previewOnly === true,
+      emptyQueue: totalAttempted === 0,
+    };
   }
 
   function translated(key, fallback) {
@@ -152,7 +159,8 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     const type = options.type || "text";
     const min = options.min != null ? ` min="${htmlEsc(options.min)}"` : "";
     const step = options.step != null ? ` step="${htmlEsc(options.step)}"` : "";
-    return `<input data-manual-field="${field}" type="${type}" value="${htmlEsc(value)}"${min}${step} style="box-sizing:border-box;width:100%;min-width:${options.minWidth || 90}px;background:rgba(255,255,255,0.035);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font:inherit">`;
+    const placeholder = options.placeholder ? ` placeholder="${htmlEsc(options.placeholder)}"` : "";
+    return `<input data-manual-field="${field}" type="${type}" value="${htmlEsc(value)}"${placeholder}${min}${step} style="box-sizing:border-box;width:100%;min-width:${options.minWidth || 90}px;background:rgba(255,255,255,0.035);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font:inherit">`;
   }
 
   function manualReviewStaticField(field, value, className = "") {
@@ -229,6 +237,10 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   window._resDownloadManualReviewTable = async function (tableId) {
     const rows = collectManualReviewRows(tableId, false);
     if (!rows.length || !window.api?.saveOutputFile) return;
+    const meaningful = (value) => {
+      const text = String(value == null ? "" : value).trim().toLowerCase();
+      return Boolean(text) && !["-", "—", "n/a", "na", "unknown", "undefined", "null"].includes(text);
+    };
     const columns = [
       { header: translated("results.source_col", "Source"), value: "source" },
       { header: t("results.customer_name_col"), value: "name" },
@@ -240,6 +252,12 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       { header: translated("results.city_col", "City"), value: "city" },
       { header: translated("results.address_col", "Address"), value: "address" },
       { header: t("results.reason_col"), value: "reason" },
+      { header: translated("results.diagnostics_col", "Diagnostics"), value: (row) => [
+        row?.customerQuality?.identity?.message || row?.actionMessage || "",
+        !meaningful(row?.source || row?.recoverySource) ? "Missing source" : "",
+        !meaningful(row?.sku || row?.suggestedSku) ? "Missing SKU" : "",
+        !meaningful(row?.suggestedQty ?? row?.qty ?? row?.easyOrdersQty) ? "Missing quantity" : "",
+      ].filter(Boolean).join("; ") },
     ];
     const csv = tableRowsToCsv(rows, columns);
     const buffer = Array.from(new TextEncoder().encode(csv));
@@ -540,6 +558,15 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         direction: auto;
         text-align: start;
         color: var(--text2);
+      }
+      .skipped-orders-table .manual-missing-value {
+        display: inline-block;
+        color: var(--warning);
+        font-family: var(--font-mono);
+        font-size: var(--type-caption);
+        font-style: italic;
+        font-weight: var(--weight-semibold);
+        white-space: nowrap;
       }
       .skipped-orders-table .manual-product-readonly {
         box-sizing: border-box;
@@ -894,6 +921,73 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       duplicate_easyorders_uuid_conflicting_phone: translated("results.reason_duplicate_easyorders_uuid_conflicting_phone", "Same EasyOrders order has conflicting phone candidates"),
       skipped_manual: translated("results.reason_skipped_manual", "Manual review"),
     };
+    const identityIssueLabels = {
+      "phone:sequential_digits": "Phone contains a complete sequential digit pattern",
+      "phone:sequential_digit_run": "Phone contains a sequential digit run",
+      "phone:repeated_digit_phone": "Phone is made mostly of one repeated digit",
+      "phone:repeated_digit_run": "Phone contains a repeated digit run",
+      "phone:ambiguous_candidates": "Phone has more than one plausible correction",
+      "phone:missing": "Phone is missing",
+      "name:missing": "Customer name is missing",
+      "name:placeholder": "Customer name is a placeholder",
+      "name:unsafe_symbols": "Customer name contains unsafe symbols",
+      "name:repeated_chars": "Customer name contains repeated characters",
+      "name:mostly_digits": "Customer name is mostly digits",
+      "name:mixed_letters_digits": "Customer name mixes letters and digits",
+      "name:phone_like": "Customer name looks like a phone number",
+      "name:latin_keyboard_smash": "Customer name looks like keyboard noise",
+      "name:short_latin_keyboard_smash": "Customer name looks like keyboard noise",
+      "name:long_single_token_low_variety": "Customer name has unusually low character variety",
+      "name:repeated_short_token": "Customer name repeats a short token",
+      "name:too_long": "Customer name is unusually long",
+    };
+    const missingValueLabels = {
+      source: "Missing source",
+      sku: "Missing SKU",
+      quantity: "Missing quantity",
+      product: "Missing product",
+      phone: "Missing phone",
+    };
+    const hasMeaningfulValue = (value) => {
+      const text = String(value == null ? "" : value).trim();
+      return Boolean(text) && !["-", "—", "n/a", "na", "unknown", "undefined", "null"].includes(text.toLowerCase());
+    };
+    const rawQuantityFor = (row) => row?.suggestedQty ?? row?.qty ?? row?.easyOrdersQty ?? "";
+    const missingFieldsFor = (row) => {
+      const missing = [];
+      if (!hasMeaningfulValue(row?.source || row?.recoverySource)) missing.push("source");
+      if (!hasMeaningfulValue(row?.sku || row?.suggestedSku)) missing.push("sku");
+      if (!hasMeaningfulValue(rawQuantityFor(row))) missing.push("quantity");
+      if (!hasMeaningfulValue(row?.productName || row?.product)) missing.push("product");
+      if (!hasMeaningfulValue(row?.normalizedPhone || row?.normPhone || row?.phone || row?.rawPhone)) missing.push("phone");
+      return missing;
+    };
+    const missingFieldsDetailFor = (row) => missingFieldsFor(row)
+      .map((field) => missingValueLabels[field])
+      .join("; ");
+    const customerIdentityDetailFor = (row) => {
+      const identity = row?.customerQuality?.identity || row?.customerQuality?.identityQuality || null;
+      let issues = Array.isArray(identity?.issues) ? identity.issues.map((issue) => String(issue).trim()).filter(Boolean) : [];
+      const rawIdentityMessage = String(identity?.message || row?.actionMessage || row?.message || "").trim();
+      if (!issues.length) {
+        const match = rawIdentityMessage.match(/:\s*(phone|name):[^.]+/i);
+        if (match) issues = match[0].replace(/^:\s*/, "").split(/,\s*/).map((issue) => issue.trim()).filter(Boolean);
+      }
+      const phone = row?.normalizedPhone || row?.normPhone || row?.phone || row?.rawPhone || "";
+      const details = issues.map((issue) => {
+        const known = identityIssueLabels[issue];
+        if (known) return /phone:/.test(issue) && hasMeaningfulValue(phone) ? `${known} (${phone})` : known;
+        return issue.replace(/^phone:/, "Phone: ").replace(/^name:/, "Name: ").replace(/_/g, " ");
+      });
+      if (details.length) return details.join("; ");
+      if (rawIdentityMessage && !/^customer data looks fake or invalid(?:\.|$)/i.test(rawIdentityMessage)) return rawIdentityMessage;
+      if (normalizedRecoveryReasonKey(row?.reason || rawIdentityMessage) === "invalid_customer_data") {
+        return "Identity validation failed, but the exact issue was not retained for this row; re-run the account to capture the diagnostic.";
+      }
+      return "";
+    };
+    const missingValueHtml = (field, detail) => `<span class="manual-missing-value" title="${htmlEsc(detail)}">${htmlEsc(missingValueLabels[field] || "Missing")}</span>`;
+    const displayOrMissing = (value, field, detail) => hasMeaningfulValue(value) ? htmlEsc(value) : missingValueHtml(field, detail);
     const title = (value) => String(value || "").replace(/"/g,"");
     const reasonKeyFor = (row) => row?.uncertain && row.reason === "phone_parse_failed" ? "phone_uncertain_zero_appended" : row?.reason;
     const reasonTextFor = (row) => {
@@ -907,14 +1001,19 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         || row.recoverySource === "affiliate-recovery"
         || (row.uncertain && manualReviewReasons.has(String(reasonKey || ""))));
     };
+    const phoneFor = (row) => row?.normalizedPhone || row?.normPhone || row?.phone || row?.rawPhone || "—";
+    const qtyFor = (row) => rawQuantityFor(row) || "—";
+    const customerDetail = (row) => customerIdentityDetailFor(row);
+    const completenessDetail = (row) => missingFieldsDetailFor(row);
+    const diagnosticDetailFor = (row) => [customerDetail(row), completenessDetail(row)].filter(Boolean).join("; ");
     const messageFor = (row) => {
       const reasonKey = normalizedRecoveryReasonKey(reasonKeyFor(row) || row?.actionMessage || row?.message || row?.skuTierDecision?.message);
+      const detail = diagnosticDetailFor(row);
+      if (reasonKey === "invalid_customer_data" && detail) return detail;
       const normalized = recoveryStatusMessage({ ...row, reason: reasonKey });
-      if (normalized && normalized !== "-") return normalized;
-      return row?.actionMessage || row?.message || row?.skuTierDecision?.message || "";
+      if (normalized && normalized !== "-") return detail ? `${normalized} ${detail}` : normalized;
+      return detail || row?.actionMessage || row?.message || row?.skuTierDecision?.message || "";
     };
-    const phoneFor = (row) => row?.normalizedPhone || row?.normPhone || row?.phone || row?.rawPhone || "—";
-    const qtyFor = (row) => row?.suggestedQty || row?.qty || row?.easyOrdersQty || "—";
     const subtotalFor = (row) => row?.suggestedSubtotal || row?.subtotal || row?.easyOrdersSubtotal || "—";
     const outcomeFor = (row) => row?.uploadedWithWarning
       ? t("results.warning_uploaded")
@@ -929,6 +1028,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       { header: translated("results.qty_col", "Qty"), value: qtyFor },
       { header: t("results.reason_col"), value: reasonTextFor },
       { header: translated("results.message_col", "Message"), value: messageFor },
+      { header: translated("results.diagnostics_col", "Diagnostics"), value: diagnosticDetailFor },
     ], "warnings-skipped-orders");
     const paged = buildPagedItems(rows, (row, i, attrs) => {
       const reasonText = reasonTextFor(row);
@@ -937,12 +1037,15 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       const reviewColor = isManualReview ? "#f97316" : "var(--warning)";
       const outcomeColor = row.uploadedWithWarning ? "var(--warning)" : (isManualReview ? "#f97316" : "var(--danger)");
       const message = messageFor(row);
+      const diagnostics = diagnosticDetailFor(row);
       const phone = phoneFor(row);
       const qty = qtyFor(row);
       const subtotal = subtotalFor(row);
       const city = row.city || row.region || "";
       const address = row.address || row.notes || "";
       const editable = isManualReviewRow(row);
+      const source = row.source || row.recoverySource || "";
+      const sku = row.sku || row.suggestedSku || "";
       const manualMetadata = editable ? [
         ["easyOrderUuid", row.easyOrderUuid || row.orderUuid || row.orderId || ""],
         ["easyShortId", row.easyShortId || row.shortId || row.ID || ""],
@@ -952,18 +1055,18 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       ].map(([field, value]) => manualReviewHiddenField(field, value)).join("") : "";
       return `<tr ${attrs} style="${isManualReview ? "background:rgba(255,255,255,0.018)" : (row.uncertain ? "background:rgba(255,255,255,0.012)" : "")}">
         <td class="skip-outcome" style="color:${outcomeColor}" title="${outcomeText}">${editable ? `<input data-manual-select type="checkbox" style="accent-color:#f97316">${manualMetadata}` : outcomeText}</td>
-        <td class="skip-source" title="${title(row.source)}">${row.source || "—"}</td>
+        <td class="skip-source" title="${title(source || "No source was retained in the imported row")}">${displayOrMissing(source, "source", "No source was retained in the imported row")}</td>
         <td class="skip-name" title="${title(row.name)}">${editable ? manualReviewInput("name", row.name || "") : (row.name || "—")}</td>
-        <td class="skip-phone" style="color:var(--text)" title="${title(phone)}">${editable ? manualReviewInput("phone", phone) : phone}</td>
-        <td class="skip-phone" title="${title(row.sku)}">${editable ? manualReviewInput("sku", row.sku || row.suggestedSku || "") : (row.sku || row.suggestedSku || "—")}</td>
-        <td class="skip-product" title="${title(row.productName)}">${editable ? `${manualReviewStaticField("productName", row.productName || "", "manual-product-readonly")}${manualReviewHiddenField("subtotal", subtotal)}` : (row.productName || "—")}</td>
-        <td class="skip-phone">${editable ? manualReviewInput("qty", qty, { type: "number", min: 1, step: 1, minWidth: 64 }) : qty}</td>
+        <td class="skip-phone" style="color:var(--text)" title="${title(phone || "Phone was not retained in the imported row")}">${editable ? manualReviewInput("phone", phone === "—" ? "" : phone, { placeholder: "Missing phone" }) : displayOrMissing(phone, "phone", "Phone was not retained in the imported row")}</td>
+        <td class="skip-phone" title="${title(sku || "No trusted SKU was matched or carried from the source row")}">${editable ? manualReviewInput("sku", sku, { placeholder: "Missing SKU" }) : displayOrMissing(sku, "sku", "No trusted SKU was matched or carried from the source row")}</td>
+        <td class="skip-product" title="${title(row.productName || "Product name was not retained in the imported row")}">${editable ? `${manualReviewStaticField("productName", row.productName || "", "manual-product-readonly")}${manualReviewHiddenField("subtotal", subtotal)}` : displayOrMissing(row.productName, "product", "Product name was not retained in the imported row")}</td>
+        <td class="skip-phone">${editable ? manualReviewInput("qty", qty === "—" ? "" : qty, { type: "number", min: 1, step: 1, minWidth: 64, placeholder: "Missing qty" }) : displayOrMissing(qty, "quantity", "Quantity was not present or could not be inferred")}</td>
         <td class="skip-phone">${editable ? manualReviewInput("city", city, { minWidth: 120 }) : htmlEsc(city || "—")}</td>
         <td class="skip-phone">${editable ? manualReviewInput("address", address, { minWidth: 160 }) : htmlEsc(address || "—")}</td>
-        <td class="skip-reason" style="color:${reviewColor}" title="${title(reasonText)}">${reasonText}</td>
-        <td class="skip-reason skip-message" title="${title(message)}">${message || "—"}</td>
+        <td class="skip-reason" style="color:${reviewColor}" title="${title([reasonText, customerDetail(row)].filter(Boolean).join(" — "))}">${reasonText}</td>
+        <td class="skip-reason skip-message" title="${title(message || diagnostics)}">${message || diagnostics || "—"}</td>
         ${showAlertColumn ? `<td class="skip-alert">${row.uncertain ? `<span title="${t("results.phone_rescued_verify")}" style="color:var(--warning)">⚠️</span>` : ""}</td>` : ""}
-      </tr>`.replace("<tr ", `<tr data-manual-row="${editable ? "1" : "0"}" data-manual-source="${htmlEsc(row.source || "")}" data-manual-reason="${htmlEsc(reasonText)}" `);
+      </tr>`.replace("<tr ", `<tr data-manual-row="${editable ? "1" : "0"}" data-manual-source="${htmlEsc(source)}" data-manual-reason="${htmlEsc(reasonText)}" `);
     }, "skipped");
     const hasManualReview = rows.some(isManualReviewRow);
     const manualTableId = hasManualReview ? registerManualReviewTable(rows) : "";
@@ -2250,7 +2353,14 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
           </div>
         <div class="dash-section-body no-pad">${errorRowsHtml}</div>
       </div>` : `
-      ${recoveryMetrics?.previewOnly ? `
+      ${recoveryMetrics?.emptyQueue ? `
+      <div class="notice-box warn" style="border-color:var(--warning);background:rgba(255,170,0,0.08)">
+        <span class="notice-icon">ℹ️</span>
+        <div class="notice-text">
+          <strong>${translated("results.recovery_zero_queue_title", "No eligible EasyOrders recovery orders")}</strong>
+          <div style="font-size:var(--type-label);color:var(--text2);margin-top:3px">${translated("results.recovery_zero_queue_body", "0 orders were submitted or retried. The Taager failed-orders list was not checked because there were no unresolved recovery attempts. See skipped and manual-review rows below.")}</div>
+        </div>
+      </div>` : recoveryMetrics?.previewOnly ? `
       <div class="notice-box warn" style="border-color:var(--warning);background:rgba(255,170,0,0.08)">
         <span class="notice-icon">⚠️</span>
         <div class="notice-text">
@@ -2698,7 +2808,14 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
         </div>
         <div class="dash-section-body no-pad">${errorRowsHtml}</div>
       </div>` : `
-      ${recoveryMetrics?.previewOnly ? `
+      ${recoveryMetrics?.emptyQueue ? `
+      <div class="notice-box warn" style="border-color:var(--warning);background:rgba(255,170,0,0.08)">
+        <span class="notice-icon">ℹ️</span>
+        <div class="notice-text">
+          <strong>${translated("results.recovery_zero_queue_title", "No eligible EasyOrders recovery orders")}</strong>
+          <div style="font-size:var(--type-label);color:var(--text2);margin-top:3px">${translated("results.recovery_zero_queue_body", "0 orders were submitted or retried. The Taager failed-orders list was not checked because there were no unresolved recovery attempts. See skipped and manual-review rows below.")}</div>
+        </div>
+      </div>` : recoveryMetrics?.previewOnly ? `
       <div class="notice-box warn" style="border-color:var(--warning);background:rgba(255,170,0,0.08)">
         <span class="notice-icon">⚠️</span>
         <div class="notice-text">

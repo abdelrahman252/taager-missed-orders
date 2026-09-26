@@ -32,6 +32,7 @@ admin-panel/admin.env
 # Build output directories
 dist/
 release/
+vendor/automation-browser/
 
 # Temporary and local IDE configurations
 .codex-tmp/

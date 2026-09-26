@@ -1,6 +1,6 @@
 {
   "name": "taager-orders",
-  "version": "1.0.126",
+  "version": "1.0.127",
   "description": "Taager Orders Automation Bot",
   "repository": {
     "type": "git",
@@ -61,13 +61,13 @@
     "portal:lint": "npm --prefix web-portal run lint -- src",
     "icons:transparent": "powershell -ExecutionPolicy Bypass -File scripts/regenerate-transparent-icons.ps1",
     "dist:mac": "electron-builder --mac --x64 --arm64",
-    "dist:win": "electron-builder --win",
-    "dist:all": "electron-builder --mac --win",
-    "build": "electron-builder",
+    "dist:win": "node tools/prepare-automation-browser.js && electron-builder --win",
+    "dist:all": "node tools/prepare-automation-browser.js && electron-builder --mac --win",
+    "build": "node tools/prepare-automation-browser.js && electron-builder",
     "sentry:sourcemaps": "node scripts/sentry-upload-sourcemaps.js",
-    "release:win": "electron-builder --win --publish always",
+    "release:win": "node tools/prepare-automation-browser.js && electron-builder --win --publish always",
     "release:mac": "electron-builder --mac --publish always",
-    "release:all": "electron-builder --mac --win --publish always"
+    "release:all": "node tools/prepare-automation-browser.js && electron-builder --mac --win --publish always"
   },
   "dependencies": {
     "@google/genai": "^2.6.0",
@@ -122,6 +122,12 @@
     },
     "win": {
       "icon": "assets/icon.ico",
+      "extraResources": [
+        {
+          "from": "vendor/automation-browser",
+          "to": "automation-browser"
+        }
+      ],
       "target": [
         {
           "target": "nsis",

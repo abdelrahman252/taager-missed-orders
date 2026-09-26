@@ -1,6 +1,7 @@
 "use strict";
 
 const { chromium } = require("playwright-core");
+const { pinnedAutomationBrowserPath } = require("./automation-browser-path");
 const fs   = require("fs");
 const os   = require("os");
 const path = require("path");
@@ -12,7 +13,7 @@ const {
 const { formatPhone, normalizePhone } = require("./phone");
 const { buildGroupedCartOrders, cartOrderItemKeys, orderLineItems } = require("./cart-order-groups");
 const { sanitizeCustomerFields } = require("./customer-quality");
-const { resolveMonthlyTaagerExportRange } = require("./taager-date-range");
+const { resolveSafeTaagerExportRange } = require("./taager-date-range");
 const {
   buildCatalogScope,
   loadTrustedSkuTierCatalog,
@@ -58,6 +59,12 @@ const {
   waitForManualGoogleLogin,
 } = require("./google-login-handshake");
 const { isRetryableNetworkError } = require("./network-retry");
+const {
+  TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR,
+  TAAGER_ORDERS_SEARCH_ENABLED_SELECTOR,
+  TAAGER_EXPORT_BUTTON_SELECTOR,
+  createCurrentTaagerOrdersDatePicker,
+} = require("./taager-orders-page-ui");
 
 const config = JSON.parse(process.env.BOT_CONFIG || "{}");
 const log = (msg) => process.stdout.write(msg + "\n");
@@ -75,10 +82,10 @@ const lightFunnelsFlow = createLightFunnelsFlow({
   emit: (message) => process.send && process.send(message),
   waitForManualGoogleLogin,
   closeForManualGoogle: closeActiveContextForManualGoogle,
-  chromePathProvider: () => config.chromePath || findChrome(),
+  chromePathProvider: runnerBrowserPath,
   relaunchAfterManualGoogle: async (stage, targetUrl) => {
     await closeActiveContextForManualGoogle();
-    const relaunched = await launchRunnerContext(config.profilePath, config.chromePath || findChrome());
+    const relaunched = await launchRunnerContext(config.profilePath, runnerBrowserPath());
     await gotoWithNetworkRetries(relaunched.page, targetUrl, `LightFunnels ${stage} relaunch`, { attempts: 3, timeout: 45000, waitMs: 5000 });
     return relaunched.page;
   },
@@ -90,25 +97,6 @@ const CMS_PROVIDER = String(config.cmsProvider || "easyorders").trim().toLowerCa
 const MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS = 3;
 const TAAGER_POPUP_RETRY_WAIT_MS = 0;
 const RUNNER_DOWNLOADS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "khod-taager-runner-"));
-const TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR = [
-  "#orders-v2-date-pill",
-  "#orders-search-button",
-  'button:has-text("Search")',
-  'button:has-text("بحث")',
-].join(", ");
-const TAAGER_ORDERS_SEARCH_ENABLED_SELECTOR = [
-  "#orders-search-button:not([disabled])",
-  'button:has-text("Search"):not([disabled])',
-  'button:has-text("بحث"):not([disabled])',
-].join(", ");
-const TAAGER_EXPORT_BUTTON_SELECTOR = [
-  "#export-to-excel-button",
-  'button:has-text("Export")',
-  'button:has-text("Excel")',
-  'button:has-text("تصدير")',
-  'button:has-text("إكسل")',
-  'button:has-text("اكسل")',
-].join(", ");
 
 let parserFns = null;
 let outputFns = null;
@@ -117,6 +105,52 @@ let activePage = null;
 let stopRequested = false;
 let taagerIdentityVerified = false;
 let activeSecondTaagerCartChild = null;
+const runnerContextCloseReasons = new WeakMap();
+
+function runnerBrowserPath() {
+  return pinnedAutomationBrowserPath() || config.chromePath || findChrome();
+}
+
+function safeAutomationLocation(page) {
+  try {
+    const current = new URL(page.url());
+    return `${current.origin}${current.pathname}`;
+  } catch (_) {
+    return "unavailable";
+  }
+}
+
+function installRunnerBrowserLifecycleDiagnostics(context, label = "runner") {
+  const browser = context && typeof context.browser === "function" ? context.browser() : null;
+  const observePage = (page) => {
+    page.on("close", () => {
+      log(`[BrowserLifecycle] page closed label=${label} active=${page === activePage} url=${safeAutomationLocation(page)} requestedContextClose=${runnerContextCloseReasons.get(context) || "none"}`);
+    });
+    page.on("crash", () => {
+      log(`[BrowserLifecycle] page crashed label=${label} active=${page === activePage} url=${safeAutomationLocation(page)}`);
+    });
+  };
+
+  for (const page of context.pages()) observePage(page);
+  context.on("page", observePage);
+  context.on("close", () => {
+    log(`[BrowserLifecycle] context closed label=${label} requestedBy=${runnerContextCloseReasons.get(context) || "outside-runner-or-browser"}`);
+  });
+  if (browser && typeof browser.on === "function") {
+    browser.on("disconnected", () => {
+      log(`[BrowserLifecycle] browser disconnected label=${label} requestedContextClose=${runnerContextCloseReasons.get(context) || "none"}`);
+    });
+  }
+}
+
+async function closeRunnerContext(context, reason) {
+  if (!context) return;
+  runnerContextCloseReasons.set(context, reason || "unspecified-runner-close");
+  log(`[BrowserLifecycle] runner requested context close reason=${reason || "unspecified"}`);
+  await context.close().catch((error) => {
+    log(`[BrowserLifecycle] runner context close failed reason=${reason || "unspecified"}: ${error.message}`);
+  });
+}
 
 function handleStopMessage(message) {
   if (!message) return;
@@ -714,6 +748,17 @@ async function pickTaagerDateRangeV2(page, dateFrom, dateTo, signal) {
 }
 
 async function pickTaagerDateRange(page, dateFrom, dateTo, signal) {
+  const currentUiDatePicker = createCurrentTaagerOrdersDatePicker({
+    log,
+    clearInterruption: clearTaagerInterruptionBounded,
+    safeClick: safeTaagerClick,
+    pickDateInCalendar: pickDateInTaagerCalendar,
+    formatDataDay,
+  });
+  if (await currentUiDatePicker.isAvailable(page)) {
+    return currentUiDatePicker.pickDateRange(page, dateFrom, dateTo, signal);
+  }
+
   if (await hasTaagerOrdersV2DateFilter(page)) {
     return pickTaagerDateRangeV2(page, dateFrom, dateTo, signal);
   }
@@ -1295,6 +1340,7 @@ async function launchRunnerContext(profilePath, chromePath) {
         Object.defineProperty(navigator, "plugins", { get: () => [1, 2, 3, 4, 5] });
         Object.defineProperty(navigator, "languages", { get: () => ["ar-SA", "ar", "en"] });
       });
+      installRunnerBrowserLifecycleDiagnostics(context, "runner");
       await installTaagerInterruptionAutoDismiss(context, { log });
       installUnexpectedBlankPageGuard(context, { getActivePage: () => activePage, log, delayMs: 5000 });
       const page = await getOrCreateAutomationPage(context, { log });
@@ -1313,12 +1359,12 @@ async function launchRunnerContext(profilePath, chromePath) {
   throw new Error(`Could not reopen bot Chrome profile. Close the Google login Chrome window and retry. Last error: ${lastError ? lastError.message : "unknown"}`);
 }
 
-async function closeActiveContextForManualGoogle() {
+async function closeActiveContextForManualGoogle(reason = stopRequested ? "stop-requested" : "manual-google-or-relaunch") {
   if (!activeContext) return;
   const context = activeContext;
   activeContext = null;
   activePage = null;
-  await context.close().catch(() => {});
+  await closeRunnerContext(context, reason);
 }
 
 function isClosedAutomationPage(page) {
@@ -1329,8 +1375,8 @@ async function relaunchTaagerAutomationPage(stage, targetPath) {
   const profilePath = config.profilePath;
   if (!profilePath) throw new Error(`TAAGER_PAGE_CLOSED: cannot recover ${stage}; profilePath is missing`);
   log(`Taager ${stage}: browser page is closed or crashed - relaunching Chrome profile and reopening ${targetPath}`);
-  await closeActiveContextForManualGoogle();
-  const relaunched = await launchRunnerContext(profilePath, config.chromePath || findChrome());
+  await closeActiveContextForManualGoogle(`relaunch:${stage}`);
+  const relaunched = await launchRunnerContext(profilePath, runnerBrowserPath());
   const page = relaunched.page;
   await gotoWithNetworkRetries(page, taagerCountryUrl(targetPath), `Taager ${stage} relaunch`, { attempts: 3, timeout: 45000, waitMs: 5000 });
   await page.waitForTimeout(1000).catch(() => {});
@@ -3161,11 +3207,11 @@ async function taagerLogin(page) {
     await waitForManualGoogleLogin({
       config,
       country: TAAGER_COUNTRY,
-      chromePath: config.chromePath || findChrome(),
+      chromePath: runnerBrowserPath(),
       timeoutMs: 10 * 60 * 1000,
       log,
     });
-    const relaunched = await launchRunnerContext(config.profilePath, config.chromePath || findChrome());
+    const relaunched = await launchRunnerContext(config.profilePath, runnerBrowserPath());
     page = relaunched.page;
     await ensureTaagerArabic(page, "google-manual-relaunch", { requireButton: false });
     page = await ensureTaagerAuthenticatedHomeRoute(page, "google-manual-login-confirmed");
@@ -3489,6 +3535,27 @@ async function recoverTaagerForRetry(page, stage, targetPath, error, attempt, ma
 }
 
 async function readDownloadToBuffer(download, options = {}) {
+  // Persist the attachment immediately to an app-owned path. A Taager export
+  // can close its tab/context as soon as the download starts; Playwright's
+  // context-owned stream/path may then become unavailable. saveAs waits for
+  // completion and gives the runner a stable copy before parsing it.
+  if (typeof download.saveAs === "function") {
+    const savedPath = path.join(
+      RUNNER_DOWNLOADS_DIR,
+      `taager-export-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.xlsx`
+    );
+    try {
+      await download.saveAs(savedPath);
+      const savedBuffer = fs.readFileSync(savedPath);
+      if (savedBuffer.length) {
+        log(`Taager download persisted before parsing (${savedBuffer.length} bytes)`);
+        return savedBuffer;
+      }
+      throw new Error("saved download was empty");
+    } catch (saveError) {
+      log(`Taager download saveAs failed; trying stream and recovery paths: ${saveError.message}`);
+    }
+  }
   try {
     const stream = await download.createReadStream();
     const chunks = [];
@@ -3592,7 +3659,7 @@ function createRunnerTaagerOrdersExportFlow() {
     searchButtonSelector: TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR,
     searchEnabledSelector: TAAGER_ORDERS_SEARCH_ENABLED_SELECTOR,
     exportButtonSelector: TAAGER_EXPORT_BUTTON_SELECTOR,
-    finalErrorPrefix: "TAAGER_POPUP_RECOVERY_FAILED: Taager orders export failed",
+    finalErrorPrefix: "Taager orders export failed",
   });
 }
 
@@ -5289,7 +5356,7 @@ async function runSecondTaagerCartWorker() {
   log(`  Total missed-source items: ${Array.isArray(orders) ? orders.length : 0}`);
   log("========================================\n");
 
-  const { context, page: initialPage } = await launchRunnerContext(profilePath, config.chromePath || findChrome());
+  const { context, page: initialPage } = await launchRunnerContext(profilePath, runnerBrowserPath());
   let page = initialPage;
   try {
     emitStage("taager.second-cart.login", "started", "Logging into second Taager cart account", { total: Array.isArray(orders) ? orders.length : 0 });
@@ -5341,7 +5408,7 @@ async function runSecondTaagerCartWorker() {
       },
     });
   } finally {
-    await (activeContext || context).close().catch(() => {});
+    await closeRunnerContext(activeContext || context, "second-taager-cart-finished");
     activeContext = null;
     activePage = null;
   }
@@ -5352,7 +5419,7 @@ function secondTaagerCartConfig(ordersPath, exportDateFrom, exportDateTo, option
     mode: "second-taager-cart-upload",
     ordersJsonPath: ordersPath,
     profilePath: config.secondTaagerProfilePath,
-    chromePath: config.chromePath,
+    chromePath: runnerBrowserPath(),
     launchMinimized: config.launchMinimized,
     autoConfirm: config.autoConfirm,
     dateFrom: config.dateFrom,
@@ -5464,7 +5531,7 @@ if (config.mode === "second-taager-cart-upload") {
   const dateFrom       = parseDate(config.dateFrom);
   const dateTo         = parseDate(config.dateTo);
   const exportFromDate = subtractDay(dateFrom); // -1 day so Easy-Orders export catches late-night orders and builds full product catalog
-  const taagerExportRange = resolveMonthlyTaagerExportRange();
+  const taagerExportRange = resolveSafeTaagerExportRange(dateFrom, dateTo, { lookbackDays: 2 });
   const taagerStartDate = taagerExportRange.exportDateFrom;
   const taagerEndDate = taagerExportRange.exportDateTo;
 
@@ -5481,7 +5548,7 @@ if (config.mode === "second-taager-cart-upload") {
     log(`📁 Using existing profile: ${profilePath}`);
   }
 
-  const chromePath = config.chromePath || findChrome();
+  const chromePath = runnerBrowserPath();
   log(`🌐 Using Chrome: ${chromePath}`);
 
   // ════════════════════════════════════════════════════════════════
@@ -5647,7 +5714,7 @@ if (config.mode === "second-taager-cart-upload") {
         process.send && process.send({ type: "error", error: message });
       }
     } finally {
-      await (activeContext || context).close().catch(() => {});
+      await closeRunnerContext(activeContext || context, "runner-finished");
       activeContext = null;
       activePage = null;
     }
@@ -6808,7 +6875,7 @@ if (config.mode === "second-taager-cart-upload") {
     log(`❌ FATAL: ${message}`);
     process.send && process.send({ type: "error", error: message });
   } finally {
-    await (activeContext || context).close().catch(() => {});
+    await closeRunnerContext(activeContext || context, "runner-finished");
     activeContext = null;
     activePage = null;
   }

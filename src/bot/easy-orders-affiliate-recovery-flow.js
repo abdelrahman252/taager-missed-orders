@@ -409,7 +409,16 @@ function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
       taagerOrderCount: Number(finalVerification.keys && finalVerification.keys.taagerOrderCount || 0),
       keyCount: Number(finalVerification.keys && finalVerification.keys.size || 0),
     };
-    stage("affiliate-recovery.done", recovery.unresolvedCount > 0 || recovery.failedInTaagerCount > 0 ? "warning" : "ok", `Affiliate recovery complete: verified ${recovery.verifiedCount}, unresolved ${recovery.unresolvedCount}, failed ${recovery.failedInTaagerCount}`);
+    const noEligibleOrders = recovery.attemptedCount === 0;
+    const completionMessage = noEligibleOrders
+      ? "No eligible EasyOrders recovery orders: 0 orders were submitted or retried; Taager failed-orders list was not checked because there were no unresolved attempts."
+      : `Affiliate recovery complete: verified ${recovery.verifiedCount}, unresolved ${recovery.unresolvedCount}, failed ${recovery.failedInTaagerCount}`;
+    if (noEligibleOrders) log(completionMessage);
+    stage(
+      "affiliate-recovery.done",
+      noEligibleOrders || recovery.unresolvedCount > 0 || recovery.failedInTaagerCount > 0 ? "warning" : "ok",
+      completionMessage
+    );
     return recovery;
   }
 

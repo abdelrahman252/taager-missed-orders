@@ -24,8 +24,8 @@ function resolveSafeTaagerExportRange(dateFrom, dateTo, options = {}) {
   if (!from || !to || !today) throw new Error("A valid Taager export date range is required.");
   if (from > to) throw new Error("Taager export dateFrom cannot be after dateTo.");
 
-  const lookbackDays = Number.isFinite(options.lookbackDays) ? options.lookbackDays : 2;
-  const forwardDays = Number.isFinite(options.forwardDays) ? options.forwardDays : 2;
+  const lookbackDays = Number.isFinite(options.lookbackDays) ? options.lookbackDays : 0;
+  const forwardDays = Number.isFinite(options.forwardDays) ? options.forwardDays : 0;
   const exportDateFrom = addLocalDays(from, -lookbackDays);
   const expandedTo = addLocalDays(to, forwardDays);
   const exportDateTo = expandedTo > today ? today : expandedTo;
@@ -35,7 +35,7 @@ function resolveSafeTaagerExportRange(dateFrom, dateTo, options = {}) {
 function resolveMonthlyTaagerExportRange(options = {}) {
   const today = localDay(options.today || new Date());
   if (!today) throw new Error("A valid current date is required for Taager monthly export.");
-  const lookbackDays = Number.isFinite(options.lookbackDays) ? options.lookbackDays : 2;
+  const lookbackDays = Number.isFinite(options.lookbackDays) ? options.lookbackDays : 0;
   const previousMonthThroughDay = Number.isFinite(options.previousMonthThroughDay) ? options.previousMonthThroughDay : 5;
   if (today.getDate() <= previousMonthThroughDay) {
     const previousMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);

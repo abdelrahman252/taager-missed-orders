@@ -8,7 +8,7 @@ const {
   buildSkuTierProfiles,
   resolveSkuPriceTier,
 } = require("../src/bot/parser");
-const { resolveMonthlyTaagerExportRange, formatDataDay } = require("../src/bot/taager-date-range");
+const { resolveMonthlyTaagerExportRange, resolveSafeTaagerExportRange, formatDataDay } = require("../src/bot/taager-date-range");
 
 function profilesFor(taagerCatalog, trustedCatalog = {}) {
   return buildSkuTierProfiles({}, taagerCatalog, trustedCatalog);
@@ -234,16 +234,30 @@ assert.strictEqual(changedPriceOverridesOldSubtotal.reason, "sku_price_updated_t
 assert.strictEqual(changedPriceOverridesOldSubtotal.priceSource, "taager_sku_subtotal_tier_latest");
 
 const currentMonthRange = resolveMonthlyTaagerExportRange({ today: new Date(2026, 7, 20) });
-assert.strictEqual(formatDataDay(currentMonthRange.exportDateFrom), "2026-07-30");
+assert.strictEqual(formatDataDay(currentMonthRange.exportDateFrom), "2026-08-01");
 assert.strictEqual(formatDataDay(currentMonthRange.exportDateTo), "2026-08-20");
 const previousMonthRange = resolveMonthlyTaagerExportRange({ today: new Date(2026, 8, 1) });
-assert.strictEqual(formatDataDay(previousMonthRange.exportDateFrom), "2026-07-30");
+assert.strictEqual(formatDataDay(previousMonthRange.exportDateFrom), "2026-08-01");
 assert.strictEqual(formatDataDay(previousMonthRange.exportDateTo), "2026-09-01");
 const earlyMonthRange = resolveMonthlyTaagerExportRange({ today: new Date(2026, 8, 5) });
-assert.strictEqual(formatDataDay(earlyMonthRange.exportDateFrom), "2026-07-30");
+assert.strictEqual(formatDataDay(earlyMonthRange.exportDateFrom), "2026-08-01");
 assert.strictEqual(formatDataDay(earlyMonthRange.exportDateTo), "2026-09-05");
 const afterEarlyMonthRange = resolveMonthlyTaagerExportRange({ today: new Date(2026, 8, 6) });
-assert.strictEqual(formatDataDay(afterEarlyMonthRange.exportDateFrom), "2026-08-30");
+assert.strictEqual(formatDataDay(afterEarlyMonthRange.exportDateFrom), "2026-09-01");
 assert.strictEqual(formatDataDay(afterEarlyMonthRange.exportDateTo), "2026-09-06");
+const exactSafeRange = resolveSafeTaagerExportRange(
+  new Date(2026, 8, 18),
+  new Date(2026, 8, 25),
+  { today: new Date(2026, 8, 25) }
+);
+assert.strictEqual(formatDataDay(exactSafeRange.exportDateFrom), "2026-09-18", "Taager exports should not add a two-day lookback by default");
+assert.strictEqual(formatDataDay(exactSafeRange.exportDateTo), "2026-09-25", "Taager exports should preserve an exact end date when it is today");
+const taagerRunRangeWithLookback = resolveSafeTaagerExportRange(
+  new Date(2026, 8, 17),
+  new Date(2026, 8, 25),
+  { today: new Date(2026, 8, 25), lookbackDays: 2 }
+);
+assert.strictEqual(formatDataDay(taagerRunRangeWithLookback.exportDateFrom), "2026-09-15", "Taager From should be two days before the selected run start");
+assert.strictEqual(formatDataDay(taagerRunRangeWithLookback.exportDateTo), "2026-09-25", "Taager should retain the requested end bound for bookkeeping while leaving the UI To field blank");
 
 console.log("SKU tier resolver verification passed.");

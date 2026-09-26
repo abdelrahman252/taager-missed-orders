@@ -60,7 +60,9 @@ function createTaagerOrdersExportFlow(options = {}) {
       return "TAAGER_DATE_RANGE_FAILED";
     }
     if (/download/i.test(message)) return "TAAGER_DOWNLOAD_FAILED";
-    if (/net::|timeout|internet|connection/i.test(message)) return "TAAGER_NETWORK_ERROR";
+    if (/TAAGER_TARGET_TIMEOUT|TAAGER_BLOCKING_OVERLAY/i.test(message)) return "TAAGER_UI_NOT_READY";
+    if (/net::|internet|connection|ERR_NETWORK|ERR_NAME_NOT_RESOLVED/i.test(message)) return "TAAGER_NETWORK_ERROR";
+    if (/timeout/i.test(message)) return "TAAGER_TIMEOUT";
     return "TAAGER_EXPORT_FAILED";
   }
 
@@ -147,7 +149,19 @@ function createTaagerOrdersExportFlow(options = {}) {
     // Chrome closes immediately after emitting the download event.
     const downloadCookies = await page.context().cookies().catch(() => []);
     const downloadStartedAt = Date.now();
-    const downloadPromise = page.waitForEvent("download", { timeout: 120000 });
+    // Start persisting the file as soon as Playwright emits the download event.
+    // Taager can close its target page/context immediately after the click;
+    // waiting for the click continuation before touching Download risks losing
+    // access to its context-owned stream.
+    // Successful exports in the current Taager UI arrive within seconds. A
+    // missing event should trigger recovery promptly instead of freezing the
+    // run for two minutes on every attempt.
+    const downloadPromise = page.waitForEvent("download", { timeout: 45000 }).then((download) =>
+      readDownloadToBuffer(download, {
+        cookies: downloadCookies,
+        url: typeof download.url === "function" ? download.url() : "",
+      })
+    );
     log(`Taager orders export attempt ${attempt}/${maxAttempts}: clicking export`);
     let buffer;
     try {
@@ -158,11 +172,7 @@ function createTaagerOrdersExportFlow(options = {}) {
         log,
       });
       stage("taager.orders.download", "started", "Waiting for download event");
-      const download = await downloadPromise;
-      buffer = await readDownloadToBuffer(download, {
-        cookies: downloadCookies,
-        url: typeof download.url === "function" ? download.url() : "",
-      });
+      buffer = await downloadPromise;
     } catch (downloadError) {
       // Chrome can disappear after Taager has already started writing the
       // attachment. When the browser target closes before Playwright returns

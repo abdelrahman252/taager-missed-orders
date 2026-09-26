@@ -26,6 +26,7 @@ const log = require("electron-log");
 const { autoUpdater } = require("electron-updater");
 const monitoring = require("../monitoring/sentry.main");
 const { normalizePhone } = require("../bot/phone");
+const { pinnedAutomationBrowserPath } = require("../bot/automation-browser-path");
 const { processDashboardSheets } = require("../bot/dashboard-sheet-processing");
 const { createDashboardQueryService } = require("./dashboard-query-service");
 const { findNewDuplicateConflict } = require("./account-duplicates");
@@ -1041,6 +1042,8 @@ let lastExportTimestamp = 0;
 let _cachedChromePath = null;
 function getCachedChromePath() {
   if (_cachedChromePath) return _cachedChromePath;
+  const pinnedBrowser = pinnedAutomationBrowserPath();
+  if (pinnedBrowser) { _cachedChromePath = pinnedBrowser; return pinnedBrowser; }
   const { execSync } = require("child_process");
   try {
     if (process.platform === "win32") {
