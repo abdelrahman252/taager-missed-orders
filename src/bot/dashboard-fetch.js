@@ -330,12 +330,12 @@ async function relaunchTaagerAutomationPage(stage, targetPath) {
 }
 
 async function ensureDashboardAutomationPageAlive(page, label, targetPath = "/orders") {
-  const candidate = !isClosedAutomationPage(activePage) ? activePage : page;
+  const candidate = !isClosedAutomationPage(page) ? page : activePage;
   if (!isClosedAutomationPage(candidate)) {
     activePage = candidate;
     return candidate;
   }
-  log("Dashboard Taager " + label + ": page closed after export; relaunching Chrome profile before enrichment");
+  log("Dashboard Taager " + label + ": page closed; relaunching the account Chrome profile");
   return relaunchTaagerAutomationPage("dashboard-" + label, targetPath);
 }
 
@@ -1119,6 +1119,7 @@ function isTaagerSwitchToArabicLanguageText(text) {
 }
 
 async function taagerLogin(page) {
+  page = await ensureDashboardAutomationPageAlive(page, "login-start", "/auth/login");
   assertUsableTaagerPage(page, "login-start");
   await installTaagerInterruptionAutoDismiss(page, { log });
   await clearTaagerInterruptionBounded(page, "login-start");
@@ -1355,6 +1356,7 @@ function isBrowserClosedError(error) {
   return message.includes("Target page, context or browser has been closed") ||
     lower.includes("target closed") ||
     lower.includes("page closed") ||
+    lower.includes("page is closed") ||
     lower.includes("browser has been closed") ||
     lower.includes("browser closed") ||
     lower.includes("page crashed") ||
@@ -1364,8 +1366,12 @@ function isBrowserClosedError(error) {
 function isRecoverableTaagerError(error, page) {
   if (isDangerousTaagerError(error)) return false;
   const message = String(error && error.message || error || "");
-  const url = page && typeof page.url === "function" ? page.url() : "";
-  return isNetworkNavigationError(error) ||
+  let url = "";
+  try {
+    url = page && typeof page.url === "function" ? page.url() : "";
+  } catch (_) {}
+  return isClosedAutomationPage(page) ||
+    isNetworkNavigationError(error) ||
     isProbablyPopupBlockerError(error) ||
     isOnLoginPage(url) ||
     message.includes("SESSION_EXPIRED") ||
@@ -1560,6 +1566,7 @@ async function recoverDashboardDownloadedBuffer(meta = {}) {
 }
 
 async function gotoDashboardTaagerOrders(page) {
+  page = await ensureDashboardAutomationPageAlive(page, "orders-export", "/orders");
   assertUsableTaagerPage(page, "dashboard-orders-export");
   log("Dashboard Taager export: ensuring Arabic before /orders navigation");
   await ensureTaagerArabic(page, "before-orders-export", { requireButton: false });
@@ -1576,11 +1583,13 @@ async function gotoDashboardTaagerOrders(page) {
     const searchReady = await page.locator(TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR).first()
       .isVisible({ timeout: 5000 })
       .catch(() => false);
-    if (searchReady) {
+    if (searchReady && taagerIdentityVerified) {
       log("Dashboard Taager export: orders controls visible; skipping slow post-navigation checks");
       return page;
     }
-    log("Dashboard Taager export: orders controls not visible yet; falling back to full verification");
+    log(searchReady
+      ? "Dashboard Taager export: orders controls visible; verifying account identity after browser relaunch"
+      : "Dashboard Taager export: orders controls not visible yet; falling back to full verification");
   }
   await ensureTaagerArabic(page, "orders-export", { requireButton: false });
   log("Dashboard Taager export: verifying session, identity, and country");
