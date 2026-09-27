@@ -32,6 +32,12 @@ const {
   waitForManualGoogleLogin,
 } = require("./google-login-handshake");
 const { isRetryableNetworkError } = require("./network-retry");
+const {
+  TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR,
+  TAAGER_ORDERS_SEARCH_ENABLED_SELECTOR,
+  TAAGER_EXPORT_BUTTON_SELECTOR,
+  createCurrentTaagerOrdersDatePicker,
+} = require("./taager-orders-page-ui");
 
 const config = JSON.parse(process.env.BOT_CONFIG || "{}");
 const log = (msg) => process.stdout.write(msg + "\n");
@@ -72,25 +78,6 @@ const EASY_ORDERS_LOOKBACK_DAYS = Number(config.easyOrdersLookbackDays || 60) > 
 const MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS = 3;
 const TAAGER_POPUP_RETRY_WAIT_MS = 0;
 const DASHBOARD_TAAGER_DOWNLOADS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "khod-dashboard-taager-"));
-const TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR = [
-  "#orders-v2-date-pill",
-  "#orders-search-button",
-  'button:has-text("Search")',
-  'button:has-text("بحث")',
-].join(", ");
-const TAAGER_ORDERS_SEARCH_ENABLED_SELECTOR = [
-  "#orders-search-button:not([disabled])",
-  'button:has-text("Search"):not([disabled])',
-  'button:has-text("بحث"):not([disabled])',
-].join(", ");
-const TAAGER_EXPORT_BUTTON_SELECTOR = [
-  "#export-to-excel-button",
-  'button:has-text("Export")',
-  'button:has-text("Excel")',
-  'button:has-text("تصدير")',
-  'button:has-text("إكسل")',
-  'button:has-text("اكسل")',
-].join(", ");
 let dashboardSheetProcessingFns = null;
 let activeContext = null;
 let activePage = null;
@@ -943,6 +930,17 @@ async function pickTaagerDateRangeV2(page, dateFrom, dateTo, signal) {
 }
 
 async function pickTaagerDateRange(page, dateFrom, dateTo, signal) {
+  const currentUiDatePicker = createCurrentTaagerOrdersDatePicker({
+    log,
+    clearInterruption: clearTaagerInterruptionBounded,
+    safeClick: safeTaagerClick,
+    pickDateInCalendar: pickDateInTaagerCalendar,
+    formatDataDay,
+  });
+  if (await currentUiDatePicker.isAvailable(page)) {
+    return currentUiDatePicker.pickDateRange(page, dateFrom, dateTo, signal);
+  }
+
   if (await hasTaagerOrdersV2DateFilter(page)) {
     return pickTaagerDateRangeV2(page, dateFrom, dateTo, signal);
   }
@@ -1727,7 +1725,7 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
     const requestedTo = parseConfigDate(config.dashboardDateTo);
     const dateFrom = requestedFrom || new Date(now.getFullYear(), now.getMonth() - 2, 1);
     const dateTo = requestedTo || new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const { exportDateFrom, exportDateTo } = resolveSafeTaagerExportRange(dateFrom, dateTo, { today: now });
+    const { exportDateFrom, exportDateTo } = resolveSafeTaagerExportRange(dateFrom, dateTo, { today: now, lookbackDays: 2 });
 
     log(`Dashboard fetch - Taager ${formatDataDay(exportDateFrom)} -> ${formatDataDay(exportDateTo)} (saving created-date range ${formatDataDay(dateFrom)} -> ${formatDataDay(dateTo)})`);
     emitStage("taager.login", "started", "Logging into Taager");

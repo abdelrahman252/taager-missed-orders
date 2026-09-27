@@ -1984,7 +1984,7 @@
       });
       if (lifecycle) {
         pane._dashboardSectionLifecycle = lifecycle;
-        if (typeof lifecycle.destroy === 'function') {
+        if (typeof lifecycle.destroy === 'function' && typeof pane._dashboardSectionCleanup !== 'function') {
           pane._dashboardSectionCleanup = function () {
             runLifecycleHook(lifecycle, 'destroy', pane);
           };

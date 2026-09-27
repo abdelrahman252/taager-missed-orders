@@ -6,6 +6,10 @@
 window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx) {
   'use strict';
 
+  var previousSectionCleanup = mountEl && mountEl._dashboardSectionCleanup;
+  if (mountEl) mountEl._dashboardSectionCleanup = null;
+  if (typeof previousSectionCleanup === 'function') previousSectionCleanup();
+
   function pruneStaleProductForecastDom() {
     if (!mountEl || !document.querySelectorAll) return;
     Array.prototype.slice.call(document.querySelectorAll('.s9-root')).forEach(function (root) {
@@ -2419,5 +2423,8 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
       mountEl._s9MarketingLoadedAccount = forecastAccountId;
       window.DashboardMarketingState.load(forecastAccountId);
     }
+  }
+  if (mountEl._s9HydrationState && !mountEl._s9HydrationState.cancelled) {
+    mountEl._s9HydrationState.cleanup = mountEl._dashboardSectionCleanup;
   }
 };
