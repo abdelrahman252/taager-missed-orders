@@ -329,6 +329,16 @@ async function relaunchTaagerAutomationPage(stage, targetPath) {
   return page;
 }
 
+async function ensureDashboardAutomationPageAlive(page, label, targetPath = "/orders") {
+  const candidate = !isClosedAutomationPage(activePage) ? activePage : page;
+  if (!isClosedAutomationPage(candidate)) {
+    activePage = candidate;
+    return candidate;
+  }
+  log("Dashboard Taager " + label + ": page closed after export; relaunching Chrome profile before enrichment");
+  return relaunchTaagerAutomationPage("dashboard-" + label, targetPath);
+}
+
 function assertUsableTaagerPage(page, where = "taager") {
   if (!page) throw new Error(`TAAGER_PAGE_INVALID at ${where}: page is missing`);
   for (const method of ["setExtraHTTPHeaders", "goto", "locator"]) {
@@ -1509,6 +1519,46 @@ async function readDownloadToBuffer(download, options = {}) {
   }
 }
 
+async function recoverDashboardDownloadedBuffer(meta = {}) {
+  const startedAt = Number(meta.startedAt || Date.now());
+  const deadline = Date.now() + 10000;
+  let lastSize = -1;
+  let stableReads = 0;
+
+  while (Date.now() < deadline) {
+    let candidates = [];
+    try {
+      candidates = fs.readdirSync(DASHBOARD_TAAGER_DOWNLOADS_DIR, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && !entry.name.endsWith(".crdownload"))
+        .map((entry) => {
+          const filePath = path.join(DASHBOARD_TAAGER_DOWNLOADS_DIR, entry.name);
+          const stat = fs.statSync(filePath);
+          return { filePath, mtimeMs: stat.mtimeMs, size: stat.size };
+        })
+        .filter((entry) => entry.mtimeMs >= startedAt - 1000 && entry.size > 0)
+        .sort((a, b) => b.mtimeMs - a.mtimeMs);
+    } catch (error) {
+      log("Dashboard Taager download recovery could not inspect its download directory: " + error.message);
+    }
+
+    const candidate = candidates[0];
+    if (candidate) {
+      if (candidate.size === lastSize) stableReads += 1;
+      else stableReads = 0;
+      lastSize = candidate.size;
+      if (stableReads >= 1) {
+        const buffer = fs.readFileSync(candidate.filePath);
+        if (buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b) {
+          log("Dashboard Taager download rescued from disk (" + buffer.length + " bytes)");
+          return buffer;
+        }
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return null;
+}
+
 async function gotoDashboardTaagerOrders(page) {
   assertUsableTaagerPage(page, "dashboard-orders-export");
   log("Dashboard Taager export: ensuring Arabic before /orders navigation");
@@ -1611,6 +1661,7 @@ function createDashboardTaagerOrdersExportFlow() {
     recoverForRetry: (page, error, attempt, maxAttempts) =>
       recoverTaagerForRetry(page, "dashboard-orders-export", "/orders", error, attempt, maxAttempts),
     readDownloadToBuffer,
+    recoverDownloadedBuffer: recoverDashboardDownloadedBuffer,
     maxAttempts: MAX_TAAGER_ORDERS_EXPORT_ATTEMPTS,
     searchButtonSelector: TAAGER_ORDERS_SEARCH_BUTTON_SELECTOR,
     searchEnabledSelector: TAAGER_ORDERS_SEARCH_ENABLED_SELECTOR,
@@ -1680,6 +1731,9 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
       async () => { page = await taagerLogin(page); },
       "Taager"
     );
+    if (DASHBOARD_ENRICHMENT_PROVIDER !== "none") {
+      page = await ensureDashboardAutomationPageAlive(page, "post-export", "/orders");
+    }
     emitStage("taager.orders.export", "ok", `Taager export downloaded ${buffer.length} bytes`, { bytes: buffer.length });
 
     let easyBuffer = null;
