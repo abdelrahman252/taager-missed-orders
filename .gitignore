@@ -2,6 +2,13 @@
 admin-panel/
 countries/
 supabase/
+!supabase/
+supabase/*
+!supabase/functions/
+supabase/functions/*
+!supabase/functions/admin-error-alert/
+supabase/functions/admin-error-alert/*
+!supabase/functions/admin-error-alert/index.ts
 scripts/*
 !scripts/perf/
 scripts/perf/fixtures/

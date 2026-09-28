@@ -1698,6 +1698,25 @@ function adminAlertAccountInfo(account, fallbackId) {
   };
 }
 
+function appendAdminStageHistory(history, message) {
+  if (!Array.isArray(history) || !message || message.type !== "stage") return;
+  const stage = compactAdminAlertText(message.stage || "unknown", 80);
+  const status = compactAdminAlertText(message.status || "info", 24);
+  const detail = compactAdminAlertText(message.message || "", 120);
+  history.push(`${new Date().toISOString()} ${stage} (${status})${detail ? ` - ${detail}` : ""}`);
+  if (history.length > 500) history.shift();
+}
+
+function adminAlertStageHistory(details) {
+  if (!Array.isArray(details.stageHistory)) return [];
+  const history = details.stageHistory.map((line) => compactAdminAlertText(line, 220)).filter(Boolean);
+  const taager = history.filter((line) => /taager/i.test(line));
+  const selected = taager.length
+    ? [...taager.slice(0, 3), ...taager.slice(-4), ...history.slice(-5)]
+    : history.slice(-12);
+  return [...new Set(selected)].slice(-12);
+}
+
 function notifyAdminErrorAlert(details = {}) {
   const errorText = compactAdminAlertText(details.error || details.message || "Unknown error", 900);
   if (!errorText || errorText === "LICENSE_INVALID") return;
@@ -1727,11 +1746,47 @@ function notifyAdminErrorAlert(details = {}) {
     dateFrom: compactAdminAlertText(details.dateFrom || "", 32),
     dateTo: compactAdminAlertText(details.dateTo || "", 32),
     lastStage: compactAdminAlertText(details.lastStage || "", 180),
+    stageHistory: adminAlertStageHistory(details),
+    durationMs: Math.max(0, Number(details.durationMs || 0)),
     recentLogs,
     appVersion: app.getVersion(),
     timestamp: new Date().toISOString(),
   }).catch((error) => {
-    log.warn("[AdminAlert] WhatsApp alert failed:", error && error.message ? error.message : error);
+    log.warn("[AdminAlert] Error alert failed:", error && error.message ? error.message : error);
+  });
+}
+
+function notifyAdminSuccessAlert(details = {}) {
+  const licenseKey = compactAdminAlertText(licenseStore.get("licenseKey", ""), 80);
+  if (!licenseKey) return;
+  const account = adminAlertAccountInfo(details.account || null, details.accountId);
+  const stageHistory = adminAlertStageHistory(details);
+  const counts = details.counts && typeof details.counts === "object" ? details.counts : {};
+  supabaseFunctionRequest("admin-error-alert", {
+    kind: "success",
+    licenseKey,
+    customerName: compactAdminAlertText(licenseStore.get("customerName", ""), 180),
+    flow: compactAdminAlertText(details.flow || "runner", 80),
+    operation: compactAdminAlertText(details.operation || "completed", 120),
+    account,
+    dateFrom: compactAdminAlertText(details.dateFrom || "", 32),
+    dateTo: compactAdminAlertText(details.dateTo || "", 32),
+    summary: compactAdminAlertText(details.summary || "Run completed", 240),
+    counts: Object.fromEntries(["orders", "failed", "skipped", "rows"]
+      .filter((key) => counts[key] != null)
+      .map((key) => [key, Math.max(0, Number(counts[key]) || 0)])),
+    lastStage: compactAdminAlertText(details.lastStage || "", 180),
+    stageHistory,
+    durationMs: Math.max(0, Number(details.durationMs || 0)),
+    recentLogs: Array.isArray(details.recentLogs)
+      ? details.recentLogs.slice(-5).map((line) => compactAdminAlertText(line, 240)).filter(Boolean)
+      : [],
+    appVersion: app.getVersion(),
+    timestamp: new Date().toISOString(),
+  }).then((result) => {
+    if (!result || result.ok !== true) log.warn("[AdminAlert] Success alert was not delivered:", result && (result.error || result.reason) || "unknown");
+  }).catch((error) => {
+    log.warn("[AdminAlert] Success alert failed:", error && error.message ? error.message : error);
   });
 }
 
@@ -4964,7 +5019,9 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
     const accountLabel = accountDisplayName(acc, dashboardAccountId);
 
     let resolved = false;
+    const runStartedAt = Date.now();
     let lastStage = "dashboard.fetch.spawned";
+    const stageHistory = [];
     let killedByWatchdog = false;
     let lastChildActivityAt = Date.now();
     const childLogTail = [];
@@ -5043,6 +5100,8 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
         dateFrom,
         dateTo,
         lastStage,
+        stageHistory,
+        durationMs: Date.now() - runStartedAt,
         recentLogs: childLogTail.slice(-10),
       });
       try { child.kill(); } catch (_) {}
@@ -5062,6 +5121,7 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
     child.on("message", async (msg) => {
       lastChildActivityAt = Date.now();
       if (msg.type === "stage") {
+        appendAdminStageHistory(stageHistory, msg);
         lastStage = msg.stage || lastStage;
         const payload = {
           ...msg,
@@ -5151,7 +5211,25 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
             dateFrom,
             dateTo,
             lastStage,
+            stageHistory,
+            durationMs: Date.now() - runStartedAt,
             recentLogs: childLogTail.slice(-10),
+          });
+        }
+        if (!snapshotSaveError && !resolved) {
+          notifyAdminSuccessAlert({
+            flow: "dashboard-fetch",
+            operation: analyticsOnly ? "analytics-enriched" : "snapshot-saved",
+            account: acc,
+            accountId: dashboardAccountId,
+            dateFrom,
+            dateTo,
+            summary: analyticsOnly ? "Taager statuses refreshed" : "Dashboard snapshot saved",
+            counts: { rows: rows.length },
+            lastStage,
+            stageHistory,
+            durationMs: Date.now() - runStartedAt,
+            recentLogs: childLogTail.slice(-5),
           });
         }
         safeResolve({
@@ -5176,6 +5254,8 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
           dateFrom,
           dateTo,
           lastStage,
+          stageHistory,
+          durationMs: Date.now() - runStartedAt,
           recentLogs: childLogTail.slice(-10),
         });
         safeResolve({ success: false, error: msg.error, lastStage, recentLogs: childLogTail.slice(-10) });
@@ -5218,6 +5298,8 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
         dateFrom,
         dateTo,
         lastStage,
+        stageHistory,
+        durationMs: Date.now() - runStartedAt,
         recentLogs: childLogTail.slice(-10),
       });
       safeResolve({ success: false, error: err.message, lastStage, recentLogs: childLogTail.slice(-10) });
@@ -5234,6 +5316,8 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
           dateFrom,
           dateTo,
           lastStage,
+          stageHistory,
+          durationMs: Date.now() - runStartedAt,
           recentLogs: childLogTail.slice(-10),
         });
         safeResolve({ success: false, error, lastStage, recentLogs: childLogTail.slice(-10) });
@@ -7710,6 +7794,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
       currentBotChild = child;
       botChildren = [child];
       const logs = []; let resolved = false;
+      const stageHistory = [];
       const runLog = createBotRunLogWriter(acc, dateFrom, dateTo);
       mainWindow.webContents.send("bot-log", `[Run Log] Saved to: ${runLog.filePath}`);
       const safeResolve = (v) => { if (!resolved) { resolved = true; resolve(v); } };
@@ -7733,6 +7818,20 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
             data.failedOrders.failedDir  = dir;
             data.failedOrders.failedPath = filePath;
           }
+          if (!resolved) notifyAdminSuccessAlert({
+            flow: "runner",
+            operation: "completed",
+            account: acc,
+            accountId: acc.id || "__single__",
+            dateFrom,
+            dateTo,
+            summary: "Runner finished processing orders",
+            counts: { orders: data.orders, failed: data.failedOrders?.count, skipped: data.skippedOrders?.count },
+            lastStage: stageHistory.length ? stageHistory[stageHistory.length - 1] : "",
+            stageHistory,
+            durationMs: Date.now() - runStartedAt,
+            recentLogs: logs.slice(-5),
+          });
           mainWindow.webContents.send("bot-run-complete");
           safeResolve({
             success: true,
@@ -7753,6 +7852,8 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
             error: msg.error,
             dateFrom,
             dateTo,
+            stageHistory,
+            durationMs: Date.now() - runStartedAt,
             recentLogs: logs.slice(-10),
           });
           mainWindow.webContents.send("bot-run-complete");
@@ -7775,6 +7876,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
           log.info(`[Bot] Debug screenshot saved for ${msg.label || "bot"}: ${msg.path || ""}`);
         }
         if (msg.type === "stage") {
+          appendAdminStageHistory(stageHistory, msg);
           const stageLine = `[Stage:${msg.flow || "runner"}] ${msg.stage || "unknown"} ${msg.status ? `(${msg.status})` : ""}${msg.message ? ` - ${msg.message}` : ""}`;
           runLog.write(stageLine);
           mainWindow.webContents.send("bot-log", stageLine);
@@ -7832,6 +7934,8 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
           error: err.message,
           dateFrom,
           dateTo,
+          stageHistory,
+          durationMs: Date.now() - runStartedAt,
           recentLogs: logs.slice(-10),
         });
         mainWindow.webContents.send("bot-run-complete");
@@ -7856,6 +7960,8 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
             error: "Bot exited with code " + code,
             dateFrom,
             dateTo,
+            stageHistory,
+            durationMs: Date.now() - runStartedAt,
             recentLogs: logs.slice(-10),
           });
         }
@@ -7912,6 +8018,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
       botChildren.push(child);
       currentBotChild = child;
       const logs = [];
+      const stageHistory = [];
       const runLog = createBotRunLogWriter(acc, dateFrom, dateTo, "account-" + (idx + 1));
       mainWindow.webContents.send("bot-log", `${prefix}[Run Log] Saved to: ${runLog.filePath}`);
       let resolved = false;
@@ -7948,6 +8055,20 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
             data.failedOrders.failedDir  = dir;
             data.failedOrders.failedPath = filePath;
           }
+          if (!resolved) notifyAdminSuccessAlert({
+            flow: "runner",
+            operation: "completed",
+            account: acc,
+            accountId,
+            dateFrom,
+            dateTo,
+            summary: "Runner finished processing orders",
+            counts: { orders: data.orders, failed: data.failedOrders?.count, skipped: data.skippedOrders?.count },
+            lastStage: stageHistory.length ? stageHistory[stageHistory.length - 1] : "",
+            stageHistory,
+            durationMs: Date.now() - runStartedAt,
+            recentLogs: logs.slice(-5),
+          });
           safeResolve({ success: true, data, ...finishTiming(), runLogPath: runLog.filePath, accountId, accountEmail, accountLabel });
         }
         if (msg.type === "error") {
@@ -7959,6 +8080,8 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
             error: msg.error,
             dateFrom,
             dateTo,
+            stageHistory,
+            durationMs: Date.now() - runStartedAt,
             recentLogs: logs.slice(-10),
           });
           safeResolve({ success: false, error: msg.error, ...finishTiming(), runLogPath: runLog.filePath, accountId, accountEmail, accountLabel });
@@ -7975,6 +8098,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
         }
         const tagged = { ...msg, accountId, accountEmail, accountLabel, accountIdx: idx, totalAccounts: accountsToRun.length };
         if (msg.type === "stage") {
+          appendAdminStageHistory(stageHistory, msg);
           const stageLine = `${prefix}[Stage:${msg.flow || "runner"}] ${msg.stage || "unknown"} ${msg.status ? `(${msg.status})` : ""}${msg.message ? ` - ${msg.message}` : ""}`;
           runLog.write(stageLine);
           mainWindow.webContents.send("bot-log", stageLine);
@@ -8012,6 +8136,8 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
           error: err.message,
           dateFrom,
           dateTo,
+          stageHistory,
+          durationMs: Date.now() - runStartedAt,
           recentLogs: logs.slice(-10),
         });
         safeResolve({
@@ -8036,6 +8162,8 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
             error: `${prefix}exited with code ${code}`,
             dateFrom,
             dateTo,
+            stageHistory,
+            durationMs: Date.now() - runStartedAt,
             recentLogs: logs.slice(-10),
           });
         }

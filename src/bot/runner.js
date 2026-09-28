@@ -1391,6 +1391,7 @@ async function relaunchTaagerAutomationPage(stage, targetPath) {
 //   Button:   button[type="submit"]  text="تسجيل الدخول"
 // ════════════════════════════════════════
 async function phase1_easyOrdersLogin(page) {
+  log("Easy-Orders Login: starting");
   await easyOrdersFlow.login(page);
   log("✅ EasyOrders identity guard passed at phase1 (email + active store verified by shared flow).");
   return;
@@ -3694,7 +3695,7 @@ async function taagerOrdersExportAttempt(page, exportFromDate, dateTo, attempt, 
 async function phase4_taager(page, exportFromDate, dateTo) {
   assertUsableTaagerPage(page, "phase4-start");
   log("\n========================================");
-  log("  PHASE 4 - Taager Login & Export");
+  log("  Taager Login & Orders Export");
   log("========================================\n");
   emitStage("taager.login", "started", "Logging into Taager");
   page = await taagerLogin(page);
@@ -5722,7 +5723,7 @@ if (config.mode === "second-taager-cart-upload") {
   }
 
   try {
-    // Phase 1 — Easy-Orders login (unchanged)
+    // LightFunnels cannot export orders yet; stop before starting Taager.
     if (CMS_PROVIDER === "lightfunnels") {
       log("\n========================================");
       log("  PHASE 1 - LightFunnels Login");
@@ -5733,19 +5734,17 @@ if (config.mode === "second-taager-cart-upload") {
       throw new Error("LIGHTFUNNELS_ORDER_EXPORT_NOT_IMPLEMENTED: login and account selection are complete, but LightFunnels order export is not built yet.");
     }
 
-    await phase1_easyOrdersLogin(page);
-
-    // Phase 2 — Real orders export (unchanged)
-    const realBuffer = await phase2_realOrders(page, exportFromDate);
-
-    // Phase 3 — Missed orders export (unchanged)
-    const missedBuffer = await phase3_missedOrders(page, exportFromDate);
-
-    // Phase 4 - Taager login + export (dedup/status list).
+    // Export Taager orders while this Chrome context is still fresh, as the
+    // dashboard does. EasyOrders exports follow using the recovered active page.
     // The selected range is widened around the edges, but never past today because
     // Taager disables future calendar dates.
     const taagerBuffer = await phase4_taager(page, taagerStartDate, taagerEndDate);
     page = activePage || page;
+
+    await phase1_easyOrdersLogin(page);
+
+    const realBuffer = await phase2_realOrders(page, exportFromDate);
+    const missedBuffer = await phase3_missedOrders(page, exportFromDate);
 
     // ── Parse all sheets ──
     log("\n═══════════════════════════════════════");

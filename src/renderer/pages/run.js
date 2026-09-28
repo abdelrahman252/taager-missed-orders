@@ -495,10 +495,10 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
 
     function updatePhases(msg) {
       const phaseMap = [
-        { keywords: ["Easy-Orders Login", "PHASE 1", "easy-orders login", "Easy-orders login"], idx: 0 },
-        { keywords: ["Real Orders Export", "PHASE 2", "Real orders downloaded"],                idx: 1 },
-        { keywords: ["Missed Orders Export", "PHASE 3", "Missed orders downloaded"],            idx: 2 },
-        { keywords: ["PHASE 4", "Taager Login", "Taager: logging in", "taagerLogin"],                idx: 3 },
+        { keywords: ["Taager Login", "Taager: logging in", "taagerLogin"], idx: 0 },
+        { keywords: ["Easy-Orders Login", "EasyOrders identity guard", "easy-orders login", "Easy-orders login"], idx: 1 },
+        { keywords: ["Real Orders Export", "PHASE 2", "Real orders downloaded"], idx: 2 },
+        { keywords: ["Missed Orders Export", "PHASE 3", "Missed orders downloaded"], idx: 3 },
         { keywords: ["PHASE 5", "Upload to Taager Cart", "Taager upload"],        idx: 4 },
       ];
       for (const p of phaseMap) {
@@ -520,6 +520,14 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
     function setPhaseActive(idx) {
       const dot = document.getElementById(`dot-${idx}`);
       if (dot && !dot.classList.contains("done")) {
+        for (let i = 0; i < idx; i++) {
+          const previous = document.getElementById(`dot-${i}`);
+          if (previous && previous.classList.contains("active")) {
+            previous.classList.remove("active");
+            previous.classList.add("done");
+            document.getElementById(`phase-label-${i}`).textContent = t("run.phase_complete");
+          }
+        }
         dot.classList.add("active");
         document.getElementById(`phase-label-${idx}`).textContent = t("run.phase_running");
       }
@@ -1235,14 +1243,17 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
   // ── Update phase state for an account based on a log line ──
   function updateAccPhases(acc, msg) {
     const phaseMap = [
-      { keywords: ["Easy-Orders Login","PHASE 1","easy-orders login","Easy-orders login"], idx: 0 },
-      { keywords: ["Real Orders Export","PHASE 2","Real orders downloaded"],               idx: 1 },
-      { keywords: ["Missed Orders Export","PHASE 3","Missed orders downloaded"],           idx: 2 },
-      { keywords: ["PHASE 4","Taager Login","Taager: logging in","taagerLogin"],                idx: 3 },
+      { keywords: ["Taager Login","Taager: logging in","taagerLogin"], idx: 0 },
+      { keywords: ["Easy-Orders Login","EasyOrders identity guard","easy-orders login","Easy-orders login"], idx: 1 },
+      { keywords: ["Real Orders Export","PHASE 2","Real orders downloaded"], idx: 2 },
+      { keywords: ["Missed Orders Export","PHASE 3","Missed orders downloaded"], idx: 3 },
       { keywords: ["PHASE 5","Upload to Taager Cart","Taager upload"],       idx: 4 },
     ];
     for (const p of phaseMap) {
       if (p.keywords.some(k => msg.includes(k)) && acc.phases[p.idx].state !== "done") {
+        for (let i = 0; i < p.idx; i++) {
+          if (acc.phases[i].state === "active") acc.phases[i].state = "done";
+        }
         acc.phases[p.idx].state = "active";
       }
     }
