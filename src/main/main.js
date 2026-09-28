@@ -29,6 +29,7 @@ const { normalizePhone } = require("../bot/phone");
 const { pinnedAutomationBrowserPath } = require("../bot/automation-browser-path");
 const { processDashboardSheets } = require("../bot/dashboard-sheet-processing");
 const { createDashboardQueryService } = require("./dashboard-query-service");
+const { updateDeliveryJourneys } = require("./dashboard-delivery-journey");
 const { findNewDuplicateConflict } = require("./account-duplicates");
 const { fetchActiveAdminNotification } = require("./admin-notifications");
 const { evaluateCachedLicense, isInsideWarningWindow } = require("./license-expiry-policy");
@@ -2177,6 +2178,7 @@ function mergeDashboardAccountSnapshots(primary, secondary, identityMeta) {
     ...extra,
     ...base,
     snapshot: mergeDashboardSnapshotRows(base.snapshot, extra.snapshot),
+    deliveryJourneys: { ...(extra.deliveryJourneys || {}), ...(base.deliveryJourneys || {}) },
     snapshotMonth: base.snapshotMonth || extra.snapshotMonth || "",
     accountIdentity: identityMeta || base.accountIdentity || extra.accountIdentity || null,
     accountLabel: (identityMeta && identityMeta.label) || base.accountLabel || extra.accountLabel || "",
@@ -2490,7 +2492,16 @@ function persistDashboardSnapshot(accountId, data, options = {}) {
   if (requiresConfirmation && options.requireConfirmation && !options.allowSuspiciousReplacement) {
     return { saved: false, requiresConfirmation, rows, validation, warnings: data.warnings || [] };
   }
-  const mergedRows = replaceDashboardRowsInRange(accounts[accountId].snapshot, rows, rangeFrom, rangeTo);
+  const previousRows = accounts[accountId].snapshot || [];
+  const previousObservedAt = accounts[accountId].botSnapshotTimestamp || accounts[accountId].manualFetchTimestamp || accounts[accountId].staticUploadTimestamp || Date.now();
+  accounts[accountId].deliveryJourneys = updateDeliveryJourneys(
+    accounts[accountId].deliveryJourneys,
+    previousRows,
+    rows,
+    Date.now(),
+    previousObservedAt
+  );
+  const mergedRows = replaceDashboardRowsInRange(previousRows, rows, rangeFrom, rangeTo);
   accounts[accountId].snapshot = mergedRows;
   accounts[accountId].snapshotMonth = data.snapshotMonth || "";
   accounts[accountId].accountIdentity = identityMeta;
@@ -2595,7 +2606,7 @@ function runMonthlyDataCleanup(options = {}) {
     bumpDashboardSnapshotRevision();
   }
 
-  const changed = analyticsPrune.removed > 0 || dashboardPrune.removedRows > 0;
+  const changed = analyticsPrune.removed > 0 || dashboardPrune.changed;
   if (changed) {
     analyticsSnapshotSyncCacheKey = "";
     dashboardQueryService.clearCache();
@@ -2613,6 +2624,7 @@ function runMonthlyDataCleanup(options = {}) {
     analyticsRunsRemoved: analyticsPrune.removed,
     analyticsRunsKept: analyticsPrune.runs.length,
     dashboardRowsRemoved: dashboardPrune.removedRows,
+    dashboardDeliveryJourneysRemoved: dashboardPrune.removedJourneys,
     dashboardAccountsTouched: dashboardPrune.touchedAccounts,
     changed,
     ranAt: now.toISOString(),
@@ -2621,7 +2633,7 @@ function runMonthlyDataCleanup(options = {}) {
   dashboardStore.set(MONTHLY_DATA_CLEANUP_LAST_RUN_KEY, cutoff.monthKey);
   dashboardStore.set(MONTHLY_DATA_CLEANUP_LAST_RESULT_KEY, result);
   if (changed) {
-    log.info(`[MonthlyCleanup] Removed ${analyticsPrune.removed} analytics runs and ${dashboardPrune.removedRows} dashboard rows before ${cutoff.cutoffDateKey}.`);
+    log.info(`[MonthlyCleanup] Removed ${analyticsPrune.removed} analytics runs, ${dashboardPrune.removedRows} dashboard rows, and ${dashboardPrune.removedJourneys} delivery journeys before ${cutoff.cutoffDateKey}.`);
   } else {
     log.info(`[MonthlyCleanup] Checked ${cutoff.monthKey}; no old reporting data found.`);
   }

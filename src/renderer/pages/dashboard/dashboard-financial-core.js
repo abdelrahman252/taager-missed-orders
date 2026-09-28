@@ -45,6 +45,35 @@
     return { rate: 0, source: "insufficient_history", insufficientHistory: true };
   }
 
+  function calculateOutForDeliveryEstimate(input) {
+    input = input || {};
+    var outForDeliveryCount = nonNegative(input.outForDeliveryCount);
+    var deliveredOutcomes = nonNegative(input.deliveredOutcomes);
+    var unsuccessfulOutcomes = nonNegative(input.unsuccessfulOutcomes);
+    var outcomeSampleSize = deliveredOutcomes + unsuccessfulOutcomes;
+    var minimumOutcomeSampleSize = Math.max(1, Math.round(nonNegative(input.minimumOutcomeSampleSize == null ? 20 : input.minimumOutcomeSampleSize)));
+    if (input.rateAvailable === false || outcomeSampleSize < minimumOutcomeSampleSize) {
+      return {
+        outForDeliveryCount: outForDeliveryCount,
+        expectedDeliveredFromOutForDeliveryExact: null,
+        expectedDeliveredFromOutForDeliveryDisplay: null,
+        outcomeSampleSize: outcomeSampleSize,
+        outcomeSuccessRate: null,
+        unavailable: true,
+      };
+    }
+    var outcomeSuccessRate = rate(deliveredOutcomes / outcomeSampleSize);
+    var exact = outForDeliveryCount * outcomeSuccessRate;
+    return {
+      outForDeliveryCount: outForDeliveryCount,
+      expectedDeliveredFromOutForDeliveryExact: exact,
+      expectedDeliveredFromOutForDeliveryDisplay: Math.min(outForDeliveryCount, Math.round(exact)),
+      outcomeSampleSize: outcomeSampleSize,
+      outcomeSuccessRate: outcomeSuccessRate,
+      unavailable: false,
+    };
+  }
+
   function calculate(input) {
     input = input || {};
     var netOrders = nonNegative(input.netOrders);
@@ -118,6 +147,7 @@
 
   return {
     calculate: calculate,
+    calculateOutForDeliveryEstimate: calculateOutForDeliveryEstimate,
     divide: divide,
     number: number,
     rate: rate,

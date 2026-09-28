@@ -589,7 +589,7 @@
       'orders.searchPlaceholder': 'Search by order ID, phone, customer, city, or product',
       'orders.emptyFiltered': 'No orders match the selected filters.',
       'orders.pagination': '{start} - {end} of {total} orders',
-      'orders.pipelineTitle': 'Status Pipeline',
+      'orders.pipelineTitle': 'Orders by Status',
       'orders.pipelineHint': 'Click any stage to inspect matching orders',
       'orders.totalDeliveredSales': 'Total Delivered Sales',
       'orders.deliveredAov': 'Average Order Value (Delivered)',

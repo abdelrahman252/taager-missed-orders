@@ -581,7 +581,7 @@
       'orders.searchPlaceholder': 'ابحث برقم الطلب، رقم العميل، العميل، المدينة أو المنتج',
       'orders.emptyFiltered': 'لا توجد طلبات تطابق الفلاتر المحددة.',
       'orders.pagination': '{start} - {end} من {total} طلب',
-      'orders.pipelineTitle': 'مسار الحالات',
+      'orders.pipelineTitle': 'الطلبات حسب الحالة',
       'orders.pipelineHint': 'انقر على أي مرحلة لعرض تفاصيل الطلبات',
       'orders.totalDeliveredSales': 'إجمالي مبيعات الطلبات المسلمة',
       'orders.deliveredAov': 'متوسط قيمة الطلب المستلم',

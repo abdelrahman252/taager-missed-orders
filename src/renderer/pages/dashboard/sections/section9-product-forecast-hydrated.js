@@ -149,11 +149,15 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
     var combined = Object.assign({}, primary);
     var hasActualDelivered = members.some(function (member) { return member && member.actualDeliveredCount !== undefined; });
     var hasActualCommission = members.some(function (member) { return member && member.actualCommission !== undefined; });
+    var hasOutForDeliveryEstimate = members.length > 0 && members.every(function (member) {
+      return member.expectedDeliveredFromOutForDeliveryExact != null && Number.isFinite(Number(member.expectedDeliveredFromOutForDeliveryExact));
+    });
     var additiveFields = [
       'units', 'pieces', 'placedCount', 'netOrderCount', 'totalOrderCount', 'statusTotalCount',
       'qty', 'revenue', 'commission', 'deliveredSales', 'deliveredCount', 'actualDeliveredCount',
       'actualCommission', 'actualDeliveredQty', 'actualDeliveredSales', 'expectedDeliveriesExact',
       'expectedTotalProfitBeforeAdSpend', 'expectedDeliveredSales', 'ndrBaseOrders', 'ndrDeliveredOrders',
+      'expectedDeliveredFromOutForDeliveryExact',
       'drBaseOrders', 'drDeliveredOrders', 'totalPieces', 'canceledCount', 'canceledByYouCount',
       'failedCount', 'confirmedCount', 'shippingCount', 'processingCount', 'waitingCount',
       'outForDeliveryCount', 'deliverySuspendedCount', 'awaitingShipmentCount', 'pendingCount',
@@ -180,6 +184,16 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
     combined.confirmationPct = statusTotal > 0 ? (Number(combined.confirmationStatusCount || combined.confirmedCount || 0) / statusTotal) * 100 : 0;
     combined.ndrPct = ndrBase > 0 ? (ndrDelivered / ndrBase) * 100 : 0;
     combined.expectedNdrRate = ndrBase > 0 ? ndrDelivered / ndrBase : (netOrders > 0 ? delivered / netOrders : 0);
+    combined.expectedDeliveredFromOutForDeliveryExact = hasOutForDeliveryEstimate
+      ? Number(combined.expectedDeliveredFromOutForDeliveryExact || 0)
+      : null;
+    combined.expectedDeliveredFromOutForDeliveryDisplay = hasOutForDeliveryEstimate
+      ? Math.min(Number(combined.outForDeliveryCount || 0), Math.round(combined.expectedDeliveredFromOutForDeliveryExact))
+      : null;
+    combined.expectedDeliveredFromOutForDeliveryUnavailable = !hasOutForDeliveryEstimate;
+    combined.expectedDeliveredFromOutForDeliverySource = members.every(function (member) {
+      return member.expectedDeliveredFromOutForDeliverySource === primary.expectedDeliveredFromOutForDeliverySource;
+    }) ? primary.expectedDeliveredFromOutForDeliverySource : 'mixed';
     combined.drRate = drBase > 0 ? (drDelivered / drBase) * 100 : 0;
     combined.deliveryPct = netOrders > 0 ? (delivered / netOrders) * 100 : 0;
     combined.deliveredAov = delivered > 0 ? Number(combined.deliveredSales || 0) / delivered : 0;
@@ -324,6 +338,14 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
       realDeliveredSales: realDeliveredSales,
       realDeliveredAov: realDeliveredAov,
       outForDeliveryCount: productStatusCount(p, 'shipping', ['outForDeliveryCount', 'shippingExactCount', 'shippingCount']),
+      expectedDeliveredFromOutForDeliveryExact: p.expectedDeliveredFromOutForDeliveryExact != null
+        ? Number(p.expectedDeliveredFromOutForDeliveryExact)
+        : null,
+      expectedDeliveredFromOutForDeliveryDisplay: p.expectedDeliveredFromOutForDeliveryDisplay != null
+        ? Number(p.expectedDeliveredFromOutForDeliveryDisplay)
+        : null,
+      expectedDeliveredFromOutForDeliveryUnavailable: p.expectedDeliveredFromOutForDeliveryUnavailable === true || p.expectedDeliveredFromOutForDeliveryExact == null,
+      expectedDeliveredFromOutForDeliverySource: p.expectedDeliveredFromOutForDeliverySource || 'unavailable',
       deliverySuspendedCount: productStatusCount(p, 'delivery_suspended', ['deliverySuspendedCount', 'deliverySuspendedExactCount']),
       awaitingShipmentCount: productStatusCount(p, 'waiting', ['awaitingShipmentCount', 'waitingExactCount', 'waitingCount']),
       realAdSpend:   realAdSpend,
@@ -1270,10 +1292,18 @@ window.renderSectionProductForecastHydratedEntry = function (mountEl, data, ctx)
         ) +
         _kpiMiniTip(
           p9Txt('Out for delivery', '\u0642\u064a\u062f \u0627\u0644\u062a\u0648\u0635\u064a\u0644'),
-          p9Num(s.outForDeliveryCount), '#14b8a6', 'i',
+          '<span style="display:flex;flex-direction:column;align-items:center;gap:3px;line-height:1.2;">' +
+            '<span>' + p9Num(s.outForDeliveryCount) + '</span>' +
+            '<span style="font-size:var(--type-micro);font-weight:var(--weight-medium);color:var(--dash-text-muted);">' +
+              p9Txt('Estimated delivery: ', '\u062a\u0642\u062f\u064a\u0631 \u0627\u0644\u062a\u0633\u0644\u064a\u0645: ') +
+              (s.expectedDeliveredFromOutForDeliveryUnavailable ? '—' : p9Num(s.expectedDeliveredFromOutForDeliveryDisplay)) +
+            '</span>' +
+          '</span>', '#14b8a6', 'i',
           p9Txt('Out for delivery', '\u0642\u064a\u062f \u0627\u0644\u062a\u0648\u0635\u064a\u0644'),
-          p9Txt('Orders for this selected product currently out for delivery.', '\u0637\u0644\u0628\u0627\u062a \u0647\u0630\u0627 \u0627\u0644\u0645\u0646\u062a\u062c \u0627\u0644\u0645\u062d\u062f\u062f \u0627\u0644\u0645\u0648\u062c\u0648\u062f\u0629 \u062d\u0627\u0644\u064a\u0627 \u0642\u064a\u062f \u0627\u0644\u062a\u0648\u0635\u064a\u0644.'),
-          'Out for delivery = product orders with shipping status'
+          String(s.expectedDeliveredFromOutForDeliverySource || '').indexOf('observed_') === 0
+            ? p9Txt('Measured from orders observed Out for Delivery and later resolved in the selected cohort; account history is used when product history is insufficient.', 'مقاس من طلبات رُصدت قيد التوصيل ثم اكتملت نتيجتها في المجموعة المختارة؛ يُستخدم سجل الحساب إذا لم تكفِ بيانات المنتج.')
+            : p9Txt('Approximation from resolved shipping outcomes until enough observed Out for Delivery histories are available.', 'تقريب من نتائج الشحن المكتملة حتى تتوفر سجلات كافية لطلبات رُصدت قيد التوصيل.'),
+          'estimatedDeliveries = productOutForDeliveryOrders * selectedShippingSuccessRate'
         ) +
         _kpiMiniTip(
           p9Txt('Delivery suspended', '\u062a\u0645 \u062a\u0639\u0644\u064a\u0642 \u0627\u0644\u062a\u0648\u0635\u064a\u0644'),

@@ -177,6 +177,10 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
   // become 30 inside this calculator.
   var realNdrPct = d.ndrPctExact != null ? Number(d.ndrPctExact) : (d.ndrPct != null ? Number(d.ndrPct) : 0);
   var realShippingOrders = d.shippingCount != null ? Number(d.shippingCount) : 0;
+  var expectedDeliveredFromOutForDelivery = d.expectedDeliveredFromOutForDeliveryDisplay != null
+    ? Number(d.expectedDeliveredFromOutForDeliveryDisplay)
+    : null;
+  var expectedDeliveredFromOutForDeliveryUnavailable = d.expectedDeliveredFromOutForDeliveryUnavailable === true || expectedDeliveredFromOutForDelivery == null;
   var realConfirmationRate = d.confirmationRate != null ? Number(d.confirmationRate) : 0;
   var realConfirmedOrders =
     d.confirmationStatusCount != null ? Number(d.confirmationStatusCount)
@@ -3238,15 +3242,19 @@ window.renderSection7HydratedEntry = function (mountEl, data, ctx) {
       ) +
       _kpiMiniTip(
         s7Txt("Orders Out for Delivery", "عدد الطلبات قيد التوصيل"),
-        s7Num(realShippingOrders),
+        '<span style="display:flex;flex-direction:column;align-items:center;gap:3px;line-height:1.2;">' +
+          '<span>' + s7Num(realShippingOrders) + '</span>' +
+          '<span style="font-size:var(--type-micro);font-weight:var(--weight-medium);color:var(--dash-text-muted);">' +
+            s7Txt("Estimated delivery: ", "تقدير التسليم: ") + (expectedDeliveredFromOutForDeliveryUnavailable ? '—' : s7Num(expectedDeliveredFromOutForDelivery)) +
+          '</span>' +
+        '</span>',
         "#14b8a6",
         "↗",
         s7Txt("Orders Out for Delivery", "عدد الطلبات قيد التوصيل"),
-        s7Txt(
-          "Orders whose exact current status is Out for delivery.",
-          "عدد الطلبات التي حالتها الحالية قيد التوصيل.",
-        ),
-        "outForDeliveryOrders = count(status: shipping)",
+        String(d.expectedDeliveredFromOutForDeliverySource || '').indexOf('observed_') === 0
+          ? s7Txt('Measured from orders observed Out for Delivery and later resolved in the selected Actual/Expected period.', 'مقاس من طلبات رُصدت قيد التوصيل ثم اكتملت نتيجتها في فترة Actual/Expected المختارة.')
+          : s7Txt('Approximation from resolved shipping outcomes until at least 20 observed Out for Delivery orders have a final result.', 'تقريب من نتائج الشحن المكتملة حتى تتوفر نتيجة نهائية لـ20 طلبًا على الأقل رُصدت قيد التوصيل.'),
+        "estimatedDeliveries = outForDeliveryOrders * selectedShippingSuccessRate",
       ) +
       _kpiMiniTip(
         s7Txt("Net Delivery Rate (NDR)", "معدل التسليم الصافي (NDR)"),

@@ -126,6 +126,7 @@ function pruneDashboardAccountsForCurrentMonth(accounts, cutoffDateKey, rowDateK
   const source = accounts && typeof accounts === "object" ? accounts : {};
   const next = {};
   let removedRows = 0;
+  let removedJourneys = 0;
   let touchedAccounts = 0;
 
   for (const [accountId, account] of Object.entries(source)) {
@@ -134,19 +135,22 @@ function pruneDashboardAccountsForCurrentMonth(accounts, cutoffDateKey, rowDateK
       continue;
     }
     const rows = Array.isArray(account.snapshot) ? account.snapshot : [];
-    if (!rows.length) {
-      next[accountId] = account;
-      continue;
-    }
+    const journeys = account.deliveryJourneys && typeof account.deliveryJourneys === "object" ? account.deliveryJourneys : {};
+    const keptJourneys = Object.fromEntries(Object.entries(journeys).filter(([, journey]) => {
+      const dateKey = String(journey && journey.createdAt || "").slice(0, 10);
+      return !dateKey || dateKey >= cutoffDateKey;
+    }));
+    const removedJourneyCount = Object.keys(journeys).length - Object.keys(keptJourneys).length;
+    removedJourneys += removedJourneyCount;
     const keptRows = rows.filter((row) => {
       const dateKey = rowDateKey(row);
       return !dateKey || dateKey >= cutoffDateKey;
     });
     const removed = rows.length - keptRows.length;
-    if (removed > 0) {
+    if (removed > 0 || removedJourneyCount > 0) {
       touchedAccounts++;
       removedRows += removed;
-      next[accountId] = { ...account, snapshot: keptRows };
+      next[accountId] = { ...account, snapshot: keptRows, deliveryJourneys: keptJourneys };
     } else {
       next[accountId] = account;
     }
@@ -155,8 +159,9 @@ function pruneDashboardAccountsForCurrentMonth(accounts, cutoffDateKey, rowDateK
   return {
     accounts: next,
     removedRows,
+    removedJourneys,
     touchedAccounts,
-    changed: removedRows > 0,
+    changed: removedRows > 0 || removedJourneys > 0,
   };
 }
 

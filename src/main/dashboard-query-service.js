@@ -1138,6 +1138,55 @@ function createDashboardQueryService(options) {
         }
       }
 
+      // Snapshot statuses provide resolved shipment outcomes, but no transition
+      // history proving that a given order previously entered Out for Delivery.
+      const shippingOutcomes = { delivered: 0, unsuccessful: 0 };
+      const shippingOutcomesByProduct = new Map();
+      const shippingSeen = new Set();
+      const shippingProductSeen = new Set();
+      const useHistoricalShippingCohort = isExpected && !!(ndrFrom && ndrTo) && !expectedNdrFallbackUsed;
+      const shippingRows = useHistoricalShippingCohort
+        ? (ndrRows.length ? ndrRows : rows) : rows;
+      shippingRows.forEach((row, index) => {
+        if (useHistoricalShippingCohort ? !inNdrRange(row, ndrFrom, ndrTo) : !inCreatedRange(row, scope)) return;
+        const bucket = statusBucket(row);
+        if (bucket !== "delivered" && bucket !== "failed" && bucket !== "return_verified") return;
+        const key = orderKey(row, index);
+        const field = bucket === "delivered" ? "delivered" : "unsuccessful";
+        if (!shippingSeen.has(key)) {
+          shippingSeen.add(key);
+          shippingOutcomes[field] += 1;
+        }
+        const productKey = productIdentity(row).key;
+        if (!shippingOutcomesByProduct.has(productKey)) shippingOutcomesByProduct.set(productKey, { delivered: 0, unsuccessful: 0 });
+        const combinedKey = productKey + ":" + key;
+        if (!shippingProductSeen.has(combinedKey)) {
+          shippingProductSeen.add(combinedKey);
+          shippingOutcomesByProduct.get(productKey)[field] += 1;
+        }
+      });
+
+      const observedShippingOutcomes = { delivered: 0, unsuccessful: 0 };
+      const observedShippingByProduct = new Map();
+      scope.accountIds.forEach((accountId) => {
+        const journeys = accounts[accountId] && accounts[accountId].deliveryJourneys || {};
+        Object.values(journeys).forEach((journey) => {
+          if (!journey || !journey.enteredOutForDeliveryAt) return;
+          if (journey.outcome !== "delivered" && journey.outcome !== "unsuccessful") return;
+          const createdAt = dateKey(journey.createdAt || "");
+          if (!createdAt) return;
+          if (useHistoricalShippingCohort) {
+            if ((ndrFrom && createdAt < ndrFrom) || (ndrTo && createdAt > ndrTo)) return;
+          } else if ((scope.dateFrom && createdAt < scope.dateFrom) || (scope.dateTo && createdAt > scope.dateTo)) return;
+          observedShippingOutcomes[journey.outcome] += 1;
+          (journey.products || []).forEach((item) => {
+            const key = productIdentity({ sku: item.sku, products: item.name, taagerCountry: item.country, accountId }).key;
+            if (!observedShippingByProduct.has(key)) observedShippingByProduct.set(key, { delivered: 0, unsuccessful: 0 });
+            observedShippingByProduct.get(key)[journey.outcome] += 1;
+          });
+        });
+      });
+
       let list = Array.from(products.values()).filter((product) => product.netOrderCount > 0).map((product) => {
         // Bug A fix: use confirmedCount (orders in CONFIRMED_BUCKETS) as the DR denominator,
         // matching the frontend aggregator. The old formula (totalOrders - pendingCount)
@@ -1171,6 +1220,20 @@ function createDashboardQueryService(options) {
         const ndrRate = ndrBase > 0
           ? Math.max(0, Math.min(1, ndrDelivered / ndrBase))
           : (isExpected ? globalExpectedNdrRate : 0);
+        const productShippingOutcomes = shippingOutcomesByProduct.get(product.key) || { delivered: 0, unsuccessful: 0 };
+        const candidates = [
+          { source: "observed_product", outcomes: observedShippingByProduct.get(product.key) || { delivered: 0, unsuccessful: 0 } },
+          { source: "observed_account", outcomes: observedShippingOutcomes },
+          { source: "proxy_product", outcomes: productShippingOutcomes },
+          { source: "proxy_account", outcomes: shippingOutcomes },
+        ];
+        const selectedShipping = candidates.find((candidate) => candidate.outcomes.delivered + candidate.outcomes.unsuccessful >= 20);
+        const selectedShippingOutcomes = selectedShipping ? selectedShipping.outcomes : { delivered: 0, unsuccessful: 0 };
+        const outForDeliveryProjection = financialCore.calculateOutForDeliveryEstimate({
+          outForDeliveryCount: product.outForDeliveryCount,
+          deliveredOutcomes: selectedShippingOutcomes.delivered,
+          unsuccessfulOutcomes: selectedShippingOutcomes.unsuccessful,
+        });
         const drRate = drBase > 0
           ? Math.max(0, Math.min(1, drDelivered / drBase))
           : (isExpected ? globalExpectedDrRate : 0);
@@ -1190,6 +1253,9 @@ function createDashboardQueryService(options) {
           netOrderProfitAfterTax: product.netOrderProfitAfterTax,
           currentTotalSales: product.revenue,
           expectedNdrRate: ndrRate,
+          expectedDeliveredFromOutForDeliveryExact: outForDeliveryProjection.expectedDeliveredFromOutForDeliveryExact,
+          expectedDeliveredFromOutForDeliveryDisplay: outForDeliveryProjection.expectedDeliveredFromOutForDeliveryDisplay,
+          expectedDeliveredFromOutForDeliveryUnavailable: outForDeliveryProjection.unavailable,
           adSpend: 0,
           insufficientHistory: isExpected && productNdrBase <= 0 && globalNdrBase <= 0,
         });
@@ -1215,6 +1281,12 @@ function createDashboardQueryService(options) {
           actualEarnedProfitAfterTax: actualAverageProfitTotal,
           actualAverageProfit,
           actualAverageProfitSource,
+          outForDeliveryCount: product.outForDeliveryCount,
+          expectedDeliveredFromOutForDeliveryExact: outForDeliveryProjection.expectedDeliveredFromOutForDeliveryExact,
+          expectedDeliveredFromOutForDeliveryDisplay: outForDeliveryProjection.expectedDeliveredFromOutForDeliveryDisplay,
+          expectedDeliveredFromOutForDeliveryUnavailable: outForDeliveryProjection.unavailable,
+          expectedDeliveredFromOutForDeliverySource: selectedShipping ? selectedShipping.source : "unavailable",
+          expectedDeliveredFromOutForDeliverySampleSize: outForDeliveryProjection.outcomeSampleSize,
           deliveries: deliveriesVal,
           deliveredCount: deliveriesVal,
           expectedDeliveriesExact: projection.expectedDeliveriesExact,

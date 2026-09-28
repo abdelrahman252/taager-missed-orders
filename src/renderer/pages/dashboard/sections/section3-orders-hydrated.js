@@ -1129,8 +1129,20 @@ window.renderSection3HydratedEntry = function (mountEl, data, ctx) {
 
     var cardsHtml = '';
     var isLightTheme = document.documentElement.getAttribute('data-theme') === 'light';
+    var outForDeliveryEstimate = data && data.roi ? data.roi : {};
+    var estimateUnavailable = outForDeliveryEstimate.expectedDeliveredFromOutForDeliveryUnavailable === true ||
+      outForDeliveryEstimate.expectedDeliveredFromOutForDeliveryDisplay == null;
+    var estimateText = estimateUnavailable
+      ? '—'
+      : formatReadableNumber(outForDeliveryEstimate.expectedDeliveredFromOutForDeliveryDisplay, 0);
+    var estimateHint = estimateUnavailable
+      ? s3Pick('Delivery rate unavailable', 'معدل التسليم غير متوفر')
+      : String(outForDeliveryEstimate.expectedDeliveredFromOutForDeliverySource || '').indexOf('observed_') === 0
+        ? s3Pick('Based on observed delivery outcomes', 'بناءً على نتائج التوصيل المرصودة')
+        : s3Pick('Approximation from completed shipping outcomes', 'تقريب من نتائج الشحن المكتملة');
     dynamicStages.forEach(function (s, i) {
       var isActive  = s.id === activeStageId;
+      var isOutForDelivery = s.id === 'shipping' || s.exactBucket === 'shipping';
       var glowBox, bg;
       if (isLightTheme) {
         /* Light mode: white card surface, soft colored outer glow (border handles the edge) */
@@ -1148,7 +1160,7 @@ window.renderSection3HydratedEntry = function (mountEl, data, ctx) {
 
       cardsHtml +=
         '<div class="s3-mini-stage fade-up" data-id="' + s.id + '" style="flex:1;min-width:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;animation-delay:' + (i * 60) + 'ms;">' +
-          '<div class="s3-mini-card" style="width:94%;height:96px;border-radius:var(--dash-radius-md);' +
+          '<div class="s3-mini-card" style="width:94%;height:108px;border-radius:var(--dash-radius-md);' +
             'transform:skewX(-6deg);' +
             'border:1.5px solid ' + s.color + ';' +
             'background:' + bg + ';' +
@@ -1169,6 +1181,8 @@ window.renderSection3HydratedEntry = function (mountEl, data, ctx) {
                 '<span class="s3-mini-count" title="' + formatReadableNumber(s.count, 0) + '" style="font-size:var(--type-page-title);font-weight:var(--weight-bold);color:' + (isLightTheme ? '#1e293b' : '#fff') + ';line-height:1;letter-spacing:-0.5px;font-variant-numeric:tabular-nums;">' + formatReadableNumber(s.count, 0) + '</span>' +
                 '<span class="s3-mini-pct" style="font-size:var(--type-caption);color:' + (isLightTheme ? '#64748b' : 'rgba(255,255,255,0.55)') + ';font-weight:var(--weight-semibold);">' + s.pct + '%</span>' +
               '</div>' +
+              (isOutForDelivery ? '<div class="s3-mini-estimate" title="' + estimateHint + '" style="font-size:var(--type-caption);color:' + (isLightTheme ? '#475569' : 'rgba(255,255,255,0.7)') + ';white-space:nowrap;text-align:' + textAlign + ';">' +
+                s3Pick('Est. delivery: ', 'تقدير التسليم: ') + estimateText + '</div>' : '') +
             '</div>' +
           '</div>' +
           (isActive

@@ -695,6 +695,16 @@ window.renderSection8 = function (mountEl, data, ctx) {
         (sarLabel ? '<span style="font-family:var(--font-ui);font-size:var(--type-micro);font-weight:var(--weight-semibold);color:rgba(255,255,255,0.42);text-align:center;max-width:72px;">' + sarLabel + '</span>' : '') +
       '</div>';
     }
+    var expectedOutForDeliveryHtml = '';
+    if (s.id === 'shipping') {
+      var expectedOutForDeliveryText = s.expectedDeliveredFromOutForDeliveryUnavailable
+        ? '—'
+        : Number(s.expectedDeliveredFromOutForDeliveryDisplay || 0).toLocaleString('en-US');
+      expectedOutForDeliveryHtml = '<div title="' + (String(s.expectedDeliveredFromOutForDeliverySource || '').indexOf('observed_') === 0
+        ? s8Txt('Measured from orders observed Out for Delivery and later resolved in the selected period.', 'مقاس من طلبات رُصدت قيد التوصيل ثم اكتملت نتيجتها في الفترة المختارة.')
+        : s8Txt('Approximation from resolved shipping outcomes; at least 20 required. Observed Out for Delivery history is still insufficient.', 'تقريب من نتائج الشحن المكتملة؛ يلزم 20 نتيجة على الأقل. سجل الطلبات المرصودة قيد التوصيل لا يكفي بعد.')) + '" style="font-family:var(--font-ui);font-size:var(--type-micro);font-weight:var(--weight-medium);color:' + labelColor + ';text-align:center;line-height:1.2;">' +
+        s8Txt('Estimated delivery: ', 'تقدير التسليم: ') + expectedOutForDeliveryText + '</div>';
+    }
 
     return '<div style="background:' + bg + ';' + topBorder + borderRadius + trackGlow + sideBorder +
       'padding:12px 4px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:6px;flex:1;min-width:60px;' +
@@ -716,6 +726,7 @@ window.renderSection8 = function (mountEl, data, ctx) {
       '<span style="font-family:var(--font-ui);font-size:var(--type-micro);font-weight:var(--weight-semibold);color:' + pctColor + ';background:' + pctColor + '15;padding:2px 6px;border-radius:var(--dash-radius-sm);z-index:1;">' +
         ((typeof s.pct === 'string' && s.pct.indexOf('%') !== -1) ? s.pct : s.pct + '%') +
       '</span>' +
+      expectedOutForDeliveryHtml +
       
       '<div style="min-height:30px;display:flex;align-items:center;margin-top:2px;z-index:1;">' +
         sarHtml +
@@ -900,6 +911,14 @@ window.renderSection8 = function (mountEl, data, ctx) {
         share: share,
         color: color,
         businessGroup: businessGroup,
+        expectedDeliveredFromOutForDeliveryExact: id === 'shipping' && byId.shipping
+          ? byId.shipping.expectedDeliveredFromOutForDeliveryExact
+          : null,
+        expectedDeliveredFromOutForDeliveryDisplay: id === 'shipping' && byId.shipping
+          ? byId.shipping.expectedDeliveredFromOutForDeliveryDisplay
+          : null,
+        expectedDeliveredFromOutForDeliveryUnavailable: id !== 'shipping' || !byId.shipping || byId.shipping.expectedDeliveredFromOutForDeliveryUnavailable === true,
+        expectedDeliveredFromOutForDeliverySource: id === 'shipping' && byId.shipping ? byId.shipping.expectedDeliveredFromOutForDeliverySource : 'unavailable',
         sar: sar ? sar.toLocaleString('en-US', { maximumFractionDigits: 2 }) : undefined
       };
     }

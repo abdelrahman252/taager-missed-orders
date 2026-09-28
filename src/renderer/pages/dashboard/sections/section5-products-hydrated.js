@@ -667,6 +667,11 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         canceledCount:   p.canceledByYouCount || p.canceledCount || 0,
         confirmedCount:  p.confirmedCount  || 0,
         shippingCount:   p.shippingCount   || 0,
+        outForDeliveryCount: p.outForDeliveryCount != null ? p.outForDeliveryCount : (p.shippingCount || 0),
+        expectedDeliveredFromOutForDeliveryExact: p.expectedDeliveredFromOutForDeliveryExact,
+        expectedDeliveredFromOutForDeliveryDisplay: p.expectedDeliveredFromOutForDeliveryDisplay,
+        expectedDeliveredFromOutForDeliveryUnavailable: p.expectedDeliveredFromOutForDeliveryUnavailable,
+        expectedDeliveredFromOutForDeliverySource: p.expectedDeliveredFromOutForDeliverySource,
         processingCount: p.processingCount || 0,
         statusTotalCount: p.statusTotalCount || p.netOrderCount || p.placedCount || 0,
         netOrderCount: p.netOrderCount != null ? p.netOrderCount : (p.placedCount || 0),
@@ -1058,6 +1063,11 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       canceledCount: canceledCountVal,
       confirmedCount: confirmedCountVal,
       shippingCount: shippingCountVal,
+      outForDeliveryCount: Number(row.outForDeliveryCount != null ? row.outForDeliveryCount : shippingCountVal),
+      expectedDeliveredFromOutForDeliveryExact: row.expectedDeliveredFromOutForDeliveryExact != null ? Number(row.expectedDeliveredFromOutForDeliveryExact) : null,
+      expectedDeliveredFromOutForDeliveryDisplay: row.expectedDeliveredFromOutForDeliveryDisplay != null ? Number(row.expectedDeliveredFromOutForDeliveryDisplay) : null,
+      expectedDeliveredFromOutForDeliveryUnavailable: row.expectedDeliveredFromOutForDeliveryUnavailable === true || row.expectedDeliveredFromOutForDeliveryExact == null,
+      expectedDeliveredFromOutForDeliverySource: row.expectedDeliveredFromOutForDeliverySource || 'unavailable',
       processingCount: processingCountVal,
       waitingCount: waitingCountVal,
       pendingCount: pendingCountVal,
@@ -1381,7 +1391,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
       { label:s5Txt('Confirmed', 'مؤكدة'), count: p.confirmationStatusCount || p.confirmedCount, color:'#3b82f6', pct: p.confirmationPct },
       { label:s5Txt('Pending', 'قيد الانتظار'), count: p.pendingStatusCount || p.pendingCount || 0, color:'#a855f7', pct: p.pendingPct },
       { label:p5Txt('funnelCanceled'), count: p.cancelStatusCount || p.canceledCount, color:'#ef4444', pct: p.cancelPct },
-      { label: s5Txt('In Shipping', 'في الشحن'),       count: p.shippingCount,  color:'#14b8a6', pct: parseFloat((p.shippingCount/total*100).toFixed(1)) },
+      { label: s5Txt('In Shipping', 'في الشحن'),       count: p.shippingCount,  color:'#14b8a6', pct: parseFloat((p.shippingCount/total*100).toFixed(1)), expectedOutForDelivery: p.expectedDeliveredFromOutForDeliveryUnavailable ? null : p.expectedDeliveredFromOutForDeliveryDisplay },
       { label:s5Txt('Delivered ✓', 'مُسلَّمة ✓'),    count: p.deliveredCount, color:'#00e676', pct: p.deliveryPct },
       { label:p5Txt('funnelFailed'), count: p.failedCount, color:'#f97316', pct: parseFloat(((p.failedCount || 0)/total*100).toFixed(1)) },
     ];
@@ -1392,7 +1402,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
           <div style="font-size:var(--type-micro);font-weight:var(--weight-bold);color:${s.color};white-space:nowrap">${s.pct}٪</div>
         </div>
         <div style="font-size:var(--type-label);color:rgba(255,255,255,0.7);flex-shrink:0">${s.label}</div>
-        <div style="font-size:var(--type-label);font-weight:var(--weight-bold);color:#fff;margin-right:auto">${(s.count||0).toLocaleString('en-US')}</div>
+        <div style="font-size:var(--type-label);font-weight:var(--weight-bold);color:#fff;margin-right:auto;text-align:end">${(s.count||0).toLocaleString('en-US')}${s.expectedOutForDelivery !== undefined ? `<div style="font-size:var(--type-micro);font-weight:var(--weight-medium);color:rgba(255,255,255,0.48);margin-top:2px">${s5Txt('Estimated delivery: ', 'تقدير التسليم: ')}${s.expectedOutForDelivery == null ? '—' : Number(s.expectedOutForDelivery).toLocaleString('en-US')}</div>` : ''}</div>
       </div>`;
     }).join('');
   }
@@ -1772,6 +1782,12 @@ function renderSection5Hydrated(mountEl, data, ctx) {
     const productKey = p.key || p.sku || p.name || i;
     const totalPiecesText = productCompactNumber(p.totalPieces || 0, 0, 10000);
     const shippingText = productCompactNumber(p.shippingCount || 0, 0, 10000);
+    const expectedOutForDeliveryText = p.expectedDeliveredFromOutForDeliveryUnavailable || p.expectedDeliveredFromOutForDeliveryDisplay == null
+      ? '—'
+      : productCompactNumber(p.expectedDeliveredFromOutForDeliveryDisplay, 0, 10000);
+    const expectedOutForDeliverySourceText = String(p.expectedDeliveredFromOutForDeliverySource || '').indexOf('observed_') === 0
+      ? s5Txt('Measured from observed Out for Delivery orders', 'مقاس من الطلبات المرصودة قيد التوصيل')
+      : s5Txt('Approximation from resolved shipping outcomes', 'تقريب من نتائج الشحن المكتملة');
     const deliveredText = productCompactNumber(p.deliveredCount || 0, 0, 10000);
     const failedText = productCompactNumber(p.failedCount || 0, 0, 10000);
     const canceledText = productCompactNumber(p.canceledCount || 0, 0, 10000);
@@ -1845,7 +1861,8 @@ function renderSection5Hydrated(mountEl, data, ctx) {
 
       <!-- Col 5: In Shipping count -->
       <div class="s5-cell s5-cell-shipping" style="flex:0 0 64px;min-width:64px;text-align:center;padding:0 5px">
-        <div class="s5-number-fit" title="${attr(productNumber(p.shippingCount || 0, 0))}" style="font-size:${compact?'14px':'16px'};font-weight:var(--weight-bold);color:#14b8a6">${shippingText}</div>
+        <div class="s5-number-fit" title="${attr(productNumber(p.shippingCount || 0, 0) + ' · ' + s5Txt('Estimated delivery: ', 'تقدير التسليم: ') + expectedOutForDeliveryText + ' · ' + expectedOutForDeliverySourceText)}" style="font-size:${compact?'14px':'16px'};font-weight:var(--weight-bold);color:#14b8a6">${shippingText}</div>
+        <div style="font-size:var(--type-micro);font-weight:var(--weight-medium);color:rgba(255,255,255,0.48);white-space:nowrap;">${s5Txt('Exp. ', 'متوقع ')}${expectedOutForDeliveryText}</div>
       </div>
       ${DIV}
 
@@ -5074,7 +5091,7 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         { label: s5Txt('Pending', 'قيد الانتظار'), count: p.pendingStatusCount || p.pendingCount || 0, color: '#a855f7' },
         { label: p5Txt('funnelCanceled'), count: p.cancelStatusCount || p.canceledCount || 0, color: '#ef4444' },
         { label: s5Txt('Delivered', 'تم التسليم'),  count: p.deliveredCount || 0, color: '#00e676' },
-        { label: s5Txt('In Shipping', 'قيد الشحن'),   count: p.shippingCount  || 0, color: '#14b8a6' },
+        { label: s5Txt('In Shipping', 'قيد الشحن'),   count: p.shippingCount  || 0, color: '#14b8a6', expectedOutForDelivery: p.expectedDeliveredFromOutForDeliveryUnavailable ? null : p.expectedDeliveredFromOutForDeliveryDisplay },
         { label: p5Txt('funnelFailed'), count: p.failedCount || 0, color: '#f97316' },
       ];
 
@@ -5084,7 +5101,9 @@ function renderSection5Hydrated(mountEl, data, ctx) {
         return '<div style="margin-bottom:8px">' +
           '<div style="display:flex;justify-content:space-between;font-size:var(--type-caption);margin-bottom:3px;">' +
             '<span style="color:' + (_fIsLight ? 'rgba(30,10,60,0.6)' : 'rgba(255,255,255,0.55)') + '">' + f.label + '</span>' +
-            '<span style="font-weight:var(--weight-bold);color:' + (_fIsLight ? 'rgba(15,5,30,0.9)' : '#fff') + '">' + num(f.count) + ' <span style="color:' + (_fIsLight ? 'rgba(15,5,30,0.45)' : 'rgba(255,255,255,0.35)') + ';font-weight:var(--weight-medium)">(' + barW + '%)</span></span>' +
+            '<span style="font-weight:var(--weight-bold);color:' + (_fIsLight ? 'rgba(15,5,30,0.9)' : '#fff') + '">' + num(f.count) + ' <span style="color:' + (_fIsLight ? 'rgba(15,5,30,0.45)' : 'rgba(255,255,255,0.35)') + ';font-weight:var(--weight-medium)">(' + barW + '%)</span>' +
+              (f.expectedOutForDelivery !== undefined ? '<span style="display:block;font-size:var(--type-micro);font-weight:var(--weight-medium);color:' + (_fIsLight ? 'rgba(15,5,30,0.55)' : 'rgba(255,255,255,0.48)') + ';margin-top:2px">' + s5Txt('Expected: ', 'متوقع: ') + (f.expectedOutForDelivery == null ? '—' : num(f.expectedOutForDelivery)) + '</span>' : '') +
+            '</span>' +
           '</div>' +
           '<div style="height:6px;background:' + (_fIsLight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.06)') + ';border-radius:var(--dash-radius-sm);overflow:hidden">' +
             '<div style="height:100%;width:' + barW + '%;background:' + f.color + ';border-radius:var(--dash-radius-sm)"></div>' +

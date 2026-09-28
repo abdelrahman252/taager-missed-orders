@@ -2226,6 +2226,10 @@ async function diagnoseAdminSyncLifecycle(page) {
       "taagerAi",
     ];
     for (const sectionId of sectionIds) {
+      if (sectionId === "marketing" && await page.locator('.dash-nav-btn[data-section="marketing"]').count() === 0) {
+        console.log("[qa] optional Marketing section is not present in this dashboard build; skipping it");
+        continue;
+      }
       await showDashboard(page);
       await page.locator(`.dash-nav-btn[data-section="${sectionId}"]`).evaluate((button) => button.click());
       await page.waitForTimeout(700);

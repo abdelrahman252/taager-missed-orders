@@ -151,6 +151,14 @@ window.renderSection2 = function (mountEl, data, ctx) {
         pct: pctLabel(share),
         color: color,
         businessGroup: businessGroup,
+        expectedDeliveredFromOutForDeliveryExact: id === 'shipping' && byId.shipping
+          ? byId.shipping.expectedDeliveredFromOutForDeliveryExact
+          : null,
+        expectedDeliveredFromOutForDeliveryDisplay: id === 'shipping' && byId.shipping
+          ? byId.shipping.expectedDeliveredFromOutForDeliveryDisplay
+          : null,
+        expectedDeliveredFromOutForDeliveryUnavailable: id !== 'shipping' || !byId.shipping || byId.shipping.expectedDeliveredFromOutForDeliveryUnavailable === true,
+        expectedDeliveredFromOutForDeliverySource: id === 'shipping' && byId.shipping ? byId.shipping.expectedDeliveredFromOutForDeliverySource : 'unavailable',
         sar: sar ? sar.toLocaleString('en-US', { maximumFractionDigits: 2 }) : undefined
       });
     }
@@ -310,6 +318,16 @@ window.renderSection2 = function (mountEl, data, ctx) {
       iconBg     = s.color + '22';
       iconShadow = '0 0 16px ' + s.color + 'aa,0 0 32px ' + s.color + '44,inset 0 0 12px ' + s.color + '33';
     }
+    var expectedOutForDeliveryHtml = '';
+    if (s.id === 'shipping') {
+      var expectedOutForDeliveryText = s.expectedDeliveredFromOutForDeliveryUnavailable
+        ? '—'
+        : Number(s.expectedDeliveredFromOutForDeliveryDisplay || 0).toLocaleString('en-US');
+      expectedOutForDeliveryHtml = '<div title="' + (String(s.expectedDeliveredFromOutForDeliverySource || '').indexOf('observed_') === 0
+        ? s2Txt('Measured from orders observed Out for Delivery and later resolved in the selected period.', 'مقاس من طلبات رُصدت قيد التوصيل ثم اكتملت نتيجتها في الفترة المختارة.')
+        : s2Txt('Approximation from resolved shipping outcomes; at least 20 required. Observed Out for Delivery history is still insufficient.', 'تقريب من نتائج الشحن المكتملة؛ يلزم 20 نتيجة على الأقل. سجل الطلبات المرصودة قيد التوصيل لا يكفي بعد.')) + '" style="font-size:var(--type-caption);font-weight:var(--weight-semibold);color:' + pctColor + ';margin-top:5px;white-space:nowrap;">' +
+        s2Txt('Estimated delivery: ', 'تقدير التسليم: ') + expectedOutForDeliveryText + '</div>';
+    }
     /* Icon: use the stage id to pick path, color baked in as explicit hex */
     var iconKey = PATHS[s.id] ? s.id : 'intake';
     var iconHtml = svgIcon(PATHS[iconKey], s.color, 22);
@@ -321,6 +339,7 @@ window.renderSection2 = function (mountEl, data, ctx) {
           '<div class="s2-card-top" style="text-align:center;margin-top:8px;">' +
             '<div class="s2-count s2-count-num" data-to="' + animTo + '" data-decimals="' + animDec + '" data-suffix="' + suffix + '" style="font-size:var(--type-hero);font-weight:var(--weight-bold);color:' + countColor + ';line-height:1;letter-spacing:-2px;">' + primary + '</div>' +
             '<div class="s2-pct-text" style="font-size:var(--type-control);font-weight:var(--weight-semibold);color:' + pctColor + ';margin-top:8px;letter-spacing:1px;">' + secondary + '</div>' +
+            expectedOutForDeliveryHtml +
           '</div>' +
           '<div class="s2-icon-wrap" style="width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:8px;flex-shrink:0;background:' + iconBg + ';border:1.5px solid ' + s.color + 'cc;box-shadow:' + iconShadow + ';">' +
             iconHtml +
@@ -431,6 +450,10 @@ window.renderSection2 = function (mountEl, data, ctx) {
     var resolvedCount = deliveredCount + failedCount;
     var activePct = pctNum(activeCount, total);
     var shippingPct = pctNum(shippingCount, total);
+    var shippingStage = (Array.isArray(sourceStages) ? sourceStages : []).find(function (stage) { return stage && stage.id === 'shipping'; });
+    var expectedOutForDeliveryText = shippingStage && !shippingStage.expectedDeliveredFromOutForDeliveryUnavailable
+      ? Number(shippingStage.expectedDeliveredFromOutForDeliveryDisplay || 0).toLocaleString('en-US')
+      : '—';
     var outcomeQuality = resolvedCount > 0 ? pctNum(deliveredCount, resolvedCount) : 0;
     return [
       {
@@ -455,7 +478,7 @@ window.renderSection2 = function (mountEl, data, ctx) {
         label: s2Txt('Out for Delivery Rate', 'نسبة الشحنات الجارية'),
         value: shippingPct,
         suffix: '%',
-        sub: Number(shippingCount || 0).toLocaleString('en-US') + s2Txt(' orders currently with courier', ' طلبات مع شركة الشحن حالياً')
+        sub: Number(shippingCount || 0).toLocaleString('en-US') + s2Txt(' orders currently with courier · Estimated delivery: ', ' طلبات مع شركة الشحن حالياً · تقدير التسليم: ') + expectedOutForDeliveryText
       },
       {
         icon: 'confirmed',
