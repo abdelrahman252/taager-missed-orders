@@ -495,10 +495,10 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
 
     function updatePhases(msg) {
       const phaseMap = [
-        { keywords: ["Taager Login", "Taager: logging in", "taagerLogin"], idx: 0 },
-        { keywords: ["Easy-Orders Login", "EasyOrders identity guard", "easy-orders login", "Easy-orders login"], idx: 1 },
-        { keywords: ["Real Orders Export", "PHASE 2", "Real orders downloaded"], idx: 2 },
-        { keywords: ["Missed Orders Export", "PHASE 3", "Missed orders downloaded"], idx: 3 },
+        { keywords: ["Easy-Orders Login", "EasyOrders identity guard", "easy-orders login", "Easy-orders login"], idx: 0 },
+        { keywords: ["Real Orders Export", "PHASE 2", "Real orders downloaded"], idx: 1 },
+        { keywords: ["Missed Orders Export", "PHASE 3", "Missed orders downloaded"], idx: 2 },
+        { keywords: ["Taager Login", "Taager: logging in", "taagerLogin"], idx: 3 },
         { keywords: ["PHASE 5", "Upload to Taager Cart", "Taager upload"],        idx: 4 },
       ];
       for (const p of phaseMap) {
@@ -1243,10 +1243,10 @@ window.renderRun = function (dateFrom, dateTo, selectedAccountIds, onComplete, o
   // ── Update phase state for an account based on a log line ──
   function updateAccPhases(acc, msg) {
     const phaseMap = [
-      { keywords: ["Taager Login","Taager: logging in","taagerLogin"], idx: 0 },
-      { keywords: ["Easy-Orders Login","EasyOrders identity guard","easy-orders login","Easy-orders login"], idx: 1 },
-      { keywords: ["Real Orders Export","PHASE 2","Real orders downloaded"], idx: 2 },
-      { keywords: ["Missed Orders Export","PHASE 3","Missed orders downloaded"], idx: 3 },
+      { keywords: ["Easy-Orders Login","EasyOrders identity guard","easy-orders login","Easy-orders login"], idx: 0 },
+      { keywords: ["Real Orders Export","PHASE 2","Real orders downloaded"], idx: 1 },
+      { keywords: ["Missed Orders Export","PHASE 3","Missed orders downloaded"], idx: 2 },
+      { keywords: ["Taager Login","Taager: logging in","taagerLogin"], idx: 3 },
       { keywords: ["PHASE 5","Upload to Taager Cart","Taager upload"],       idx: 4 },
     ];
     for (const p of phaseMap) {

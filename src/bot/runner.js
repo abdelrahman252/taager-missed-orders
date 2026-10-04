@@ -1368,7 +1368,13 @@ async function closeActiveContextForManualGoogle(reason = stopRequested ? "stop-
 }
 
 function isClosedAutomationPage(page) {
-  return !page || (typeof page.isClosed === "function" && page.isClosed());
+  if (!page || (typeof page.isClosed === "function" && page.isClosed())) return true;
+  try {
+    const browser = typeof page.context === "function" ? page.context().browser() : null;
+    return !!(browser && typeof browser.isConnected === "function" && !browser.isConnected());
+  } catch (_) {
+    return true;
+  }
 }
 
 async function relaunchTaagerAutomationPage(stage, targetPath) {
@@ -3670,7 +3676,7 @@ async function ensureRunnerAutomationPageAlive(page, label, targetPath = "/order
     activePage = candidate;
     return candidate;
   }
-  log(`Taager ${label}: automation page closed after download/navigation; relaunching Chrome profile`);
+  log(`Taager ${label}: automation page or Chrome connection closed; relaunching Chrome profile`);
   return relaunchTaagerAutomationPage(label, targetPath);
 }
 
@@ -5734,17 +5740,17 @@ if (config.mode === "second-taager-cart-upload") {
       throw new Error("LIGHTFUNNELS_ORDER_EXPORT_NOT_IMPLEMENTED: login and account selection are complete, but LightFunnels order export is not built yet.");
     }
 
-    // Export Taager orders while this Chrome context is still fresh, as the
-    // dashboard does. EasyOrders exports follow using the recovered active page.
-    // The selected range is widened around the edges, but never past today because
-    // Taager disables future calendar dates.
-    const taagerBuffer = await phase4_taager(page, taagerStartDate, taagerEndDate);
-    page = activePage || page;
-
+    // Complete both primary EasyOrders exports before moving to Taager. A
+    // browser disconnect during a Taager download then cannot block those exports.
     await phase1_easyOrdersLogin(page);
-
     const realBuffer = await phase2_realOrders(page, exportFromDate);
     const missedBuffer = await phase3_missedOrders(page, exportFromDate);
+
+    // The selected range is widened around the edges, but never past today because
+    // Taager disables future calendar dates.
+    page = await ensureRunnerAutomationPageAlive(page, "before-orders-export", "/orders");
+    const taagerBuffer = await phase4_taager(page, taagerStartDate, taagerEndDate);
+    page = activePage || page;
 
     // ── Parse all sheets ──
     log("\n═══════════════════════════════════════");
