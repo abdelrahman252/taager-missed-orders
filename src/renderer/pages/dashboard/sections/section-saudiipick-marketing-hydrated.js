@@ -227,6 +227,7 @@
 
     function mappedSourcesForAccount(sourceStatus, accountId, fallback) {
       var selected = normalizeSourceList(sourceStatus && sourceStatus.selectedSourceAccounts);
+      if (sourceStatus && sourceStatus.mappingAuthoritative) return selected;
       if (selected.length) return selected;
       var mapped = normalizeSourceList(sourceStatus && sourceStatus.mappedAccounts);
       if (mapped.length) return mapped;
@@ -506,11 +507,13 @@
       var choices = pageRows.length ? pageRows.map(function (source) {
         var owner = ownerOfSource(source.id);
         var ownedElsewhere = owner && owner.id !== selectedAccountId;
+        var unavailable = source.usable === false;
         return '<label class="marketing-mapping-choice">' +
-          '<input type="checkbox" data-sip-source value="' + esc(source.id) + '"' + (sourceChecked(source) ? ' checked' : '') + (ownedElsewhere ? ' disabled data-locked="1"' : '') + '>' +
+          '<input type="checkbox" data-sip-source value="' + esc(source.id) + '"' + (sourceChecked(source) ? ' checked' : '') + (unavailable ? ' disabled data-locked="1"' : '') + '>' +
           '<span class="marketing-source-copy"><strong>' + esc(source.name) + '</strong><small>' + esc(source.id) + '</small>' +
             (source.organizationName ? '<small>' + esc(source.organizationName) + '</small>' : '') +
             (ownedElsewhere ? '<em>' + esc(tx('Assigned to ', 'Assigned to ') + owner.label) + '</em>' : '') +
+            (unavailable ? '<em>' + esc(source.errorDescription || tx('Connection unavailable. Reconnect this account on Saudi iPick.', 'الاتصال غير متاح. أعد ربط هذا الحساب على Saudi iPick.')) + '</em>' : '') +
           '</span>' +
           '<select class="marketing-source-currency" disabled><option>' + esc(source.currency || 'SAR') + '</option></select>' +
         '</label>';
@@ -522,7 +525,7 @@
         '<details class="marketing-mapping-row" open data-sip-map-row="' + esc(activeAccount.id) + '">' +
           '<summary><span class="marketing-account-label">' + esc(activeAccount.label) + '</span><span class="marketing-assigned-pill">' + esc(selectedCount + ' assigned') + '</span></summary>' +
           '<div class="marketing-mapping-choices">' + choices + '</div>' +
-          '<div class="marketing-limit-note"><strong>' + esc(tx('Assigned ', 'Assigned ') + selectedCount + ' / ' + availableAccounts.length + ' ' + platform.shortLabel + ' accounts') + '</strong><span>' + esc(tx('You can assign multiple ' + platform.shortLabel + ' accounts to this Taager account.', 'You can assign multiple ' + platform.shortLabel + ' accounts to this Taager account.')) + '</span></div>' +
+          '<div class="marketing-limit-note"><strong>' + esc(tx('Assigned ', 'المربوط: ') + selectedCount + ' / ' + (status && status.limit && status.limit.max || availableAccounts.length) + ' ' + platform.shortLabel + ' accounts') + '</strong><span>' + esc(tx('Available on Saudi iPick: ', 'المتاح على Saudi iPick: ') + availableAccounts.length) + '</span></div>' +
           '<button class="marketing-secondary marketing-save-map-btn" type="button" data-sip-save-mapping' + (availableAccounts.length && selectedAccountId && !allMode ? '' : ' disabled') + '>' + esc(tx('Assign to this account', 'Assign to this account')) + '</button>' +
         '</details>' +
         paginationMarkup;
@@ -890,7 +893,7 @@
           selectedSources.forEach(function (source) { byId[source.id] = source; });
           pageRows.forEach(function (source) {
             var owner = ownerOfSource(source.id);
-            if (!owner || owner.id === selectedAccountId) byId[source.id] = source;
+            if (source.usable !== false) byId[source.id] = source;
           });
           selectedSources = Object.keys(byId).map(function (id) { return byId[id]; });
           saveActivePlatformState();
@@ -916,6 +919,7 @@
           var source = availableAccounts.filter(function (item) { return item.id === sourceId; })[0];
           if (!sourceId) { error = tx('Paste the ad account ID first.', 'Paste the ad account ID first.'); saveActivePlatformState(); render(); return; }
           if (!source) { error = tx('This ad account is not in the Saudi iPick website account pool. Add it on the website first, then refresh status.', 'This ad account is not in the Saudi iPick website account pool. Add it on the website first, then refresh status.'); saveActivePlatformState(); render(); return; }
+          if (source.usable === false) { error = source.errorDescription || tx('Reconnect this account on Saudi iPick first.', 'أعد ربط هذا الحساب على Saudi iPick أولًا.'); saveActivePlatformState(); render(); return; }
           if (!selectedSources.some(function (item) { return item.id === source.id; })) selectedSources = selectedSources.concat([source]);
           error = '';
           message = tx('Account selected. Save mapping to assign it.', 'Account selected. Save mapping to assign it.');
@@ -965,7 +969,16 @@
           setBusy(true);
           window.api.saveSaudiIPickMarketingMapping(selectedAccountId, platform, sources).then(function (result) {
             switchPlatform(platform, false);
-            if (!result || !result.ok) throw new Error(result && result.error || 'Could not save mapping.');
+            if (!result || !result.ok) {
+              var code = result && result.error || '';
+              if (code === 'marketing_account_limit_exceeded') {
+                throw new Error(tx('Account limit reached (max ' + result.limit + '). Ask the admin to increase Saudi iPick Marketing Usage.', 'وصلت للحد المسموح (' + result.limit + '). اطلب من المسؤول زيادته في Saudi iPick Marketing Usage.'));
+              }
+              if (code === 'marketing_account_assigned_elsewhere') {
+                throw new Error(tx('An ad account is already assigned to another Taager account.', 'يوجد حساب إعلاني مربوط بحساب تاجر آخر.'));
+              }
+              throw new Error(code || 'Could not save mapping.');
+            }
             selectedSources = normalizeSourceList(sources);
             result = mergeMappedResult(result, selectedSources);
             setStore(result);

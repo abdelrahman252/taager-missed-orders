@@ -5778,6 +5778,14 @@ function marketingStableAccountKey(accountId) {
   return String(stable || clean).trim().toLowerCase();
 }
 
+function saudiIPickQuotaAccountKey(accountId) {
+  const account = getStoredAccountById(accountId);
+  if (account) return accountHash(account);
+  const stable = marketingStableAccountKey(accountId);
+  const merchant = stable.match(/^(?:taager:)?([a-z]{2}:[a-z0-9_-]+)$/i);
+  return merchant ? `taager:${merchant[1].toLowerCase()}` : stable;
+}
+
 function marketingAccountLookupKeys(accountId) {
   const clean = String(accountId || "").trim();
   const account = getStoredAccountById(clean);
@@ -6285,6 +6293,7 @@ function saveCachedMarketingStatus(accountId, platform, status) {
     reconnectRequired: !!status.reconnectRequired,
     error: status.error || "",
     limit: status.limit || null,
+    mappingAuthoritative: !!status.mappingAuthoritative,
     limits: status.limits || null,
     mappings: preservePreviousPayload ? previous.mappings || {} : status.mappings || {},
     cache: status.cache || null,
@@ -6711,6 +6720,41 @@ function mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAcc
   return mappings;
 }
 
+async function saudiIPickMarketingUsage(accountId, platform, sourceAccounts = null) {
+  const licenseKey = licenseStore.get("licenseKey", "");
+  const accountKey = saudiIPickQuotaAccountKey(accountId);
+  if (!licenseKey || !accountKey) return { ok: false, reason: "license_or_account_missing" };
+  const payload = {
+    p_license_key: licenseKey,
+    p_machine_uuid: _getOrCreateMachineUUID(),
+    p_device_id: getDeviceFingerprint(),
+    p_dashboard_account_id: accountKey,
+    p_platform: platform,
+  };
+  if (sourceAccounts !== null) {
+    payload.p_source_accounts = sourceAccounts.map((source) => ({
+      id: String(source.id || "").trim(),
+      name: String(source.name || source.id || "").trim(),
+      currency: String(source.currency || "").trim(),
+    }));
+  }
+  try {
+    return await supabaseRpc("taager_saudiipick_marketing_state", payload);
+  } catch (error) {
+    log.error("[SaudiIPick][Marketing] usage request failed", {
+      platform,
+      accountId: accountKey,
+      message: error && error.message || String(error),
+    });
+    return { ok: false, reason: "MARKETING_USAGE_UNAVAILABLE" };
+  }
+}
+
+function saudiIPickMappingMigrationKey(accountId, platform) {
+  const identity = `${licenseStore.get("licenseKey", "")}|${saudiIPickQuotaAccountKey(accountId)}|${platform}`;
+  return `saudiipickMappingMigrated:${crypto.createHash("sha256").update(identity).digest("hex")}`;
+}
+
 async function callSaudiIPickMarketing(action, accountId, platform = "snapchat", range = {}) {
   const dashboardAccountId = marketingAccountKey(accountId, action !== "sync");
   if (!dashboardAccountId) return { ok: false, error: "SELECT_SINGLE_ACCOUNT" };
@@ -6733,6 +6777,20 @@ async function callSaudiIPickMarketing(action, accountId, platform = "snapchat",
   const account = getStoredAccountById(dashboardAccountId);
   const dashboardAccountKey = marketingStableAccountKey(dashboardAccountId);
   const previous = getCachedSaudiIPickMarketingStatus(dashboardAccountId, platform);
+  let usage = await saudiIPickMarketingUsage(dashboardAccountId, platform);
+  if (!usage || !usage.ok) return { ok: false, provider: "saudiipick", platform, usageError: true, error: usage && usage.reason || "MARKETING_USAGE_UNAVAILABLE" };
+  const migrationKey = saudiIPickMappingMigrationKey(dashboardAccountId, platform);
+  if (usage.used > 0) dashboardStore.set(migrationKey, true);
+  if (action === "sync") {
+    if (usage.used > usage.limit) {
+      return { ok: false, provider: "saudiipick", platform, error: "marketing_account_limit_exceeded", limit: usage.limit, used: usage.used };
+    }
+    const authorizedIds = new Set((usage.mappedAccounts || []).map((source) => String(source.id || "")));
+    const requestedIds = (range && Array.isArray(range.sourceAccounts) ? range.sourceAccounts : []).map((source) => String(source && (source.id || source.sourceAccountId) || ""));
+    if (!requestedIds.length || requestedIds.some((id) => !authorizedIds.has(id))) {
+      return { ok: false, provider: "saudiipick", platform, error: "SAUDIIPICK_MAPPING_REQUIRED" };
+    }
+  }
   const payload = {
     action,
     platform,
@@ -6803,10 +6861,28 @@ async function callSaudiIPickMarketing(action, accountId, platform = "snapchat",
     partial: !!(result && result.partial),
   });
 
+  if (action === "status" && result && result.ok && usage.used === 0 && !dashboardStore.get(migrationKey, false) && previous && Array.isArray(previous.mappedAccounts) && previous.mappedAccounts.length) {
+    const usable = new Set((Array.isArray(result.availableAccounts) ? result.availableAccounts : [])
+      .filter((source) => source && source.usable !== false)
+      .map((source) => String(source.id || "")));
+    const oldSources = previous.mappedAccounts
+      .map((source) => normalizeNativeSourceAccount(source, "SAR", platform))
+      .filter(Boolean);
+    if (oldSources.length <= usage.limit && oldSources.every((source) => usable.has(source.id))) {
+      const migrated = await saudiIPickMarketingUsage(dashboardAccountId, platform, oldSources);
+      if (migrated && migrated.ok) {
+        usage = migrated;
+        dashboardStore.set(migrationKey, true);
+      }
+    }
+  }
+
   const merged = nativeMarketingSanitizeAccountHealth({
     ...result,
     provider: "saudiipick",
     platform,
+    limit: { used: usage.used, max: usage.limit },
+    mappingAuthoritative: true,
     mappings: result.mappings && Object.keys(result.mappings).length ? result.mappings : previous && previous.mappings || {},
   });
 
@@ -6855,13 +6931,15 @@ async function callSaudiIPickMarketing(action, accountId, platform = "snapchat",
   }
 
   if (action === "status" && merged.ok) {
+    const sameServerMapping = marketingSourceAccountSignature(previous && previous.mappedAccounts) ===
+      marketingSourceAccountSignature(usage.mappedAccounts);
     const stableStatus = {
       ...merged,
-      summary: previous && previous.summary || null,
-      lastSyncAt: previous && previous.lastSyncAt || null,
-      mappedAccounts: previous && previous.mappedAccounts && previous.mappedAccounts.length ? previous.mappedAccounts : merged.mappedAccounts,
-      selectedSourceAccounts: previous && previous.selectedSourceAccounts && previous.selectedSourceAccounts.length ? previous.selectedSourceAccounts : merged.selectedSourceAccounts,
-      mappings: previous && previous.mappings || merged.mappings || {},
+      summary: sameServerMapping && previous && previous.summary || null,
+      lastSyncAt: sameServerMapping && previous && previous.lastSyncAt || null,
+      mappedAccounts: usage.mappedAccounts || [],
+      selectedSourceAccounts: usage.mappedAccounts || [],
+      mappings: mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAccountKey, usage.mappedAccounts || [], platform),
     };
     const stableSources = Array.isArray(stableStatus.selectedSourceAccounts) && stableStatus.selectedSourceAccounts.length
       ? stableStatus.selectedSourceAccounts
@@ -6910,6 +6988,19 @@ async function saveSaudiIPickMarketingMappingState(accountId, platform = "snapch
   const selected = (Array.isArray(sourceAccounts) ? sourceAccounts : [])
     .map((source) => normalizeNativeSourceAccount(source, "SAR", platform))
     .filter(Boolean);
+  const available = new Map((Array.isArray(previous.availableAccounts) ? previous.availableAccounts : [])
+    .map((source) => normalizeNativeSourceAccount(source, "SAR", platform))
+    .filter(Boolean)
+    .map((source) => [source.id, source]));
+  if (selected.some((source) => !available.has(source.id))) {
+    return { ok: false, provider: "saudiipick", platform, error: "SAUDIIPICK_SOURCE_NOT_AVAILABLE" };
+  }
+  if (selected.some((source) => available.get(source.id).usable === false)) {
+    return { ok: false, provider: "saudiipick", platform, error: "SAUDIIPICK_SOURCE_CONNECTION_UNAVAILABLE" };
+  }
+  const usage = await saudiIPickMarketingUsage(dashboardAccountId, platform, selected);
+  if (!usage || !usage.ok) return { ok: false, provider: "saudiipick", platform, error: usage && usage.reason || "MARKETING_USAGE_UNAVAILABLE", limit: usage && usage.limit };
+  dashboardStore.set(saudiIPickMappingMigrationKey(dashboardAccountId, platform), true);
   const next = {
     ...previous,
     ok: true,
@@ -6923,6 +7014,8 @@ async function saveSaudiIPickMarketingMappingState(accountId, platform = "snapch
     selectedSourceAccountIds: selected.map((source) => source.id),
     availableAccounts: previous.availableAccounts || selected,
     linkedAccounts: previous.linkedAccounts || selected,
+    limit: { used: usage.used, max: usage.limit },
+    mappingAuthoritative: true,
     mappings: mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAccountKey, selected, platform),
     statusCheckedAt: new Date().toISOString(),
   };
@@ -7091,6 +7184,7 @@ ipcMain.handle("get-saudiipick-marketing-status", async (_, accountId, platform 
       saveCachedMarketingStatus(dashboardAccountId, platform, disconnected);
       return disconnected;
     }
+    if (result && result.usageError) return result;
     return cached ? { ok: true, ...cached, offline: true, error: result && result.error || "" } : result;
   } catch (error) {
     log.error("[SaudiIPick][Marketing] status failed", { accountId: dashboardAccountId, platform, error: error.message });

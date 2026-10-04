@@ -1,0 +1,2068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co;">
+<title>Taager Bot — Admin Panel</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+  :root {
+    --bg:#0a0c0f; --bg2:#111318; --bg3:#1a1d24; --border:#2a2d35;
+    --accent:#7c6af7; --accent2:#4f8ef7; --green:#00d68f; --red:#ff4d6d;
+    --yellow:#ffc94d; --text1:#f0f2f7; --text2:#8b8fa8; --text3:#55596a; --radius:10px;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text1); font-family:'IBM Plex Sans',sans-serif; min-height:100vh; }
+  .topbar { background:var(--bg2); border-bottom:1px solid var(--border); padding:14px 32px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+  .topbar-logo { font-family:'IBM Plex Mono',monospace; font-size:15px; font-weight:700; color:var(--text1); letter-spacing:-.3px; }
+  .topbar-logo span { color:var(--accent); }
+  .topbar-status { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text2); }
+  .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--text3); margin-right:6px; }
+  .dot.green { background:var(--green); box-shadow:0 0 6px var(--green); }
+  #config-banner { background:linear-gradient(90deg,rgba(124,106,247,.15),rgba(79,142,247,.1)); border-bottom:1px solid rgba(124,106,247,.3); padding:14px 32px; display:flex; align-items:center; gap:16px; }
+  #config-banner label { font-size:11px; font-weight:700; color:var(--text2); text-transform:uppercase; letter-spacing:.08em; white-space:nowrap; }
+  #config-banner input { background:var(--bg); border:1px solid var(--border); border-radius:7px; padding:7px 12px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text1); flex:1; outline:none; }
+  #config-banner input:focus { border-color:var(--accent); }
+  #btn-connect { padding:8px 20px; background:var(--accent); border:none; border-radius:7px; color:#fff; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; transition:opacity .2s; }
+  #btn-connect:hover { opacity:.85; }
+  .main { display:flex; gap:0; min-height:calc(100vh - 49px - 55px); }
+  .sidebar { width:220px; min-width:220px; background:var(--bg2); border-right:1px solid var(--border); padding:24px 0; }
+  .sidebar-section { font-size:10px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.1em; padding:0 20px; margin-bottom:8px; margin-top:20px; }
+  .sidebar-section:first-child { margin-top:0; }
+  .nav-item { display:flex; align-items:center; gap:10px; padding:9px 20px; font-size:13px; color:var(--text2); cursor:pointer; transition:background .15s,color .15s; border-left:2px solid transparent; }
+  .nav-item:hover { background:var(--bg3); color:var(--text1); }
+  .nav-item.active { background:rgba(124,106,247,.1); color:var(--accent); border-left-color:var(--accent); }
+  .nav-item .icon { font-size:15px; width:20px; text-align:center; }
+  .content { flex:1; padding:32px; overflow-y:auto; min-width:0; }
+  .page { display:none; } .page.active { display:block; }
+  .page-header { margin-bottom:28px; }
+  .page-title { font-size:22px; font-weight:700; letter-spacing:-.5px; margin-bottom:4px; }
+  .page-sub { font-size:13px; color:var(--text2); }
+  .card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:20px; }
+  .card-title { font-size:12px; font-weight:700; color:var(--text2); text-transform:uppercase; letter-spacing:.08em; margin-bottom:18px; }
+  .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
+  .stat-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:20px; }
+  .stat-label { font-size:11px; font-weight:700; color:var(--text2); text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px; }
+  .stat-value { font-size:28px; font-weight:700; font-family:'IBM Plex Mono',monospace; color:var(--text1); }
+  .stat-value.green { color:var(--green); } .stat-value.red { color:var(--red); } .stat-value.yellow { color:var(--yellow); }
+  .presence-toolbar { display:flex; gap:12px; margin-bottom:16px; align-items:center; flex-wrap:wrap; }
+  .presence-toolbar input { flex:1; min-width:240px; padding:10px 14px; background:var(--bg3); border:1px solid var(--border); border-radius:7px; color:var(--text1); font-family:'IBM Plex Sans',sans-serif; font-size:13px; outline:none; }
+  .presence-toolbar input:focus { border-color:var(--accent); }
+  .presence-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--text3); margin-right:7px; vertical-align:middle; }
+  .presence-dot.online { background:var(--green); box-shadow:0 0 8px rgba(0,214,143,.75); }
+  .presence-dot.today { background:var(--yellow); box-shadow:0 0 8px rgba(255,201,77,.45); }
+  .presence-muted { color:var(--text3); font-size:12px; }
+  .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .form-group { display:flex; flex-direction:column; gap:6px; }
+  .form-group label { font-size:11px; font-weight:700; color:var(--text2); text-transform:uppercase; letter-spacing:.07em; }
+  .form-group input, .form-group select, .form-group textarea { background:var(--bg3); border:1px solid var(--border); border-radius:7px; padding:10px 12px; font-family:'IBM Plex Sans',sans-serif; font-size:13px; color:var(--text1); outline:none; transition:border-color .2s; }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color:var(--accent); }
+  .form-group textarea { min-height:86px; resize:vertical; line-height:1.5; }
+  .broadcast-layout { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(260px,.8fr); gap:20px; }
+  .broadcast-preview { min-height:132px; border:1px solid rgba(79,142,247,.35); border-radius:10px; padding:16px; background:linear-gradient(145deg,rgba(79,142,247,.1),var(--bg3)); }
+  .broadcast-preview.warn { border-color:rgba(255,201,77,.4); background:linear-gradient(145deg,rgba(255,201,77,.1),var(--bg3)); }
+  .broadcast-preview.success { border-color:rgba(0,214,143,.4); background:linear-gradient(145deg,rgba(0,214,143,.1),var(--bg3)); }
+  .broadcast-preview-title { font-size:14px; font-weight:700; margin-bottom:7px; }
+  .broadcast-preview-message { color:var(--text2); font-size:13px; line-height:1.55; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .broadcast-status { margin-top:12px; color:var(--text3); font-size:11px; font-family:'IBM Plex Mono',monospace; }
+  .form-group .hint { font-size:11px; color:var(--text3); margin-top:2px; }
+  .btn { padding:9px 18px; border:none; border-radius:7px; font-family:'IBM Plex Sans',sans-serif; font-size:13px; font-weight:600; cursor:pointer; transition:opacity .2s; display:inline-flex; align-items:center; gap:6px; }
+  .btn:hover { opacity:.85; }
+  .btn-primary { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; }
+  .btn-green   { background:var(--green); color:#021c12; }
+  .btn-red     { background:var(--red); color:#fff; }
+  .btn-ghost   { background:var(--bg3); border:1px solid var(--border); color:var(--text1); }
+  .btn-sm { padding:6px 14px; font-size:12px; }
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  thead th { text-align:left; padding:10px 14px; font-size:10px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.08em; border-bottom:1px solid var(--border); white-space:nowrap; }
+  tbody tr { border-bottom:1px solid rgba(42,45,53,.7); transition:background .15s; }
+  tbody tr:hover { background:var(--bg3); }
+  tbody td { padding:12px 14px; color:var(--text1); vertical-align:middle; }
+  tbody td.mono { font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text2); }
+  .badge { display:inline-block; padding:3px 9px; border-radius:99px; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+  .badge-green  { background:rgba(0,214,143,.15);  color:var(--green);  border:1px solid rgba(0,214,143,.3); }
+  .badge-red    { background:rgba(255,77,109,.15);  color:var(--red);    border:1px solid rgba(255,77,109,.3); }
+  .badge-yellow { background:rgba(255,201,77,.15);  color:var(--yellow); border:1px solid rgba(255,201,77,.3); }
+  .badge-gray   { background:rgba(139,143,168,.1);  color:var(--text2);  border:1px solid var(--border); }
+  .badge-blue   { background:rgba(79,142,247,.15);  color:#8bbcf7;       border:1px solid rgba(79,142,247,.3); }
+  .badge-purple { background:rgba(124,106,247,.15); color:#b3a9f9;       border:1px solid rgba(124,106,247,.3); }
+  .notice { padding:14px 18px; border-radius:8px; font-size:13px; display:flex; align-items:flex-start; gap:10px; margin-bottom:16px; }
+  .notice-info    { background:rgba(79,142,247,.1);  border:1px solid rgba(79,142,247,.3);  color:#8bbcf7; }
+  .notice-warn    { background:rgba(255,201,77,.1);  border:1px solid rgba(255,201,77,.3);  color:var(--yellow); }
+  .notice-success { background:rgba(0,214,143,.1);   border:1px solid rgba(0,214,143,.3);   color:var(--green); }
+  .notice-error   { background:rgba(255,77,109,.1);  border:1px solid rgba(255,77,109,.3);  color:var(--red); }
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.75); display:flex; align-items:center; justify-content:center; z-index:999; opacity:0; pointer-events:none; transition:opacity .2s; overflow-y:auto; padding:20px; }
+  .modal-overlay.open { opacity:1; pointer-events:all; }
+  .modal { background:var(--bg2); border:1px solid var(--border); border-radius:14px; padding:30px; width:540px; max-width:95vw; max-height:90vh; display:flex; flex-direction:column; transform:scale(.95); transition:transform .2s; }
+  .modal-overlay.open .modal { transform:scale(1); }
+  .modal-title { font-size:18px; font-weight:700; margin-bottom:6px; }
+  .modal-sub { font-size:13px; color:var(--text2); margin-bottom:24px; }
+  .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:24px; }
+  #toast-container { position:fixed; bottom:24px; right:24px; z-index:9999; display:flex; flex-direction:column; gap:8px; }
+  .toast { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:12px 18px; font-size:13px; color:var(--text1); box-shadow:0 8px 24px rgba(0,0,0,.4); animation:toast-in .3s ease; display:flex; align-items:center; gap:10px; }
+  .toast.success { border-color:rgba(0,214,143,.4); } .toast.error { border-color:rgba(255,77,109,.4); }
+  @keyframes toast-in { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+  .key-output { background:var(--bg3); border:1px solid var(--border); border-radius:8px; padding:14px 16px; font-family:'IBM Plex Mono',monospace; font-size:14px; color:var(--accent); letter-spacing:.1em; word-break:break-all; margin-top:12px; display:none; user-select:all; text-align:center; }
+  .empty { text-align:center; padding:60px 20px; color:var(--text2); }
+  .empty-icon { font-size:40px; margin-bottom:12px; }
+  .empty-title { font-size:16px; font-weight:600; color:var(--text1); margin-bottom:6px; }
+  .empty-sub { font-size:13px; }
+  .spinner { width:18px; height:18px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; display:inline-block; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .mt-16 { margin-top:16px; } .mt-8 { margin-top:8px; } .gap-8 { display:flex; gap:8px; flex-wrap:wrap; }
+  .full-grid { grid-column:1/-1; }
+  #modal-accounts-body { overflow-y:auto; flex:1; padding-right:6px; margin-bottom:16px; }
+  #modal-accounts-body::-webkit-scrollbar { width:6px; }
+  #modal-accounts-body::-webkit-scrollbar-track { background:transparent; }
+  #modal-accounts-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+  #modal-accounts-body::-webkit-scrollbar-thumb:hover { background:var(--text3); }
+  .acc-slot { background:var(--bg3); border:1px solid var(--border); border-radius:8px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
+  .acc-slot-info { font-size:12px; color:var(--text2); font-family:'IBM Plex Mono',monospace; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .acc-slot-label { font-size:11px; font-weight:700; color:var(--text1); margin-bottom:2px; }
+  .feat-toggle { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:700; border:none; cursor:pointer; transition:opacity .15s; }
+  .feat-toggle:hover { opacity:.8; }
+  .feat-on  { background:rgba(0,214,143,.2); color:var(--green); border:1px solid rgba(0,214,143,.35); }
+  .feat-off { background:rgba(255,77,109,.15); color:var(--red); border:1px solid rgba(255,77,109,.3); }
+  .slots-container { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px; }
+  .slots-column { flex:1; min-width:250px; display:flex; flex-direction:column; gap:8px; }
+  .btn:disabled { opacity:0.5; cursor:not-allowed; }
+  @media (max-width: 860px) {
+    .main { flex-direction: column; }
+    .sidebar { width: 100%; min-width: 100%; padding: 16px 20px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; border-right: none; border-bottom: 1px solid var(--border); }
+    .sidebar-section { display: none; }
+    .nav-item { padding: 8px 16px; border-left: none; border-bottom: 2px solid transparent; }
+    .nav-item.active { border-bottom-color: var(--accent); border-left-color: transparent; }
+    .content { padding: 20px; }
+    .stats-row { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .form-grid { grid-template-columns: 1fr; }
+    .broadcast-layout { grid-template-columns:1fr; }
+  }
+  @media (max-width: 480px) {
+    .stats-row { grid-template-columns: 1fr; }
+    .topbar { padding: 12px 20px; flex-direction: column; gap: 10px; align-items: flex-start; }
+    #config-banner { padding: 12px 20px; flex-direction: column; align-items: stretch; gap: 10px; }
+    #config-banner input { width: 100%; }
+    .modal { padding: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-logo">⚡ Taager Bot <span>Admin</span></div>
+  <div class="topbar-status"><span class="dot" id="conn-dot"></span><span id="conn-label">Not connected</span></div>
+</div>
+
+<div id="config-banner">
+  <label>Supabase URL</label>
+  <input id="inp-url" type="text" placeholder="https://xxxx.supabase.co" autocomplete="off" />
+  <label>Service Role Key</label>
+  <input id="inp-key" type="password" placeholder="service_role key only" autocomplete="off" style="flex:2" />
+  <button id="btn-connect" onclick="connect()">Connect</button>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-section">Menu</div>
+    <div class="nav-item" onclick="switchPage('online')" id="nav-online"><span class="icon">O</span> Online Customers</div>
+    <div class="nav-item active" onclick="switchPage('dashboard')" id="nav-dashboard"><span class="icon">📊</span> Dashboard</div>
+    <div class="nav-item" onclick="switchPage('licenses')" id="nav-licenses"><span class="icon">🔑</span> Licenses</div>
+    <div class="nav-item" onclick="switchPage('keygen')" id="nav-keygen"><span class="icon">✨</span> Generate Key</div>
+    <div class="nav-item" onclick="switchPage('marketing-usage')" id="nav-marketing-usage"><span class="icon">U</span> Saudi iPick Usage</div>
+    <div class="sidebar-section">Tools</div>
+    <div class="nav-item" onclick="switchPage('credentials')" id="nav-credentials"><span class="icon">C</span> Reset Credentials</div>
+    <div class="nav-item" onclick="switchPage('device')" id="nav-device"><span class="icon">💻</span> Reset Device</div>
+    <div class="nav-item" onclick="switchPage('revoke')" id="nav-revoke"><span class="icon">🚫</span> Revoke License</div>
+  </div>
+
+  <div class="content">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div class="page-title">Dashboard</div>
+        <div class="page-sub">Overview of all licenses and customers</div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-label">Total Licenses</div><div class="stat-value" id="stat-total">—</div></div>
+        <div class="stat-card"><div class="stat-label">Active</div><div class="stat-value green" id="stat-active">—</div></div>
+        <div class="stat-card"><div class="stat-label">Expired</div><div class="stat-value yellow" id="stat-expired">—</div></div>
+        <div class="stat-card"><div class="stat-label">Revoked</div><div class="stat-value red" id="stat-revoked">—</div></div>
+      </div>
+      <div class="card" id="broadcast-card">
+        <div class="card-title">Broadcast notification</div>
+        <div class="broadcast-layout">
+          <div class="form-grid">
+            <div class="form-group full-grid">
+              <label>Title</label>
+              <input id="broadcast-title" type="text" maxlength="120" placeholder="Short announcement title" oninput="updateBroadcastPreview()" />
+            </div>
+            <div class="form-group full-grid">
+              <label>Message</label>
+              <textarea id="broadcast-message" maxlength="1000" placeholder="What should customers know?" oninput="updateBroadcastPreview()"></textarea>
+            </div>
+            <div class="form-group">
+              <label>Tone</label>
+              <select id="broadcast-kind" onchange="updateBroadcastPreview()">
+                <option value="info">Info</option>
+                <option value="warn">Warning</option>
+                <option value="success">Success</option>
+              </select>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary" id="broadcast-send" onclick="sendBroadcast()">Send / replace active</button>
+              <button class="btn btn-ghost" id="broadcast-disable" onclick="disableBroadcast()" disabled>Disable current</button>
+            </div>
+          </div>
+          <div>
+            <div class="broadcast-preview" id="broadcast-preview">
+              <div class="broadcast-preview-title" id="broadcast-preview-title">Announcement title</div>
+              <div class="broadcast-preview-message" id="broadcast-preview-message">Your notification preview appears here.</div>
+            </div>
+            <div class="broadcast-status" id="broadcast-status">No active notification loaded.</div>
+          </div>
+        </div>
+      </div>
+      <div class="notice notice-info">ℹ️ Connect to Supabase using the bar above to load live data.</div>
+    </div>
+
+    <!-- ONLINE CUSTOMERS -->
+    <div class="page" id="page-online">
+      <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div><div class="page-title">Online Customers</div><div class="page-sub">Presence by customer license and active device</div></div>
+        <button class="btn btn-primary" onclick="loadOnlineCustomers()">Refresh</button>
+      </div>
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-label">Online Now</div><div class="stat-value green" id="presence-stat-online">-</div></div>
+        <div class="stat-card"><div class="stat-label">Opened Today</div><div class="stat-value yellow" id="presence-stat-today">-</div></div>
+        <div class="stat-card"><div class="stat-label">Seen Before</div><div class="stat-value" id="presence-stat-seen">-</div></div>
+        <div class="stat-card"><div class="stat-label">Never Opened</div><div class="stat-value red" id="presence-stat-never">-</div></div>
+      </div>
+      <div class="card">
+        <div class="presence-toolbar">
+          <input id="online-search" type="text" placeholder="Search by license, customer, or status..." autocomplete="off" oninput="handleOnlineSearch(this.value)" />
+          <button class="btn btn-ghost" onclick="clearOnlineSearch()" id="btn-clear-online-search" style="display:none">Clear</button>
+        </div>
+        <div class="table-wrap" id="online-customers-table-wrap">
+          <div class="empty"><div class="empty-icon">O</div><div class="empty-title">No data</div><div class="empty-sub">Connect to Supabase first</div></div>
+        </div>
+        <div id="online-customers-pagination" style="display:none; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; margin-top:20px; padding-top:16px; border-top:1px solid var(--border);">
+          <div id="online-customers-pagination-info" style="font-size:12px; color:var(--text2);">Showing 0 to 0 of 0 customers</div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button class="btn btn-ghost btn-sm" id="btn-online-prev" onclick="prevOnlinePage()">Prev</button>
+            <span id="lbl-online-page" style="font-size:12px; font-family:'IBM Plex Mono',monospace; color:var(--text2); min-width:80px; text-align:center;">Page 1 of 1</span>
+            <button class="btn btn-ghost btn-sm" id="btn-online-next" onclick="nextOnlinePage()">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LICENSES -->
+    <div class="page" id="page-licenses">
+      <div class="page-header" style="display:flex;align-items:center;justify-content:space-between">
+        <div><div class="page-title">All Licenses</div><div class="page-sub">Click a license to manage accounts</div></div>
+        <button class="btn btn-primary" onclick="loadLicenses()">🔄 Refresh</button>
+      </div>
+      <div class="card">
+        <div class="search-bar-container" style="display:none; gap:12px; margin-bottom:16px; align-items:center;">
+          <input id="lic-search" type="text" placeholder="🔍 Search by license key or customer name..." autocomplete="off" oninput="handleLicenseSearch(this.value)" style="flex:1; padding:10px 14px; background:var(--bg3); border:1px solid var(--border); border-radius:7px; color:var(--text1); font-family:'IBM Plex Sans',sans-serif; font-size:13px;" />
+          <button class="btn btn-ghost" onclick="clearLicenseSearch()" id="btn-clear-search" style="display:none; padding:10px 18px;">Clear</button>
+        </div>
+        <div class="table-wrap" id="licenses-table-wrap">
+          <div class="empty"><div class="empty-icon">🔑</div><div class="empty-title">No data</div><div class="empty-sub">Connect to Supabase first</div></div>
+        </div>
+        <div class="pagination-container" id="licenses-pagination" style="display:none; justify-content:space-between; align-items:center; margin-top:20px; padding-top:16px; border-top:1px solid var(--border);">
+          <div class="pagination-info" id="lic-pagination-info" style="font-size:12px; color:var(--text2);">Showing 0 to 0 of 0 licenses</div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button class="btn btn-ghost btn-sm" id="btn-lic-prev" onclick="prevLicensePage()">◀ Prev</button>
+            <span id="lbl-lic-page" style="font-size:12px; font-family:'IBM Plex Mono',monospace; color:var(--text2); min-width:80px; text-align:center;">Page 1 of 1</span>
+            <button class="btn btn-ghost btn-sm" id="btn-lic-next" onclick="nextLicensePage()">Next ▶</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KEYGEN -->
+    <div class="page" id="page-keygen">
+      <div class="page-header">
+        <div class="page-title">Generate License Key</div>
+        <div class="page-sub">Create a key — set how many account slots the customer gets</div>
+      </div>
+      <div class="card" style="max-width:580px">
+        <div class="notice notice-info" style="margin-bottom:20px">
+          🤖 <strong>Fully automatic.</strong> Device locks on first activation. Set <strong>Max Accounts</strong> to control how many credential slots the customer can add.
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Customer Name <span style="font-weight:600;color:var(--red);text-transform:none">(required)</span></label>
+            <input id="kg-name" type="text" placeholder="e.g. Ahmed Store" required />
+          </div>
+          <div class="form-group">
+            <label>Expiry Date</label>
+            <input id="kg-expiry" type="date" />
+            <span class="hint">Default: 30 days from today</span>
+          </div>
+          <div class="form-group">
+            <label>Max Accounts <span style="font-weight:400;color:var(--text3);text-transform:none">(minimum 1)</span></label>
+            <input id="kg-max-accounts" type="number" min="1" value="1" placeholder="1" />
+            <span class="hint">How many credential slots this license allows</span>
+          </div>
+          <div class="form-group">
+            <label>Max Devices <span style="font-weight:400;color:var(--text3);text-transform:none">(minimum 1)</span></label>
+            <input id="kg-max-devices" type="number" min="1" value="1" placeholder="1" />
+            <span class="hint">How many machines can activate this license</span>
+          </div>
+          <div class="form-group full-grid">
+            <label>Notes <span style="font-weight:400;color:var(--text3);text-transform:none">(optional)</span></label>
+            <input id="kg-notes" type="text" placeholder="e.g. Monthly subscription - May 2026" />
+          </div>
+          <div class="form-group">
+            <label>Operations Suite</label>
+            <select id="kg-analytics">
+              <option value="true">✅ Enabled (default)</option>
+              <option value="false">🔒 Disabled</option>
+            </select>
+            <span class="hint">Controls both Analytics and Operations pages.</span>
+          </div>
+          <div class="form-group" style="display:none">
+            <label>Operations Page</label>
+            <select id="kg-operations">
+              <option value="true">✅ Enabled (default)</option>
+              <option value="false">🔒 Disabled</option>
+            </select>
+            <span class="hint">Can the customer access the Operations page?</span>
+          </div>
+          <div class="form-group">
+            <label>Dashboard Page</label>
+            <select id="kg-dashboard">
+              <option value="false">🔒 Disabled (default)</option>
+              <option value="true">✅ Enabled</option>
+            </select>
+            <span class="hint">Premium feature — Dashboard + COD Tracker. Off by default.</span>
+          </div>
+          <div class="form-group">
+            <label>Team Leader Mode</label>
+            <select id="kg-team-leader">
+              <option value="false">Disabled (default)</option>
+              <option value="true">Enabled</option>
+            </select>
+            <span class="hint">Dashboard and account management only. Taager is required; Easy Orders is optional.</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:20px;align-items:center">
+          <button class="btn btn-primary" onclick="generateKey()">⚡ Generate &amp; Save Key</button>
+          <button class="btn btn-ghost" onclick="copyKey()" id="btn-copy-key" style="display:none">📋 Copy Key</button>
+        </div>
+        <div class="key-output" id="key-output-box"></div>
+        <div id="keygen-notice" class="mt-16"></div>
+      </div>
+    </div>
+
+    <!-- MARKETING USAGE -->
+    <div class="page" id="page-marketing-usage">
+      <div class="page-header" style="display:flex;align-items:center;justify-content:space-between">
+        <div><div class="page-title">Saudi iPick Marketing Usage</div><div class="page-sub">TikTok and Snapchat assignments and limits per Taager account</div></div>
+        <button class="btn btn-primary" onclick="loadMarketingUsage()">Refresh</button>
+      </div>
+      <div class="card">
+        <div class="notice notice-info">Saudi iPick assignments saved by Taager Orders. Limits apply per Taager account and platform. New website accounts appear in the app after Refresh accounts.</div>
+        <div id="marketing-usage-search-container" style="display:none; gap:12px; margin-bottom:16px; align-items:center;">
+          <input id="marketing-usage-search" type="text" placeholder="Search by license key or customer name..." autocomplete="off" oninput="handleMarketingUsageSearch(this.value)" style="flex:1; padding:10px 14px; background:var(--bg3); border:1px solid var(--border); border-radius:7px; color:var(--text1); font-family:'IBM Plex Sans',sans-serif; font-size:13px;" />
+          <button class="btn btn-ghost" onclick="clearMarketingUsageSearch()" id="btn-clear-marketing-usage-search" style="display:none; padding:10px 18px;">Clear</button>
+        </div>
+        <div class="table-wrap" id="marketing-usage-table-wrap">
+          <div class="empty"><div class="empty-icon">U</div><div class="empty-title">No data</div><div class="empty-sub">Connect to Supabase first</div></div>
+        </div>
+        <div id="marketing-usage-pagination" style="display:none; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; margin-top:20px; padding-top:16px; border-top:1px solid var(--border);">
+          <div id="marketing-usage-pagination-info" style="font-size:12px; color:var(--text2);">Showing 0 to 0 of 0 accounts</div>
+          <div id="marketing-usage-page-buttons" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESET DEVICE -->
+    <div class="page" id="page-device">
+      <div class="page-header">
+        <div class="page-title">Reset Device Lock</div>
+        <div class="page-sub">Allow a customer to activate on a new device</div>
+      </div>
+      <div class="card" style="max-width:520px">
+        <div class="notice notice-warn">⚠️ Use when customer changed PC, reinstalled Windows, or VPN changed their device fingerprint. After reset, next activation auto-locks to the new device.</div>
+        <div class="form-group mt-16"><label>License Key</label><input id="dev-key" type="text" placeholder="TAAGER-XXXX-XXXX-XXXX-XXXX" /></div>
+        <div style="margin-top:16px"><button class="btn btn-primary" onclick="resetDevice()">💻 Reset Device Lock</button></div>
+        <div id="device-notice" class="mt-16"></div>
+      </div>
+    </div>
+
+    <!-- RESET CREDENTIALS -->
+    <div class="page" id="page-credentials">
+      <div class="page-header">
+        <div class="page-title">Reset Credentials</div>
+        <div class="page-sub">Clear all saved account slots for a license</div>
+      </div>
+      <div class="card" style="max-width:520px">
+        <div class="notice notice-warn">This deletes all saved account hashes for the license. The customer will need to re-enter their Easy-Orders and Taager accounts.</div>
+        <div class="form-group mt-16"><label>License Key</label><input id="cred-key" type="text" placeholder="TAAGER-XXXX-XXXX-XXXX-XXXX" /></div>
+        <div style="margin-top:16px"><button class="btn btn-primary" onclick="resetCredentials()">Reset Credentials</button></div>
+        <div id="credentials-notice" class="mt-16"></div>
+      </div>
+    </div>
+
+    <!-- REVOKE -->
+    <div class="page" id="page-revoke">
+      <div class="page-header">
+        <div class="page-title">Revoke License</div>
+        <div class="page-sub">Block a customer immediately</div>
+      </div>
+      <div class="card" style="max-width:520px">
+        <div class="notice notice-warn">⚠️ Revoking blocks the customer on their next app check.</div>
+        <div class="form-group mt-16"><label>License Key</label><input id="rev-key" type="text" placeholder="TAAGER-XXXX-XXXX-XXXX-XXXX" /></div>
+        <div style="margin-top:16px;display:flex;gap:10px">
+          <button class="btn btn-red"   onclick="revokeLicense()">🚫 Revoke</button>
+          <button class="btn btn-ghost" onclick="unrevokeLicense()">✅ Un-Revoke</button>
+        </div>
+        <div id="revoke-notice" class="mt-16"></div>
+      </div>
+    </div>
+
+  </div>
+
+<!-- ACCOUNT MANAGEMENT MODAL -->
+<div class="modal-overlay" id="modal-accounts">
+  <div class="modal" style="width:580px">
+    <div class="modal-title" id="modal-lic-key-display">Account Management</div>
+    <div class="modal-sub">Lock or unlock individual account slots for this license.</div>
+    <div id="modal-accounts-body">Loading...</div>
+    <div class="modal-pagination" id="modal-accounts-pagination" style="display:none; justify-content:center; align-items:center; gap:12px; margin-top:16px;">
+      <button class="btn btn-ghost btn-sm" id="btn-prev-page" onclick="prevModalPage()">◀ Prev</button>
+      <span id="lbl-modal-page" style="font-size:12px; font-family:'IBM Plex Mono',monospace; color:var(--text2);">Page 1 of 1</span>
+      <button class="btn btn-ghost btn-sm" id="btn-next-page" onclick="nextModalPage()">Next ▶</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeAccountModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT EXPIRY MODAL -->
+<div class="modal-overlay" id="modal-expiry">
+  <div class="modal" style="width:400px">
+    <div class="modal-title">Edit Expiry Date</div>
+    <div class="modal-sub" id="expiry-modal-key-display">License Key</div>
+    <div class="form-group" style="margin-top:16px">
+      <label>New Expiry Date</label>
+      <input id="edit-expiry-date" type="date" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeExpiryModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveExpiryDate()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+let SUPABASE_URL = "", SUPABASE_KEY = "";
+let currentModalKey = "";
+let onlineAutoRefreshTimer = null;
+const ADMIN_PROXY = location.protocol === "http:" && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+
+window.addEventListener("load", () => {
+  // sessionStorage — credentials are gone when browser/tab closes (more secure than localStorage)
+  const savedUrl = sessionStorage.getItem("sb_url") || "";
+  const savedKey = sessionStorage.getItem("sb_key") || "";
+  if (savedUrl) document.getElementById("inp-url").value = savedUrl;
+  if (savedKey) document.getElementById("inp-key").value = savedKey;
+  if (ADMIN_PROXY) initAdminProxy();
+  else showToast("Run npm run admin, then open http://127.0.0.1:8787", "error");
+  const d = new Date(); d.setDate(d.getDate() + 30);
+  document.getElementById("kg-expiry").value = d.toISOString().slice(0,10);
+});
+
+async function initAdminProxy() {
+  try {
+    const res = await fetch("/api/config", { cache: "no-store" });
+    const cfg = await res.json();
+    if (cfg.supabaseUrl) {
+      SUPABASE_URL = cfg.supabaseUrl;
+      document.getElementById("inp-url").value = SUPABASE_URL;
+    }
+    if (cfg.configured) {
+      document.getElementById("inp-key").value = "";
+      document.getElementById("inp-key").placeholder = "loaded by local admin server";
+      setConnected(true);
+      loadDashboard();
+    }
+  } catch {
+    showToast("Admin server is not running", "error");
+  }
+}
+
+function cleanUrl(raw) {
+  try { return new URL(raw.trim()).origin; }
+  catch { return raw.trim().replace(/\/rest\/v1\/?.*$/, "").replace(/\/$/, ""); }
+}
+function connect() {
+  SUPABASE_URL = cleanUrl(document.getElementById("inp-url").value);
+  SUPABASE_KEY = document.getElementById("inp-key").value.trim();
+  if (!SUPABASE_URL || !SUPABASE_KEY) { showToast("Please enter both URL and key", "error"); return; }
+  document.getElementById("inp-url").value = SUPABASE_URL;
+  // sessionStorage only — never localStorage for the service-role key
+  sessionStorage.setItem("sb_url", SUPABASE_URL); sessionStorage.setItem("sb_key", SUPABASE_KEY);
+  setConnected(true); loadDashboard(); showToast("Connected ✓", "success");
+}
+function setConnected(ok) {
+  document.getElementById("conn-dot").className = "dot " + (ok ? "green" : "");
+  document.getElementById("conn-label").textContent = ok ? "Connected" : "Not connected";
+}
+
+async function sbReq(method, path, body) {
+  if (ADMIN_PROXY) {
+    const res = await fetch("/api/rest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ method, path, body }),
+    });
+    return res.json();
+  }
+  const headers = { "Content-Type":"application/json", "Authorization":"Bearer "+SUPABASE_KEY, "apikey":SUPABASE_KEY };
+  if (method === "POST")  headers["Prefer"] = "return=representation";
+  if (method === "PATCH") headers["Prefer"] = "return=minimal";
+  const res = await fetch(SUPABASE_URL + "/rest/v1" + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  const text = await res.text();
+  try { return { ok: res.ok, status: res.status, data: JSON.parse(text) }; }
+  catch { return { ok: res.ok, status: res.status, data: text }; }
+}
+
+async function sbRpc(fn, params) {
+  if (ADMIN_PROXY) {
+    const res = await fetch("/api/rpc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fn, params: params || {} }),
+    });
+    return res.json();
+  }
+  const headers = { "Content-Type":"application/json", "Authorization":"Bearer "+SUPABASE_KEY, "apikey":SUPABASE_KEY };
+  const res = await fetch(SUPABASE_URL + "/rest/v1/rpc/" + fn, { method:"POST", headers, body: JSON.stringify(params || {}) });
+  const text = await res.text();
+  try { return { ok: res.ok, status: res.status, data: JSON.parse(text) }; }
+  catch { return { ok: res.ok, status: res.status, data: text }; }
+}
+
+function switchPage(name) {
+  if (onlineAutoRefreshTimer) {
+    clearInterval(onlineAutoRefreshTimer);
+    onlineAutoRefreshTimer = null;
+  }
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+  document.getElementById("page-" + name).classList.add("active");
+  document.getElementById("nav-" + name).classList.add("active");
+  if (name === "licenses") loadLicenses();
+  if (name === "dashboard") loadDashboard();
+  if (name === "online") {
+    loadOnlineCustomers();
+    onlineAutoRefreshTimer = setInterval(() => loadOnlineCustomers(false), 60 * 1000);
+  }
+  if (name === "marketing-usage") loadMarketingUsage();
+}
+
+// DASHBOARD
+async function loadDashboard() {
+  if (!SUPABASE_URL) return;
+  const [res] = await Promise.all([
+    sbReq("GET", "/licenses?select=expires_at,revoked", null),
+    loadBroadcast(),
+  ]);
+  if (!res.ok) return;
+  const rows = res.data; const now = new Date();
+  let active = 0, expired = 0, revoked = 0;
+  rows.forEach(r => { if (r.revoked) { revoked++; return; } if (new Date(r.expires_at) >= now) active++; else expired++; });
+  document.getElementById("stat-total").textContent   = rows.length;
+  document.getElementById("stat-active").textContent  = active;
+  document.getElementById("stat-expired").textContent = expired;
+  document.getElementById("stat-revoked").textContent = revoked;
+}
+
+let activeBroadcastId = null;
+
+function updateBroadcastPreview() {
+  const title = document.getElementById("broadcast-title").value.trim();
+  const message = document.getElementById("broadcast-message").value.trim();
+  const kind = document.getElementById("broadcast-kind").value;
+  document.getElementById("broadcast-preview").className = "broadcast-preview " + kind;
+  document.getElementById("broadcast-preview-title").textContent = title || "Announcement title";
+  document.getElementById("broadcast-preview-message").textContent = message || "Your notification preview appears here.";
+}
+
+async function loadBroadcast() {
+  const res = await sbReq("GET", "/admin_notifications?active=eq.true&select=id,title,message,kind,created_at&order=created_at.desc&limit=1", null);
+  if (!res.ok) {
+    document.getElementById("broadcast-status").textContent = "Could not load broadcast: " + (res.data?.message || res.status);
+    return;
+  }
+  const row = Array.isArray(res.data) ? res.data[0] : null;
+  activeBroadcastId = row ? String(row.id) : null;
+  document.getElementById("broadcast-disable").disabled = !row;
+  document.getElementById("broadcast-status").textContent = row
+    ? "Active #" + row.id + " · sent " + new Date(row.created_at).toLocaleString()
+    : "No active notification.";
+  if (row) {
+    document.getElementById("broadcast-title").value = row.title || "";
+    document.getElementById("broadcast-message").value = row.message || "";
+    document.getElementById("broadcast-kind").value = row.kind || "info";
+    updateBroadcastPreview();
+  }
+}
+
+async function sendBroadcast() {
+  const title = document.getElementById("broadcast-title").value.trim();
+  const message = document.getElementById("broadcast-message").value.trim();
+  const kind = document.getElementById("broadcast-kind").value;
+  if (!title || !message) { showToast("Enter both a title and message", "error"); return; }
+  const button = document.getElementById("broadcast-send");
+  const previousBroadcastId = activeBroadcastId;
+  button.disabled = true;
+  try {
+    const disabled = await sbReq("PATCH", "/admin_notifications?active=eq.true", { active: false });
+    if (!disabled.ok) throw new Error(disabled.data?.message || "Could not replace current notification");
+    const created = await sbReq("POST", "/admin_notifications", { title, message, kind, active: true });
+    if (!created.ok) throw new Error(created.data?.message || "Could not create notification");
+    showToast("Broadcast sent", "success");
+    await loadBroadcast();
+  } catch (error) {
+    if (previousBroadcastId) {
+      await sbReq("PATCH", "/admin_notifications?id=eq." + encodeURIComponent(previousBroadcastId), { active: true });
+    }
+    showToast(error.message || "Broadcast failed", "error");
+    await loadBroadcast();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function disableBroadcast() {
+  if (!activeBroadcastId) return;
+  const button = document.getElementById("broadcast-disable");
+  button.disabled = true;
+  const res = await sbReq("PATCH", "/admin_notifications?id=eq." + encodeURIComponent(activeBroadcastId) + "&active=eq.true", { active: false });
+  if (res.ok) showToast("Broadcast disabled", "success");
+  else showToast(res.data?.message || "Could not disable broadcast", "error");
+  await loadBroadcast();
+}
+
+// ONLINE CUSTOMERS
+const ONLINE_NOW_MS = 3 * 60 * 1000;
+const ONLINE_PAGE_SIZE = 12;
+let allOnlineCustomerRows = [];
+let onlineSearchQuery = "";
+let onlineCurrentPage = 1;
+
+function dateMs(value) {
+  const ms = Date.parse(value || "");
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function sameLocalDay(left, right) {
+  return left && right
+    && left.getFullYear() === right.getFullYear()
+    && left.getMonth() === right.getMonth()
+    && left.getDate() === right.getDate();
+}
+
+function formatDateTime(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString([], { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function relativeTime(value) {
+  const ms = dateMs(value);
+  if (!ms) return "Never";
+  const diff = Math.max(0, Date.now() - ms);
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return minutes + "m ago";
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return hours + "h ago";
+  const days = Math.floor(hours / 24);
+  return days + "d ago";
+}
+
+function shortDevice(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "-";
+  if (raw.length <= 12) return raw;
+  return raw.slice(0, 6) + "..." + raw.slice(-4);
+}
+
+function presenceStatus(row, now) {
+  if (row.licenseRevoked) return { label: "Revoked", badge: "badge-red", dot: "", rank: 5 };
+  if (row.expiresAt && dateMs(row.expiresAt) && dateMs(row.expiresAt) < now.getTime()) return { label: "Expired", badge: "badge-yellow", dot: "", rank: 4 };
+  if (!row.lastSeenAt) return { label: "Never opened", badge: "badge-gray", dot: "", rank: 3 };
+  const seen = new Date(row.lastSeenAt);
+  const age = now.getTime() - seen.getTime();
+  if (age <= ONLINE_NOW_MS) return { label: "Online now", badge: "badge-green", dot: "online", rank: 0 };
+  if (sameLocalDay(seen, now)) return { label: "Opened today", badge: "badge-yellow", dot: "today", rank: 1 };
+  return { label: "Offline", badge: "badge-gray", dot: "", rank: 2 };
+}
+
+async function loadOnlineCustomers(showLoading = true) {
+  if (!SUPABASE_URL) { showToast("Connect first", "error"); return; }
+  const wrap = document.getElementById("online-customers-table-wrap");
+  const pagEl = document.getElementById("online-customers-pagination");
+  if (showLoading) {
+    wrap.innerHTML = '<div style="text-align:center;padding:40px"><span class="spinner"></span></div>';
+    if (pagEl) pagEl.style.display = "none";
+  }
+
+  const licensesRes = await sbReq("GET", "/licenses?select=license_key,customer_name,expires_at,revoked,max_devices,created_at&order=created_at.desc", null);
+  const devicesRes = await sbReq("GET", "/license_devices?select=id,license_key,machine_uuid,device_id,activated_at,last_seen_at,revoked,revoked_at&order=last_seen_at.desc", null);
+
+  if (!licensesRes.ok || !devicesRes.ok) {
+    wrap.innerHTML = '<div class="notice notice-error">Could not load customer presence. Run the latest Supabase setup/migration first.<br>' +
+      escHtml(JSON.stringify((!licensesRes.ok && licensesRes.data) || (!devicesRes.ok && devicesRes.data))) + '</div>';
+    return;
+  }
+
+  const devicesByLicense = {};
+  (Array.isArray(devicesRes.data) ? devicesRes.data : []).forEach((device) => {
+    const key = String(device.license_key || "");
+    if (!key) return;
+    if (!devicesByLicense[key]) devicesByLicense[key] = [];
+    devicesByLicense[key].push(device);
+  });
+
+  const now = new Date();
+  allOnlineCustomerRows = (Array.isArray(licensesRes.data) ? licensesRes.data : []).map((license) => {
+    const key = String(license.license_key || "");
+    const devices = (devicesByLicense[key] || []).filter(device => device.revoked !== true);
+    devices.sort((a, b) => dateMs(b.last_seen_at) - dateMs(a.last_seen_at));
+    const latest = devices[0] || null;
+    const row = {
+      licenseKey: key,
+      customerName: license.customer_name || "",
+      expiresAt: license.expires_at || "",
+      licenseRevoked: license.revoked === true,
+      maxDevices: Number(license.max_devices || 1) || 1,
+      activeDevices: devices.length,
+      latestDeviceId: latest && (latest.device_id || latest.machine_uuid) || "",
+      activatedAt: latest && latest.activated_at || "",
+      lastSeenAt: latest && latest.last_seen_at || "",
+      createdAt: license.created_at || "",
+    };
+    const status = presenceStatus(row, now);
+    row.statusLabel = status.label;
+    row.statusBadge = status.badge;
+    row.statusDot = status.dot;
+    row.statusRank = status.rank;
+    return row;
+  }).sort((a, b) =>
+    a.statusRank - b.statusRank
+    || dateMs(b.lastSeenAt) - dateMs(a.lastSeenAt)
+    || String(a.licenseKey).localeCompare(String(b.licenseKey))
+  );
+
+  const online = allOnlineCustomerRows.filter(row => row.statusLabel === "Online now").length;
+  const today = allOnlineCustomerRows.filter(row => row.statusLabel === "Opened today" || row.statusLabel === "Online now").length;
+  const seen = allOnlineCustomerRows.filter(row => row.lastSeenAt).length;
+  const never = allOnlineCustomerRows.filter(row => !row.lastSeenAt).length;
+  document.getElementById("presence-stat-online").textContent = online;
+  document.getElementById("presence-stat-today").textContent = today;
+  document.getElementById("presence-stat-seen").textContent = seen;
+  document.getElementById("presence-stat-never").textContent = never;
+
+  renderOnlineCustomersTable();
+}
+
+function filteredOnlineRows() {
+  const query = onlineSearchQuery.trim().toUpperCase();
+  if (!query) return allOnlineCustomerRows;
+  return allOnlineCustomerRows.filter(row =>
+    String(row.licenseKey || "").toUpperCase().includes(query)
+    || String(row.customerName || "").toUpperCase().includes(query)
+    || String(row.statusLabel || "").toUpperCase().includes(query)
+  );
+}
+
+function renderOnlineCustomersTable() {
+  const wrap = document.getElementById("online-customers-table-wrap");
+  const pagEl = document.getElementById("online-customers-pagination");
+  const rows = filteredOnlineRows();
+  if (!rows.length) {
+    wrap.innerHTML = '<div class="empty"><div class="empty-icon">O</div><div class="empty-title">No matching customers</div><div class="empty-sub">Try another license key, customer name, or status</div></div>';
+    if (pagEl) pagEl.style.display = "none";
+    return;
+  }
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / ONLINE_PAGE_SIZE));
+  if (onlineCurrentPage > totalPages) onlineCurrentPage = totalPages;
+  if (onlineCurrentPage < 1) onlineCurrentPage = 1;
+  const startIdx = (onlineCurrentPage - 1) * ONLINE_PAGE_SIZE;
+  const pageRows = rows.slice(startIdx, startIdx + ONLINE_PAGE_SIZE);
+
+  wrap.innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Status</th><th>Customer</th><th>License Key</th><th>Last Opened</th>
+        <th>Last Seen</th><th>Devices</th><th>Device</th><th>Expires</th>
+      </tr></thead>
+      <tbody>${pageRows.map(row => {
+        return '<tr>'
+          + '<td><span class="presence-dot ' + row.statusDot + '"></span><span class="badge ' + row.statusBadge + '">' + escHtml(row.statusLabel) + '</span></td>'
+          + '<td>' + (row.customerName ? escHtml(row.customerName) : '<span class="presence-muted">-</span>') + '</td>'
+          + '<td class="mono" style="font-size:11px">' + escHtml(row.licenseKey) + '</td>'
+          + '<td>' + escHtml(relativeTime(row.lastSeenAt)) + '</td>'
+          + '<td class="mono">' + escHtml(formatDateTime(row.lastSeenAt)) + '</td>'
+          + '<td><span class="badge badge-blue">' + row.activeDevices + ' / ' + row.maxDevices + '</span></td>'
+          + '<td class="mono" title="' + escHtml(row.latestDeviceId) + '">' + escHtml(shortDevice(row.latestDeviceId)) + '</td>'
+          + '<td class="mono">' + (row.expiresAt ? escHtml(String(row.expiresAt).slice(0, 10)) : '-') + '</td>'
+          + '</tr>';
+      }).join("")}</tbody>
+    </table>`;
+
+  if (totalPages > 1) {
+    pagEl.style.display = "flex";
+    const endRange = Math.min(startIdx + ONLINE_PAGE_SIZE, rows.length);
+    document.getElementById("online-customers-pagination-info").textContent = `Showing ${startIdx + 1} to ${endRange} of ${rows.length} customers`;
+    document.getElementById("lbl-online-page").textContent = `Page ${onlineCurrentPage} of ${totalPages}`;
+    document.getElementById("btn-online-prev").disabled = onlineCurrentPage === 1;
+    document.getElementById("btn-online-next").disabled = onlineCurrentPage === totalPages;
+  } else {
+    pagEl.style.display = "none";
+  }
+}
+
+function handleOnlineSearch(value) {
+  onlineSearchQuery = value;
+  onlineCurrentPage = 1;
+  const clearBtn = document.getElementById("btn-clear-online-search");
+  if (clearBtn) clearBtn.style.display = value.trim() ? "inline-flex" : "none";
+  renderOnlineCustomersTable();
+}
+
+function clearOnlineSearch() {
+  const input = document.getElementById("online-search");
+  if (input) input.value = "";
+  handleOnlineSearch("");
+}
+
+function prevOnlinePage() {
+  if (onlineCurrentPage > 1) {
+    onlineCurrentPage--;
+    renderOnlineCustomersTable();
+  }
+}
+
+function nextOnlinePage() {
+  const totalPages = Math.ceil(filteredOnlineRows().length / ONLINE_PAGE_SIZE);
+  if (onlineCurrentPage < totalPages) {
+    onlineCurrentPage++;
+    renderOnlineCustomersTable();
+  }
+}
+
+const MARKETING_USAGE_PLATFORMS = [
+  { id: "tiktok", label: "TikTok" },
+  { id: "snapchat", label: "Snapchat" },
+];
+const DEFAULT_MARKETING_ACCOUNT_LIMIT = 2;
+const MARKETING_USAGE_PAGE_SIZE = 10;
+let allMarketingUsageRows = [];
+let marketingUsageSearchQuery = "";
+let marketingUsageCurrentPage = 1;
+
+function escHtml(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function jsArg(value) {
+  return JSON.stringify(String(value == null ? "" : value));
+}
+
+async function sha256Text(value) {
+  const bytes = new TextEncoder().encode(String(value || ""));
+  const hash = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function marketingAccountIdentity(account) {
+  const accountHash = String(account && account.account_hash || "").trim().toLowerCase();
+  if (accountHash) return accountHash;
+  const taagerEmail = String(account && account.taager_email || "").trim().toLowerCase();
+  if (/^[a-z]{2}:[a-z0-9_-]+$/i.test(taagerEmail)) return taagerEmail;
+  const phone = String(account && account.taager_phone || "").replace(/\D/g, "");
+  if (phone) return "phone:" + phone;
+  return String(
+    account && (account.taager_email || account.easy_email || account.account_hash) || ""
+  ).trim().toLowerCase();
+}
+
+function normalizedMarketingUsageAccountKey(value) {
+  const key = String(value || "").trim().toLowerCase();
+  const merchant = key.match(/^(?:taager:)?([a-z]{2}:[a-z0-9_-]+)$/);
+  if (merchant) return "taager:" + merchant[1];
+  return key;
+}
+
+function pushUnique(list, value) {
+  const item = String(value || "").trim();
+  if (item && list.indexOf(item) === -1) list.push(item);
+}
+
+function mergeMarketingAccountLabels(current, next) {
+  const lines = [];
+  String(current || "").split(/\n+/).forEach(line => pushUnique(lines, line));
+  String(next || "").split(/\n+/).forEach(line => pushUnique(lines, line));
+  return lines.join("\n");
+}
+
+function marketingAccountLabel(accountId, account) {
+  if (!account) return accountId;
+  const easyEmail = String(account.easy_email || "").trim();
+  const taagerEmail = String(account.taager_email || "").trim();
+  const taagerPhone = String(account.taager_phone || "").trim();
+  const loginMethod = String(account.taager_login_method || "").trim();
+  const lines = [];
+  if (easyEmail) lines.push("Easy: " + easyEmail);
+  if (taagerEmail && taagerEmail !== easyEmail) lines.push("Taager: " + taagerEmail);
+  else if (taagerEmail) lines.push("Taager: same email");
+  if (taagerPhone) lines.push("Taager phone: " + taagerPhone);
+  if (loginMethod) lines.push("Login: " + loginMethod);
+  return lines.length ? lines.join("\n") : accountId;
+}
+
+function marketingLimitBadge(used, max) {
+  const cls = used > max ? "badge-red" : used === max ? "badge-yellow" : "badge-green";
+  return '<span class="badge ' + cls + '">' + used + ' / ' + max + '</span>';
+}
+
+function marketingUsageEditAccountId(row, platform) {
+  const platformIds = row && row.platformAccountIds && row.platformAccountIds[platform] || [];
+  return normalizedMarketingUsageAccountKey(platformIds[0] || row.dashboardAccountId || (row.accountIds && row.accountIds[0]) || row.rowKey || "");
+}
+
+function marketingUsageLimitFor(row, platform, dashboardAccountId) {
+  const overrides = row && row.limitOverrides && row.limitOverrides[platform] || {};
+  const exact = Number(overrides[dashboardAccountId] || 0);
+  if (exact > 0) return exact;
+  const normalizedId = normalizedMarketingUsageAccountKey(dashboardAccountId);
+  const normalized = Object.keys(overrides).find(id => normalizedMarketingUsageAccountKey(id) === normalizedId);
+  const merged = Number(normalized && overrides[normalized] || 0);
+  if (merged > 0) return merged;
+  const first = Number(Object.keys(overrides).map(id => overrides[id]).find(Boolean) || 0);
+  return first > 0 ? first : DEFAULT_MARKETING_ACCOUNT_LIMIT;
+}
+
+async function loadMarketingUsage() {
+  if (!SUPABASE_URL) { showToast("Connect first", "error"); return; }
+  const wrap = document.getElementById("marketing-usage-table-wrap");
+  wrap.innerHTML = '<div style="text-align:center;padding:40px"><span class="spinner"></span></div>';
+  document.getElementById("marketing-usage-pagination").style.display = "none";
+
+  const licensesRes = await sbReq("GET", "/licenses?select=license_key,customer_name&order=created_at.desc", null);
+  const accountsRes = await sbReq("GET", "/license_accounts?select=license_key,account_hash,easy_email,taager_email,taager_phone,taager_login_method", null);
+  const mappingsRes = await sbReq("GET", "/saudiipick_marketing_mappings?select=license_key_hash,dashboard_account_id,platform,source_account_id,source_account_name", null);
+  const limitsRes = await sbReq("GET", "/marketing_account_limits?select=license_key_hash,dashboard_account_id,platform,max_source_accounts", null);
+
+  if (!licensesRes.ok || !accountsRes.ok || !mappingsRes.ok) {
+    wrap.innerHTML = '<div class="notice notice-error">Could not load marketing usage. Run the latest Supabase setup/migration first.<br>' +
+      escHtml(JSON.stringify((!licensesRes.ok && licensesRes.data) || (!accountsRes.ok && accountsRes.data) || (!mappingsRes.ok && mappingsRes.data))) + '</div>';
+    return;
+  }
+  if (!limitsRes.ok && limitsRes.status !== 404) {
+    wrap.innerHTML = '<div class="notice notice-error">Marketing limits table is not ready. Run the latest Supabase setup/migration first.<br>' + escHtml(JSON.stringify(limitsRes.data)) + '</div>';
+    return;
+  }
+
+  const licenseByHash = {};
+  await Promise.all((licensesRes.data || []).map(async (lic) => {
+    const hash = await sha256Text(lic.license_key);
+    licenseByHash[hash] = lic;
+  }));
+
+  const rowsByKey = {};
+  function ensureRow(licenseHash, dashboardAccountId) {
+    const rowKey = normalizedMarketingUsageAccountKey(dashboardAccountId);
+    const key = licenseHash + "|" + rowKey;
+    if (!rowsByKey[key]) {
+      const lic = licenseByHash[licenseHash] || {};
+      rowsByKey[key] = {
+        rowKey,
+        licenseHash,
+        licenseKey: lic.license_key || "(unknown license)",
+        customerName: lic.customer_name || "",
+        dashboardAccountId: dashboardAccountId || rowKey,
+        accountLabel: "",
+        accountIds: [],
+        platformAccountIds: { tiktok: [], snapchat: [] },
+        sources: { tiktok: {}, snapchat: {} },
+        limitOverrides: { tiktok: {}, snapchat: {} },
+        limits: { tiktok: DEFAULT_MARKETING_ACCOUNT_LIMIT, snapchat: DEFAULT_MARKETING_ACCOUNT_LIMIT },
+      };
+    }
+    const row = rowsByKey[key];
+    pushUnique(row.accountIds, dashboardAccountId);
+    const id = String(dashboardAccountId || "").trim();
+    if (id && (id.toLowerCase().indexOf("taager:") === 0 || row.dashboardAccountId === row.rowKey)) {
+      row.dashboardAccountId = id;
+    }
+    return row;
+  }
+
+  function notePlatformAccountId(row, platform, dashboardAccountId) {
+    if (!row || !MARKETING_USAGE_PLATFORMS.some(p => p.id === platform)) return;
+    pushUnique(row.platformAccountIds[platform], dashboardAccountId);
+  }
+
+  (accountsRes.data || []).forEach((account) => {
+    const licenseKey = account.license_key || "";
+    const licenseHash = Object.keys(licenseByHash).find(hash => licenseByHash[hash].license_key === licenseKey);
+    const id = marketingAccountIdentity(account);
+    if (!licenseHash || !id) return;
+    const row = ensureRow(licenseHash, id);
+    row.accountLabel = mergeMarketingAccountLabels(row.accountLabel, marketingAccountLabel(id, account));
+  });
+
+  (mappingsRes.data || []).forEach((mapping) => {
+    const licenseHash = mapping.license_key_hash || "";
+    const accountId = mapping.dashboard_account_id || "";
+    const platform = mapping.platform || "";
+    const sourceId = mapping.source_account_id || "";
+    if (!licenseHash || !accountId || !sourceId || !MARKETING_USAGE_PLATFORMS.some(p => p.id === platform)) return;
+    const row = ensureRow(licenseHash, accountId);
+    notePlatformAccountId(row, platform, accountId);
+    row.sources[platform][sourceId] = mapping.source_account_name || sourceId;
+  });
+
+  (Array.isArray(limitsRes.data) ? limitsRes.data : []).forEach((limit) => {
+    const accountId = limit.dashboard_account_id || "";
+    if (!/^[a-f0-9]{64}$/i.test(accountId)) return;
+    const row = ensureRow(limit.license_key_hash || "", accountId);
+    const platform = limit.platform || "";
+    if (!row || !MARKETING_USAGE_PLATFORMS.some(p => p.id === platform)) return;
+    const max = Number(limit.max_source_accounts || DEFAULT_MARKETING_ACCOUNT_LIMIT) || DEFAULT_MARKETING_ACCOUNT_LIMIT;
+    row.limits[platform] = max;
+    row.limitOverrides[platform][accountId] = max;
+  });
+
+  allMarketingUsageRows = Object.values(rowsByKey).sort((a, b) =>
+    String(a.licenseKey).localeCompare(String(b.licenseKey)) || String(a.accountLabel).localeCompare(String(b.accountLabel)));
+  renderMarketingUsageTable();
+}
+
+function renderMarketingUsageTable() {
+  const wrap = document.getElementById("marketing-usage-table-wrap");
+  const searchContainer = document.getElementById("marketing-usage-search-container");
+  const pagination = document.getElementById("marketing-usage-pagination");
+
+  if (!allMarketingUsageRows.length) {
+    wrap.innerHTML = '<div class="empty"><div class="empty-icon">U</div><div class="empty-title">No marketing usage yet</div><div class="empty-sub">Mappings will appear here after accounts are assigned.</div></div>';
+    searchContainer.style.display = "none";
+    pagination.style.display = "none";
+    return;
+  }
+
+  searchContainer.style.display = "flex";
+  const query = marketingUsageSearchQuery.trim().toUpperCase();
+  const filteredRows = allMarketingUsageRows.filter(row =>
+    String(row.licenseKey || "").toUpperCase().includes(query) ||
+    String(row.customerName || "").toUpperCase().includes(query)
+  );
+
+  if (!filteredRows.length) {
+    wrap.innerHTML = '<div class="empty"><div class="empty-icon">U</div><div class="empty-title">No matching accounts</div><div class="empty-sub">Try a different license key or customer name.</div></div>';
+    pagination.style.display = "none";
+    return;
+  }
+
+  const totalPages = Math.ceil(filteredRows.length / MARKETING_USAGE_PAGE_SIZE);
+  marketingUsageCurrentPage = Math.min(Math.max(marketingUsageCurrentPage, 1), totalPages);
+  const startIndex = (marketingUsageCurrentPage - 1) * MARKETING_USAGE_PAGE_SIZE;
+  const pageRows = filteredRows.slice(startIndex, startIndex + MARKETING_USAGE_PAGE_SIZE);
+
+  wrap.innerHTML = `
+    <table>
+      <thead><tr>
+        <th>License</th><th>Customer</th><th>Account</th>
+        ${MARKETING_USAGE_PLATFORMS.map(p => '<th>' + p.label + '</th>').join("")}
+      </tr></thead>
+      <tbody>${pageRows.map(row => {
+        return '<tr>' +
+          '<td class="mono" style="font-size:11px">' + escHtml(row.licenseKey) + '</td>' +
+          '<td>' + escHtml(row.customerName || "-") + '</td>' +
+          '<td><strong style="white-space:pre-line">' + escHtml(row.accountLabel || row.dashboardAccountId || row.rowKey) + '</strong><br><span class="mono">' + escHtml(row.dashboardAccountId || row.rowKey) + '</span></td>' +
+          MARKETING_USAGE_PLATFORMS.map(platform => {
+            const used = Object.keys(row.sources[platform.id] || {}).length;
+            const editAccountId = marketingUsageEditAccountId(row, platform.id);
+            const max = marketingUsageLimitFor(row, platform.id, editAccountId);
+            const title = Object.keys(row.sources[platform.id] || {}).map(id => id + ": " + row.sources[platform.id][id]).join("\\n");
+            const assigned = Object.keys(row.sources[platform.id] || {});
+            return '<td title="' + escHtml(title) + '">' +
+              marketingLimitBadge(used, max) +
+              '<div class="mt-8"><button class="btn btn-ghost btn-sm" data-license-hash="' + escHtml(row.licenseHash) +
+                '" data-dashboard-account-id="' + escHtml(editAccountId) +
+                '" data-platform="' + escHtml(platform.id) +
+                '" data-current-max="' + max +
+                '" onclick="editMarketingAccountLimitFromButton(this)">Limit</button></div>' +
+              (assigned.length ? '<details class="mt-8"><summary style="cursor:pointer">Assigned accounts</summary>' + assigned.map(id =>
+                '<div style="margin-top:6px;word-break:break-all"><span>' + escHtml(row.sources[platform.id][id] || id) + '</span> ' +
+                '<button class="btn btn-ghost btn-sm" data-license-hash="' + escHtml(row.licenseHash) +
+                '" data-platform="' + escHtml(platform.id) + '" data-source-account-id="' + escHtml(id) +
+                '" onclick="releaseSaudiIPickSourceFromButton(this)">Release</button></div>'
+              ).join('') + '</details>' : '') +
+            '</td>';
+          }).join("") +
+        '</tr>';
+      }).join("")}</tbody>
+    </table>`;
+
+  if (totalPages > 1) {
+    pagination.style.display = "flex";
+    document.getElementById("marketing-usage-pagination-info").textContent =
+      `Showing ${startIndex + 1} to ${Math.min(startIndex + MARKETING_USAGE_PAGE_SIZE, filteredRows.length)} of ${filteredRows.length} accounts`;
+    document.getElementById("marketing-usage-page-buttons").innerHTML = Array.from({ length: totalPages }, (_, index) => {
+      const page = index + 1;
+      const activeClass = page === marketingUsageCurrentPage ? " btn-primary" : " btn-ghost";
+      return `<button class="btn btn-sm${activeClass}" onclick="goToMarketingUsagePage(${page})">${page}</button>`;
+    }).join("");
+  } else {
+    pagination.style.display = "none";
+  }
+}
+
+function handleMarketingUsageSearch(value) {
+  marketingUsageSearchQuery = value;
+  marketingUsageCurrentPage = 1;
+  document.getElementById("btn-clear-marketing-usage-search").style.display = value.trim() ? "inline-flex" : "none";
+  renderMarketingUsageTable();
+}
+
+function clearMarketingUsageSearch() {
+  document.getElementById("marketing-usage-search").value = "";
+  handleMarketingUsageSearch("");
+}
+
+function goToMarketingUsagePage(page) {
+  marketingUsageCurrentPage = page;
+  renderMarketingUsageTable();
+}
+
+function editMarketingAccountLimitFromButton(button) {
+  return editMarketingAccountLimit(
+    button.getAttribute("data-license-hash") || "",
+    button.getAttribute("data-dashboard-account-id") || "",
+    button.getAttribute("data-platform") || "",
+    Number(button.getAttribute("data-current-max") || DEFAULT_MARKETING_ACCOUNT_LIMIT)
+  );
+}
+
+async function editMarketingAccountLimit(licenseHash, dashboardAccountId, platform, currentMax) {
+  const value = prompt("Set max " + platform + " ad accounts for this dashboard account", currentMax || DEFAULT_MARKETING_ACCOUNT_LIMIT);
+  if (value === null) return;
+  const max = parseInt(value, 10);
+  if (!max || max < 1) { showToast("Limit must be at least 1", "error"); return; }
+  const query = "?license_key_hash=eq." + encodeURIComponent(licenseHash)
+    + "&dashboard_account_id=eq." + encodeURIComponent(dashboardAccountId)
+    + "&platform=eq." + encodeURIComponent(platform);
+  const existing = await sbReq("GET", "/marketing_account_limits" + query + "&select=license_key_hash&limit=1", null);
+  let res;
+  if (existing.ok && Array.isArray(existing.data) && existing.data.length) {
+    res = await sbReq("PATCH", "/marketing_account_limits" + query, { max_source_accounts: max, updated_at: new Date().toISOString() });
+  } else {
+    res = await sbReq("POST", "/marketing_account_limits", {
+      license_key_hash: licenseHash,
+      dashboard_account_id: dashboardAccountId,
+      platform,
+      max_source_accounts: max,
+    });
+  }
+    if (res.ok) { showToast("Saudi iPick marketing limit updated", "success"); loadMarketingUsage(); }
+  else showToast("Could not update limit: " + JSON.stringify(res.data), "error");
+}
+
+async function releaseSaudiIPickSourceFromButton(button) {
+  const hash = button.getAttribute("data-license-hash") || "";
+  const platform = button.getAttribute("data-platform") || "";
+  const sourceId = button.getAttribute("data-source-account-id") || "";
+  if (!hash || !sourceId || !confirm("Release this " + platform + " account from Taager Orders?")) return;
+  const query = "?license_key_hash=eq." + encodeURIComponent(hash)
+    + "&platform=eq." + encodeURIComponent(platform)
+    + "&source_account_id=eq." + encodeURIComponent(sourceId);
+  const result = await sbReq("DELETE", "/saudiipick_marketing_mappings" + query, null);
+  if (result.ok) { showToast("Account released", "success"); loadMarketingUsage(); }
+  else showToast("Could not release account: " + JSON.stringify(result.data), "error");
+}
+
+async function loadLicenses() {
+  if (!SUPABASE_URL) { showToast("Connect first", "error"); return; }
+  const wrap = document.getElementById("licenses-table-wrap");
+  wrap.innerHTML = '<div style="text-align:center;padding:40px"><span class="spinner"></span></div>';
+  
+  // Hide pagination while loading
+  const pagEl = document.getElementById("licenses-pagination");
+  if (pagEl) pagEl.style.display = "none";
+  
+  const res = await sbReq("GET", "/licenses?select=*&order=created_at.desc", null);
+  if (!res.ok) { wrap.innerHTML = '<div class="notice notice-error">Failed: ' + JSON.stringify(res.data) + '</div>'; return; }
+  
+  allLicenses = Array.isArray(res.data) ? res.data : [];
+  renderLicensesTable();
+}
+
+function renderLicensesTable() {
+  const wrap = document.getElementById("licenses-table-wrap");
+  const pagEl = document.getElementById("licenses-pagination");
+  const searchContainer = document.querySelector(".search-bar-container");
+  
+  if (!allLicenses.length) {
+    wrap.innerHTML = '<div class="empty"><div class="empty-icon">🔑</div><div class="empty-title">No licenses yet</div></div>';
+    if (searchContainer) searchContainer.style.display = "none";
+    if (pagEl) pagEl.style.display = "none";
+    return;
+  }
+  
+  if (searchContainer) searchContainer.style.display = "flex";
+  
+  const query = licenseSearchQuery.trim().toUpperCase();
+  const filtered = allLicenses.filter(r => {
+    const keyMatch = String(r.license_key || "").toUpperCase().includes(query);
+    const nameMatch = String(r.customer_name || "").toUpperCase().includes(query);
+    return keyMatch || nameMatch;
+  });
+  
+  if (!filtered.length) {
+    wrap.innerHTML = '<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No matching licenses</div><div class="empty-sub">Try searching with a different license key or customer name</div></div>';
+    if (pagEl) pagEl.style.display = "none";
+    return;
+  }
+  
+  const PAGE_SIZE = 10;
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  if (licenseCurrentPage > totalPages) {
+    licenseCurrentPage = totalPages;
+  }
+  if (licenseCurrentPage < 1) {
+    licenseCurrentPage = 1;
+  }
+  
+  const startIdx = (licenseCurrentPage - 1) * PAGE_SIZE;
+  const pageRows = filtered.slice(startIdx, startIdx + PAGE_SIZE);
+  const now = new Date();
+  
+  wrap.innerHTML = `
+    <table>
+      <thead><tr>
+        <th>License Key</th><th>Customer</th><th>Expires</th><th>Status</th>
+        <th>Device</th><th>Max Acc.</th><th>Max Dev.</th><th>Operations Suite</th><th>Dashboard</th><th>Team Leader</th><th>Actions</th>
+      </tr></thead>
+      <tbody>${pageRows.map(r => {
+        const exp = new Date(r.expires_at);
+        const daysLeft = Math.ceil((exp - now) / 86400000);
+        let status = r.revoked ? '<span class="badge badge-red">Revoked</span>'
+          : daysLeft < 0 ? '<span class="badge badge-yellow">Expired</span>'
+          : '<span class="badge badge-green">Active · ' + daysLeft + 'd</span>';
+        const device = r.device_id ? '<span class="badge badge-blue" title="' + r.device_id + '">Locked</span>' : '<span class="badge badge-gray">Pending</span>';
+        const maxAcc = r.max_accounts || 1;
+        const maxDev = r.max_devices || 1;
+        const maxBadge = maxAcc > 1 ? '<span class="badge badge-purple">' + maxAcc + ' slots</span>' : '<span class="badge badge-gray">1 slot</span>';
+        const maxDevBadge = maxDev > 1 ? '<span class="badge badge-blue">' + maxDev + ' devices</span>' : '<span class="badge badge-gray">1 device</span>';
+        const sk = r.license_key.replace(/'/g, "\\'");
+        const operationsSuiteOn = r.analytics_enabled !== false || r.operations_enabled !== false;
+        const dashboardOn  = r.dashboard_enabled  === true;
+        const teamLeaderOn = r.team_leader_enabled === true;
+        const operationsBadge = '<button class="feat-toggle ' + (operationsSuiteOn ? 'feat-on'  : 'feat-off') + '" onclick="toggleFeatureFlag(\'' + sk + '\', \'operations_suite\', ' + operationsSuiteOn + ')">' + (operationsSuiteOn ? 'On' : 'Off') + '</button>';
+        const dashboardBadge  = '<button class="feat-toggle ' + (dashboardOn  ? 'feat-on'  : 'feat-off') + '" onclick="toggleFeatureFlag(\'' + sk + '\', \'dashboard_enabled\',  ' + dashboardOn  + ')">' + (dashboardOn  ? '✅ On' : '🔒 Off') + '</button>';
+        const teamLeaderBadge = '<button class="feat-toggle ' + (teamLeaderOn ? 'feat-on' : 'feat-off') + '" onclick="toggleFeatureFlag(\'' + sk + '\', \'team_leader_enabled\', ' + teamLeaderOn + ')">' + (teamLeaderOn ? 'On' : 'Off') + '</button>';
+        return '<tr><td class="mono" style="font-size:11px">' + r.license_key + '</td>'
+          + '<td>' + (r.customer_name || '<span style="color:var(--text3)">—</span>') + '</td>'
+          + '<td class="mono">' + (r.expires_at ? r.expires_at.slice(0,10) : '—') + '</td>'
+          + '<td>' + status + '</td><td>' + device + '</td><td>' + maxBadge + '</td><td>' + maxDevBadge + '</td>'
+          + '<td>' + operationsBadge + '</td>'
+          + '<td>' + dashboardBadge  + '</td>'
+          + '<td>' + teamLeaderBadge + '</td>'
+          + '<td><div class="gap-8">'
+          + '<button class="btn btn-ghost btn-sm" onclick="editMaxDevices(\'' + sk + '\',' + maxDev + ')">Devices</button>'
+          + '<button class="btn btn-primary btn-sm" onclick="openAccountModal(\'' + sk + '\',' + maxAcc + ')">👥 Accounts</button>'
+          + '<button class="btn btn-ghost btn-sm" onclick="editMaxAccounts(\'' + sk + '\',' + maxAcc + ')">✏️ Slots</button>'
+          + '<button class="btn btn-ghost btn-sm" onclick="openExpiryModal(\'' + sk + '\',\'' + (r.expires_at ? r.expires_at.slice(0,10) : '') + '\')">📅 Expiry</button>'
+          + '<button class="btn btn-ghost btn-sm" onclick="quickResetDevice(\'' + sk + '\')">💻 Device</button>'
+          + '<button class="btn btn-ghost btn-sm" onclick="quickForceFlush(\'' + sk + '\')" style="border-color:rgba(255,77,109,.35);color:var(--red)" title="Wipe all data on this customer\'s machine on their next app check-in">🔄 Flush</button>'
+          + '<button class="btn btn-ghost btn-sm" onclick="quickResetCredentials(\'' + sk + '\')" style="border-color:rgba(255,201,77,.35);color:var(--yellow)" title="Delete all saved account slots — customer must re-enter credentials">🔑 Creds</button>'
+          + '<button class="btn btn-ghost btn-sm" onclick="quickRepairAppCache(\'' + sk + '\')" style="border-color:rgba(0,229,160,.35);color:var(--green)" title="Repair corrupted app cache/stale UI for this license. Keeps credentials, accounts, devices, and marketing connections intact.">Repair App</button>'
+          + '<button class="btn btn-ghost btn-sm" onclick="quickResetCache(\'' + sk + '\')" style="border-color:rgba(124,106,247,.35);color:var(--accent)" title="Reset all dashboard, campaigns, and ad metrics to zero — keeps account logins intact">🧹 Reset Data</button>'
+          + (r.revoked ? '<button class="btn btn-green btn-sm" onclick="quickUnrevoke(\'' + sk + '\')">✅ Restore</button>'
+                       : '<button class="btn btn-red btn-sm" onclick="quickRevoke(\'' + sk + '\')">🚫 Revoke</button>')
+          + '<button class="btn btn-sm" style="background:transparent;border:1px solid #3a3d45;color:#55596a;padding:6px 10px" onclick="quickDelete(\'' + sk + '\')">🗑️</button>'
+          + '</div></td></tr>';
+      }).join("")}</tbody>
+    </table>`;
+    
+  if (totalPages > 1) {
+    pagEl.style.display = "flex";
+    const endRange = Math.min(startIdx + PAGE_SIZE, filtered.length);
+    document.getElementById("lic-pagination-info").textContent = `Showing ${startIdx + 1} to ${endRange} of ${filtered.length} licenses`;
+    document.getElementById("lbl-lic-page").textContent = `Page ${licenseCurrentPage} of ${totalPages}`;
+    document.getElementById("btn-lic-prev").disabled = licenseCurrentPage === 1;
+    document.getElementById("btn-lic-next").disabled = licenseCurrentPage === totalPages;
+  } else {
+    pagEl.style.display = "none";
+  }
+}
+
+function handleLicenseSearch(val) {
+  licenseSearchQuery = val;
+  licenseCurrentPage = 1;
+  const clearBtn = document.getElementById("btn-clear-search");
+  if (clearBtn) {
+    clearBtn.style.display = val.trim() ? "inline-flex" : "none";
+  }
+  renderLicensesTable();
+}
+
+function clearLicenseSearch() {
+  const searchInput = document.getElementById("lic-search");
+  if (searchInput) searchInput.value = "";
+  handleLicenseSearch("");
+}
+
+function prevLicensePage() {
+  if (licenseCurrentPage > 1) {
+    licenseCurrentPage--;
+    renderLicensesTable();
+  }
+}
+
+function nextLicensePage() {
+  const query = licenseSearchQuery.trim().toUpperCase();
+  const filtered = allLicenses.filter(r => {
+    const keyMatch = String(r.license_key || "").toUpperCase().includes(query);
+    const nameMatch = String(r.customer_name || "").toUpperCase().includes(query);
+    return keyMatch || nameMatch;
+  });
+  const totalPages = Math.ceil(filtered.length / 10);
+  if (licenseCurrentPage < totalPages) {
+    licenseCurrentPage++;
+    renderLicensesTable();
+  }
+}
+
+// EDIT EXPIRY MODAL
+let currentExpiryKey = "";
+function openExpiryModal(key, currentExpiry) {
+  currentExpiryKey = key;
+  document.getElementById("expiry-modal-key-display").textContent = "License: " + key;
+  document.getElementById("edit-expiry-date").value = currentExpiry ? currentExpiry.slice(0, 10) : "";
+  document.getElementById("modal-expiry").classList.add("open");
+}
+function closeExpiryModal() {
+  document.getElementById("modal-expiry").classList.remove("open");
+  currentExpiryKey = "";
+}
+async function saveExpiryDate() {
+  const dateVal = document.getElementById("edit-expiry-date").value;
+  if (!dateVal) {
+    showToast("Please select a valid date", "error");
+    return;
+  }
+  const res = await sbReq("PATCH", "/licenses?license_key=eq." + encodeURIComponent(currentExpiryKey), { expires_at: dateVal });
+  if (res.ok) {
+    showToast("Expiry date updated successfully ✓", "success");
+    closeExpiryModal();
+    loadLicenses();
+    loadDashboard();
+  } else {
+    showToast("Error updating expiry: " + JSON.stringify(res.data), "error");
+  }
+}
+
+// ACCOUNT MANAGEMENT MODAL
+let currentModalPage = 1;
+let currentModalMaxAccounts = 1;
+
+async function openAccountModal(key, maxAccounts) {
+  currentModalKey = key;
+  currentModalPage = 1;
+  currentModalMaxAccounts = maxAccounts;
+  document.getElementById("modal-lic-key-display").textContent = "Accounts: " + key;
+  document.getElementById("modal-accounts-body").innerHTML = '<div style="text-align:center;padding:20px"><span class="spinner"></span></div>';
+  document.getElementById("modal-accounts").classList.add("open");
+  await renderAccountSlots(key, maxAccounts);
+}
+
+function closeAccountModal() {
+  document.getElementById("modal-accounts").classList.remove("open");
+  currentModalKey = "";
+}
+
+function prevModalPage() {
+  if (currentModalPage > 1) {
+    currentModalPage--;
+    renderAccountSlots(currentModalKey, currentModalMaxAccounts);
+  }
+}
+
+function nextModalPage() {
+  const totalPages = Math.ceil(currentModalMaxAccounts / 12);
+  if (currentModalPage < totalPages) {
+    currentModalPage++;
+    renderAccountSlots(currentModalKey, currentModalMaxAccounts);
+  }
+}
+
+function slotIdentityKey(slot) {
+  if (!slot) return "";
+  const easy = String(slot.easy_email || "").trim().toLowerCase();
+  const easyStore = String(slot.easy_store || "").replace(/\s+/g, " ").trim().toLowerCase();
+  const method = String(slot.taager_login_method || "").trim().toLowerCase();
+  const taagerEmail = String(slot.taager_email || "").trim().toLowerCase();
+  const taagerPhone = String(slot.taager_phone || "").replace(/\D/g, "");
+  const merchantMatch = taagerEmail.match(/^([a-z]{2}):([a-z0-9_-]+)$/i);
+  const merchantCountry = merchantMatch ? String(merchantMatch[1] || "").toLowerCase() : "";
+  const merchantCode = merchantMatch ? String(merchantMatch[2] || "").toLowerCase() : "";
+  const taager = merchantCode
+    ? "merchant:" + merchantCountry + ":" + merchantCode
+    : taagerPhone
+    ? "phone:" + taagerPhone
+    : taagerEmail;
+  if (!taager) return "";
+  if (!easy) return "dashboard|" + taager;
+  if (!easyStore) return "legacy|" + easy + "|" + method + "|" + taager;
+  return "operations|" + taager + "|" + easy + "|" + easyStore;
+}
+
+function duplicateSlotGroups(slots) {
+  const list = slots || [];
+  const seen = new Set();
+  const groups = [];
+  const identity = slot => {
+    const easyEmail = String(slot && slot.easy_email || "").trim().toLowerCase();
+    const easyStore = String(slot && slot.easy_store || "").replace(/\s+/g, " ").trim().toLowerCase();
+    const merchantMatch = String(slot && slot.taager_email || "").trim().toLowerCase().match(/^([a-z]{2}):([a-z0-9_-]+)$/i);
+    return {
+      easyEmail,
+      easyStore,
+      merchant: merchantMatch ? merchantMatch[1] + ":" + merchantMatch[2] : "",
+      operations: !!(easyEmail && easyStore),
+    };
+  };
+  const duplicates = (left, right) => {
+    const a = identity(left);
+    const b = identity(right);
+    if (!a.merchant || a.merchant !== b.merchant) return false;
+    if (!a.operations || !b.operations) return true;
+    return a.easyEmail === b.easyEmail && a.easyStore === b.easyStore;
+  };
+
+  for (let i = 0; i < list.length; i++) {
+    if (seen.has(i)) continue;
+    const groupIndexes = new Set([i]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let j = 0; j < list.length; j++) {
+        if (groupIndexes.has(j)) continue;
+        if ([...groupIndexes].some(index => duplicates(list[index], list[j]))) {
+          groupIndexes.add(j);
+          changed = true;
+        }
+      }
+    }
+    if (groupIndexes.size > 1) {
+      groupIndexes.forEach(index => seen.add(index));
+      groups.push([...groupIndexes].map(index => list[index]));
+    }
+  }
+  return groups;
+}
+
+function renderSingleSlotHTML(item, key) {
+  if (item.empty) {
+    return '<div class="acc-slot" style="opacity:0.45">'
+      + '<div style="flex:1;min-width:0">'
+      + '<div class="acc-slot-label">Account Slot ' + (item.index + 1) + '</div>'
+      + '<div class="acc-slot-info">Empty — waiting for user credentials</div>'
+      + '</div>'
+      + '<span class="badge badge-gray" style="white-space:nowrap">⬜ Empty</span>'
+      + '</div>';
+  } else {
+    const slot = item.data;
+    const isUnlocked = slot.unlocked === true;
+    const lockedAt = slot.added_at ? new Date(slot.added_at).toLocaleDateString() : '—';
+    const easyEmail = slot.easy_email || '';
+    const easyStore = slot.easy_store || '';
+    const staticIdentity = String(slot.taager_email || '').toLowerCase().startsWith('static:');
+    const taagerEmail = (slot.taager_phone || slot.taager_email) ? ((slot.taager_login_method ? '[' + slot.taager_login_method + '] ' : '') + (slot.taager_phone || slot.taager_email || '')) : '';
+    const taagerPhone = slot.taager_phone || '';
+    const taagerMethod = slot.taager_login_method || (taagerPhone ? 'phone' : (taagerEmail ? 'email' : ''));
+    const taagerIdentity = taagerPhone || taagerEmail;
+    const missedDestination = String(slot.missed_orders_destination || '').trim().toLowerCase();
+    const secondMerchant = String(slot.second_taager_merchant_id || '').trim().toLowerCase();
+    const secondCountry = String(slot.second_taager_country || '').trim().toLowerCase();
+    const secondMethod = String(slot.second_taager_login_method || '').trim().toLowerCase();
+    const secondIdentity = secondMerchant
+      ? 'merchant:' + (secondCountry ? secondCountry + ':' : '') + secondMerchant
+      : (slot.second_taager_phone || slot.second_taager_email || '');
+    const secondLine = (missedDestination === 'second_taager_cart' || secondIdentity)
+      ? '<div style="font-size:11px;color:var(--text2);margin-top:2px">Second cart: '
+        + (secondMethod ? '[' + escHtml(secondMethod) + '] ' : '')
+        + escHtml(secondIdentity || 'configured')
+        + '</div>'
+      : '';
+    const identLine = staticIdentity
+      ? '<div style="font-size:11px;color:var(--text2);margin-top:2px">&#128196; Static &middot; ' + (easyStore || slot.taager_email || 'Static account') + '</div>'
+      : easyEmail || taagerIdentity
+      ? '<div style="font-size:11px;color:var(--text2);margin-top:2px">'
+        + (easyEmail ? '📦 ' + easyEmail + (easyStore ? ' [' + easyStore + ']' : '') : '')
+        + (easyEmail && taagerEmail ? ' · ' : '')
+        + (taagerEmail ? '🛒 ' + taagerEmail : '')
+        + '</div>' + secondLine
+      : '<div style="font-size:11px;color:var(--text3);margin-top:2px">No identity stored yet</div>' + secondLine;
+    const safeHash = (slot.account_hash||'').replace(/"/g, '&quot;');
+    const safeKey  = key.replace(/"/g, '&quot;');
+    return '<div class="acc-slot">'
+      + '<div style="flex:1;min-width:0">'
+      + '<div class="acc-slot-label">Account Slot ' + (item.index + 1) + '</div>'
+      + identLine
+      + '<div style="font-size:11px;color:var(--text3);margin-top:2px">Locked: ' + lockedAt + '</div>'
+      + '</div>'
+      + (isUnlocked
+          ? '<span class="badge badge-green" style="white-space:nowrap;margin-right:4px;">🔓 Unlocked</span>'
+          : '<span class="badge badge-yellow" style="white-space:nowrap;margin-right:4px;">🔒 Locked</span>')
+      + (isUnlocked
+        ? '<button class="btn btn-ghost btn-sm slot-action-btn" data-action="relock" data-key="' + safeKey + '" data-hash="' + safeHash + '">Re-lock</button>'
+        : '<button class="btn btn-green btn-sm slot-action-btn" data-action="unlock" data-key="' + safeKey + '" data-hash="' + safeHash + '">🔓 Unlock</button>')
+      + '</div>';
+  }
+}
+
+async function renderAccountSlots(key, maxAccountsHint) {
+  const body = document.getElementById("modal-accounts-body");
+  // Always fetch fresh maxAccounts from the licenses table so slot increases are reflected immediately
+  const licRes = await sbReq("GET", "/licenses?license_key=eq." + encodeURIComponent(key) + "&select=max_accounts", null);
+  const maxAccounts = (licRes.ok && licRes.data && licRes.data[0] && licRes.data[0].max_accounts)
+    ? licRes.data[0].max_accounts
+    : (maxAccountsHint || 1);
+
+  currentModalMaxAccounts = maxAccounts;
+
+  // Fetch locked account slots for this license (includes identity emails now)
+  const res = await sbReq("GET", "/license_accounts?license_key=eq." + encodeURIComponent(key) + "&select=*&order=added_at.asc", null);
+  const slots = (res.ok && Array.isArray(res.data)) ? res.data : [];
+  const duplicateGroups = duplicateSlotGroups(slots);
+
+  // Adjust modal width based on column count
+  const modalEl = document.querySelector("#modal-accounts .modal");
+  if (maxAccounts > 6) {
+    modalEl.style.width = "780px";
+  } else {
+    modalEl.style.width = "480px";
+  }
+
+  // Construct allSlots array
+  const allSlots = [];
+  for (let i = 0; i < maxAccounts; i++) {
+    if (i < slots.length) {
+      allSlots.push({ empty: false, data: slots[i], index: i });
+    } else {
+      allSlots.push({ empty: true, index: i });
+    }
+  }
+
+  const PAGE_SIZE = 12;
+  const totalPages = Math.max(1, Math.ceil(maxAccounts / PAGE_SIZE));
+  if (currentModalPage > totalPages) {
+    currentModalPage = totalPages;
+  }
+
+  const startIdx = (currentModalPage - 1) * PAGE_SIZE;
+  const pageSlots = allSlots.slice(startIdx, startIdx + PAGE_SIZE);
+
+  const col1 = pageSlots.slice(0, 6);
+  const col2 = pageSlots.slice(6, 12);
+
+  let html = '<div style="margin-bottom:14px;font-size:12px;color:var(--text2);">'
+    + slots.length + ' of ' + maxAccounts + ' account slots used. '
+    + 'Unlock lets the user edit that account\'s credentials. Re-locking happens automatically when they save.</div>';
+  if (duplicateGroups.length > 0) {
+    const duplicateCount = duplicateGroups.reduce((sum, group) => sum + group.length - 1, 0);
+    html += '<div class="notice notice-warn" style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px">'
+      + '<span>Duplicate account identity rows detected: ' + duplicateCount + ' extra row(s). This can make Electron read the wrong lock state.</span>'
+      + '<button class="btn btn-sm btn-green" onclick="repairDuplicateSlots(\'' + key.replace(/'/g, "\\'") + '\')">Repair Duplicates</button>'
+      + '</div>';
+  }
+
+  if (slots.length === 0 && maxAccounts <= 0) {
+    html += '<div style="text-align:center;padding:30px 0;color:var(--text2);font-size:13px">No accounts locked yet.<br>The user will lock slots when they first save credentials.</div>';
+  } else {
+    html += '<div class="slots-container">';
+
+    if (col1.length > 0) {
+      html += '<div class="slots-column">';
+      html += col1.map(item => renderSingleSlotHTML(item, key)).join('');
+      html += '</div>';
+    }
+
+    if (col2.length > 0) {
+      html += '<div class="slots-column">';
+      html += col2.map(item => renderSingleSlotHTML(item, key)).join('');
+      html += '</div>';
+    }
+
+    html += '</div>';
+  }
+
+  // "Re-lock all" danger action
+  if (slots.length > 0) {
+    html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">'
+      + '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">Re-lock all accounts immediately — user won\'t be able to edit or delete any account until you unlock them individually.</div>'
+      + '<button class="btn btn-ghost btn-sm" onclick="clearAllSlots(\'' + key + '\')" style="border-color:rgba(255,77,109,.4);color:var(--red)">🔒 Re-lock All Accounts</button>'
+      + '</div>';
+  }
+
+  body.innerHTML = html;
+
+  // Pagination UI update
+  const pagEl = document.getElementById("modal-accounts-pagination");
+  if (totalPages > 1) {
+    pagEl.style.display = "flex";
+    document.getElementById("lbl-modal-page").textContent = "Page " + currentModalPage + " of " + totalPages;
+    document.getElementById("btn-prev-page").disabled = currentModalPage === 1;
+    document.getElementById("btn-next-page").disabled = currentModalPage === totalPages;
+  } else {
+    pagEl.style.display = "none";
+  }
+
+  // Event delegation for slot unlock/relock buttons
+  body.querySelectorAll('.slot-action-btn[data-action="unlock"], .slot-action-btn[data-action="relock"]').forEach(btn => {
+    if (btn.parentElement && !btn.parentElement.querySelector('.slot-action-btn[data-action="delete"][data-hash="' + btn.dataset.hash + '"]')) {
+      const del = document.createElement('button');
+      del.className = 'btn btn-ghost btn-sm slot-action-btn';
+      del.dataset.action = 'delete';
+      del.dataset.key = btn.dataset.key || '';
+      del.dataset.hash = btn.dataset.hash || '';
+      del.style.borderColor = 'rgba(255,77,109,.45)';
+      del.style.color = 'var(--red)';
+      del.textContent = 'Delete';
+      btn.insertAdjacentElement('afterend', del);
+    }
+  });
+  body.querySelectorAll('.slot-action-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const action = btn.dataset.action;
+      const k      = btn.dataset.key;
+      const h      = btn.dataset.hash;
+      if (action === 'unlock') await unlockSlot(k, h);
+      else if (action === 'relock') await relockSlot(k, h);
+      else if (action === 'delete') await deleteSlot(k, h);
+    });
+  });
+}
+
+async function unlockSlot(key, hash) {
+  const res = await sbReq("PATCH",
+    "/license_accounts?license_key=eq." + encodeURIComponent(key) + "&account_hash=eq." + encodeURIComponent(hash),
+    { unlocked: true });
+  if (res.ok) { showToast("Account slot unlocked ✓", "success"); await renderAccountSlots(key, null); }
+  else showToast("Error: " + JSON.stringify(res.data), "error");
+}
+
+async function relockSlot(key, hash) {
+  const res = await sbReq("PATCH",
+    "/license_accounts?license_key=eq." + encodeURIComponent(key) + "&account_hash=eq." + encodeURIComponent(hash),
+    { unlocked: false });
+  if (res.ok) { showToast("Account slot re-locked ✓", "success"); await renderAccountSlots(key, null); }
+  else showToast("Error: " + JSON.stringify(res.data), "error");
+}
+
+async function deleteSlot(key, hash) {
+  if (!confirm("Delete this account?\n\nThis removes every server slot with the same account identity. On the customer's next Sync/Refresh, the Electron app will preserve the local account and show it locked/needs sync until it can be registered again.")) return;
+
+  const fetchRes = await sbReq("GET", "/license_accounts?license_key=eq." + encodeURIComponent(key) + "&select=*", null);
+  const slots = (fetchRes.ok && Array.isArray(fetchRes.data)) ? fetchRes.data : [];
+  const target = slots.find(slot => slot.account_hash === hash);
+  const targetKey = slotIdentityKey(target);
+  const rowsToDelete = targetKey
+    ? slots.filter(slot => slotIdentityKey(slot) === targetKey)
+    : slots.filter(slot => slot.account_hash === hash);
+
+  for (const slot of rowsToDelete) {
+    const res = await sbReq("DELETE",
+      "/license_accounts?license_key=eq." + encodeURIComponent(key) + "&account_hash=eq." + encodeURIComponent(slot.account_hash),
+      null);
+    if (!res.ok) {
+      showToast("Error: " + JSON.stringify(res.data), "error");
+      return;
+    }
+  }
+
+  showToast("Account deleted. Customer should press Sync/Refresh.", "success");
+  await renderAccountSlots(key, null);
+  loadLicenses();
+}
+
+async function repairDuplicateSlots(key) {
+  if (!confirm("Repair duplicate account slots for this license?\n\nThis keeps one row per account identity, deletes the extra rows, and uses LOCKED if any duplicate row is locked.")) return;
+
+  const fetchRes = await sbReq("GET", "/license_accounts?license_key=eq." + encodeURIComponent(key) + "&select=*&order=added_at.asc", null);
+  const slots = (fetchRes.ok && Array.isArray(fetchRes.data)) ? fetchRes.data : [];
+  const groups = duplicateSlotGroups(slots);
+  if (!groups.length) {
+    showToast("No duplicate slots found", "success");
+    await renderAccountSlots(key, null);
+    return;
+  }
+
+  let removed = 0;
+  for (const group of groups) {
+    const keep = group[0];
+    const keepUnlocked = group.every(slot => slot.unlocked === true);
+    const patchRes = await sbReq("PATCH",
+      "/license_accounts?license_key=eq." + encodeURIComponent(key) + "&account_hash=eq." + encodeURIComponent(keep.account_hash),
+      { unlocked: keepUnlocked });
+    if (!patchRes.ok) {
+      showToast("Error updating kept slot: " + JSON.stringify(patchRes.data), "error");
+      return;
+    }
+
+    for (const slot of group.slice(1)) {
+      const delRes = await sbReq("DELETE",
+        "/license_accounts?license_key=eq." + encodeURIComponent(key) + "&account_hash=eq." + encodeURIComponent(slot.account_hash),
+        null);
+      if (!delRes.ok) {
+        showToast("Error deleting duplicate slot: " + JSON.stringify(delRes.data), "error");
+        return;
+      }
+      removed++;
+    }
+  }
+
+  showToast("Duplicate slots repaired: removed " + removed + " extra row(s)", "success");
+  await renderAccountSlots(key, null);
+  loadLicenses();
+}
+
+async function clearAllSlots(key) {
+  if (!confirm("Re-lock ALL account slots for this license?\n\nThis locks all accounts immediately. The user won't be able to edit or delete accounts until you unlock them individually.")) return;
+  // Fetch existing slots to preserve all login identity columns on re-insert
+  const fetchRes = await sbReq("GET", "/license_accounts?license_key=eq." + encodeURIComponent(key) + "&select=account_hash,easy_email,easy_store,taager_email,taager_phone,taager_login_method,missed_orders_destination,second_taager_email,second_taager_phone,second_taager_login_method,second_taager_country,second_taager_merchant_id", null);
+  const existingSlots = (fetchRes.ok && Array.isArray(fetchRes.data)) ? fetchRes.data.filter(r => r.account_hash) : [];
+
+  // Delete all rows
+  const delRes = await sbReq("DELETE", "/license_accounts?license_key=eq." + encodeURIComponent(key), null);
+  if (!delRes.ok) { showToast("Error: " + JSON.stringify(delRes.data), "error"); return; }
+
+  // Re-insert each slot as locked, preserving email, phone, and login method
+  for (const slot of existingSlots) {
+    await sbReq("POST", "/license_accounts", {
+      license_key:  key,
+      account_hash: slot.account_hash,
+      easy_email:   slot.easy_email  || null,
+      easy_store:   slot.easy_store  || null,
+      taager_email:   slot.taager_email  || null,
+      taager_phone:   slot.taager_phone  || null,
+      taager_login_method: slot.taager_login_method || null,
+      missed_orders_destination: slot.missed_orders_destination || null,
+      second_taager_email: slot.second_taager_email || null,
+      second_taager_phone: slot.second_taager_phone || null,
+      second_taager_login_method: slot.second_taager_login_method || null,
+      second_taager_country: slot.second_taager_country || null,
+      second_taager_merchant_id: slot.second_taager_merchant_id || null,
+      unlocked:     false,
+    });
+  }
+
+  showToast("All accounts re-locked ✓", "success");
+  await renderAccountSlots(key, null);
+  loadLicenses();
+}
+
+async function editMaxAccounts(key, currentMax) {
+  const val = prompt(
+    "Set max account slots for this license (minimum 1)\nCurrent: " + currentMax,
+    currentMax
+  );
+  if (val === null) return;
+  const num = parseInt(val);
+  if (isNaN(num) || num < 1) {
+    alert("Please enter a valid number of slots (minimum 1).");
+    return;
+  }
+  const res = await sbReq("PATCH", "/licenses?license_key=eq." + encodeURIComponent(key), { max_accounts: num });
+  if (res.ok) { showToast("Account slots updated to " + num + " ✓", "success"); loadLicenses(); }
+  else showToast("Error: " + JSON.stringify(res.data), "error");
+}
+
+async function editMaxDevices(key, currentMax) {
+  const val = prompt(
+    "Set max active devices for this license (minimum 1)\nCurrent: " + currentMax,
+    currentMax
+  );
+  if (val === null) return;
+  const num = parseInt(val, 10);
+  if (isNaN(num) || num < 1) {
+    alert("Please enter a valid number of devices (minimum 1).");
+    return;
+  }
+  const res = await sbReq("PATCH", "/licenses?license_key=eq." + encodeURIComponent(key), { max_devices: num });
+  if (res.ok) { showToast("Device limit updated to " + num, "success"); loadLicenses(); }
+  else showToast("Error: " + JSON.stringify(res.data), "error");
+}
+
+async function toggleFeatureFlag(key, column, currentValue) {
+  const newValue = !currentValue;
+  const label = column === 'operations_suite' ? 'Operations Suite' : column === 'analytics_enabled' ? 'Analytics' : column === 'operations_enabled' ? 'Operations' : column === 'team_leader_enabled' ? 'Team Leader' : 'Dashboard';
+  const action = newValue ? 'enable' : 'disable';
+  if (!confirm(action.charAt(0).toUpperCase() + action.slice(1) + ' ' + label + ' for license ' + key + '?')) return;
+  const patch = column === 'operations_suite'
+    ? { analytics_enabled: newValue, operations_enabled: newValue }
+    : column === 'team_leader_enabled' && newValue
+    ? { team_leader_enabled: true, dashboard_enabled: true }
+    : { [column]: newValue };
+  const res = await sbReq("PATCH", "/licenses?license_key=eq." + encodeURIComponent(key), patch);
+  if (res.ok) { showToast(label + ' ' + (newValue ? 'enabled' : 'disabled') + ' ✓', 'success'); loadLicenses(); }
+  else showToast('Error: ' + JSON.stringify(res.data), 'error');
+}
+
+async function quickRepairAppCache(key) {
+  if (!confirm("Repair app cache for " + key + "?\n\nThis fixes corrupted icons/text, stale packaged UI, and stale dashboard calculations on the customer's next app check-in.\n\nAll credentials and logged-in account slots will remain intact. Marketing connections, campaign data, device lock, and license data are not deleted.")) return;
+  const res = await sbReq("PATCH", "/licenses?license_key=eq." + encodeURIComponent(key), {
+    reset_cache: true
+  });
+  if (res.ok) {
+    showToast("App cache repair queued - customer should restart/open the app to finish", "success");
+    loadLicenses();
+  } else {
+    showToast("Error queuing app repair: " + JSON.stringify(res.data), "error");
+  }
+}
+async function quickResetCache(key) {
+  if (!confirm("Reset all data and cache for " + key + "?\n\nThis will wipe all synced dashboard order statistics, campaign history, and ad spend metrics on the customer's machine on their next check-in. It will also clear marketing tables on the server.\n\nAll credentials and logged-in account slots will remain intact. This cannot be undone.")) return;
+  const hash = await sha256Text(key);
+  await sbReq("DELETE", "/marketing_connections?license_key_hash=eq." + encodeURIComponent(hash), null);
+  await sbReq("DELETE", "/marketing_account_mappings?license_key_hash=eq." + encodeURIComponent(hash), null);
+  await sbReq("DELETE", "/saudiipick_marketing_mappings?license_key_hash=eq." + encodeURIComponent(hash), null);
+  await sbReq("DELETE", "/marketing_provider_assignments?license_key_hash=eq." + encodeURIComponent(hash), null);
+  await sbReq("DELETE", "/marketing_daily_metrics?license_key_hash=eq." + encodeURIComponent(hash), null);
+  await sbReq("DELETE", "/marketing_source_accounts?license_key_hash=eq." + encodeURIComponent(hash), null);
+  await sbReq("DELETE", "/marketing_account_limits?license_key_hash=eq." + encodeURIComponent(hash), null);
+
+  const res = await sbReq("PATCH", "/licenses?license_key=eq." + encodeURIComponent(key), {
+    reset_cache: true
+  });
+  if (res.ok) {
+    showToast("Data reset completed ✓ — client metrics and ad caches cleared, accounts preserved", "success");
+    loadLicenses();
+  } else {
+    showToast("Error resetting cache: " + JSON.stringify(res.data), "error");
+  }
+}
+
+async function quickForceFlush(key) {
+  if (!confirm("Force flush for " + key + "?\n\nThis will wipe ALL local data (credentials, sessions, analytics, bot profiles) on the customer's machine on their next app check-in, clear all saved accounts on the server, and reset the device lock.\n\nThis cannot be undone.")) return;
+  const delRes = await sbReq("DELETE", "/license_accounts?license_key=eq." + encodeURIComponent(key), null);
+  if (!delRes.ok) {
+    showToast("Error clearing accounts: " + JSON.stringify(delRes.data), "error");
+    return;
+  }
+  await sbReq("DELETE", "/license_devices?license_key=eq." + encodeURIComponent(key), null);
+  const hash = await sha256Text(key);
+  await sbReq("DELETE", "/marketing_connections?license_key_hash=eq." + encodeURIComponent(hash), null);
+  await sbReq("DELETE", "/marketing_account_mappings?license_key_hash=eq." + encodeURIComponent(hash), null);
+  await sbReq("DELETE", "/saudiipick_marketing_mappings?license_key_hash=eq." + encodeURIComponent(hash), null);
+  await sbReq("DELETE", "/marketing_provider_assignments?license_key_hash=eq." + encodeURIComponent(hash), null);
+  await sbReq("DELETE", "/marketing_daily_metrics?license_key_hash=eq." + encodeURIComponent(hash), null);
+  await sbReq("DELETE", "/marketing_source_accounts?license_key_hash=eq." + encodeURIComponent(hash), null);
+  await sbReq("DELETE", "/marketing_account_limits?license_key_hash=eq." + encodeURIComponent(hash), null);
+  
+  const res = await sbReq("PATCH", "/licenses?license_key=eq." + encodeURIComponent(key), {
+    force_flush: true,
+    machine_uuid: null,
+    device_id: null,
+    activated_at: null,
+    allow_reset: true
+  });
+  if (res.ok) {
+    showToast("Flush completed ✓ — local data wiped, accounts reset, and device lock cleared", "success");
+    loadLicenses();
+  } else {
+    showToast("Error resetting license: " + JSON.stringify(res.data), "error");
+  }
+}
+
+async function quickResetDevice(key) {
+  if (!confirm("Reset device lock?")) return;
+  await sbReq("DELETE", "/license_devices?license_key=eq." + encodeURIComponent(key), null);
+  const res = await sbReq("PATCH", "/licenses?license_key=eq." + encodeURIComponent(key), { device_id: null, machine_uuid: null, activated_at: null, allow_reset: true });
+  if (res.ok) { showToast("Device reset ✓ — customer can now re-activate", "success"); loadLicenses(); }
+  else showToast("Error: " + JSON.stringify(res.data), "error");
+}
+async function quickResetCredentials(key) {
+  if (!confirm("Reset all saved credentials for " + key + "?\n\nThis will delete all account slots. The customer will need to re-enter their accounts.")) return;
+  const res = await sbReq("DELETE", "/license_accounts?license_key=eq." + encodeURIComponent(key), null);
+  if (res.ok) {
+    const hash = await sha256Text(key);
+    await sbReq("DELETE", "/marketing_connections?license_key_hash=eq." + encodeURIComponent(hash), null);
+    await sbReq("DELETE", "/marketing_account_mappings?license_key_hash=eq." + encodeURIComponent(hash), null);
+    await sbReq("DELETE", "/saudiipick_marketing_mappings?license_key_hash=eq." + encodeURIComponent(hash), null);
+    await sbReq("DELETE", "/marketing_provider_assignments?license_key_hash=eq." + encodeURIComponent(hash), null);
+    await sbReq("DELETE", "/marketing_daily_metrics?license_key_hash=eq." + encodeURIComponent(hash), null);
+    await sbReq("DELETE", "/marketing_source_accounts?license_key_hash=eq." + encodeURIComponent(hash), null);
+    await sbReq("DELETE", "/marketing_account_limits?license_key_hash=eq." + encodeURIComponent(hash), null);
+    showToast("Credentials reset - all account slots cleared", "success");
+    loadLicenses();
+  }
+  else showToast("Error: " + JSON.stringify(res.data), "error");
+}
+async function quickRevoke(key) {
+  if (!confirm("Revoke this license?")) return;
+  const res = await sbReq("PATCH", "/licenses?license_key=eq." + encodeURIComponent(key), { revoked: true });
+  if (res.ok) { showToast("Revoked", "success"); loadLicenses(); }
+  else showToast("Error: " + JSON.stringify(res.data), "error");
+}
+async function quickUnrevoke(key) {
+  const res = await sbReq("PATCH", "/licenses?license_key=eq." + encodeURIComponent(key), { revoked: false });
+  if (res.ok) { showToast("Restored ✓", "success"); loadLicenses(); }
+  else showToast("Error: " + JSON.stringify(res.data), "error");
+}
+async function quickDelete(key) {
+  if (!confirm("Permanently delete " + key + "?")) return;
+  const res = await sbReq("DELETE", "/licenses?license_key=eq." + encodeURIComponent(key), null);
+  if (res.ok) { showToast("Deleted ✓", "success"); loadLicenses(); loadDashboard(); }
+  else showToast("Error: " + JSON.stringify(res.data), "error");
+}
+
+// KEYGEN
+function randomSegment(len) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return s;
+}
+function generateRandomKey() {
+  return "TAAGER-" + randomSegment(4) + "-" + randomSegment(4) + "-" + randomSegment(4) + "-" + randomSegment(4);
+}
+let lastGeneratedKey = "";
+async function generateKey() {
+  const name           = document.getElementById("kg-name").value.trim();
+  const expiry         = document.getElementById("kg-expiry").value.trim();
+  const notes          = document.getElementById("kg-notes").value.trim();
+  const maxAcc         = parseInt(document.getElementById("kg-max-accounts").value) || 1;
+  const maxDevices     = parseInt(document.getElementById("kg-max-devices").value) || 1;
+  const analyticsOn    = document.getElementById("kg-analytics").value !== "false";
+  const operationsOn   = analyticsOn;
+  const dashboardOn    = document.getElementById("kg-dashboard").value === "true";
+  const teamLeaderOn   = document.getElementById("kg-team-leader").value === "true";
+  if (!name) { showNotice("keygen-notice", "error", "Please enter the customer name."); return; }
+  if (!expiry) { showNotice("keygen-notice", "error", "Please select an expiry date."); return; }
+  const key = generateRandomKey();
+  lastGeneratedKey = key;
+  const keyBox = document.getElementById("key-output-box");
+  keyBox.textContent = key; keyBox.style.display = "block";
+  document.getElementById("btn-copy-key").style.display = "inline-flex";
+  if (!SUPABASE_URL) { showNotice("keygen-notice", "warn", "⚠️ Not connected — key generated locally only."); return; }
+  const res = await sbReq("POST", "/licenses", {
+    license_key: key, customer_name: name || null, notes: notes || null,
+    expires_at: expiry, device_id: null, machine_uuid: null, activated_at: null,
+    account_locked: false, account_hash: null, revoked: false, max_accounts: maxAcc, max_devices: maxDevices,
+    force_flush: false,
+    analytics_enabled: analyticsOn, operations_enabled: operationsOn, dashboard_enabled: dashboardOn || teamLeaderOn,
+    team_leader_enabled: teamLeaderOn,
+  });
+  if (res.ok) {
+    showNotice("keygen-notice", "success", "Saved. Expires: " + expiry + ". Max accounts: " + maxAcc + ". Max devices: " + maxDevices + ". Team Leader: " + (teamLeaderOn ? "On" : "Off") + ".");
+    showToast("Key generated & saved ✓", "success");
+  } else {
+    const msg = res.data?.message || JSON.stringify(res.data) || "";
+    showNotice("keygen-notice", msg.includes("duplicate") ? "warn" : "error",
+      msg.includes("duplicate") ? "⚠️ Duplicate key — try again." : "Save failed: " + msg);
+  }
+}
+function copyKey() { navigator.clipboard.writeText(lastGeneratedKey).then(() => showToast("Copied ✓", "success")); }
+
+// RESET DEVICE
+async function resetDevice() {
+  const key = document.getElementById("dev-key").value.trim().toUpperCase();
+  if (!key) { showNotice("device-notice", "error", "Enter a license key."); return; }
+  if (!SUPABASE_URL) { showNotice("device-notice", "error", "Not connected."); return; }
+  if (!confirm("Reset the device lock?")) return;
+  const res = await sbReq("PATCH", "/licenses?license_key=eq." + encodeURIComponent(key), { device_id: null, machine_uuid: null, activated_at: null, allow_reset: true });
+  if (res.ok) { showNotice("device-notice", "success", "✅ Device lock reset. Customer can now re-activate on their new device."); showToast("Device reset ✓", "success"); }
+  else showNotice("device-notice", "error", "Error: " + JSON.stringify(res.data));
+}
+
+async function resetCredentials() {
+  const key = document.getElementById("cred-key").value.trim().toUpperCase();
+  if (!key) { showNotice("credentials-notice", "error", "Enter a license key."); return; }
+  if (!SUPABASE_URL) { showNotice("credentials-notice", "error", "Not connected."); return; }
+  if (!confirm("Reset all saved credentials for " + key + "?\n\nThis deletes all account slots. The customer will need to re-enter their accounts.")) return;
+  const res = await sbReq("DELETE", "/license_accounts?license_key=eq." + encodeURIComponent(key), null);
+  if (res.ok) {
+    const hash = await sha256Text(key);
+    await sbReq("DELETE", "/marketing_connections?license_key_hash=eq." + encodeURIComponent(hash), null);
+    await sbReq("DELETE", "/marketing_account_mappings?license_key_hash=eq." + encodeURIComponent(hash), null);
+    await sbReq("DELETE", "/saudiipick_marketing_mappings?license_key_hash=eq." + encodeURIComponent(hash), null);
+    await sbReq("DELETE", "/marketing_provider_assignments?license_key_hash=eq." + encodeURIComponent(hash), null);
+    await sbReq("DELETE", "/marketing_daily_metrics?license_key_hash=eq." + encodeURIComponent(hash), null);
+    await sbReq("DELETE", "/marketing_source_accounts?license_key_hash=eq." + encodeURIComponent(hash), null);
+    await sbReq("DELETE", "/marketing_account_limits?license_key_hash=eq." + encodeURIComponent(hash), null);
+    showNotice("credentials-notice", "success", "All account slots, marketing connections, metrics, and accounts cleared. Customer can now re-enter credentials.");
+    showToast("Credentials reset", "success");
+  }
+  else showNotice("credentials-notice", "error", "Error: " + JSON.stringify(res.data));
+}
+
+// REVOKE
+async function revokeLicense() {
+  const key = document.getElementById("rev-key").value.trim().toUpperCase();
+  if (!key) { showNotice("revoke-notice", "error", "Enter a license key."); return; }
+  if (!SUPABASE_URL) { showNotice("revoke-notice", "error", "Not connected."); return; }
+  if (!confirm("Revoke this license?")) return;
+  const res = await sbReq("PATCH", "/licenses?license_key=eq." + encodeURIComponent(key), { revoked: true });
+  if (res.ok) showNotice("revoke-notice", "success", "✅ Revoked.");
+  else showNotice("revoke-notice", "error", "Error: " + JSON.stringify(res.data));
+}
+async function unrevokeLicense() {
+  const key = document.getElementById("rev-key").value.trim().toUpperCase();
+  if (!key) { showNotice("revoke-notice", "error", "Enter a license key."); return; }
+  if (!SUPABASE_URL) { showNotice("revoke-notice", "error", "Not connected."); return; }
+  const res = await sbReq("PATCH", "/licenses?license_key=eq." + encodeURIComponent(key), { revoked: false });
+  if (res.ok) showNotice("revoke-notice", "success", "✅ Restored.");
+  else showNotice("revoke-notice", "error", "Error: " + JSON.stringify(res.data));
+}
+
+// HELPERS
+function showNotice(id, type, msg) {
+  const el = document.getElementById(id);
+  const map = { success:"notice-success", error:"notice-error", warn:"notice-warn", info:"notice-info" };
+  el.className = "notice " + (map[type] || "notice-info");
+  el.textContent = msg; el.style.display = "flex";
+}
+function showToast(msg, type) {
+  const t = document.createElement("div");
+  t.className = "toast " + (type || "");
+  t.innerHTML = (type === "success" ? "✅ " : type === "error" ? "❌ " : "ℹ️ ") + msg;
+  document.getElementById("toast-container").appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+// Close modal on overlay click
+document.getElementById("modal-accounts").addEventListener("click", function(e) {
+  if (e.target === this) closeAccountModal();
+});
+document.getElementById("modal-expiry").addEventListener("click", function(e) {
+  if (e.target === this) closeExpiryModal();
+});
+</script>
+</body>
+</html>

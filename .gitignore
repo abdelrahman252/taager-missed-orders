@@ -1,5 +1,10 @@
 # Folders we don't want on GitHub
-admin-panel/
+admin-panel/*
+!admin-panel/index.html
+!admin-panel/server.js
+!admin-panel/SETUP_GUIDE.md
+!admin-panel/SUPABASE_SETUP.sql
+admin-panel/admin.env
 countries/
 supabase/
 !supabase/
