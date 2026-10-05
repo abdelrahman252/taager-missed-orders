@@ -645,6 +645,10 @@ assert(runnerSource.includes("Routing config:"), "runner logs must expose affili
 assert(runnerSource.includes("runSecondTaagerCartUpload"), "runner must support a second Taager cart destination");
 assert(runnerSource.includes('mode: "second-taager-cart-upload"'), "runner must launch a Taager-only worker for second cart uploads");
 assert(runnerSource.includes("const defaultMaxCycles = Math.max(12, list.length)"), "verified cart upload should scale reconciliation cycles to the pending order count by default");
+const cartUploadSource = runnerSource.slice(runnerSource.indexOf("async function phase5_uploadToTaager(page"), runnerSource.indexOf("function cartVerificationKeys"));
+assert(cartUploadSource.includes('ensureRunnerAutomationPageAlive(page, "before-cart-upload", "/cart")'), "cart upload must refresh a stale page after verification exports recover Chrome");
+const verifiedCartSource = runnerSource.slice(runnerSource.indexOf("async function phase5_uploadToTaagerVerified"), runnerSource.indexOf("async function runSecondTaagerCartUpload"));
+assert(verifiedCartSource.includes("page = activePage || page;"), "verified cart workflow must adopt the page replaced by export recovery");
 assert(runnerSource.includes("cartVerificationNoProgressCycles"), "verified cart upload should stop on repeated no-progress cycles instead of pretending completion");
 assert(runnerSource.includes("cartVerificationBatchSize"), "verified cart upload should submit controlled chunks instead of the whole pending list");
 assert(runnerSource.includes("noProgressCycles >= maxNoProgressCycles"), "verified cart upload should have a no-progress brake");

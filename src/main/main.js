@@ -33,6 +33,7 @@ const { updateDeliveryJourneys } = require("./dashboard-delivery-journey");
 const { findNewDuplicateConflict } = require("./account-duplicates");
 const { fetchActiveAdminNotification } = require("./admin-notifications");
 const { evaluateCachedLicense, isInsideWarningWindow } = require("./license-expiry-policy");
+const { classifyRunnerAlert } = require("./runner-alert-classification");
 const {
   normalizeSettings: normalizeProductAlertSettings,
   publicSettings: publicProductAlertSettings,
@@ -1799,6 +1800,16 @@ function notifyAdminSuccessAlert(details = {}) {
   }).catch((error) => {
     log.warn("[AdminAlert] Success alert failed:", error && error.message ? error.message : error);
   });
+}
+
+function notifyRunnerCompletionAlert(data, details) {
+  const classification = classifyRunnerAlert(data);
+  const alertDetails = { ...details, operation: classification.operation || details.operation || "completed" };
+  if (classification.kind === "error") {
+    notifyAdminErrorAlert({ ...alertDetails, error: classification.error });
+    return;
+  }
+  notifyAdminSuccessAlert(alertDetails);
 }
 
 function getStoredAccountById(accountId) {
@@ -8035,7 +8046,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
             data.failedOrders.failedDir  = dir;
             data.failedOrders.failedPath = filePath;
           }
-          if (!resolved) notifyAdminSuccessAlert({
+          if (!resolved) notifyRunnerCompletionAlert(data, {
             flow: "runner",
             operation: "completed",
             account: acc,
@@ -8293,7 +8304,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
             data.failedOrders.failedDir  = dir;
             data.failedOrders.failedPath = filePath;
           }
-          if (!resolved) notifyAdminSuccessAlert({
+          if (!resolved) notifyRunnerCompletionAlert(data, {
             flow: "runner",
             operation: "completed",
             account: acc,

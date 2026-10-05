@@ -14,6 +14,7 @@ const {
 const { setBrowserProcessContextCloseReason } = require("./browser-process-diagnostics");
 const { formatPhone, normalizePhone } = require("./phone");
 const { buildGroupedCartOrders, cartOrderItemKeys, orderLineItems } = require("./cart-order-groups");
+const { selectUsableAutomationPage, canRetryCartUploadAttempt, resolveCartUploadRecovery } = require("./cart-upload-safety");
 const { sanitizeCustomerFields } = require("./customer-quality");
 const { resolveSafeTaagerExportRange } = require("./taager-date-range");
 const {
@@ -3690,7 +3691,7 @@ function createRunnerTaagerOrdersExportFlow() {
 }
 
 async function ensureRunnerAutomationPageAlive(page, label, targetPath = "/orders") {
-  const candidate = !isClosedAutomationPage(activePage) ? activePage : page;
+  const candidate = selectUsableAutomationPage(activePage, page, isClosedAutomationPage);
   if (!isClosedAutomationPage(candidate)) {
     activePage = candidate;
     return candidate;
@@ -4314,7 +4315,7 @@ async function gotoTaagerCartForUpload(page) {
   return page;
 }
 
-async function uploadToTaagerCartAttempt(page, orders, tempPath, attempt, maxAttempts) {
+async function uploadToTaagerCartAttempt(page, orders, tempPath, attempt, maxAttempts, attemptState = {}) {
   log(`Taager cart upload attempt ${attempt}/${maxAttempts}`);
   log("Taager cart: navigating to /cart");
   emitStage("taager.cart.navigate", "started", `Opening Taager cart (attempt ${attempt}/${maxAttempts})`, { attempt, maxAttempts });
@@ -4333,6 +4334,9 @@ async function uploadToTaagerCartAttempt(page, orders, tempPath, attempt, maxAtt
   await waitForBulkCartReady(page);
   emitStage("taager.cart.bulk-tab", "ok", "Bulk upload controls are ready", { attempt, maxAttempts });
   emitStage("taager.cart.file", "started", "Uploading Taager bulk file", { attempt, maxAttempts });
+  // From file selection onward the app cannot know whether Taager accepted or
+  // queued the batch if the page dies; force export reconciliation first.
+  attemptState.submissionMayHaveOccurred = true;
   await uploadTaagerBulkFile(page, tempPath);
   emitStage("taager.cart.file", "ok", "Taager bulk file selected", { attempt, maxAttempts });
   log("Taager cart file selected - waiting for confirm button");
@@ -4458,6 +4462,11 @@ async function uploadToTaagerCartAttempt(page, orders, tempPath, attempt, maxAtt
 
 async function phase5_uploadToTaager(page, orders, outputOptions = {}) {
   const uploadOrders = Array.isArray(orders) ? orders : [];
+  // The orders export used for verification can recover/relaunch Chrome and
+  // replace activePage. Never carry the pre-export page into cart navigation.
+  if (uploadOrders.length > 0) {
+    page = await ensureRunnerAutomationPageAlive(page, "before-cart-upload", "/cart");
+  }
   log("\n========================================");
   log("  PHASE 5 - Upload to Taager Cart");
   log(`  Total: ${uploadOrders.length} orders`);
@@ -4473,9 +4482,20 @@ async function phase5_uploadToTaager(page, orders, outputOptions = {}) {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         emitStage("taager.cart.attempt", "started", `Attempt ${attempt}/${maxAttempts}`, { attempt, maxAttempts });
-        return await uploadToTaagerCartAttempt(page, uploadOrders, tempPath, attempt, maxAttempts);
+        const attemptState = { submissionMayHaveOccurred: false };
+        try {
+          return await uploadToTaagerCartAttempt(page, uploadOrders, tempPath, attempt, maxAttempts, attemptState);
+        } catch (error) {
+          const uploadError = error instanceof Error ? error : new Error(String(error || "Unknown Taager upload error"));
+          if (attemptState.submissionMayHaveOccurred) uploadError.cartUploadSubmissionMayHaveOccurred = true;
+          throw uploadError;
+        }
       } catch (error) {
         lastError = error;
+        if (!canRetryCartUploadAttempt({ submissionMayHaveOccurred: error.cartUploadSubmissionMayHaveOccurred === true })) {
+          emitStage("taager.cart.attempt", "warning", "Upload outcome is uncertain; skipping automatic resubmission until Taager export verification", { attempt, maxAttempts, submissionMayHaveOccurred: true });
+          throw error;
+        }
         emitStage("taager.cart.attempt", attempt >= maxAttempts ? "failed" : "retry", error.message || String(error), { attempt, maxAttempts });
         page = await recoverTaagerForRetry(page, "cart-upload", "/cart", error, attempt, maxAttempts);
         if (attempt >= maxAttempts) break;
@@ -5139,7 +5159,20 @@ async function phase5_uploadToTaagerVerified(page, orders, outputOptions = {}, v
   const exportToDate = verifyOptions.exportToDate;
   if (!(exportFromDate instanceof Date) || !(exportToDate instanceof Date)) {
     log("Taager cart verification skipped: export date range is unavailable; falling back to upload result only.");
-    return phase5_uploadToTaager(page, list, outputOptions);
+    try {
+      return await phase5_uploadToTaager(page, list, outputOptions);
+    } catch (error) {
+      if (error.cartUploadSubmissionMayHaveOccurred !== true) throw error;
+      const failedOrders = list.map((order) => ({
+        ...order,
+        error: "Upload outcome is uncertain and no Taager export range is available to verify it.",
+        verificationUnconfirmed: true,
+        manualReview: true,
+        uncertain: true,
+        hardFailed: false,
+      }));
+      return { success: 0, failed: failedOrders.length, successfulOrders: [], failedOrders, failedSource: "uncertain-upload", verification: { cycles: [], manualReview: true } };
+    }
   }
 
   const defaultMaxCycles = Math.max(12, list.length);
@@ -5156,6 +5189,7 @@ async function phase5_uploadToTaagerVerified(page, orders, outputOptions = {}, v
   if (!baselineCounts) {
     const baseline = await exportTaagerCartVerificationSnapshot(page, exportFromDate, exportToDate, 0, label + " baseline");
     baselineCounts = baseline.counts;
+    page = activePage || page;
   }
 
   const confirmedAll = [];
@@ -5183,7 +5217,64 @@ async function phase5_uploadToTaagerVerified(page, orders, outputOptions = {}, v
       failed: failedAll.length,
     });
 
-    const uploadResult = await phase5_uploadToTaager(page, batch, outputOptions);
+    let uploadResult;
+    try {
+      uploadResult = await phase5_uploadToTaager(page, batch, outputOptions);
+    } catch (error) {
+      if (error.cartUploadSubmissionMayHaveOccurred !== true) throw error;
+      log(`Taager cart cycle ${cycle}: upload outcome is uncertain; performing verification-only exports (no resubmission).`);
+      const uncertainSettleValue = Number(config.cartVerificationSettleMs ?? verifyOptions.settleMs ?? 10000);
+      const uncertainSettleMs = Math.max(0, Number.isFinite(uncertainSettleValue) ? uncertainSettleValue : 10000);
+      let uncertainPending = batch.slice();
+      let uncertainConfirmed = 0;
+      let verificationSucceeded = false;
+      let verificationError = null;
+      let verificationChecks = 0;
+      for (let check = 1; check <= maxNoProgressCycles && uncertainPending.length > 0; check++) {
+        verificationChecks++;
+        try {
+          page = await ensureRunnerAutomationPageAlive(page, "cart-upload-uncertain-verification", "/cart");
+          if (uncertainSettleMs > 0) {
+            log(`Taager cart cycle ${cycle}: waiting ${Math.round(uncertainSettleMs / 1000)}s before verification-only export ${check}/${maxNoProgressCycles}.`);
+            await page.waitForTimeout(uncertainSettleMs);
+          }
+          const recoverySnapshot = await exportTaagerCartVerificationSnapshot(page, exportFromDate, exportToDate, cycle, `${label} uncertain-upload-${check}`);
+          page = activePage || page;
+          verificationSucceeded = true;
+          const delta = splitOrdersByVerificationDelta(uncertainPending, baselineCounts, recoverySnapshot.counts);
+          const recovery = resolveCartUploadRecovery(uncertainPending, { submissionMayHaveOccurred: true, verificationSucceeded: true, ...delta });
+          confirmedAll.push(...recovery.confirmed.map((order) => ({ ...order, verificationCycle: cycle, verifiedInTaager: true })));
+          uncertainConfirmed += recovery.confirmed.length;
+          uncertainPending = recovery.manualReview;
+          baselineCounts = recoverySnapshot.counts;
+        } catch (verifyError) {
+          verificationError = verifyError;
+          log(`Taager cart cycle ${cycle}: verification-only export ${check} failed: ${verifyError.message}`);
+          break;
+        }
+      }
+      const manualRows = resolveCartUploadRecovery(uncertainPending, {
+        submissionMayHaveOccurred: true,
+        verificationSucceeded,
+        unconfirmed: uncertainPending,
+      }).manualReview.map((order) => ({
+        ...order,
+        error: verificationError
+          ? `Upload outcome could not be verified: ${verificationError.message}`
+          : "Upload outcome remains absent from Taager export after bounded verification; manual review required.",
+        verificationUnconfirmed: true,
+        manualReview: true,
+        uncertain: true,
+        hardFailed: false,
+      }));
+      failedAll.push(...manualRows);
+      pending = deferred;
+      cycles.push({ cycle, submitted: batch.length, deferred: deferred.length, knownFailed: 0, confirmed: uncertainConfirmed, unconfirmed: manualRows.length, pendingAfter: pending.length, outcomeUncertain: true, verificationChecks });
+      emitStage("taager.cart.verify.cycle", pending.length ? "retry" : (manualRows.length ? "warning" : "ok"), `Uncertain upload checked without resubmission: ${uncertainConfirmed} confirmed, ${manualRows.length} require manual review; ${pending.length} deferred rows remain`, { cycle, confirmed: uncertainConfirmed, manualReview: manualRows.length, pendingAfter: pending.length });
+      if (pending.length === 0) break;
+      continue;
+    }
+    page = activePage || page;
     const knownFailures = (uploadResult.failedOrders || []).map((order) => ({
       ...order,
       error: order.error || "Taager cart upload failed",
@@ -5192,7 +5283,8 @@ async function phase5_uploadToTaagerVerified(page, orders, outputOptions = {}, v
     }));
     failedAll.push(...knownFailures);
     const candidates = splitSuccessfulOrders(batch, knownFailures);
-    const settleMs = Math.max(0, Number(config.cartVerificationSettleMs || verifyOptions.settleMs || 10000) || 0);
+    const settleValue = Number(config.cartVerificationSettleMs ?? verifyOptions.settleMs ?? 10000);
+    const settleMs = Math.max(0, Number.isFinite(settleValue) ? settleValue : 10000);
     if (settleMs > 0 && candidates.length > 0) {
       log("Taager cart verification " + label + ": waiting " + Math.round(settleMs / 1000) + "s before export so new orders can appear in Taager.");
       emitStage("taager.cart.verify.settle", "started", "Waiting " + Math.round(settleMs / 1000) + "s before verification export", {
@@ -5204,6 +5296,7 @@ async function phase5_uploadToTaagerVerified(page, orders, outputOptions = {}, v
     }
 
     const snapshot = await exportTaagerCartVerificationSnapshot(page, exportFromDate, exportToDate, cycle, label);
+    page = activePage || page;
     const { confirmed, unconfirmed } = splitOrdersByVerificationDelta(candidates, baselineCounts, snapshot.counts);
     confirmedAll.push(...confirmed.map((order) => ({ ...order, verificationCycle: cycle, verifiedInTaager: true })));
 
@@ -5266,6 +5359,8 @@ async function phase5_uploadToTaagerVerified(page, orders, outputOptions = {}, v
       error: "Not confirmed in Taager export after " + maxCycles + " verified upload cycle" + (maxCycles === 1 ? "" : "s"),
       verificationUnconfirmed: true,
       hardFailed: false,
+      manualReview: true,
+      uncertain: true,
     })));
     log("Taager cart verification stopped: " + pending.length + " orders still not confirmed after " + maxCycles + " cycles.");
   }
