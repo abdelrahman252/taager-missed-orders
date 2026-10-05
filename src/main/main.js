@@ -5815,12 +5815,46 @@ function marketingStableAccountKey(accountId) {
   return String(stable || clean).trim().toLowerCase();
 }
 
+const saudiIPickQuotaSlotAliases = new Map();
+
+function saudiIPickQuotaAliasKey(accountId) {
+  const account = getStoredAccountById(accountId);
+  return `${licenseStore.get("licenseKey", "")}|${account ? accountHash(account) : marketingStableAccountKey(accountId)}`;
+}
+
 function saudiIPickQuotaAccountKey(accountId) {
+  const resolved = saudiIPickQuotaSlotAliases.get(saudiIPickQuotaAliasKey(accountId));
+  if (resolved) return resolved;
   const account = getStoredAccountById(accountId);
   if (account) return accountHash(account);
   const stable = marketingStableAccountKey(accountId);
   const merchant = stable.match(/^(?:taager:)?([a-z]{2}:[a-z0-9_-]+)$/i);
   return merchant ? `taager:${merchant[1].toLowerCase()}` : stable;
+}
+
+async function resolveSaudiIPickQuotaSlot(accountId, licenseKey) {
+  let account = getStoredAccountById(accountId);
+  if (!account) return { ok: false, reason: "dashboard_account_not_licensed" };
+  if (accountId === "__single__" || accountId === "legacy") {
+    account = { ...account };
+    for (const field of ["easyStore", "cmsProvider", "lightfunnelsEmail", "lightfunnelsAccountName", "taagerEmail", "taagerPhone", "taagerLoginMethod", "taagerCountry", "taagerAffiliateCode"]) {
+      account[field] = store.get(field, "");
+    }
+  }
+  const rows = await supabaseRpc("taager_get_license_accounts", { p_license_key: licenseKey });
+  const method = taagerLoginMethodOf(account);
+  const country = account.taagerCountry || "sa";
+  return require("./marketing-license-slot").resolveMarketingLicenseSlot(rows, {
+    computedHash: accountHash(account),
+    cachedHash: account.licenseIdentityKey === accountIdentityKey(account) ? account.licenseAccountHash : "",
+    cmsEmail: cmsEmailOf(account),
+    cmsStore: licenseEasyStoreOf(account),
+    merchantIdentity: taagerMerchantIdentityOf(account),
+    loginMethod: method,
+    loginIdentity: method === "phone" ? "" : String(account.taagerEmail || "").trim().toLowerCase(),
+    loginPhone: method === "phone" ? normalizePhone(account.taagerPhone || "", country) : "",
+    normalizePhone: (value) => normalizePhone(value, country),
+  });
 }
 
 function marketingAccountLookupKeys(accountId) {
@@ -6760,6 +6794,7 @@ function mergeNativeMarketingMappings(previous, dashboardAccountId, dashboardAcc
 async function saudiIPickMarketingUsage(accountId, platform, sourceAccounts = null) {
   const licenseKey = licenseStore.get("licenseKey", "");
   const accountKey = saudiIPickQuotaAccountKey(accountId);
+  const aliasKey = saudiIPickQuotaAliasKey(accountId);
   if (!licenseKey || !accountKey) return { ok: false, reason: "license_or_account_missing" };
   const payload = {
     p_license_key: licenseKey,
@@ -6776,7 +6811,21 @@ async function saudiIPickMarketingUsage(accountId, platform, sourceAccounts = nu
     }));
   }
   try {
-    return await supabaseRpc("taager_saudiipick_marketing_state", payload);
+    let result = await supabaseRpc("taager_saudiipick_marketing_state", payload);
+    if (result && result.reason === "dashboard_account_not_licensed") {
+      if (aliasKey !== saudiIPickQuotaAliasKey(accountId)) return { ok: false, reason: "account_selection_changed" };
+      const slot = await resolveSaudiIPickQuotaSlot(accountId, licenseKey);
+      if (!slot.ok) return slot;
+      if (aliasKey !== saudiIPickQuotaAliasKey(accountId)) return { ok: false, reason: "account_selection_changed" };
+      // Use the existing server slot so its admin limits and assignments stay
+      // attached to the account. Do not create a slot or bypass the RPC check.
+      result = await supabaseRpc("taager_saudiipick_marketing_state", { ...payload, p_dashboard_account_id: slot.accountHash });
+      if (result && result.ok && aliasKey === saudiIPickQuotaAliasKey(accountId)) {
+        saudiIPickQuotaSlotAliases.set(aliasKey, slot.accountHash);
+        log.info("[SaudiIPick][Marketing] existing license slot resolved", { platform, accountId, slot: String(slot.accountHash).slice(0, 12) });
+      }
+    }
+    return result;
   } catch (error) {
     log.error("[SaudiIPick][Marketing] usage request failed", {
       platform,

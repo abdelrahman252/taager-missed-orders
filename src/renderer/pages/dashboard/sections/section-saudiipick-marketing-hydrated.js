@@ -182,6 +182,12 @@
     var sourcePageSize = 5;
     var message = '';
     var error = '';
+    function connectionErrorMessage(value) {
+      if (value === 'dashboard_account_not_licensed') return tx('Could not match this Taager account to its license. Contact your administrator.', 'تعذر مطابقة حساب Taager مع ترخيصه. تواصل مع المسؤول.');
+      if (value === 'dashboard_account_ambiguous') return tx('Multiple licensed accounts match. Administrator review is required.', 'يوجد أكثر من حساب مرخص مطابق. يلزم مراجعة المسؤول.');
+      if (value === 'account_selection_changed') return tx('The account changed while connecting. Refresh the connection status.', 'تغير الحساب أثناء الربط. حدّث حالة الاتصال.');
+      return value;
+    }
     var loading = false;
     var diagnostics = {
       step: 'idle',
@@ -584,7 +590,7 @@
       var canSync = selectedAccountId && !allMode && !loading && (selectedSources.length > 0 || statusSources.length > 0);
 
       return '<article class="marketing-platform-card" data-marketing-platform="' + esc(platform.id) + '">' +
-        (error ? '<div class="marketing-message is-error">' + esc(error) + '</div>' : '') +
+        (error ? '<div class="marketing-message is-error">' + esc(connectionErrorMessage(error)) + '</div>' : '') +
         (loading ? '<div class="marketing-loading"><span class="dash-preloader-spinner"></span><span>' + esc(tx('Working...', 'Working...')) + '</span></div>' : '') +
         '<div class="marketing-platform-head">' +
           '<div class="marketing-platform-brand"><span class="marketing-platform-mark ' + esc(platform.markClass) + '">' + esc(platform.mark) + '</span><div><strong>' + esc(platform.label) + '</strong><small>' + esc(tx('Available now', 'Available now')) + '</small></div></div>' +
