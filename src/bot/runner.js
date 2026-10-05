@@ -2,6 +2,7 @@
 
 const { chromium } = require("playwright-core");
 const { pinnedAutomationBrowserPath } = require("./automation-browser-path");
+const crypto = require("crypto");
 const fs   = require("fs");
 const os   = require("os");
 const path = require("path");
@@ -10,6 +11,7 @@ const {
   installUnexpectedBlankPageGuard,
   launchPersistentChromeContext,
 } = require("./chrome-launch");
+const { setBrowserProcessContextCloseReason } = require("./browser-process-diagnostics");
 const { formatPhone, normalizePhone } = require("./phone");
 const { buildGroupedCartOrders, cartOrderItemKeys, orderLineItems } = require("./cart-order-groups");
 const { sanitizeCustomerFields } = require("./customer-quality");
@@ -67,6 +69,8 @@ const {
 } = require("./taager-orders-page-ui");
 
 const config = JSON.parse(process.env.BOT_CONFIG || "{}");
+const RUN_ID = String(config.runnerRunId || crypto.randomUUID()).slice(0, 40);
+const PROFILE_ID = String(config.browserProfileId || crypto.createHash("sha256").update(path.resolve(config.profilePath || "").toLowerCase()).digest("hex").slice(0, 12)).slice(0, 24);
 const log = (msg) => process.stdout.write(msg + "\n");
 const emitStage = (stage, status, message, extra = {}) => {
   process.send && process.send({ type: "stage", flow: "runner", stage, status, message, ...extra });
@@ -106,6 +110,13 @@ let stopRequested = false;
 let taagerIdentityVerified = false;
 let activeSecondTaagerCartChild = null;
 const runnerContextCloseReasons = new WeakMap();
+const runnerContextProfileIds = new WeakMap();
+let runnerBrowserLaunchIndex = 0;
+
+function browserProfileIdentityFor(profilePath) {
+  const resolved = path.resolve(String(profilePath || ""));
+  return crypto.createHash("sha256").update(process.platform === "win32" ? resolved.toLowerCase() : resolved).digest("hex").slice(0, 12);
+}
 
 function runnerBrowserPath() {
   return pinnedAutomationBrowserPath() || config.chromePath || findChrome();
@@ -120,35 +131,38 @@ function safeAutomationLocation(page) {
   }
 }
 
-function installRunnerBrowserLifecycleDiagnostics(context, label = "runner") {
+function installRunnerBrowserLifecycleDiagnostics(context, label = "runner", profileId = PROFILE_ID) {
+  runnerContextProfileIds.set(context, profileId);
+  const contextProfileId = profileId;
   const browser = context && typeof context.browser === "function" ? context.browser() : null;
   const observePage = (page) => {
     page.on("close", () => {
-      log(`[BrowserLifecycle] page closed label=${label} active=${page === activePage} url=${safeAutomationLocation(page)} requestedContextClose=${runnerContextCloseReasons.get(context) || "none"}`);
+      log(`[BrowserLifecycle] run=${RUN_ID} profile=${contextProfileId} page closed label=${label} active=${page === activePage} url=${safeAutomationLocation(page)} requestedContextClose=${runnerContextCloseReasons.get(context) || "none"}`);
     });
     page.on("crash", () => {
-      log(`[BrowserLifecycle] page crashed label=${label} active=${page === activePage} url=${safeAutomationLocation(page)}`);
+      log(`[BrowserLifecycle] run=${RUN_ID} profile=${contextProfileId} page crashed label=${label} active=${page === activePage} url=${safeAutomationLocation(page)}`);
     });
   };
 
   for (const page of context.pages()) observePage(page);
   context.on("page", observePage);
   context.on("close", () => {
-    log(`[BrowserLifecycle] context closed label=${label} requestedBy=${runnerContextCloseReasons.get(context) || "outside-runner-or-browser"}`);
+    log(`[BrowserLifecycle] run=${RUN_ID} profile=${contextProfileId} context closed label=${label} requestedBy=${runnerContextCloseReasons.get(context) || "outside-runner-or-browser"}`);
   });
   if (browser && typeof browser.on === "function") {
     browser.on("disconnected", () => {
-      log(`[BrowserLifecycle] browser disconnected label=${label} requestedContextClose=${runnerContextCloseReasons.get(context) || "none"}`);
+      log(`[BrowserLifecycle] run=${RUN_ID} profile=${contextProfileId} browser disconnected label=${label} requestedContextClose=${runnerContextCloseReasons.get(context) || "none"}`);
     });
   }
 }
 
 async function closeRunnerContext(context, reason) {
   if (!context) return;
+  setBrowserProcessContextCloseReason(context, reason || "unspecified-runner-close");
   runnerContextCloseReasons.set(context, reason || "unspecified-runner-close");
-  log(`[BrowserLifecycle] runner requested context close reason=${reason || "unspecified"}`);
+  log(`[BrowserLifecycle] run=${RUN_ID} profile=${runnerContextProfileIds.get(context) || PROFILE_ID} runner requested context close reason=${reason || "unspecified"}`);
   await context.close().catch((error) => {
-    log(`[BrowserLifecycle] runner context close failed reason=${reason || "unspecified"}: ${error.message}`);
+    log(`[BrowserLifecycle] run=${RUN_ID} profile=${runnerContextProfileIds.get(context) || PROFILE_ID} runner context close failed reason=${reason || "unspecified"}: ${error.message}`);
   });
 }
 
@@ -160,6 +174,7 @@ function handleStopMessage(message) {
   }
   if (message.type !== "stop") return;
   stopRequested = true;
+  log(`[RunProcess] run=${RUN_ID} event=stop-request-received source=main-process`);
   if (activeSecondTaagerCartChild && activeSecondTaagerCartChild.connected) {
     try { activeSecondTaagerCartChild.send({ type: "stop" }); } catch (_) {}
   }
@@ -1325,6 +1340,10 @@ async function launchRunnerContext(profilePath, chromePath) {
         windowSize: "1280,800",
         viewport: null,
         downloadsPath: RUNNER_DOWNLOADS_DIR,
+        runId: RUN_ID,
+        profileId: browserProfileIdentityFor(profilePath),
+        browserLabel: `runner-${++runnerBrowserLaunchIndex}`,
+        log,
       });
       activeContext = context;
       activePage = null;
@@ -1340,7 +1359,7 @@ async function launchRunnerContext(profilePath, chromePath) {
         Object.defineProperty(navigator, "plugins", { get: () => [1, 2, 3, 4, 5] });
         Object.defineProperty(navigator, "languages", { get: () => ["ar-SA", "ar", "en"] });
       });
-      installRunnerBrowserLifecycleDiagnostics(context, "runner");
+      installRunnerBrowserLifecycleDiagnostics(context, "runner", browserProfileIdentityFor(profilePath));
       await installTaagerInterruptionAutoDismiss(context, { log });
       installUnexpectedBlankPageGuard(context, { getActivePage: () => activePage, log, delayMs: 5000 });
       const page = await getOrCreateAutomationPage(context, { log });
@@ -5586,6 +5605,10 @@ if (config.mode === "second-taager-cart-upload") {
   const context = await launchPersistentChromeContext(chromium, profilePath, {
     executablePath: chromePath,
     windowSize: "1280,800",
+    runId: RUN_ID,
+    profileId: browserProfileIdentityFor(profilePath),
+    browserLabel: `runner-${++runnerBrowserLaunchIndex}`,
+    log,
 
     args: [
       // ── Startup behaviour (all safe, no banners) ──

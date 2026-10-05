@@ -1,6 +1,8 @@
 "use strict";
 
 const { chromium } = require("playwright-core");
+const crypto = require("crypto");
+const { setBrowserProcessContextCloseReason } = require("./browser-process-diagnostics");
 const { pinnedAutomationBrowserPath } = require("./automation-browser-path");
 const fs = require("fs");
 const os = require("os");
@@ -40,6 +42,8 @@ const {
 } = require("./taager-orders-page-ui");
 
 const config = JSON.parse(process.env.BOT_CONFIG || "{}");
+const RUN_ID = String(config.runnerRunId || crypto.randomUUID()).slice(0, 40);
+const PROFILE_ID = String(config.browserProfileId || crypto.createHash("sha256").update(path.resolve(config.profilePath || "").toLowerCase()).digest("hex").slice(0, 12)).slice(0, 24);
 const log = (msg) => process.stdout.write(msg + "\n");
 const emitStage = (stage, status, message, extra = {}) => {
   process.send && process.send({ type: "stage", flow: "dashboard", stage, status, message, ...extra });
@@ -83,16 +87,18 @@ let activeContext = null;
 let activePage = null;
 let taagerIdentityVerified = false;
 const intentionalContextClosures = new WeakSet();
+let dashboardBrowserLaunchIndex = 0;
+const dashboardCloseReasons = new WeakMap();
 const instrumentedDashboardPages = new WeakSet();
 
 function installDashboardPageDiagnostics(page, label) {
   if (!page || instrumentedDashboardPages.has(page) || typeof page.on !== "function") return;
   instrumentedDashboardPages.add(page);
   page.on("close", () => {
-    log(`[Dashboard Chrome] page closed (${page === activePage ? "active page" : "other page"}; ${label}; url=${safeDashboardPageLocation(page)})`);
+    log(`[Dashboard Chrome] run=${RUN_ID} profile=${PROFILE_ID} page closed (${page === activePage ? "active page" : "other page"}; ${label}; url=${safeDashboardPageLocation(page)})`);
   });
   page.on("crash", () => {
-    log(`[Dashboard Chrome] page crashed (${page === activePage ? "active page" : "other page"}; ${label}; url=${safeDashboardPageLocation(page)})`);
+    log(`[Dashboard Chrome] run=${RUN_ID} profile=${PROFILE_ID} page crashed (${page === activePage ? "active page" : "other page"}; ${label}; url=${safeDashboardPageLocation(page)})`);
   });
 }
 
@@ -109,14 +115,14 @@ function installDashboardBrowserDiagnostics(context, label) {
   if (!context || typeof context.on !== "function") return;
   context.on("close", () => {
     const intentional = intentionalContextClosures.has(context);
-    log(`[Dashboard Chrome] context closed (${intentional ? "intentional" : "unexpected"}; ${label})`);
+    log(`[Dashboard Chrome] run=${RUN_ID} profile=${PROFILE_ID} context closed (${intentional ? "intentional" : "unexpected"}; ${label}; requestedClose=${dashboardCloseReasons.get(context) || "none"})`);
   });
   context.on("page", (page) => installDashboardPageDiagnostics(page, label));
   const browser = typeof context.browser === "function" ? context.browser() : null;
   if (browser && typeof browser.on === "function") {
     browser.on("disconnected", () => {
       const intentional = intentionalContextClosures.has(context);
-      log(`[Dashboard Chrome] browser disconnected (${intentional ? "intentional" : "unexpected"}; ${label})`);
+      log(`[Dashboard Chrome] run=${RUN_ID} profile=${PROFILE_ID} browser disconnected (${intentional ? "intentional" : "unexpected"}; ${label}; requestedClose=${dashboardCloseReasons.get(context) || "none"})`);
     });
   }
 }
@@ -267,6 +273,10 @@ async function launchDashboardContext(profilePath, chromePath) {
         executablePath: chromePath,
         windowSize: "1400,900",
         downloadsPath: DASHBOARD_TAAGER_DOWNLOADS_DIR,
+        runId: RUN_ID,
+        profileId: PROFILE_ID,
+        browserLabel: `dashboard-${++dashboardBrowserLaunchIndex}`,
+        log,
       });
       installDashboardBrowserDiagnostics(context, "recovery launch");
       await addChromeFingerprintSpoofing(context);
@@ -289,11 +299,13 @@ async function launchDashboardContext(profilePath, chromePath) {
   throw new Error(`Could not reopen bot Chrome profile. Close the Google login Chrome window and retry. Last error: ${lastError ? lastError.message : "unknown"}`);
 }
 
-async function closeActiveContextForManualGoogle() {
+async function closeActiveContextForManualGoogle(reason = "manual-google-or-relaunch") {
   if (!activeContext) return;
   const context = activeContext;
   activeContext = null;
   activePage = null;
+  dashboardCloseReasons.set(context, reason || "manual-google-or-relaunch");
+  setBrowserProcessContextCloseReason(context, reason || "manual-google-or-relaunch");
   intentionalContextClosures.add(context);
   await context.close().catch(() => {});
 }
@@ -1704,6 +1716,10 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
     executablePath: chromePath,
     windowSize: "1400,900",
     downloadsPath: DASHBOARD_TAAGER_DOWNLOADS_DIR,
+    runId: RUN_ID,
+    profileId: PROFILE_ID,
+    browserLabel: `dashboard-${++dashboardBrowserLaunchIndex}`,
+    log,
   });
   installDashboardBrowserDiagnostics(context, "initial launch");
 
@@ -1827,7 +1843,11 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
     process.send && process.send({ type: "error", error: fatalMessage });
   } finally {
     const contextToClose = activeContext || context;
-    if (contextToClose) intentionalContextClosures.add(contextToClose);
+    if (contextToClose) {
+      dashboardCloseReasons.set(contextToClose, "dashboard-fetch-finished");
+      setBrowserProcessContextCloseReason(contextToClose, "dashboard-fetch-finished");
+      intentionalContextClosures.add(contextToClose);
+    }
     await contextToClose.close().catch(() => {});
   }
 })();

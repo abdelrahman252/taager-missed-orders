@@ -1720,6 +1720,17 @@ function adminAlertStageHistory(details) {
 function notifyAdminErrorAlert(details = {}) {
   const errorText = compactAdminAlertText(details.error || details.message || "Unknown error", 900);
   if (!errorText || errorText === "LICENSE_INVALID") return;
+  // The browser process close event can follow the worker's error IPC message.
+  // Allow a bounded interval for its diagnostic IPC, without delaying the UI.
+  if (Array.isArray(details.browserDiagnosticTail) && !details.browserDiagnosticsSettled &&
+      /BROWSER_CRASH|Target page, context or browser has been closed|browser.*disconnect/i.test(errorText)) {
+    setTimeout(() => notifyAdminErrorAlert({
+      ...details,
+      browserDiagnosticsSettled: true,
+      recentLogs: recentRunLogsWithBrowserDiagnostics(details.recentLogs, 8, details.browserDiagnosticTail),
+    }), 750);
+    return;
+  }
 
   const licenseKey = compactAdminAlertText(licenseStore.get("licenseKey", ""), 80);
   const customerName = compactAdminAlertText(licenseStore.get("customerName", ""), 180);
@@ -4987,10 +4998,13 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
   }
   const profilePath = path.join(userData, `bot-profile${acc.id ? `-${acc.id}` : ""}`);
   if (!fs.existsSync(profilePath)) fs.mkdirSync(profilePath, { recursive: true });
+  const runId = crypto.randomUUID();
 
   const creds = {
     ...acc,
     profilePath,
+    runnerRunId: runId,
+    browserProfileId: browserProfileIdentity(profilePath),
     launchMinimized: store.get("launchMinimized", false),
     easyPassword,
     lightfunnelsPassword,
@@ -5025,31 +5039,41 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
     let killedByWatchdog = false;
     let lastChildActivityAt = Date.now();
     const childLogTail = [];
+    const browserDiagnosticTail = [];
+    const recordBrowserDiagnostic = (line) => {
+      browserDiagnosticTail.push(String(line || ""));
+      if (browserDiagnosticTail.length > 12) browserDiagnosticTail.shift();
+    };
 
     const forwardDashboardLog = (text, options = {}) => {
-      const message = String(text || "");
-      lastChildActivityAt = Date.now();
-      childLogTail.push(message);
-      if (childLogTail.length > 30) childLogTail.shift();
-      if (options.stream === "stderr") log.warn(`[Dashboard:${accountLabel}] ${message}`);
-      else log.info(`[Dashboard:${accountLabel}] ${message}`);
-      let logFilePath = "";
-      try {
-        logFilePath = log.transports && log.transports.file && typeof log.transports.file.getFile === "function"
-          ? (log.transports.file.getFile().path || "")
-          : "";
-      } catch (_) {}
-      const payload = {
-        accountId: dashboardAccountId,
-        accountLabel,
-        message,
-        stream: options.stream || "stdout",
-        timestamp: Date.now(),
-        logFilePath,
-      };
-      mainWindow.webContents.send("bot-dashboard-log", payload);
-      mainWindow.webContents.send("bot-log", `[Dashboard:${accountLabel}]${options.stream === "stderr" ? "[ERR]" : ""} ${message}`);
+      for (const message of String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean)) {
+        lastChildActivityAt = Date.now();
+        childLogTail.push(message);
+        if (childLogTail.length > 30) childLogTail.shift();
+        if (options.stream === "stderr") log.warn(`[Dashboard:${accountLabel}] ${message}`);
+        else log.info(`[Dashboard:${accountLabel}] ${message}`);
+        let logFilePath = "";
+        try {
+          logFilePath = log.transports && log.transports.file && typeof log.transports.file.getFile === "function"
+            ? (log.transports.file.getFile().path || "")
+            : "";
+        } catch (_) {}
+        const payload = {
+          accountId: dashboardAccountId,
+          accountLabel,
+          message,
+          stream: options.stream || "stdout",
+          timestamp: Date.now(),
+          logFilePath,
+        };
+        mainWindow.webContents.send("bot-dashboard-log", payload);
+        mainWindow.webContents.send("bot-log", `[Dashboard:${accountLabel}]${options.stream === "stderr" ? "[ERR]" : ""} ${message}`);
+      }
     };
+
+    child._botRunId = runId;
+    child._botRunDiagnostic = (message) => { recordBrowserDiagnostic(message); forwardDashboardLog(message, { stream: "stderr" }); };
+    child._botRunDiagnostic(`[RunProcess] run=${runId} profile=${browserProfileIdentity(profilePath)} event=child-started pid=${child.pid || "unknown"}`);
 
     child.stdout.on("data", (d) => {
       forwardDashboardLog(d.toString(), { stream: "stdout" });
@@ -5089,7 +5113,8 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
 
     const watchdog = setTimeout(() => {
       killedByWatchdog = true;
-      const error = `DASHBOARD_FETCH_TIMEOUT: last stage was ${lastStage}; timeout=${Math.round(accountTimeoutMs / 1000)}s; recent logs=${childLogTail.slice(-5).join(" | ")}`;
+      child._botRunDiagnostic(`[RunProcess] run=${runId} event=kill-requested pid=${child.pid || "unknown"} reason=dashboard-fetch-watchdog-timeout`);
+      const error = `DASHBOARD_FETCH_TIMEOUT: last stage was ${lastStage}; timeout=${Math.round(accountTimeoutMs / 1000)}s; recent logs=${recentRunLogsWithBrowserDiagnostics(childLogTail, 5, browserDiagnosticTail).join(" | ")}`;
       forwardDashboardLog(error, { stream: "stderr" });
       notifyAdminErrorAlert({
         flow: "dashboard-fetch",
@@ -5102,10 +5127,11 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
         lastStage,
         stageHistory,
         durationMs: Date.now() - runStartedAt,
-        recentLogs: childLogTail.slice(-10),
+        browserDiagnosticTail,
+        recentLogs: recentRunLogsWithBrowserDiagnostics(childLogTail, 8, browserDiagnosticTail),
       });
       try { child.kill(); } catch (_) {}
-      safeResolve({ success: false, error, lastStage, recentLogs: childLogTail.slice(-10) });
+      safeResolve({ success: false, error, lastStage, recentLogs: recentRunLogsWithBrowserDiagnostics(childLogTail, 8, browserDiagnosticTail) });
     }, accountTimeoutMs);
 
     const safeResolve = (v) => {
@@ -5119,6 +5145,10 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
     };
 
     child.on("message", async (msg) => {
+      if (msg && msg.type === "browser-process-diagnostic") {
+        recordBrowserDiagnostic(msg.message);
+        return;
+      }
       lastChildActivityAt = Date.now();
       if (msg.type === "stage") {
         appendAdminStageHistory(stageHistory, msg);
@@ -5213,7 +5243,8 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
             lastStage,
             stageHistory,
             durationMs: Date.now() - runStartedAt,
-            recentLogs: childLogTail.slice(-10),
+            browserDiagnosticTail,
+            recentLogs: recentRunLogsWithBrowserDiagnostics(childLogTail, 8, browserDiagnosticTail),
           });
         }
         if (!snapshotSaveError && !resolved) {
@@ -5229,7 +5260,7 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
             lastStage,
             stageHistory,
             durationMs: Date.now() - runStartedAt,
-            recentLogs: childLogTail.slice(-5),
+            recentLogs: recentRunLogsWithBrowserDiagnostics(childLogTail, 5, browserDiagnosticTail),
           });
         }
         safeResolve({
@@ -5242,7 +5273,7 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
           enrichmentDiagnostics: msg.enrichmentDiagnostics || (msg.parseDiagnostics && msg.parseDiagnostics.enrichment) || null,
           debugSummary: dashboardDebugSummaryForRange(rows, msg.dateFrom || dateFrom || "", msg.dateTo || dateTo || "", msg.parseDiagnostics),
           lastStage,
-          recentLogs: childLogTail.slice(-10)
+          recentLogs: recentRunLogsWithBrowserDiagnostics(childLogTail, 8, browserDiagnosticTail)
         });
       } else if (msg.type === "error") {
         notifyAdminErrorAlert({
@@ -5256,9 +5287,10 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
           lastStage,
           stageHistory,
           durationMs: Date.now() - runStartedAt,
-          recentLogs: childLogTail.slice(-10),
+          browserDiagnosticTail,
+          recentLogs: recentRunLogsWithBrowserDiagnostics(childLogTail, 8, browserDiagnosticTail),
         });
-        safeResolve({ success: false, error: msg.error, lastStage, recentLogs: childLogTail.slice(-10) });
+        safeResolve({ success: false, error: msg.error, lastStage, recentLogs: recentRunLogsWithBrowserDiagnostics(childLogTail, 8, browserDiagnosticTail) });
       } else if (msg.type === "export-timestamp") {
         lastExportTimestamp = msg.timestamp || Date.now();
       } else if (msg.type === "debug-screenshot") {
@@ -5300,11 +5332,15 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
         lastStage,
         stageHistory,
         durationMs: Date.now() - runStartedAt,
-        recentLogs: childLogTail.slice(-10),
+        browserDiagnosticTail,
+        recentLogs: recentRunLogsWithBrowserDiagnostics(childLogTail, 8, browserDiagnosticTail),
       });
-      safeResolve({ success: false, error: err.message, lastStage, recentLogs: childLogTail.slice(-10) });
+      safeResolve({ success: false, error: err.message, lastStage, recentLogs: recentRunLogsWithBrowserDiagnostics(childLogTail, 8, browserDiagnosticTail) });
     });
     child.on("exit", (code) => {
+      const processExitLine = `[RunProcess] run=${runId} event=child-exit pid=${child.pid || "unknown"} code=${code == null ? "null" : code} signal=${child.signalCode || "null"}`;
+      recordBrowserDiagnostic(processExitLine);
+      forwardDashboardLog(processExitLine, { stream: "stderr" });
       if (!resolved && !killedByWatchdog) {
         const error = `Process exited with code ${code}`;
         notifyAdminErrorAlert({
@@ -5318,9 +5354,10 @@ ipcMain.handle("run-dashboard-fetch", async (_, { accountId, dateFrom, dateTo, a
           lastStage,
           stageHistory,
           durationMs: Date.now() - runStartedAt,
-          recentLogs: childLogTail.slice(-10),
+          browserDiagnosticTail,
+          recentLogs: recentRunLogsWithBrowserDiagnostics(childLogTail, 8, browserDiagnosticTail),
         });
-        safeResolve({ success: false, error, lastStage, recentLogs: childLogTail.slice(-10) });
+        safeResolve({ success: false, error, lastStage, recentLogs: recentRunLogsWithBrowserDiagnostics(childLogTail, 8, browserDiagnosticTail) });
       }
     });
   });
@@ -7549,6 +7586,22 @@ function spawnBotChild(creds) {
   });
 }
 
+function browserProfileIdentity(profilePath) {
+  const resolved = path.resolve(String(profilePath || ""));
+  return crypto.createHash("sha256")
+    .update(process.platform === "win32" ? resolved.toLowerCase() : resolved)
+    .digest("hex")
+    .slice(0, 12);
+}
+
+function recentRunLogsWithBrowserDiagnostics(lines, limit = 8, diagnosticLines = []) {
+  const source = Array.isArray(lines) ? lines : [];
+  const diagnostics = (Array.isArray(diagnosticLines) ? diagnosticLines : [])
+    .filter(Boolean)
+    .slice(-4);
+  return [...new Set([...source.slice(-limit), ...diagnostics])].slice(-Math.max(limit, diagnostics.length));
+}
+
 let botChildren = []; // track all running children
 
 function waitForBotChildExit(child, timeoutMs) {
@@ -7568,8 +7621,11 @@ function waitForBotChildExit(child, timeoutMs) {
   });
 }
 
-function forceKillBotProcessTree(child) {
+function forceKillBotProcessTree(child, reason = "unspecified") {
   if (!child || !child.pid || child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  if (typeof child._botRunDiagnostic === "function") {
+    child._botRunDiagnostic(`[RunProcess] run=${child._botRunId || "unknown"} event=force-kill-requested pid=${child.pid} reason=${String(reason).replace(/[^a-zA-Z0-9_.:-]/g, "_").slice(0, 80)}`);
+  }
   if (process.platform === "win32") {
     const { spawn } = require("child_process");
     return new Promise((resolve) => {
@@ -7604,12 +7660,15 @@ async function stopRunningBots() {
 
   for (const child of children) {
     try {
+      if (typeof child._botRunDiagnostic === "function") {
+        child._botRunDiagnostic(`[RunProcess] run=${child._botRunId || "unknown"} event=stop-requested pid=${child.pid || "unknown"} reason=app-stop`);
+      }
       if (child.connected) child.send({ type: "stop" });
     } catch (_) {}
   }
 
   // Manual Google-login Chrome is spawned by the main process, not Playwright.
-  await Promise.all(manualChildren.map(forceKillBotProcessTree));
+  await Promise.all(manualChildren.map((child) => forceKillBotProcessTree(child, "manual-chrome-cleanup")));
   if (manualChildren.length) {
     await Promise.all(manualChildren.map((child) => waitForBotChildExit(child, 2500)));
   }
@@ -7618,7 +7677,7 @@ async function stopRunningBots() {
 
   const graceful = await Promise.all(children.map((child) => waitForBotChildExit(child, 4000)));
   const stuck = children.filter((_child, index) => !graceful[index]);
-  await Promise.all(stuck.map(forceKillBotProcessTree));
+  await Promise.all(stuck.map((child) => forceKillBotProcessTree(child, "stop-timeout")));
   if (stuck.length) await Promise.all(stuck.map((child) => waitForBotChildExit(child, 2500)));
 
   botChildren = [];
@@ -7859,6 +7918,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
     const acc = accountsToRun[0];
     const profilePath = path.join(app.getPath("userData"), `bot-profile-${acc.id}`);
     if (!fs.existsSync(profilePath)) fs.mkdirSync(profilePath, { recursive: true });
+    const runId = crypto.randomUUID();
 
     const creds = {
       ...acc,
@@ -7877,6 +7937,8 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
       dashboardEnabled,
       reportingDataEnabled,
       chromePath: getCachedChromePath() || undefined,
+      runnerRunId: runId,
+      browserProfileId: browserProfileIdentity(profilePath),
     };
     return new Promise((resolve) => {
       const runStartedAt = Date.now();
@@ -7888,11 +7950,19 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
       currentBotChild = child;
       botChildren = [child];
       const logs = []; let resolved = false;
+      const browserDiagnosticTail = [];
+      const recordBrowserDiagnostic = (line) => {
+        browserDiagnosticTail.push(String(line || ""));
+        if (browserDiagnosticTail.length > 12) browserDiagnosticTail.shift();
+      };
       const stageHistory = [];
       const runLog = createBotRunLogWriter(acc, dateFrom, dateTo);
       mainWindow.webContents.send("bot-log", `[Run Log] Saved to: ${runLog.filePath}`);
       const safeResolve = (v) => { if (!resolved) { resolved = true; resolve(v); } };
-      child.stdout.on("data", (d) => { const m = d.toString().trim(); if (m) { logs.push(m); runLog.write(m); mainWindow.webContents.send("bot-log", m); } });
+      child._botRunId = runId;
+      child._botRunDiagnostic = (message) => { recordBrowserDiagnostic(message); logs.push(message); runLog.write(message); mainWindow.webContents.send("bot-log", message); };
+      child._botRunDiagnostic(`[RunProcess] run=${runId} profile=${browserProfileIdentity(profilePath)} event=child-started pid=${child.pid || "unknown"}`);
+      child.stdout.on("data", (d) => { for (const m of d.toString().split(/\r?\n/).map((line) => line.trim()).filter(Boolean)) { logs.push(m); runLog.write(m); mainWindow.webContents.send("bot-log", m); } });
       child.stderr.on("data", (d) => {
         const m = d.toString().trim(); if (!m) return;
         if (m.includes("CHROME_NOT_FOUND")) {
@@ -7903,6 +7973,10 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
         } else { runLog.write("ERR: " + m); mainWindow.webContents.send("bot-log", "ERR: " + m); }
       });
       child.on("message", (msg) => {
+        if (msg && msg.type === "browser-process-diagnostic") {
+          recordBrowserDiagnostic(msg.message);
+          return;
+        }
         if (msg.type === "result") {
           // Auto-save failed orders to per-email folder before resolving
           const data = msg.data || {};
@@ -7924,7 +7998,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
             lastStage: stageHistory.length ? stageHistory[stageHistory.length - 1] : "",
             stageHistory,
             durationMs: Date.now() - runStartedAt,
-            recentLogs: logs.slice(-5),
+            recentLogs: recentRunLogsWithBrowserDiagnostics(logs, 5, browserDiagnosticTail),
           });
           mainWindow.webContents.send("bot-run-complete");
           safeResolve({
@@ -7948,7 +8022,8 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
             dateTo,
             stageHistory,
             durationMs: Date.now() - runStartedAt,
-            recentLogs: logs.slice(-10),
+            browserDiagnosticTail,
+            recentLogs: recentRunLogsWithBrowserDiagnostics(logs, 8, browserDiagnosticTail),
           });
           mainWindow.webContents.send("bot-run-complete");
           safeResolve({
@@ -8030,7 +8105,8 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
           dateTo,
           stageHistory,
           durationMs: Date.now() - runStartedAt,
-          recentLogs: logs.slice(-10),
+          browserDiagnosticTail,
+          recentLogs: recentRunLogsWithBrowserDiagnostics(logs, 8, browserDiagnosticTail),
         });
         mainWindow.webContents.send("bot-run-complete");
         safeResolve({
@@ -8045,6 +8121,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
         });
       });
       child.on("exit", (code) => {
+        child._botRunDiagnostic(`[RunProcess] run=${runId} event=child-exit pid=${child.pid || "unknown"} code=${code == null ? "null" : code} signal=${child.signalCode || "null"}`);
         if (!resolved && code !== 0) {
           notifyAdminErrorAlert({
             flow: "runner",
@@ -8056,7 +8133,8 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
             dateTo,
             stageHistory,
             durationMs: Date.now() - runStartedAt,
-            recentLogs: logs.slice(-10),
+            browserDiagnosticTail,
+            recentLogs: recentRunLogsWithBrowserDiagnostics(logs, 8, browserDiagnosticTail),
           });
         }
         mainWindow.webContents.send("bot-run-complete");
@@ -8085,9 +8163,12 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
   function runOneAccount(acc, idx) {
     const profilePath = path.join(app.getPath("userData"), `bot-profile-${acc.id}`);
     if (!fs.existsSync(profilePath)) fs.mkdirSync(profilePath, { recursive: true });
+    const runId = crypto.randomUUID();
     const creds = {
       ...acc,
       profilePath,
+      runnerRunId: runId,
+      browserProfileId: browserProfileIdentity(profilePath),
       dateFrom,
       dateTo,
       launchMinimized: store.get("launchMinimized", false),
@@ -8112,15 +8193,24 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
       botChildren.push(child);
       currentBotChild = child;
       const logs = [];
+      const browserDiagnosticTail = [];
+      const recordBrowserDiagnostic = (line) => {
+        browserDiagnosticTail.push(String(line || ""));
+        if (browserDiagnosticTail.length > 12) browserDiagnosticTail.shift();
+      };
       const stageHistory = [];
       const runLog = createBotRunLogWriter(acc, dateFrom, dateTo, "account-" + (idx + 1));
       mainWindow.webContents.send("bot-log", `${prefix}[Run Log] Saved to: ${runLog.filePath}`);
       let resolved = false;
       const safeResolve = (v) => { if (!resolved) { resolved = true; resolve(v); } };
+      child._botRunId = runId;
+      child._botRunDiagnostic = (message) => { recordBrowserDiagnostic(message); logs.push(message); runLog.write(prefix + message); mainWindow.webContents.send("bot-log", prefix + message); };
+      child._botRunDiagnostic(`[RunProcess] run=${runId} profile=${browserProfileIdentity(profilePath)} event=child-started pid=${child.pid || "unknown"}`);
 
       child.stdout.on("data", (d) => {
-        const m = d.toString().trim();
-        if (m) { logs.push(m); runLog.write(prefix + m); mainWindow.webContents.send("bot-log", prefix + m); }
+        for (const m of d.toString().split(/\r?\n/).map((line) => line.trim()).filter(Boolean)) {
+          logs.push(m); runLog.write(prefix + m); mainWindow.webContents.send("bot-log", prefix + m);
+        }
       });
 
       child.stderr.on("data", (d) => {
@@ -8140,6 +8230,11 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
         const accountId    = acc.id;
         const accountEmail = accountContactEmail(acc);
         const accountLabel = accountDisplayName(acc, accountEmail || ("Account " + (idx + 1)));
+
+        if (msg && msg.type === "browser-process-diagnostic") {
+          recordBrowserDiagnostic(msg.message);
+          return;
+        }
 
         if (msg.type === "result") {
           const data = msg.data || {};
@@ -8161,7 +8256,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
             lastStage: stageHistory.length ? stageHistory[stageHistory.length - 1] : "",
             stageHistory,
             durationMs: Date.now() - runStartedAt,
-            recentLogs: logs.slice(-5),
+            recentLogs: recentRunLogsWithBrowserDiagnostics(logs, 5, browserDiagnosticTail),
           });
           safeResolve({ success: true, data, ...finishTiming(), runLogPath: runLog.filePath, accountId, accountEmail, accountLabel });
         }
@@ -8176,7 +8271,8 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
             dateTo,
             stageHistory,
             durationMs: Date.now() - runStartedAt,
-            recentLogs: logs.slice(-10),
+            browserDiagnosticTail,
+            recentLogs: recentRunLogsWithBrowserDiagnostics(logs, 8, browserDiagnosticTail),
           });
           safeResolve({ success: false, error: msg.error, ...finishTiming(), runLogPath: runLog.filePath, accountId, accountEmail, accountLabel });
         }
@@ -8232,7 +8328,8 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
           dateTo,
           stageHistory,
           durationMs: Date.now() - runStartedAt,
-          recentLogs: logs.slice(-10),
+          browserDiagnosticTail,
+          recentLogs: recentRunLogsWithBrowserDiagnostics(logs, 8, browserDiagnosticTail),
         });
         safeResolve({
           success: false,
@@ -8247,6 +8344,7 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
       });
 
       child.on("exit", (code) => {
+        child._botRunDiagnostic(`[RunProcess] run=${runId} event=child-exit pid=${child.pid || "unknown"} code=${code == null ? "null" : code} signal=${child.signalCode || "null"}`);
         if (!resolved && code !== 0) {
           notifyAdminErrorAlert({
             flow: "runner",
@@ -8258,7 +8356,8 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
             dateTo,
             stageHistory,
             durationMs: Date.now() - runStartedAt,
-            recentLogs: logs.slice(-10),
+            browserDiagnosticTail,
+            recentLogs: recentRunLogsWithBrowserDiagnostics(logs, 8, browserDiagnosticTail),
           });
         }
         safeResolve({

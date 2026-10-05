@@ -15,6 +15,7 @@ supabase/functions/*
 supabase/functions/admin-error-alert/*
 !supabase/functions/admin-error-alert/index.ts
 scripts/*
+!scripts/verify-browser-process-diagnostics.js
 !scripts/perf/
 scripts/perf/fixtures/
 !scripts/qa-dashboard-responsive.js

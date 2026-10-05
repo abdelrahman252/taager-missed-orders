@@ -34,6 +34,10 @@ const LOCALE_ARGS = Object.freeze([
   "--lang=ar-SA",
   "--accept-lang=ar-SA,ar,en",
 ]);
+const {
+  beginBrowserProcessDiagnostics,
+  registerBrowserProcessContext,
+} = require("./browser-process-diagnostics");
 
 function buildMaximumSpeedChromeArgs(options = {}) {
   const windowSize = options.windowSize || "1280,800";
@@ -69,10 +73,26 @@ function buildPersistentContextOptions(options = {}) {
 }
 
 async function launchPersistentChromeContext(chromium, profilePath, options = {}) {
-  return chromium.launchPersistentContext(
+  const closeReasonRef = { value: "none" };
+  const processDiagnostics = beginBrowserProcessDiagnostics({
+    runId: options.runId,
     profilePath,
-    buildPersistentContextOptions(options)
-  );
+    browser: options.browserLabel,
+    log: options.log,
+    getCloseReason: () => closeReasonRef.value,
+  });
+  try {
+    const context = await chromium.launchPersistentContext(
+      profilePath,
+      buildPersistentContextOptions(options)
+    );
+    registerBrowserProcessContext(context, closeReasonRef);
+    processDiagnostics.launchComplete();
+    return context;
+  } catch (error) {
+    processDiagnostics.launchFailed();
+    throw error;
+  }
 }
 
 function isUsablePage(page) {
