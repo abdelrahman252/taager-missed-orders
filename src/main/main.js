@@ -23,8 +23,28 @@ const zlib = require("zlib");
 const os = require("os");
 const https = require("https");
 const log = require("electron-log");
-const { autoUpdater } = require("electron-updater");
+const { createMacDmgUpdater } = require("./mac-dmg-updater");
+const { createUpdatePlatformRoutes, loadAutoUpdater } = require("./update-platform-routes");
+const autoUpdater = loadAutoUpdater(process.platform, () => require("electron-updater").autoUpdater);
 const monitoring = require("../monitoring/sentry.main");
+const macDmgUpdater = createMacDmgUpdater({
+  getDownloadsDir: () => app.getPath("downloads") || path.join(os.homedir(), "Downloads"),
+  getCurrentVersion: () => app.getVersion(),
+  arch: process.arch,
+  onProgress: (progress) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("update-progress", progress);
+  },
+});
+const updatePlatformRoutes = createUpdatePlatformRoutes({
+  platform: process.platform,
+  macUpdater: macDmgUpdater,
+  autoUpdater,
+  sendUpdateEvent: (channel, payload) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
+  },
+  showItemInFolder: (filePath) => shell.showItemInFolder(filePath),
+  fileExists: (filePath) => fs.existsSync(filePath),
+});
 const { normalizePhone } = require("../bot/phone");
 const { pinnedAutomationBrowserPath } = require("../bot/automation-browser-path");
 const { processDashboardSheets } = require("../bot/dashboard-sheet-processing");
@@ -198,17 +218,19 @@ app.commandLine.appendSwitch("renderer-process-limit", "1");
 // V8 code cache: reuse compiled JS across launches (saves 20Ã¢â‚¬â€œ60 ms per launch)
 app.commandLine.appendSwitch("js-flags", "--max-old-space-size=256");
 
-autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = false;
-try {
-  autoUpdater.verifyUpdateCodeSignature = false;
-} catch (_) {}
-autoUpdater.logger = {
-  info:  (...a) => log.info("[AutoUpdate]", ...a),
-  warn:  (...a) => log.warn("[AutoUpdate]", ...a),
-  error: (...a) => log.error("[AutoUpdate]", ...a),
-  debug: (...a) => log.debug("[AutoUpdate]", ...a),
-};
+if (autoUpdater) {
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  try {
+    autoUpdater.verifyUpdateCodeSignature = false;
+  } catch (_) {}
+  autoUpdater.logger = {
+    info:  (...a) => log.info("[AutoUpdate]", ...a),
+    warn:  (...a) => log.warn("[AutoUpdate]", ...a),
+    error: (...a) => log.error("[AutoUpdate]", ...a),
+    debug: (...a) => log.debug("[AutoUpdate]", ...a),
+  };
+}
 
 // Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 // SUPABASE CONFIG
@@ -2997,7 +3019,8 @@ app.whenReady().then(() => {
   if (app.isPackaged) {
     setTimeout(() => {
       log.info("[AutoUpdate] Startup auto-update check triggered (3s delay)");
-      autoUpdater.checkForUpdates().catch(err => {
+      const check = process.platform === "darwin" ? checkMacReleaseAndNotify : () => autoUpdater.checkForUpdates();
+      check().catch(err => {
         log.error("[AutoUpdate] Startup checkForUpdates failed:", err.message);
         monitoring.captureException(err, { operation: "autoUpdater.startupCheck" });
       });
@@ -3015,6 +3038,7 @@ app.on("before-quit", () => {
 
 app.on("window-all-closed", () => {});
 
+if (autoUpdater) {
 autoUpdater.on("checking-for-update", () => {
   log.info("[AutoUpdate] Checking for update...");
 });
@@ -3058,6 +3082,11 @@ autoUpdater.on("error", (err) => {
     mainWindow.webContents.send("update-error", { message: err.message });
   }
 });
+}
+
+async function checkMacReleaseAndNotify() {
+  return updatePlatformRoutes.checkForUpdates();
+}
 
 ipcMain.handle("check-for-updates", async () => {
   log.info("[AutoUpdate] IPC check-for-updates received");
@@ -3066,8 +3095,7 @@ ipcMain.handle("check-for-updates", async () => {
     return { dev: true };
   }
   try {
-    await autoUpdater.checkForUpdates();
-    return { ok: true };
+    return await updatePlatformRoutes.checkForUpdates();
   } catch (e) {
     log.error(`[AutoUpdate] autoUpdater.checkForUpdates() threw: ${e.message}`, e.stack || "");
     monitoring.captureException(e, { operation: "autoUpdater.manualCheck" });
@@ -3075,14 +3103,26 @@ ipcMain.handle("check-for-updates", async () => {
   }
 });
 
-ipcMain.handle("download-update", () => {
+ipcMain.handle("download-update", async () => {
   log.info("[AutoUpdate] IPC download-update received - starting download");
-  autoUpdater.downloadUpdate();
-  return { ok: true };
+  try {
+    return await updatePlatformRoutes.downloadUpdate();
+  } catch (err) {
+      log.error(`[AutoUpdate] Direct Mac DMG download failed: ${err.message}`, err.stack || "");
+      monitoring.captureException(err, { operation: process.platform === "darwin" ? "autoUpdater.macDmgDownload" : "autoUpdater.download" });
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("update-error", { message: err.message });
+      return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle("cancel-update-download", () => {
+  const cancelled = updatePlatformRoutes.cancelDownload();
+  log.info(`[AutoUpdate] Mac DMG download cancellation requested: ${cancelled}`);
+  return { ok: true, cancelled };
 });
 
 ipcMain.handle("install-update", () => {
-  log.info("[AutoUpdate] IPC install-update received - launching installer independently");
+  log.info("[AutoUpdate] IPC install-update received - handling platform update action");
 
   // Ã¢â€â‚¬Ã¢â€â‚¬ Why quitAndInstall() alone doesn't work with a tray app Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   // quitAndInstall() relies on Electron's app.quit() flow, which fires
@@ -3101,13 +3141,10 @@ ipcMain.handle("install-update", () => {
   const { spawn } = require("child_process");
   const os = require("os");
 
-  // electron-updater stores the downloaded installer in the OS temp dir.
-  // The file name matches the artifactName pattern from package.json.
-  // We search for it rather than hardcode the version.
+    // Windows electron-updater stores the installer in the OS temp dir.
   function findDownloadedInstaller() {
-    // Ask electron-updater for the cached path via its internal
-    // _downloadedUpdateHelper (works for electron-updater v6.x). On macOS this
-    // is usually the downloaded zip; on Windows it can be the NSIS installer.
+    // Ask electron-updater for the cached Windows installer path via its
+    // internal _downloadedUpdateHelper (electron-updater v6.x).
     try {
       const helper = autoUpdater._downloadedUpdateHelper;
       if (helper && helper.downloadedFileInfo && helper.downloadedFileInfo.path) {
@@ -3129,19 +3166,6 @@ ipcMain.handle("install-update", () => {
     }
 
     return null;
-  }
-
-  function uniqueDownloadPath(filename) {
-    const downloadsDir = app.getPath("downloads") || path.join(os.homedir(), "Downloads");
-    fs.mkdirSync(downloadsDir, { recursive: true });
-    const ext = path.extname(filename);
-    const base = path.basename(filename, ext);
-    let candidate = path.join(downloadsDir, filename);
-    let i = 1;
-    while (fs.existsSync(candidate)) {
-      candidate = path.join(downloadsDir, `${base}-${i++}${ext}`);
-    }
-    return candidate;
   }
 
   function killChildProcess(child) {
@@ -3175,44 +3199,8 @@ ipcMain.handle("install-update", () => {
     return child;
   }
 
-  if (process.platform === "darwin") {
-    const installerPath = findDownloadedInstaller();
-    log.info("[AutoUpdate] macOS downloaded update path:", installerPath || "NOT FOUND");
-    if (installerPath && fs.existsSync(installerPath)) {
-      try {
-        const sourceName = path.basename(installerPath);
-        const ext = path.extname(sourceName) || ".zip";
-        const targetName = /^Taager\.Orders/i.test(sourceName)
-          ? sourceName
-          : `Taager.Orders-${app.getVersion()}-mac-update${ext}`;
-        const targetPath = uniqueDownloadPath(targetName);
-        fs.copyFileSync(installerPath, targetPath);
-        shell.showItemInFolder(targetPath);
-        log.info("[AutoUpdate] macOS update copied to Downloads:", targetPath);
-        return {
-          ok: true,
-          manual: true,
-          platform: "darwin",
-          path: targetPath,
-          fileName: path.basename(targetPath),
-        };
-      } catch (copyErr) {
-        log.error("[AutoUpdate] macOS update copy failed:", copyErr.message);
-        monitoring.captureException(copyErr, { operation: "autoUpdater.macManualCopy" });
-        return { ok: false, error: copyErr.message };
-      }
-    }
-
-    try {
-      log.warn("[AutoUpdate] macOS cached update not found; falling back to quitAndInstall");
-      autoUpdater.quitAndInstall(false, true);
-      return { ok: true, fallbackQuitAndInstall: true, platform: "darwin" };
-    } catch (installErr) {
-      log.error("[AutoUpdate] macOS quitAndInstall fallback failed:", installErr.message);
-      monitoring.captureException(installErr, { operation: "autoUpdater.macQuitAndInstallFallback" });
-      return { ok: false, error: installErr.message };
-    }
-  }
+  const manualMacResult = updatePlatformRoutes.revealDownloadedUpdate();
+  if (manualMacResult) return manualMacResult;
 
   // 1. Tear everything down
   app.isQuitting = true;

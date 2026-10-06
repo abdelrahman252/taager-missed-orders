@@ -834,11 +834,22 @@
 
     async function handleUpdateAction() {
       _updLog('info', `handleUpdateAction called, state=${_updateState}`);
+      if (_updateState === 'downloading' && _appPlatform === 'darwin') {
+        const btn = document.getElementById('updateActionBtn');
+        if (btn) { btn.disabled = true; btn.textContent = updText('update.canceling_action', 'Cancelling...'); }
+        try { await window.api.cancelUpdateDownload(); }
+        catch (err) { _updLog('error', 'Cancel Mac update download failed:', err); }
+        return;
+      }
       if (_updateState === 'available') {
         _updLog('info', 'Starting update download…');
         _updateState = 'downloading';
         document.getElementById('updateActionBtn').textContent = updText('update.downloading_action', 'Downloading...');
-        document.getElementById('updateActionBtn').disabled = true;
+        document.getElementById('updateActionBtn').disabled = _appPlatform !== 'darwin';
+        if (_appPlatform === 'darwin') {
+          document.getElementById('updateActionBtn').textContent = updText('update.cancel_download', 'Cancel Download');
+          document.getElementById('updateActionBtn').onclick = handleUpdateAction;
+        }
         document.getElementById('updateProgressWrap').style.display = 'block';
         window.api.downloadUpdate();
       } else if (_updateState === 'downloaded') {
@@ -962,8 +973,9 @@
         });
       }
 
-      window.api.onUpdateAvailable(({ version }) => {
+      window.api.onUpdateAvailable(({ version, platform }) => {
         _updLog('info', `onUpdateAvailable fired — version=${version}`);
+        if (platform) _appPlatform = platform;
         _updateState = 'available';
         _setUpdBtn(false);
         document.getElementById('updateTitle').textContent = updTextFn('update.available_title', 'Update v' + version + ' Available', version);
@@ -1012,7 +1024,7 @@
           ? updText('update.mac_downloaded_title', 'Update Downloaded')
           : updText('update.ready_title', 'Update Ready to Install');
         document.getElementById('updateSub').textContent = _appPlatform === 'darwin'
-          ? updText('update.mac_downloaded_sub', 'Save it to Downloads, then replace the app manually.')
+          ? updText('update.mac_downloaded_sub', 'Open the downloaded DMG, then drag Taager Orders to Applications and choose Replace.')
           : updText('update.ready_sub', 'Restart the app to apply the update.');
         document.getElementById('updateActionBtn').textContent = _appPlatform === 'darwin'
           ? updText('update.show_downloads', 'Show in Downloads')
@@ -1021,6 +1033,19 @@
         document.getElementById('updateActionBtn').onclick = handleUpdateAction;
         document.getElementById('updateToast').style.display = 'block';
       });
+
+      if (window.api.onUpdateDownloadCancelled) {
+        window.api.onUpdateDownloadCancelled(() => {
+          _updLog('info', 'Mac update download cancelled; partial file removed');
+          _updateState = 'available';
+          document.getElementById('updateProgressWrap').style.display = 'none';
+          document.getElementById('updateTitle').textContent = updText('update.available_title', 'Update Available');
+          document.getElementById('updateSub').textContent = updText('update.available_sub', 'A new version is ready to download.');
+          document.getElementById('updateActionBtn').textContent = updText('update.download_update', 'Download Update');
+          document.getElementById('updateActionBtn').disabled = false;
+          document.getElementById('updateActionBtn').onclick = handleUpdateAction;
+        });
+      }
 
       window.api.onUpdateError(({ message }) => {
         _updLog('error', `onUpdateError fired — message: ${message}`);
