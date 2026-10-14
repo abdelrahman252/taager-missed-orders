@@ -498,10 +498,10 @@ async function downloadToBuffer(page, url) {
   return Buffer.from(body);
 }
 
-async function exportEasyOrdersOrders(page, exportFromDate) {
+async function exportEasyOrdersOrders(page, exportFromDate, exportToDate) {
   // Keep this legacy helper on the same implementation as the active flow.
   // The previous copy forced two long sleeps and could select a stale card.
-  return easyOrdersFlow.exportOrders(page, exportFromDate);
+  return easyOrdersFlow.exportOrders(page, exportFromDate, exportToDate);
 }
 
 function normalizeTaagerCode(value) {
@@ -1767,7 +1767,7 @@ async function exportTaagerOrders(page, dateFrom, dateTo) {
         emitStage("easyorders.enrichment", "started", `Exporting EasyOrders enrichment from ${formatDataDay(easyFrom)}`);
         log(`Dashboard enrichment - EasyOrders ${formatDataDay(easyFrom)} -> ${formatDataDay(dateTo)} (product names + payment only)`);
         await easyOrdersFlow.login(page);
-        easyBuffer = await easyOrdersFlow.exportOrders(page, easyFrom);
+        easyBuffer = await easyOrdersFlow.exportOrders(page, easyFrom, dateTo);
         emitStage("easyorders.enrichment", "ok", `EasyOrders enrichment export downloaded ${easyBuffer.length} bytes`, { bytes: easyBuffer.length });
       } catch (enrichmentErr) {
         enrichmentError = enrichmentErr.message || String(enrichmentErr);

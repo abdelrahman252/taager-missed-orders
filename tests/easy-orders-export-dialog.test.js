@@ -5,8 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright-core");
 const {
-  closeExportDatePicker,
-  clickExportDialogSubmit,
+  selectExportDateRangeAndSubmit,
   waitForExportOrdersDialog,
 } = require("../src/bot/easy-orders-export-dialog");
 
@@ -19,48 +18,207 @@ function findChrome() {
   return candidates.find((candidate) => candidate && fs.existsSync(candidate));
 }
 
+function pickerFixture({ resetOnSelect = false, noOpDate = "" } = {}) {
+  return `<!doctype html>
+  <button class="MuiButton-outlined" id="page-export">Export</button>
+  <div role="presentation"><div role="dialog" aria-labelledby="export-title" aria-modal="true">
+    <h2 id="export-title">Export Orders</h2>
+    <h3>Please select the start and end date</h3>
+    <div aria-haspopup="true" aria-expanded="false" id="date-range-trigger">
+      <input id="date-range" type="text" readonly aria-label="Select date range to filter statistics" placeholder="Select date range to filter statistics" value="Oct 6, 2026  -  Oct 13, 2026">
+    </div>
+    <div class="MuiDialogActions-root"><button class="MuiButton-text" id="modal-export">Export</button></div>
+  </div></div>
+  <div class="MuiPopover-paper" id="range-popover" style="display:none">
+    <div class="rdp-root rdp" dir="ltr" lang="en-US" data-mode="range" data-required="true" data-multiple-months="true">
+      <div class="rdp-nav">
+        <button class="rdp-button_previous" aria-label="Go to the Previous Month" type="button"></button>
+        <button class="rdp-button_next" aria-label="Go to the Next Month" type="button"></button>
+      </div>
+      <div class="rdp-months"></div>
+      <div class="rdp-footer"><button type="button">Apply</button></div>
+    </div>
+  </div>
+  <script>
+  (() => {
+    const resetOnSelect = ${resetOnSelect ? "true" : "false"};
+    const noOpDate = ${JSON.stringify(noOpDate)};
+    let visibleFirstMonth = new Date(2026, 9, 1);
+    let range = { from: "2026-10-06", to: "2026-10-13" };
+    const popover = document.querySelector('#range-popover');
+    const root = document.querySelector('.rdp-root');
+    const months = document.querySelector('.rdp-months');
+    const input = document.querySelector('#date-range');
+    const trigger = document.querySelector('#date-range-trigger');
+    window.events = [];
+    window.modalClicks = 0;
+
+    const iso = (date) => date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+    const dateFromIso = (value) => { const [y, m, d] = value.split('-').map(Number); return new Date(y, m - 1, d); };
+    const monthTitle = (date) => date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    function drawMonths() {
+      months.innerHTML = '';
+      for (let offset = 0; offset < 2; offset++) {
+        const monthDate = new Date(visibleFirstMonth.getFullYear(), visibleFirstMonth.getMonth() + offset, 1);
+        const month = document.createElement('section');
+        month.className = 'rdp-month';
+        month.innerHTML = '<div class="rdp-month_caption"><span class="rdp-caption_label">' + monthTitle(monthDate) + '</span></div>' +
+          '<table class="rdp-month_grid"><tbody></tbody></table>';
+        const body = month.querySelector('tbody');
+        const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
+        let row;
+        for (let day = 1; day <= daysInMonth; day++) {
+          if ((day - 1) % 7 === 0) {
+            row = document.createElement('tr');
+            body.appendChild(row);
+          }
+          const dayIso = iso(new Date(monthDate.getFullYear(), monthDate.getMonth(), day));
+          const cell = document.createElement('td');
+          cell.setAttribute('data-day', dayIso);
+          const isStart = range.from === dayIso;
+          const isEnd = range.to === dayIso;
+          const selected = range.from && range.to && dayIso >= range.from && dayIso <= range.to;
+          const classes = ['rdp-day'];
+          if (selected) classes.push('rdp-selected');
+          if (isStart) classes.push('rdp-range_start');
+          if (isEnd) classes.push('rdp-range_end');
+          cell.className = classes.join(' ');
+          if (selected) {
+            cell.setAttribute('data-selected', 'true');
+            cell.setAttribute('aria-selected', 'true');
+          }
+          cell.innerHTML = '<button type="button" class="rdp-day_button" aria-label="' + new Date(monthDate.getFullYear(), monthDate.getMonth(), day).toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' }) + '">' + day + '</button>';
+          row.appendChild(cell);
+        }
+        months.appendChild(month);
+      }
+    }
+    function applyClick(dayIso) {
+      if (dayIso === noOpDate) return;
+      const from = range && range.from;
+      const to = range && range.to;
+      if (resetOnSelect && from && to) {
+        range = { from: dayIso, to: null };
+      } else if (!from && !to) {
+        range = { from: dayIso, to: dayIso };
+      } else if (from && !to) {
+        if (dayIso === from) range = { from, to: dayIso };
+        else if (dayIso < from) range = { from: dayIso, to: from };
+        else range = { from, to: dayIso };
+      } else if (from && to) {
+        if (from === dayIso && to === dayIso) range = { from, to };
+        else if (from === dayIso) range = { from, to: dayIso };
+        else if (to === dayIso) range = { from: dayIso, to: dayIso };
+        else if (dayIso < from) range = { from: dayIso, to };
+        else if (dayIso > from) range = { from, to: dayIso };
+      }
+      window.events.push('day:' + dayIso + ':' + (range.from || '') + ':' + (range.to || ''));
+      drawMonths();
+    }
+    trigger.addEventListener('click', () => {
+      popover.style.display = '';
+      trigger.setAttribute('aria-expanded', 'true');
+      drawMonths();
+    });
+    root.addEventListener('click', (event) => {
+      const nav = event.target.closest('button.rdp-button_previous,button.rdp-button_next');
+      if (nav) {
+        visibleFirstMonth.setMonth(visibleFirstMonth.getMonth() + (nav.classList.contains('rdp-button_next') ? 1 : -1));
+        drawMonths();
+        return;
+      }
+      const day = event.target.closest('td[data-day] .rdp-day_button');
+      if (day) applyClick(day.closest('td').getAttribute('data-day'));
+    });
+    root.querySelector('.rdp-footer button').addEventListener('click', () => {
+      if (!range.from || !range.to) return;
+      const format = (value) => dateFromIso(value).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+      input.value = format(range.from) + '  -  ' + format(range.to);
+      window.events.push('apply:' + range.from + ':' + range.to);
+      popover.style.display = 'none';
+      trigger.setAttribute('aria-expanded', 'false');
+    });
+    document.querySelector('#modal-export').addEventListener('click', () => {
+      window.modalClicks++;
+      window.events.push('export:' + input.value.replace(/\\s+/g, ' ').trim());
+    });
+    drawMonths();
+  })();
+  </script>`;
+}
+
+function localDate(year, month, day) {
+  return new Date(year, month - 1, day);
+}
+
 (async () => {
   const executablePath = findChrome();
   assert(executablePath, "Google Chrome is required for the export dialog selector regression test");
   const browser = await chromium.launch({ executablePath, headless: true });
   try {
     const page = await browser.newPage();
-    await page.setContent(`<!doctype html>
-      <button class="MuiButton-outlined" id="page-export" onclick="window.openerClicks++">Export</button>
-      <div role="presentation">
-        <div role="dialog" aria-labelledby="export-title" aria-modal="true">
-          <h2 id="export-title">Export Orders</h2>
-          <input id="start-date" type="text" value="09/25/2026">
-          <div class="MuiDialogActions-root"><button class="MuiButton-text" id="modal-export" onclick="window.modalClicks++; document.querySelector('[role=dialog][aria-labelledby=export-title]').remove()">Export</button></div>
-        </div>
-      </div>
-      <div class="react-datepicker" role="dialog" aria-label="Choose Date">Calendar</div>
-      <script>
-        window.openerClicks = 0;
-        window.modalClicks = 0;
-        document.addEventListener('keydown', (event) => {
-          if (event.key === 'Escape') document.querySelector('.react-datepicker')?.remove();
-        });
-      </script>`);
+    for (const keyword of ["orders", "missed-orders"]) {
+      await page.setContent(pickerFixture());
+      const dialog = await waitForExportOrdersDialog(page, keyword);
+      await selectExportDateRangeAndSubmit(page, dialog, localDate(2026, 10, 5), localDate(2026, 10, 13), keyword);
+      const state = await page.evaluate(() => ({
+        modalClicks: window.modalClicks,
+        input: document.querySelector('#date-range').value,
+        events: window.events,
+      }));
+      assert.strictEqual(state.modalClicks, 1, `${keyword} should submit exactly once`);
+      assert.match(state.input, /^Oct 5, 2026\s+-\s+Oct 13, 2026$/);
+      assert.deepStrictEqual(state.events.slice(-2), [
+        "apply:2026-10-05:2026-10-13",
+        `export:${state.input.replace(/\s+/g, " ").trim()}`,
+      ], `${keyword} Apply must commit the exact range immediately before the separate modal Export action`);
+    }
 
-    const dialog = await waitForExportOrdersDialog(page, "orders");
-    assert.strictEqual(await dialog.isVisible(), true, "the Export Orders modal should be selected despite a second date-picker dialog");
-    await closeExportDatePicker(page, "orders");
-    await clickExportDialogSubmit(page, dialog, "orders");
+    // Existing nonempty range, with requested start inside it. The production
+    // sequence must re-anchor the start instead of carrying the old endpoint.
+    await page.setContent(pickerFixture());
+    const insideDialog = await waitForExportOrdersDialog(page, "orders");
+    await selectExportDateRangeAndSubmit(page, insideDialog, localDate(2026, 10, 8), localDate(2026, 10, 14), "orders");
+    assert.match(await page.locator('#date-range').inputValue(), /^Oct 8, 2026\s+-\s+Oct 14, 2026$/);
 
-    const state = await page.evaluate(() => ({
-      openerClicks: window.openerClicks,
-      modalClicks: window.modalClicks,
-      pickerPresent: !!document.querySelector(".react-datepicker"),
-      exportModalPresent: !!document.querySelector('[role="dialog"][aria-labelledby="export-title"]'),
-    }));
-    assert.deepStrictEqual(state, {
-      openerClicks: 0,
-      modalClicks: 1,
-      pickerPresent: false,
-      exportModalPresent: false,
-    }, "the selector must dismiss the calendar and click exactly the modal Export action, not the page opener");
-    console.log("EasyOrders export dialog regression test passed");
+    // Also exercise the live component's resetOnSelect variant.
+    await page.setContent(pickerFixture({ resetOnSelect: true }));
+    const resetDialog = await waitForExportOrdersDialog(page, "missed-orders");
+    await selectExportDateRangeAndSubmit(page, resetDialog, localDate(2026, 10, 8), localDate(2026, 10, 14), "missed-orders");
+    assert.match(await page.locator('#date-range').inputValue(), /^Oct 8, 2026\s+-\s+Oct 14, 2026$/);
+
+    // A requested start after the preset range also works under default
+    // endpoint-update semantics by re-anchoring only after the marker confirms it.
+    await page.setContent(pickerFixture());
+    const laterDialog = await waitForExportOrdersDialog(page, "orders");
+    await selectExportDateRangeAndSubmit(page, laterDialog, localDate(2026, 10, 15), localDate(2026, 10, 20), "orders");
+    assert.match(await page.locator('#date-range').inputValue(), /^Oct 15, 2026\s+-\s+Oct 20, 2026$/);
+
+    // Same-day ranges are valid and must have both exact endpoint markers.
+    await page.setContent(pickerFixture());
+    const sameDayDialog = await waitForExportOrdersDialog(page, "orders");
+    await selectExportDateRangeAndSubmit(page, sameDayDialog, localDate(2026, 10, 5), localDate(2026, 10, 5), "orders");
+    assert.match(await page.locator('#date-range').inputValue(), /^Oct 5, 2026\s+-\s+Oct 5, 2026$/);
+
+    // Navigate across the year boundary using the captured accessible nav labels.
+    await page.setContent(pickerFixture());
+    const yearDialog = await waitForExportOrdersDialog(page, "orders");
+    await selectExportDateRangeAndSubmit(page, yearDialog, localDate(2025, 12, 30), localDate(2026, 1, 2), "orders");
+    assert.match(await page.locator('#date-range').inputValue(), /^Dec 30, 2025\s+-\s+Jan 2, 2026$/);
+
+    // A calendar click that does not set the requested range must block Apply
+    // and the modal's real Export action.
+    await page.setContent(pickerFixture({ noOpDate: "2026-10-08" }));
+    const badDialog = await waitForExportOrdersDialog(page, "orders");
+    await assert.rejects(
+      () => selectExportDateRangeAndSubmit(page, badDialog, localDate(2026, 10, 8), localDate(2026, 10, 14), "orders"),
+      /EASY_ORDERS_EXPORT_RANGE_START_NOT_SET|EASY_ORDERS_EXPORT_RANGE_NOT_SET/,
+      "wrong marker state must prevent both Apply and Export"
+    );
+    assert.strictEqual(await page.evaluate(() => window.modalClicks), 0);
+    assert.deepStrictEqual(await page.evaluate(() => window.events.filter((event) => event.startsWith("apply:") || event.startsWith("export:"))), []);
+
+    console.log("EasyOrders date-range export dialog regression test passed");
   } finally {
     await browser.close();
   }

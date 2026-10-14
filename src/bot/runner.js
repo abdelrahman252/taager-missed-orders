@@ -1635,12 +1635,12 @@ async function ensureEasyOrdersEnglish(page) {
 // ════════════════════════════════════════
 // PHASE 2 — REAL ORDERS EXPORT
 // ════════════════════════════════════════
-async function phase2_realOrders(page, exportFromDate) {
+async function phase2_realOrders(page, exportFromDate, exportToDate) {
   log("\n═══════════════════════════════════════");
   log("  PHASE 2 — Real Orders Export");
   log("═══════════════════════════════════════\n");
 
-  const buffer = await easyOrdersFlow.exportReport(page, exportFromDate, "orders");
+  const buffer = await easyOrdersFlow.exportReport(page, exportFromDate, "orders", exportToDate);
   log(`✅ Real orders downloaded: ${buffer.length} bytes`);
   return buffer;
 }
@@ -1648,12 +1648,12 @@ async function phase2_realOrders(page, exportFromDate) {
 // ════════════════════════════════════════
 // PHASE 3 — MISSED ORDERS EXPORT
 // ════════════════════════════════════════
-async function phase3_missedOrders(page, exportFromDate) {
+async function phase3_missedOrders(page, exportFromDate, exportToDate) {
   log("\n═══════════════════════════════════════");
   log("  PHASE 3 — Missed Orders Export");
   log("═══════════════════════════════════════\n");
 
-  const buffer = await easyOrdersFlow.exportReport(page, exportFromDate, "missed-orders");
+  const buffer = await easyOrdersFlow.exportReport(page, exportFromDate, "missed-orders", exportToDate);
   log(`✅ Missed orders downloaded: ${buffer.length} bytes`);
   return buffer;
 }
@@ -5861,8 +5861,8 @@ if (config.mode === "second-taager-cart-upload") {
     // Complete both primary EasyOrders exports before moving to Taager. A
     // browser disconnect during a Taager download then cannot block those exports.
     await phase1_easyOrdersLogin(page);
-    const realBuffer = await phase2_realOrders(page, exportFromDate);
-    const missedBuffer = await phase3_missedOrders(page, exportFromDate);
+    const realBuffer = await phase2_realOrders(page, exportFromDate, dateTo);
+    const missedBuffer = await phase3_missedOrders(page, exportFromDate, dateTo);
 
     // The selected range is widened around the edges, but never past today because
     // Taager disables future calendar dates.

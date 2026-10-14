@@ -4,8 +4,7 @@ const os = require("os");
 const path = require("path");
 const { isRetryableNetworkError } = require("./network-retry");
 const {
-  closeExportDatePicker,
-  clickExportDialogSubmit,
+  selectExportDateRangeAndSubmit,
   waitForExportOrdersDialog,
 } = require("./easy-orders-export-dialog");
 
@@ -777,60 +776,6 @@ function createEasyOrdersExportFlow(options = {}) {
     await verifyIdentity(page, "login");
   }
 
-  async function pickDate(page, targetDate) {
-    const monthNames = new Map([
-      ["january", 0], ["jan", 0], ["يناير", 0],
-      ["february", 1], ["feb", 1], ["فبراير", 1],
-      ["march", 2], ["mar", 2], ["مارس", 2],
-      ["april", 3], ["apr", 3], ["أبريل", 3], ["ابريل", 3],
-      ["may", 4], ["مايو", 4],
-      ["june", 5], ["jun", 5], ["يونيو", 5],
-      ["july", 6], ["jul", 6], ["يوليو", 6],
-      ["august", 7], ["aug", 7], ["أغسطس", 7], ["اغسطس", 7],
-      ["september", 8], ["sep", 8], ["sept", 8], ["سبتمبر", 8],
-      ["october", 9], ["oct", 9], ["أكتوبر", 9], ["اكتوبر", 9],
-      ["november", 10], ["nov", 10], ["نوفمبر", 10],
-      ["december", 11], ["dec", 11], ["ديسمبر", 11],
-    ]);
-    const normalizeMonthToken = (value) => String(value || "")
-      .replace(/[\u200E\u200F\u061C]/g, "")
-      .replace(/[،,]/g, " ")
-      .trim()
-      .toLowerCase();
-    const readShownMonthYear = async () => {
-      const header = await page.$eval(".react-datepicker__current-month", (el) => el.innerText.trim()).catch(() => "");
-      const cleanHeader = String(header || "").replace(/[\u200E\u200F\u061C]/g, "").trim();
-      const shownYear = Number((cleanHeader.match(/\d{4}/) || [])[0]);
-      const tokens = cleanHeader.split(/\s+/).map(normalizeMonthToken).filter(Boolean);
-      const shownMonth = tokens.reduce((found, token) => (
-        found >= 0 ? found : monthNames.has(token) ? monthNames.get(token) : -1
-      ), -1);
-      return { header: cleanHeader, shownMonth, shownYear };
-    };
-    log(`EasyOrders date picker: waiting for calendar for ${formatDataDay(targetDate)}`);
-    await page.waitForSelector(".react-datepicker", { timeout: 8000 });
-    for (let i = 0; i < 24; i++) {
-      const { header, shownMonth, shownYear } = await readShownMonthYear();
-      log(`EasyOrders date picker: visible month "${header || "empty"}" parsed as ${shownYear}-${String(shownMonth + 1).padStart(2, "0")}`);
-      if (!Number.isFinite(shownYear) || shownMonth < 0) {
-        throw new Error(`EASY_ORDERS_EXPORT_DATE_HEADER_UNREADABLE: "${header || "empty"}"`);
-      }
-      const shownTotal = shownYear * 12 + shownMonth;
-      const targetTotal = targetDate.getFullYear() * 12 + targetDate.getMonth();
-      if (shownTotal === targetTotal) break;
-      log(`EasyOrders date picker: moving ${targetTotal < shownTotal ? "previous" : "next"} toward ${formatDataDay(targetDate)}`);
-      await page.click(
-        targetTotal < shownTotal ? ".react-datepicker__navigation--previous" : ".react-datepicker__navigation--next",
-        { timeout: 2500 }
-      );
-      await page.waitForTimeout(300);
-    }
-    const dayClass = String(targetDate.getDate()).padStart(3, "0");
-    log(`EasyOrders date picker: clicking day ${targetDate.getDate()} (${dayClass})`);
-    await page.click(`.react-datepicker__day--${dayClass}:not(.react-datepicker__day--outside-month)`, { timeout: 2500 });
-    log(`EasyOrders date picker: selected ${formatDataDay(targetDate)}`);
-  }
-
   async function clickExportButton(page, exportButton, keyword) {
     let lastError = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -1110,7 +1055,10 @@ function createEasyOrdersExportFlow(options = {}) {
     return { href: "", summary: lastSummary };
   }
 
-  async function triggerExport(page, exportFromDate, keyword) {
+  async function triggerExport(page, exportFromDate, exportToDate, keyword) {
+    if (!(exportToDate instanceof Date) || !Number.isFinite(exportToDate.getTime())) {
+      throw new Error(`EASY_ORDERS_EXPORT_END_DATE_MISSING: ${keyword}: a configured end date is required`);
+    }
     const pageUrl = keyword === "missed-orders" ? "https://app.easy-orders.net/#/missed-orders" : "https://app.easy-orders.net/#/orders";
     let existingNotificationHrefs = [];
     // Do not accept an older same-day workbook while EasyOrders is still
@@ -1155,21 +1103,9 @@ function createEasyOrdersExportFlow(options = {}) {
       await exportButton.waitFor({ state: "visible", timeout: 15000 });
       await clickExportButton(page, exportButton, keyword);
       const dialog = await waitForExportOrdersDialog(page, keyword);
-      // EasyOrders now renders the datepicker inputs directly inside the
-      // dialog; the old `.react-datepicker-wrapper input` wrapper is gone.
-      const dateInputs = dialog.locator('input[type="text"]');
-      if ((await dateInputs.count().catch(() => 0)) < 1) {
-        throw new Error("EASY_ORDERS_EXPORT_DATE_INPUT_UNAVAILABLE: no text date input found in export dialog");
-      }
-      await dateInputs.first().click({ timeout: 5000 });
-      stage("easyorders.export.date", "started", `Selecting export start date ${formatDataDay(exportFromDate)}`);
-      await pickDate(page, exportFromDate);
-      log(`EasyOrders export date selected for ${keyword}; closing calendar`);
-      // Wait for the date picker to actually disappear before locating the
-      // modal submit button; Escape returning does not mean the UI has settled.
-      await closeExportDatePicker(page, keyword);
-      log(`EasyOrders export calendar close attempted for ${keyword}; submitting dialog`);
-      await clickExportDialogSubmit(page, dialog, keyword);
+      stage("easyorders.export.date", "started", `Selecting export range ${formatDataDay(exportFromDate)} through ${formatDataDay(exportToDate)}`);
+      await selectExportDateRangeAndSubmit(page, dialog, exportFromDate, exportToDate, keyword);
+      log(`EasyOrders export range applied and verified for ${keyword}; dialog submitted`);
       log(`EasyOrders export submit clicked for ${keyword}; waiting for dialog to close`);
       await dialog.waitFor({ state: "hidden", timeout: 8000 }).catch(() => {});
       log(`EasyOrders export dialog close wait finished for ${keyword}`);
@@ -1259,10 +1195,10 @@ function createEasyOrdersExportFlow(options = {}) {
     }
   }
 
-  async function exportReport(page, exportFromDate, keyword = "orders") {
-    const url = await triggerExport(page, exportFromDate, keyword);
+  async function exportReport(page, exportFromDate, keyword = "orders", exportToDate) {
+    const url = await triggerExport(page, exportFromDate, exportToDate, keyword);
     const buffer = await download(page, url);
-    log(`EasyOrders ${keyword} downloaded: ${buffer.length} bytes from ${formatDataDay(exportFromDate)}`);
+    log(`EasyOrders ${keyword} downloaded: ${buffer.length} bytes for ${formatDataDay(exportFromDate)} through ${formatDataDay(exportToDate)}`);
     return buffer;
   }
 
@@ -1271,7 +1207,7 @@ function createEasyOrdersExportFlow(options = {}) {
     assertSession,
     ensureEnglish,
     exportReport,
-    exportOrders: (page, exportFromDate) => exportReport(page, exportFromDate, "orders"),
+    exportOrders: (page, exportFromDate, exportToDate) => exportReport(page, exportFromDate, "orders", exportToDate),
   };
 }
 
