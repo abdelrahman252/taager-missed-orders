@@ -95,8 +95,8 @@ function makeScenario(saveTokenResult, statusFactory, options = {}) {
     setImmediate,
     window: {
       dashboardI18n: {
-        pick(en) { return en; },
-        locale() { return "en-US"; },
+        pick(en, ar) { return options.locale === "ar" ? ar : en; },
+        locale() { return options.locale === "ar" ? "ar-SA" : "en-US"; },
       },
       DashboardMarketingState: {
         get(accountId, platformId) {
@@ -170,7 +170,7 @@ async function runInvalidTokenSmoke() {
 
   assert.deepStrictEqual(scenario.statusCalls, []);
   assert.deepStrictEqual(scenario.storeWrites, []);
-  assert.ok(scenario.htmlWrites.some((html) => html.includes("INVALID_SAUDIIPICK_TOKEN")), "invalid token error should be rendered inline");
+  assert.ok(scenario.htmlWrites.some((html) => html.includes("The Saudi iPick desktop token is invalid.")), "invalid token should show an actionable inline message");
 }
 
 async function runAccountHealthSmoke() {
@@ -240,11 +240,35 @@ async function runSavedMappingFallbackSmoke() {
   assert.ok(scenario.htmlWrites.some((html) => html.includes("1 assigned")), "saved mapping should render as assigned");
 }
 
+async function runArabicTranslationSmoke() {
+  const scenario = makeScenario({ ok: true, tokenPreview: "sipdt_abc..." }, null, {
+    locale: "ar",
+    tokenStatus: { configured: true, tokenPreview: "sipdt_saved...", connectUrl: "https://saudiipick.com/dashboard/settings" },
+  });
+  await settleAll();
+  const rendered = scenario.htmlWrites[scenario.htmlWrites.length - 1];
+  assert.ok(rendered.includes("متصل"), "connected state should be Arabic in Arabic mode");
+  assert.ok(rendered.includes("الإنفاق الإعلاني"), "marketing metrics should be Arabic in Arabic mode");
+  assert.ok(rendered.includes("تشخيص الاتصال"), "diagnostics labels should be Arabic in Arabic mode");
+  assert.ok(!rendered.includes("Partial sync") && !rendered.includes("Connected"), "status labels should not fall back to English");
+}
+
+async function runArabicErrorSmoke() {
+  const scenario = makeScenario({ ok: false, error: "INVALID_SAUDIIPICK_TOKEN" }, null, { locale: "ar" });
+  await settleAll();
+  scenario.tokenInput.value = "sipdt_invalid_token";
+  scenario.saveButton.listeners.click();
+  await settleAll();
+  assert.ok(scenario.htmlWrites.some((html) => html.includes("رمز Saudi iPick لسطح المكتب غير صالح")), "invalid token should have an Arabic inline message");
+}
+
 (async () => {
   await runValidTokenSmoke();
   await runInvalidTokenSmoke();
   await runAccountHealthSmoke();
   await runSavedMappingFallbackSmoke();
+  await runArabicTranslationSmoke();
+  await runArabicErrorSmoke();
   console.log("[PASS] Saudi iPick renderer token save refresh smoke tests");
 })().catch((err) => {
   console.error(err && err.stack ? err.stack : err);

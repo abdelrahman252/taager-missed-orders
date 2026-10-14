@@ -1379,9 +1379,12 @@
       if (shellEl._topbarReportingCurrencyKey !== reportingKey) {
         shellEl._topbarReportingCurrencyKey = reportingKey;
         window.renderCustomSelect(reportingCurrencyWrap, reportingOptions, meta.reportingCurrency || 'SAR', function (value) {
+          var previousCurrency = window.getDashboardReportingCurrency
+            ? window.getDashboardReportingCurrency()
+            : (meta.reportingCurrency || 'SAR');
           shellEl._topbarReportingCurrencyKey = null;
           if (window.setDashboardReportingCurrency) window.setDashboardReportingCurrency(value);
-          if (typeof opts.onReportingCurrencyChange === 'function') opts.onReportingCurrencyChange(value);
+          if (typeof opts.onReportingCurrencyChange === 'function') opts.onReportingCurrencyChange(value, previousCurrency);
         }, { maxHeight: '220px', ariaLabel: tr('currency.label') });
       }
     }

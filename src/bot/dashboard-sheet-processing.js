@@ -41,7 +41,11 @@ function workbookRows(buffer, label) {
 }
 
 function normalizedHeader(value) {
-  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+  // EasyOrders has emitted both spaced and compact/punctuated variants of
+  // these headers (for example, "UTM Source", "UTM_Source", and
+  // "UtmSource"). Canonicalize separators so attribution keeps working when
+  // the export template changes its presentation.
+  return String(value || "").trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 function findHeader(header, candidates) {

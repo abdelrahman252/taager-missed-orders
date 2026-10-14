@@ -11,8 +11,65 @@
   }
 
   function tx(en, ar) {
+    var untranslated = {
+      'Account connection needs attention.': 'يحتاج اتصال الحساب إلى مراجعة.',
+      'Select visible accounts': 'تحديد الحسابات الظاهرة', 'Page ': 'الصفحة ', 'Assigned to ': 'مُعيّن إلى ',
+      'No accounts match this search.': 'لا توجد حسابات مطابقة لهذا البحث.', 'Search ad accounts': 'ابحث في الحسابات الإعلانية',
+      'Assign to this account': 'تعيين لهذا الحساب', 'Assigned ad account': 'الحساب الإعلاني المعيّن',
+      'Disconnect & free slot': 'إلغاء الربط وتحرير مساحة', 'No assigned ad accounts to release.': 'لا توجد حسابات إعلانية معيّنة لتحريرها.',
+      'Use an existing website account pool or free a connection slot.': 'استخدم حسابًا من قائمة الموقع أو حرّر مساحة اتصال.',
+      'Claim': 'استحواذ', 'Release': 'تحرير', 'Ad account ID': 'معرّف الحساب الإعلاني', 'Paste ad account ID': 'ألصق معرّف الحساب الإعلاني',
+      'Use existing account': 'استخدام حساب موجود',
+      'Release removes the assignment from this Taager account and frees one connection slot.': 'يؤدي التحرير إلى إزالة التعيين من حساب تاجر هذا وتوفير مساحة اتصال.',
+      'Connection diagnostics': 'تشخيص الاتصال', 'Step': 'الخطوة', 'Available accounts': 'الحسابات المتاحة',
+      'Selected accounts': 'الحسابات المحددة', 'Mapped accounts': 'الحسابات المعيّنة', 'Not synced yet': 'لم تتم المزامنة بعد',
+      'Available on Saudi iPick: ': 'المتاح على Saudi iPick: ',
+      'Working...': 'جارٍ العمل...', 'Available now': 'متاح الآن', 'Partial sync': 'مزامنة جزئية', 'Connected': 'متصل',
+      'Not connected': 'غير متصل', 'Ad spend': 'الإنفاق الإعلاني', 'mixed currencies': 'عملات متعددة', 'Campaign rows': 'صفوف الحملات',
+      'Purchases': 'عمليات الشراء', 'ROAS': 'العائد على الإنفاق الإعلاني', 'Last sync': 'آخر مزامنة', 'Add account': 'إضافة حساب',
+      'Refresh all selected dates': 'تحديث كل التواريخ المحددة', 'Refresh accounts': 'تحديث الحسابات', 'Meta Ads': 'إعلانات Meta',
+      'Coming soon': 'قريبًا',
+      'Meta will appear here after Saudi iPick enables the provider connection. Existing dashboard calculators stay wired through Snapchat and TikTok.': 'ستظهر Meta هنا بعد تفعيل الاتصال بها في Saudi iPick. وتظل حاسبات لوحة التحكم متصلة بـ Snapchat وTikTok.',
+      'Sync mapped Meta accounts': 'مزامنة حسابات Meta المعيّنة', 'Native marketing connection': 'اتصال التسويق الأصلي',
+      'Use Saudi iPick as the source for Snapchat and TikTok spend, campaigns, purchases, CPA, and ROAS inside this desktop dashboard.': 'استخدم Saudi iPick مصدرًا لإنفاق Snapchat وTikTok وحملاتهما ومشترياتهما وتكلفة الشراء والعائد على الإنفاق داخل لوحة سطح المكتب.',
+      'Same calculators': 'الحاسبات نفسها',
+      'Each card syncs its own platform into the product, account, and level calculators after you press sync.': 'تزامن كل بطاقة منصتها مع حاسبات المنتج والحساب والمستوى عند الضغط على زر المزامنة.',
+      'Saudi iPick desktop bridge is not available in this app build.': 'اتصال Saudi iPick لسطح المكتب غير متاح في هذا الإصدار من التطبيق.',
+      'Accounts loaded. Select the ad accounts for this Taager account, then sync.': 'تم تحميل الحسابات. حدد الحسابات الإعلانية لحساب تاجر هذا، ثم ابدأ المزامنة.',
+      'Loaded ': 'تم تحميل ', 'Token saved. Loading account status...': 'تم حفظ الرمز. جارٍ تحميل حالة الحساب...',
+      'Token saved. Loading Snapchat and TikTok accounts...': 'تم حفظ الرمز. جارٍ تحميل حسابات Snapchat وTikTok...',
+      'Paste the ad account ID first.': 'ألصق معرّف الحساب الإعلاني أولًا.',
+      'This ad account is not in the Saudi iPick website account pool. Add it on the website first, then refresh status.': 'هذا الحساب الإعلاني غير موجود في قائمة حسابات موقع Saudi iPick. أضفه إلى الموقع أولًا ثم حدّث الحالة.',
+      'Account selected. Save mapping to assign it.': 'تم تحديد الحساب. احفظ التعيين لربطه.',
+      'Account removed from the draft mapping. Save mapping to free the slot.': 'تمت إزالة الحساب من التعيين المسودة. احفظ التعيين لتحرير المساحة.'
+    };
+    var dynamicArabic = null;
+    if (ar === en) {
+      var platformMatch = String(en).match(/^(Snapchat|TikTok) (.*)$/);
+      var platformAr = platformMatch ? (platformMatch[1] === 'Snapchat' ? 'سناب شات' : 'تيك توك') : '';
+      if (/^No selected (Snapchat|TikTok) accounts were returned\./.test(en)) dynamicArabic = 'لم تُرجع Saudi iPick حسابات ' + platformAr + ' المحددة. تحقق من صفحة الحسابات على الموقع وحدد الحسابات الإعلانية.';
+      else if (/^No selected (Snapchat|TikTok) accounts came back/.test(en)) dynamicArabic = 'لم تصل حسابات ' + platformAr + ' المحددة من Saudi iPick. تحقق من تحديد الحسابات على الموقع ثم حدّث الحالة.';
+      else if (/^No (Snapchat|TikTok) ad accounts were returned/.test(en)) dynamicArabic = 'لم تُرجع Saudi iPick حسابات ' + platformAr + ' إعلانية بعد.';
+      else if (/^Map (Snapchat|TikTok) accounts to Taager accounts$/.test(en)) dynamicArabic = 'تعيين حسابات ' + platformAr + ' إلى حسابات تاجر';
+      else if (/^One Taager account can use multiple (Snapchat|TikTok) ad accounts/.test(en)) dynamicArabic = 'يمكن لحساب تاجر واحد استخدام عدة حسابات ' + platformAr + ' إعلانية. حدد الحسابات التابعة له.';
+      else if (/^Claim or release (Snapchat|TikTok) ad account$/.test(en)) dynamicArabic = 'ربط أو تحرير حساب ' + platformAr + ' إعلاني';
+      else if (/^Paste an existing (Snapchat|TikTok) ad account ID/.test(en)) dynamicArabic = 'ألصق معرّف حساب ' + platformAr + ' إعلاني موجود لربطه بحساب تاجر هذا.';
+      else if (/^Partial sync: some (Snapchat|TikTok) account data/.test(en)) dynamicArabic = 'مزامنة جزئية: تعذرت قراءة بيانات بعض حسابات ' + platformAr + ' الإعلانية.';
+      else if (/^Requesting selected (Snapchat|TikTok) accounts/.test(en)) dynamicArabic = 'جارٍ طلب حسابات ' + platformAr + ' المحددة من Saudi iPick...';
+      else if (/^Could not load (Snapchat|TikTok) accounts/.test(en)) dynamicArabic = 'تعذر تحميل حسابات ' + platformAr + ' من Saudi iPick.';
+      else if (/^Syncing (Snapchat|TikTok) spend/.test(en)) dynamicArabic = 'جارٍ مزامنة إنفاق ' + platformAr + ' من Saudi iPick...';
+      else if (/^(Snapchat|TikTok) spend synced into the calculators\.$/.test(en)) dynamicArabic = 'تمت مزامنة إنفاق ' + platformAr + ' مع الحاسبات.';
+      else if (/^Could not sync (Snapchat|TikTok) spend\.$/.test(en)) dynamicArabic = 'تعذرت مزامنة إنفاق ' + platformAr + '.';
+      else if (/^Sync mapped (Snapchat|TikTok) accounts$/.test(en)) dynamicArabic = 'مزامنة حسابات ' + platformAr + ' المعيّنة';
+      else if (/^After renaming (Snapchat|TikTok) campaigns/.test(en)) dynamicArabic = 'بعد تغيير أسماء حملات ' + platformAr + ' أو إضافة رموز SKU، قد تظل التقارير المتزامنة محفوظة مؤقتًا لمدة تصل إلى 6 ساعات. للتغييرات السابقة، حدّث بيانات الحملات ثم أعد المزامنة.';
+      else if (/^Assigned /.test(en)) dynamicArabic = 'المعيّن: ' + en.slice('Assigned '.length);
+      else if (/^\d+ assigned$/.test(en)) dynamicArabic = en.slice(0, -' assigned'.length) + ' معيّن';
+      else if (/^No \w+ ad accounts were returned from Saudi iPick yet\.$/.test(en)) dynamicArabic = 'لم تُرجع Saudi iPick حسابات إعلانية بعد.';
+      else if (/^The API returned|^Could not .*| failed\.?$/.test(en)) dynamicArabic = 'تعذر إكمال العملية. حاول مرة أخرى، وإذا استمرت المشكلة تواصل مع المسؤول.';
+    }
+    var localized = ar === en ? (untranslated[en] || dynamicArabic || ar) : ar;
     return window.dashboardI18n && typeof window.dashboardI18n.pick === 'function'
-      ? window.dashboardI18n.pick(en, ar)
+      ? window.dashboardI18n.pick(en, localized)
       : en;
   }
 
@@ -186,7 +243,36 @@
       if (value === 'dashboard_account_not_licensed') return tx('Could not match this Taager account to its license. Contact your administrator.', 'تعذر مطابقة حساب Taager مع ترخيصه. تواصل مع المسؤول.');
       if (value === 'dashboard_account_ambiguous') return tx('Multiple licensed accounts match. Administrator review is required.', 'يوجد أكثر من حساب مرخص مطابق. يلزم مراجعة المسؤول.');
       if (value === 'account_selection_changed') return tx('The account changed while connecting. Refresh the connection status.', 'تغير الحساب أثناء الربط. حدّث حالة الاتصال.');
-      return value;
+      return localizedError(value);
+    }
+    function localizedError(value) {
+      var known = {
+        INVALID_SAUDIIPICK_TOKEN: tx('The Saudi iPick desktop token is invalid. Create a new token on the website and save it again.', 'رمز Saudi iPick لسطح المكتب غير صالح. أنشئ رمزًا جديدًا على الموقع ثم احفظه مرة أخرى.'),
+        SAUDIIPICK_TOKEN_REQUIRED: tx('Save a Saudi iPick desktop token first.', 'احفظ رمز Saudi iPick لسطح المكتب أولًا.'),
+        SAUDIIPICK_MAPPING_REQUIRED: tx('Assign at least one ad account before syncing.', 'عيّن حسابًا إعلانيًا واحدًا على الأقل قبل المزامنة.'),
+        SAUDIIPICK_ACCOUNT_MAPPING_REQUIRED: tx('Assign an ad account to this Taager account first.', 'عيّن حسابًا إعلانيًا لحساب تاجر هذا أولًا.'),
+        SAUDIIPICK_SOURCE_CONNECTION_UNAVAILABLE: tx('The selected ad account connection is unavailable. Reconnect it on Saudi iPick.', 'اتصال الحساب الإعلاني المحدد غير متاح. أعد ربطه على Saudi iPick.'),
+        MARKETING_USAGE_UNAVAILABLE: tx('Marketing usage could not be loaded. Try again shortly.', 'تعذر تحميل استخدام التسويق. حاول مرة أخرى بعد قليل.'),
+        SELECT_ACCOUNT: tx('Select a Taager account first.', 'حدد حساب تاجر أولًا.'),
+        SELECT_SINGLE_ACCOUNT: tx('Select one Taager account to continue.', 'حدد حساب تاجر واحدًا للمتابعة.')
+      };
+      var text = String(value == null ? '' : value);
+      return Object.prototype.hasOwnProperty.call(known, text) ? known[text] : text;
+    }
+    function diagnosticStepLabel(step) {
+      var labels = {
+        idle: ['Idle', 'جاهز'], 'bridge-missing': ['Bridge missing', 'الاتصال غير متاح'],
+        'token-save': ['Saving token', 'جارٍ حفظ الرمز'], 'token-saved': ['Token saved', 'تم حفظ الرمز'],
+        'token-error': ['Token error', 'خطأ في الرمز'], 'token-cleared': ['Token cleared', 'تم مسح الرمز'],
+        'token-status': ['Reading token status', 'جارٍ قراءة حالة الرمز'], 'token-status-error': ['Token status error', 'خطأ في حالة الرمز'],
+        'status-request': ['Loading accounts', 'جارٍ تحميل الحسابات'], 'status-ok': ['Accounts loaded', 'تم تحميل الحسابات'],
+        'status-error': ['Account loading error', 'خطأ في تحميل الحسابات'], 'mapping-save': ['Saving account assignment', 'جارٍ حفظ تعيين الحساب'],
+        'mapping-saved': ['Account assignment saved', 'تم حفظ تعيين الحساب'], 'mapping-error': ['Account assignment error', 'خطأ في تعيين الحساب'],
+        'sync-request': ['Sync requested', 'بدأت المزامنة'], 'sync-ok': ['Sync complete', 'اكتملت المزامنة'],
+        'sync-error': ['Sync error', 'خطأ في المزامنة']
+      };
+      var pair = labels[String(step || 'idle')];
+      return pair ? tx(pair[0], pair[1]) : String(step || 'idle');
     }
     var loading = false;
     var diagnostics = {
@@ -299,7 +385,7 @@
       sourceQuery = cached.sourceQuery || '';
       sourcePage = cached.sourcePage || 1;
       message = cached.message || '';
-      error = cached.error || '';
+      error = localizedError(cached.error || '');
       loading = !!cached.loading;
       diagnostics = Object.assign({}, diagnostics, cached.diagnostics || {}, { platform: platformCursor });
       platformState[platformCursor] = cached;
@@ -363,36 +449,36 @@
     function tokenPanel() {
       return '<section class="marketing-connection-guide">' +
         '<div class="marketing-guide-head">' +
-          '<div><h4>' + esc(tx('Saudi iPick desktop bridge', 'Ø±Ø¨Ø· Saudi iPick Ø¨Ø³Ø·Ø­ Ø§Ù„Ù…ÙƒØªØ¨')) + '</h4>' +
-          '<p>' + esc(tx('Create a desktop token from the website Settings page, paste it here once, then sync selected Snapchat or TikTok accounts into the calculators.', 'Ø£Ù†Ø´Ø¦ Ø±Ù…Ø² Ø³Ø·Ø­ Ø§Ù„Ù…ÙƒØªØ¨ Ù…Ù† Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø§Ù„Ù…ÙˆÙ‚Ø¹ØŒ ÙˆØ§Ù„ØµÙ‚Ù‡ Ù‡Ù†Ø§ Ù…Ø±Ø© ÙˆØ§Ø­Ø¯Ø©ØŒ Ø«Ù… Ø²Ø§Ù…Ù† Ø­Ø³Ø§Ø¨Ø§Øª Ø³Ù†Ø§Ø¨ Ø´Ø§Øª Ø§Ù„Ù…Ø­Ø¯Ø¯Ø© Ø¯Ø§Ø®Ù„ Ø§Ù„Ø­Ø§Ø³Ø¨Ø§Øª.')) + '</p></div>' +
-          '<button type="button" class="marketing-secondary" data-sip-open-settings>' + esc(tx('Open website settings', 'ÙØªØ­ Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø§Ù„Ù…ÙˆÙ‚Ø¹')) + '</button>' +
+          '<div><h4>' + esc(tx('Saudi iPick desktop bridge', 'ربط Saudi iPick بسطح المكتب')) + '</h4>' +
+          '<p>' + esc(tx('Create a desktop token from the website Settings page, paste it here once, then sync selected Snapchat or TikTok accounts into the calculators.', 'أنشئ رمز سطح المكتب من إعدادات الموقع، والصقه هنا مرة واحدة، ثم زامن حسابات سناب شات المحددة داخل الحاسبات.')) + '</p></div>' +
+          '<button type="button" class="marketing-secondary" data-sip-open-settings>' + esc(tx('Open website settings', 'فتح إعدادات الموقع')) + '</button>' +
         '</div>' +
         '<div class="marketing-token-row marketing-token-row-compact">' +
-          '<input type="password" class="marketing-token-input" data-sip-token-input placeholder="' + esc(tx('Paste desktop token from Saudi iPick', 'Ø§Ù„ØµÙ‚ Ø±Ù…Ø² Ø³Ø·Ø­ Ø§Ù„Ù…ÙƒØªØ¨ Ù…Ù† Saudi iPick')) + '">' +
-          '<button type="button" class="marketing-primary" data-sip-save-token>' + esc(tx('Save token', 'Ø­ÙØ¸ Ø§Ù„Ø±Ù…Ø²')) + '</button>' +
-          '<button type="button" class="marketing-secondary" data-sip-clear-token' + (tokenState.configured ? '' : ' disabled') + '>' + esc(tx('Clear', 'Ù…Ø³Ø­')) + '</button>' +
+          '<input type="password" class="marketing-token-input" data-sip-token-input placeholder="' + esc(tx('Paste desktop token from Saudi iPick', 'الصق رمز سطح المكتب من Saudi iPick')) + '">' +
+          '<button type="button" class="marketing-primary" data-sip-save-token>' + esc(tx('Save token', 'حفظ الرمز')) + '</button>' +
+          '<button type="button" class="marketing-secondary" data-sip-clear-token' + (tokenState.configured ? '' : ' disabled') + '>' + esc(tx('Clear', 'مسح')) + '</button>' +
         '</div>' +
-        '<p class="marketing-sync-note">' + esc(tokenState.configured ? tx('Token saved: ', 'Ø§Ù„Ø±Ù…Ø² Ù…Ø­ÙÙˆØ¸: ') + tokenState.tokenPreview : tx('No desktop token saved yet.', 'Ù„Ø§ ÙŠÙˆØ¬Ø¯ Ø±Ù…Ø² Ù…Ø­ÙÙˆØ¸ Ø­ØªÙ‰ Ø§Ù„Ø¢Ù†.')) + '</p>' +
+        '<p class="marketing-sync-note">' + esc(tokenState.configured ? tx('Token saved: ', 'الرمز محفوظ: ') + tokenState.tokenPreview : tx('No desktop token saved yet.', 'لا يوجد رمز محفوظ حتى الآن.')) + '</p>' +
       '</section>';
     }
 
     function diagnosticsPanel() {
       var rows = [
-        [tx('Step', 'Ø§Ù„Ø®Ø·ÙˆØ©'), diagnostics.step || 'idle'],
-        [tx('Token', 'Ø§Ù„Ø±Ù…Ø²'), tokenState.configured ? tx('Saved', 'Ù…Ø­ÙÙˆØ¸') + (tokenState.tokenPreview ? ' (' + tokenState.tokenPreview + ')' : '') : tx('Not saved', 'ØºÙŠØ± Ù…Ø­ÙÙˆØ¸')],
-        [tx('Taager account', 'Ø­Ø³Ø§Ø¨ ØªØ§Ø¬Ø±'), allMode ? tx('All accounts selected', 'ÙƒÙ„ Ø§Ù„Ø­Ø³Ø§Ø¨Ø§Øª Ù…Ø­Ø¯Ø¯Ø©') : selectedAccountId],
-        [tx('Available Snapchat accounts', 'Ø­Ø³Ø§Ø¨Ø§Øª Ø³Ù†Ø§Ø¨ Ø§Ù„Ù…ØªØ§Ø­Ø©'), String(diagnostics.availableCount || 0)],
-        [tx('Selected for this Taager account', 'Ø§Ù„Ù…Ø­Ø¯Ø¯Ø© Ù„Ù‡Ø°Ø§ Ø§Ù„Ø­Ø³Ø§Ø¨'), String(diagnostics.selectedCount || 0)],
-        [tx('Mapped accounts', 'Ø§Ù„Ø­Ø³Ø§Ø¨Ø§Øª Ø§Ù„Ù…Ø¹ÙŠÙ†Ø©'), String(diagnostics.mappedCount || 0)]
+        [tx('Step', 'الخطوة'), diagnosticStepLabel(diagnostics.step)],
+        [tx('Token', 'الرمز'), tokenState.configured ? tx('Saved', 'محفوظ') + (tokenState.tokenPreview ? ' (' + tokenState.tokenPreview + ')' : '') : tx('Not saved', 'غير محفوظ')],
+        [tx('Taager account', 'حساب تاجر'), allMode ? tx('All accounts selected', 'كل الحسابات محددة') : selectedAccountId],
+        [tx('Available Snapchat accounts', 'حسابات سناب المتاحة'), String(diagnostics.availableCount || 0)],
+        [tx('Selected for this Taager account', 'المحددة لهذا الحساب'), String(diagnostics.selectedCount || 0)],
+        [tx('Mapped accounts', 'الحسابات المعينة'), String(diagnostics.mappedCount || 0)]
       ];
-      if (diagnostics.summary) rows.push([tx('Result', 'Ø§Ù„Ù†ØªÙŠØ¬Ø©'), diagnostics.summary]);
-      if (diagnostics.lastError) rows.push([tx('Last error', 'Ø¢Ø®Ø± Ø®Ø·Ø£'), diagnostics.lastError]);
-      if (diagnostics.updatedAt) rows.push([tx('Updated', 'Ø¢Ø®Ø± ØªØ­Ø¯ÙŠØ«'), diagnostics.updatedAt]);
+      if (diagnostics.summary) rows.push([tx('Result', 'النتيجة'), diagnostics.summary]);
+      if (diagnostics.lastError) rows.push([tx('Last error', 'آخر خطأ'), diagnostics.lastError]);
+      if (diagnostics.updatedAt) rows.push([tx('Updated', 'آخر تحديث'), diagnostics.updatedAt]);
       return '<section class="marketing-mapping-board" style="margin-top:14px;">' +
         '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">' +
-          '<div><h4>' + esc(tx('Connection diagnostics', 'ØªØ´Ø®ÙŠØµ Ø§Ù„Ø§ØªØµØ§Ù„')) + '</h4>' +
-          '<p class="marketing-sync-note">' + esc(tx('This shows what the desktop app received from Saudi iPick after saving or refreshing the token.', 'ÙŠÙˆØ¶Ø­ Ù‡Ø°Ø§ Ù…Ø§ Ø§Ø³ØªÙ„Ù…Ù‡ ØªØ·Ø¨ÙŠÙ‚ Ø³Ø·Ø­ Ø§Ù„Ù…ÙƒØªØ¨ Ù…Ù† Saudi iPick Ø¨Ø¹Ø¯ Ø­ÙØ¸ Ø£Ùˆ ØªØ­Ø¯ÙŠØ« Ø§Ù„Ø±Ù…Ø².')) + '</p></div>' +
-          '<button type="button" class="marketing-secondary" data-sip-refresh' + (tokenState.configured ? '' : ' disabled') + '>' + esc(tx('Refresh accounts', 'ØªØ­Ø¯ÙŠØ« Ø§Ù„Ø­Ø³Ø§Ø¨Ø§Øª')) + '</button>' +
+          '<div><h4>' + esc(tx('Connection diagnostics', 'تشخيص الاتصال')) + '</h4>' +
+          '<p class="marketing-sync-note">' + esc(tx('This shows what the desktop app received from Saudi iPick after saving or refreshing the token.', 'يوضح هذا ما استلمه تطبيق سطح المكتب من Saudi iPick بعد حفظ أو تحديث الرمز.')) + '</p></div>' +
+          '<button type="button" class="marketing-secondary" data-sip-refresh' + (tokenState.configured ? '' : ' disabled') + '>' + esc(tx('Refresh accounts', 'تحديث الحسابات')) + '</button>' +
         '</div>' +
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;">' +
           rows.map(function (row) {
@@ -427,7 +513,7 @@
         : '';
       var assigned = selectedSources;
       var assignedMarkup = assigned.length ? '<div class="marketing-inline-info">' +
-        esc(tx('Assigned to this Taager account: ', 'Ù…Ø¹ÙŠÙ† Ù„Ù‡Ø°Ø§ Ø§Ù„Ø­Ø³Ø§Ø¨: ')) +
+        esc(tx('Assigned to this Taager account: ', 'معين لهذا الحساب: ')) +
         assigned.map(function (source) { return esc(source.name || source.id); }).join(', ') +
       '</div>' : '';
       var rows = pageRows.length ? pageRows.map(function (source) {
@@ -438,37 +524,37 @@
           '<span class="marketing-source-copy"><strong>' + esc(source.name) + '</strong><small>' +
             esc((source.organizationName ? source.organizationName + ' Â· ' : '') + source.currency + (source.canManageCampaigns ? ' Â· manage campaigns' : '')) +
             '</small><small>' + esc(source.id) + '</small>' +
-            (ownedElsewhere ? '<em>' + esc(tx('Assigned to ', 'Ù…Ø¹ÙŠÙ† Ø¥Ù„Ù‰ ') + owner.label) + '</em>' : '') +
+            (ownedElsewhere ? '<em>' + esc(tx('Assigned to ', 'معين إلى ') + owner.label) + '</em>' : '') +
           '</span>' +
         '</label>';
       }).join('') : '<div class="marketing-inline-warning">' + esc(availableAccounts.length
-        ? tx('No accounts match this search.', 'Ù„Ø§ ØªÙˆØ¬Ø¯ Ø­Ø³Ø§Ø¨Ø§Øª Ù…Ø·Ø§Ø¨Ù‚Ø© Ù„Ù„Ø¨Ø­Ø«.')
-        : tx('No selected Snapchat accounts came back from Saudi iPick yet. Connect Snapchat on the website and select the ad accounts first.', 'Ù„Ù… ØªØµÙ„ Ø£ÙŠ Ø­Ø³Ø§Ø¨Ø§Øª Ø³Ù†Ø§Ø¨ Ø´Ø§Øª Ù…Ø­Ø¯Ø¯Ø© Ù…Ù† Saudi iPick Ø¨Ø¹Ø¯. Ø§Ø±Ø¨Ø· Ø³Ù†Ø§Ø¨ Ø´Ø§Øª ÙÙŠ Ø§Ù„Ù…ÙˆÙ‚Ø¹ ÙˆØ­Ø¯Ø¯ Ø§Ù„Ø­Ø³Ø§Ø¨Ø§Øª Ø§Ù„Ø¥Ø¹Ù„Ø§Ù†ÙŠØ© Ø£ÙˆÙ„Ø§Ù‹.')) + '</div>';
+        ? tx('No accounts match this search.', 'لا توجد حسابات مطابقة للبحث.')
+        : tx('No selected Snapchat accounts came back from Saudi iPick yet. Connect Snapchat on the website and select the ad accounts first.', 'لم تصل أي حسابات سناب شات محددة من Saudi iPick بعد. اربط سناب شات في الموقع وحدد الحسابات الإعلانية أولاً.')) + '</div>';
 
       return '<section class="marketing-mapping-board">' +
-        '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;"><div><h4>' + esc(tx('Map Snapchat ad accounts', 'ØªØ¹ÙŠÙŠÙ† Ø­Ø³Ø§Ø¨Ø§Øª Ø³Ù†Ø§Ø¨ Ø´Ø§Øª')) + '</h4>' +
-        '<p class="marketing-sync-note">' + esc(tx('Choose which Saudi iPick ad accounts feed this Taager account. Accounts assigned elsewhere are locked.', 'Ø§Ø®ØªØ± Ø­Ø³Ø§Ø¨Ø§Øª Saudi iPick Ø§Ù„ØªÙŠ ØªØºØ°ÙŠ Ø­Ø³Ø§Ø¨ ØªØ§Ø¬Ø± Ù‡Ø°Ø§. Ø§Ù„Ø­Ø³Ø§Ø¨Ø§Øª Ø§Ù„Ù…Ø¹ÙŠÙ†Ø© ÙÙŠ Ù…ÙƒØ§Ù† Ø¢Ø®Ø± ØªÙƒÙˆÙ† Ù…Ù‚ÙÙ„Ø©.')) + '</p></div>' +
+        '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;"><div><h4>' + esc(tx('Map Snapchat ad accounts', 'تعيين حسابات سناب شات')) + '</h4>' +
+        '<p class="marketing-sync-note">' + esc(tx('Choose which Saudi iPick ad accounts feed this Taager account. Accounts assigned elsewhere are locked.', 'اختر حسابات Saudi iPick التي تغذي حساب تاجر هذا. الحسابات المعينة في مكان آخر تكون مقفلة.')) + '</p></div>' +
         '<span class="marketing-status is-connected">' + esc(filtered.length + ' / ' + availableAccounts.length) + '</span></div>' +
         '<div class="marketing-token-row" style="display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:10px;margin:14px 0;">' +
-          '<input type="search" data-sip-source-search value="' + esc(sourceQuery) + '" placeholder="' + esc(tx('Search ad accounts', 'Ø§Ø¨Ø­Ø« ÙÙŠ Ø§Ù„Ø­Ø³Ø§Ø¨Ø§Øª Ø§Ù„Ø¥Ø¹Ù„Ø§Ù†ÙŠØ©')) + '" style="min-width:0;border:1px solid var(--dash-border);border-radius:8px;background:var(--dash-surface);color:var(--dash-text);padding:10px 12px;">' +
-          '<button type="button" class="marketing-secondary" data-sip-select-page' + (pageRows.length ? '' : ' disabled') + '>' + esc(tx('Select page', 'ØªØ­Ø¯ÙŠØ¯ Ø§Ù„ØµÙØ­Ø©')) + '</button>' +
-          '<button type="button" class="marketing-secondary" data-sip-clear-selection>' + esc(tx('Clear', 'Ù…Ø³Ø­')) + '</button>' +
+          '<input type="search" data-sip-source-search value="' + esc(sourceQuery) + '" placeholder="' + esc(tx('Search ad accounts', 'ابحث في الحسابات الإعلانية')) + '" style="min-width:0;border:1px solid var(--dash-border);border-radius:8px;background:var(--dash-surface);color:var(--dash-text);padding:10px 12px;">' +
+          '<button type="button" class="marketing-secondary" data-sip-select-page' + (pageRows.length ? '' : ' disabled') + '>' + esc(tx('Select page', 'تحديد الصفحة')) + '</button>' +
+          '<button type="button" class="marketing-secondary" data-sip-clear-selection>' + esc(tx('Clear', 'مسح')) + '</button>' +
         '</div>' +
         assignedMarkup +
         '<div class="marketing-account-map">' + rows + '</div>' +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;">' +
-          '<span class="marketing-sync-note">' + esc(tx('Page ', 'ØµÙØ­Ø© ') + sourcePage + ' / ' + pageCount) + '</span>' +
+          '<span class="marketing-sync-note">' + esc(tx('Page ', 'صفحة ') + sourcePage + ' / ' + pageCount) + '</span>' +
           '<div style="display:flex;gap:8px;">' +
             '<button type="button" class="marketing-secondary" data-sip-page-prev' + (sourcePage <= 1 ? ' disabled' : '') + '>â€¹</button>' +
             '<button type="button" class="marketing-secondary" data-sip-page-next' + (sourcePage >= pageCount ? ' disabled' : '') + '>â€º</button>' +
           '</div>' +
         '</div>' +
         '<div class="marketing-actions">' +
-          '<button type="button" class="marketing-primary" data-sip-save-mapping' + (availableAccounts.length && selectedAccountId && !allMode ? '' : ' disabled') + '>' + esc(tx('Assign to this account', 'ØªØ¹ÙŠÙŠÙ† Ù„Ù‡Ø°Ø§ Ø§Ù„Ø­Ø³Ø§Ø¨')) + '</button>' +
-          '<button type="button" class="marketing-sync-btn" data-sip-sync' + ((selectedSources.length || (status && status.mappedAccounts && status.mappedAccounts.length)) && !allMode ? '' : ' disabled') + '>' + esc(tx('Sync Snapchat spend', 'Ù…Ø²Ø§Ù…Ù†Ø© Ø¥Ù†ÙØ§Ù‚ Ø³Ù†Ø§Ø¨ Ø´Ø§Øª')) + '</button>' +
-          '<button type="button" class="marketing-secondary" data-sip-refresh>' + esc(tx('Refresh accounts', 'ØªØ­Ø¯ÙŠØ« Ø§Ù„Ø­Ø³Ø§Ø¨Ø§Øª')) + '</button>' +
+          '<button type="button" class="marketing-primary" data-sip-save-mapping' + (availableAccounts.length && selectedAccountId && !allMode ? '' : ' disabled') + '>' + esc(tx('Assign to this account', 'تعيين لهذا الحساب')) + '</button>' +
+          '<button type="button" class="marketing-sync-btn" data-sip-sync' + ((selectedSources.length || (status && status.mappedAccounts && status.mappedAccounts.length)) && !allMode ? '' : ' disabled') + '>' + esc(tx('Sync Snapchat spend', 'مزامنة إنفاق سناب شات')) + '</button>' +
+          '<button type="button" class="marketing-secondary" data-sip-refresh>' + esc(tx('Refresh accounts', 'تحديث الحسابات')) + '</button>' +
         '</div>' +
-        ((!selectedAccountId || allMode) ? '<p class="marketing-sync-note">' + esc(tx('Select a single Taager account from the top bar to assign and sync accounts.', 'Ø§Ø®ØªØ± Ø­Ø³Ø§Ø¨ ØªØ§Ø¬Ø± ÙˆØ§Ø­Ø¯ Ù…Ù† Ø§Ù„Ø´Ø±ÙŠØ· Ø§Ù„Ø¹Ù„ÙˆÙŠ Ù„Ù„ØªØ¹ÙŠÙŠÙ† ÙˆØ§Ù„Ù…Ø²Ø§Ù…Ù†Ø©.')) + '</p>' : '') +
+        ((!selectedAccountId || allMode) ? '<p class="marketing-sync-note">' + esc(tx('Select a single Taager account from the top bar to assign and sync accounts.', 'اختر حساب تاجر واحد من الشريط العلوي للتعيين والمزامنة.')) + '</p>' : '') +
       '</section>';
     }
 
@@ -529,7 +615,7 @@
           selectVisibleButton +
         '</div>' +
         '<details class="marketing-mapping-row" open data-sip-map-row="' + esc(activeAccount.id) + '">' +
-          '<summary><span class="marketing-account-label">' + esc(activeAccount.label) + '</span><span class="marketing-assigned-pill">' + esc(selectedCount + ' assigned') + '</span></summary>' +
+          '<summary><span class="marketing-account-label">' + esc(activeAccount.label) + '</span><span class="marketing-assigned-pill">' + esc(tx(selectedCount + ' assigned', selectedCount + ' assigned')) + '</span></summary>' +
           '<div class="marketing-mapping-choices">' + choices + '</div>' +
           '<div class="marketing-limit-note"><strong>' + esc(tx('Assigned ', 'المربوط: ') + selectedCount + ' / ' + (status && status.limit && status.limit.max || availableAccounts.length) + ' ' + platform.shortLabel + ' accounts') + '</strong><span>' + esc(tx('Available on Saudi iPick: ', 'المتاح على Saudi iPick: ') + availableAccounts.length) + '</span></div>' +
           '<button class="marketing-secondary marketing-save-map-btn" type="button" data-sip-save-mapping' + (availableAccounts.length && selectedAccountId && !allMode ? '' : ' disabled') + '>' + esc(tx('Assign to this account', 'Assign to this account')) + '</button>' +
@@ -572,7 +658,7 @@
         '</div></details>';
       var diagnosticsMarkup = '<details class="marketing-diagnostics"><summary>' + esc(tx('Connection diagnostics', 'Connection diagnostics')) + '</summary>' +
         '<div class="marketing-diagnostic-stats">' +
-          '<span>' + esc(tx('Step', 'Step')) + '</span><strong>' + esc(diagnostics.step || 'idle') + '</strong>' +
+          '<span>' + esc(tx('Step', 'الخطوة')) + '</span><strong>' + esc(diagnosticStepLabel(diagnostics.step)) + '</strong>' +
           '<span>' + esc(tx('Available accounts', 'Available accounts')) + '</span><strong>' + esc(String(diagnostics.availableCount || availableAccounts.length || 0)) + '</strong>' +
           '<span>' + esc(tx('Selected accounts', 'Selected accounts')) + '</span><strong>' + esc(String(selectedCount)) + '</strong>' +
           '<span>' + esc(tx('Mapped accounts', 'Mapped accounts')) + '</span><strong>' + esc(String(diagnostics.mappedCount || 0)) + '</strong>' +
@@ -716,7 +802,7 @@
           summary: availableAccounts.length
             ? tx('Accounts loaded. Select the ad accounts for this Taager account, then sync.', 'Accounts loaded. Select the ad accounts for this Taager account, then sync.')
             : tx('No selected ' + platform.shortLabel + ' accounts were returned. Check the website Accounts page and make sure ad accounts are selected.', 'No selected ' + platform.shortLabel + ' accounts were returned. Check the website Accounts page and make sure ad accounts are selected.'),
-          lastError: result.error || ''
+          lastError: localizedError(result.error || '')
         });
         message = availableAccounts.length
           ? tx('Loaded ', 'Loaded ') + availableAccounts.length + ' ' + platform.shortLabel + ' account(s).'
@@ -726,7 +812,7 @@
         return result;
       }).catch(function (err) {
         switchPlatform(requestPlatform, false);
-        error = err && err.message ? err.message : String(err || '');
+        error = localizedError(err && err.message ? err.message : String(err || ''));
         message = '';
         updateDiagnostics({
           step: 'status-error',
@@ -802,8 +888,8 @@
         var activeSnapshot = platformCursor;
         var input = mount.querySelector('[data-sip-token-input]');
         var token = input ? String(input.value || '').trim() : '';
-        if (!token) { error = tx('Paste the desktop token first.', 'Ø§Ù„ØµÙ‚ Ø±Ù…Ø² Ø³Ø·Ø­ Ø§Ù„Ù…ÙƒØªØ¨ Ø£ÙˆÙ„Ø§Ù‹.'); saveActivePlatformState(); render(); return; }
-        updateDiagnostics({ step: 'token-save', tokenConfigured: false, summary: tx('Saving desktop token locally...', 'Ø¬Ø§Ø±Ù Ø­ÙØ¸ Ø±Ù…Ø² Ø³Ø·Ø­ Ø§Ù„Ù…ÙƒØªØ¨ Ù…Ø­Ù„ÙŠØ§Ù‹...'), lastError: '' });
+        if (!token) { error = tx('Paste the desktop token first.', 'الصق رمز سطح المكتب أولاً.'); saveActivePlatformState(); render(); return; }
+        updateDiagnostics({ step: 'token-save', tokenConfigured: false, summary: tx('Saving desktop token locally...', 'جارٍ حفظ رمز سطح المكتب محلياً...'), lastError: '' });
         setBusy(true);
         window.api.saveSaudiIPickMarketingToken(token).then(function (result) {
           if (!result || !result.ok) throw new Error(result && result.error || 'Could not save token.');
@@ -820,8 +906,8 @@
           return loadAllStatuses();
         }).catch(function (err) {
           restorePlatformState(activeSnapshot, false);
-          error = err && err.message ? err.message : String(err || '');
-          updateDiagnostics({ step: 'token-error', tokenConfigured: !!tokenState.configured, lastError: error, summary: tx('Could not save or validate the desktop token.', 'ØªØ¹Ø°Ø± Ø­ÙØ¸ Ø£Ùˆ Ø§Ù„ØªØ­Ù‚Ù‚ Ù…Ù† Ø±Ù…Ø² Ø³Ø·Ø­ Ø§Ù„Ù…ÙƒØªØ¨.') });
+          error = localizedError(err && err.message ? err.message : String(err || ''));
+          updateDiagnostics({ step: 'token-error', tokenConfigured: !!tokenState.configured, lastError: error, summary: tx('Could not save or validate the desktop token.', 'تعذر حفظ أو التحقق من رمز سطح المكتب.') });
           loading = false;
           saveActivePlatformState();
           render();
@@ -836,8 +922,8 @@
             switchPlatform(platform, false);
             availableAccounts = [];
             selectedSources = [];
-            updateDiagnostics({ step: 'token-cleared', tokenConfigured: false, availableCount: 0, selectedCount: 0, mappedCount: 0, summary: tx('Token cleared.', 'ØªÙ… Ù…Ø³Ø­ Ø§Ù„Ø±Ù…Ø².'), lastError: '' });
-            message = tx('Token cleared.', 'ØªÙ… Ù…Ø³Ø­ Ø§Ù„Ø±Ù…Ø².');
+            updateDiagnostics({ step: 'token-cleared', tokenConfigured: false, availableCount: 0, selectedCount: 0, mappedCount: 0, summary: tx('Token cleared.', 'تم مسح الرمز.'), lastError: '' });
+            message = tx('Token cleared.', 'تم مسح الرمز.');
             error = '';
             loading = false;
             saveActivePlatformState();
@@ -971,7 +1057,7 @@
           var platform = activateFrom(button).id;
           var sources = selectedSourceObjects();
           if (!sources.length && selectedSources.length) sources = selectedSources;
-          updateDiagnostics({ step: 'mapping-save', selectedCount: sources.length, summary: tx('Saving selected ad account mapping...', 'Ø¬Ø§Ø±Ù Ø­ÙØ¸ ØªØ¹ÙŠÙŠÙ† Ø§Ù„Ø­Ø³Ø§Ø¨Ø§Øª Ø§Ù„Ø¥Ø¹Ù„Ø§Ù†ÙŠØ© Ø§Ù„Ù…Ø­Ø¯Ø¯Ø©...'), lastError: '' });
+          updateDiagnostics({ step: 'mapping-save', selectedCount: sources.length, summary: tx('Saving selected ad account mapping...', 'جارٍ حفظ تعيين الحسابات الإعلانية المحددة...'), lastError: '' });
           setBusy(true);
           window.api.saveSaudiIPickMarketingMapping(selectedAccountId, platform, sources).then(function (result) {
             switchPlatform(platform, false);
@@ -988,12 +1074,12 @@
             selectedSources = normalizeSourceList(sources);
             result = mergeMappedResult(result, selectedSources);
             setStore(result);
-            updateDiagnostics({ step: 'mapping-saved', selectedCount: selectedSources.length, mappedCount: countOf(result.mappedAccounts), summary: tx('Mapping saved. You can sync now.', 'ØªÙ… Ø­ÙØ¸ Ø§Ù„ØªØ¹ÙŠÙŠÙ†. ÙŠÙ…ÙƒÙ†Ùƒ Ø§Ù„Ù…Ø²Ø§Ù…Ù†Ø© Ø§Ù„Ø¢Ù†.'), lastError: '' });
-            message = tx('Mapping saved. You can sync now.', 'ØªÙ… Ø­ÙØ¸ Ø§Ù„ØªØ¹ÙŠÙŠÙ†. ÙŠÙ…ÙƒÙ†Ùƒ Ø§Ù„Ù…Ø²Ø§Ù…Ù†Ø© Ø§Ù„Ø¢Ù†.');
+            updateDiagnostics({ step: 'mapping-saved', selectedCount: selectedSources.length, mappedCount: countOf(result.mappedAccounts), summary: tx('Mapping saved. You can sync now.', 'تم حفظ التعيين. يمكنك المزامنة الآن.'), lastError: '' });
+            message = tx('Mapping saved. You can sync now.', 'تم حفظ التعيين. يمكنك المزامنة الآن.');
           }).catch(function (err) {
             switchPlatform(platform, false);
-            error = err && err.message ? err.message : String(err || '');
-            updateDiagnostics({ step: 'mapping-error', lastError: error, summary: tx('Could not save selected ad account mapping.', 'ØªØ¹Ø°Ø± Ø­ÙØ¸ ØªØ¹ÙŠÙŠÙ† Ø§Ù„Ø­Ø³Ø§Ø¨Ø§Øª Ø§Ù„Ø¥Ø¹Ù„Ø§Ù†ÙŠØ© Ø§Ù„Ù…Ø­Ø¯Ø¯Ø©.') });
+            error = localizedError(err && err.message ? err.message : String(err || ''));
+            updateDiagnostics({ step: 'mapping-error', lastError: error, summary: tx('Could not save selected ad account mapping.', 'تعذر حفظ تعيين الحسابات الإعلانية المحددة.') });
           }).finally(function () {
             switchPlatform(platform, false);
             loading = false;
@@ -1036,7 +1122,7 @@
             if (window.DashboardRoiState && typeof window.DashboardRoiState.notify === 'function') window.DashboardRoiState.notify(selectedAccountId);
           }).catch(function (err) {
             switchPlatform(platform, false);
-            error = err && err.message ? err.message : String(err || '');
+            error = localizedError(err && err.message ? err.message : String(err || ''));
             updateDiagnostics({ step: 'sync-error', lastError: error, summary: tx('Could not sync ' + platformMetaItem.shortLabel + ' spend.', 'Could not sync ' + platformMetaItem.shortLabel + ' spend.') });
           }).finally(function () {
             switchPlatform(platform, false);
@@ -1058,7 +1144,7 @@
           updateDiagnostics({
             step: 'token-status',
             tokenConfigured: !!tokenState.configured,
-            summary: tokenState.configured ? tx('Saved token found. Loading account status...', 'ØªÙ… Ø§Ù„Ø¹Ø«ÙˆØ± Ø¹Ù„Ù‰ Ø±Ù…Ø² Ù…Ø­ÙÙˆØ¸. Ø¬Ø§Ø±Ù ØªØ­Ù…ÙŠÙ„ Ø­Ø§Ù„Ø© Ø§Ù„Ø­Ø³Ø§Ø¨Ø§Øª...') : tx('No saved desktop token.', 'Ù„Ø§ ÙŠÙˆØ¬Ø¯ Ø±Ù…Ø² Ø³Ø·Ø­ Ù…ÙƒØªØ¨ Ù…Ø­ÙÙˆØ¸.'),
+            summary: tokenState.configured ? tx('Saved token found. Loading account status...', 'تم العثور على رمز محفوظ. جارٍ تحميل حالة الحسابات...') : tx('No saved desktop token.', 'لا يوجد رمز سطح مكتب محفوظ.'),
             lastError: ''
           });
           saveActivePlatformState();
@@ -1067,10 +1153,10 @@
         render();
         if (tokenState.configured) loadAllStatuses();
       }).catch(function (err) {
-        error = err && err.message ? err.message : String(err || '');
+        error = localizedError(err && err.message ? err.message : String(err || ''));
         platformOrder.forEach(function (platform) {
           switchPlatform(platform, false);
-          updateDiagnostics({ step: 'token-status-error', lastError: error, summary: tx('Could not read saved token status.', 'ØªØ¹Ø°Ø± Ù‚Ø±Ø§Ø¡Ø© Ø­Ø§Ù„Ø© Ø§Ù„Ø±Ù…Ø² Ø§Ù„Ù…Ø­ÙÙˆØ¸.') });
+          updateDiagnostics({ step: 'token-status-error', lastError: error, summary: tx('Could not read saved token status.', 'تعذر قراءة حالة الرمز المحفوظ.') });
           saveActivePlatformState();
         });
         restorePlatformState('snapchat', false);

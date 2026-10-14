@@ -547,6 +547,33 @@
     return dashboardMoneyValue(row && (row.marketerCommission || row.commission) || 0);
   }
 
+  // Native values are used only while preparing reporting rows and native
+  // country summaries. General row getters remain reporting-currency aware.
+  function rowNativeValue(row, nativeKey, reportingGetter) {
+    if (row && row[nativeKey] != null && row[nativeKey] !== '') {
+      return dashboardMoneyValue(row[nativeKey]);
+    }
+    return reportingGetter(row);
+  }
+
+  function rowNativeTotalPrice(row) {
+    return rowNativeValue(row, 'nativeTotalPrice', rowTotalPrice);
+  }
+
+  function rowNativeAmountDue(row) {
+    return rowNativeValue(row, 'nativeAmountDue', rowAmountDue);
+  }
+
+  function rowNativeCommission(row) {
+    if (row && row.nativeCommission != null && row.nativeCommission !== '') {
+      return dashboardMoneyValue(row.nativeCommission);
+    }
+    if (row && row.nativeProfitAfterTax != null && row.nativeProfitAfterTax !== '') {
+      return dashboardMoneyValue(row.nativeProfitAfterTax);
+    }
+    return rowCommissionValue(row);
+  }
+
   function orderOnlyKey(row, fallbackIndex) {
     var accountId = String(row && (row.accountId || row.dashboardAccountId || '') || '').trim();
     var direct = String(row && (row.taagerOrderNumber || row.orderNumber || row.id || row.orderId || row.reference || '') || '').trim();
@@ -1718,9 +1745,9 @@
     (rows || []).forEach(function (row) {
       var country = effectiveCountry(row.taagerCountry || row.country, meta, 'sa');
       var nativeCurrency = window.TaagerCountry && window.TaagerCountry.currency ? window.TaagerCountry.currency(country) : 'SAR';
-      var nativeTotalPrice = rowTotalPrice(row);
-      var nativeAmountDue = rowAmountDue(row);
-      var nativeCommission = rowCommissionValue(row);
+      var nativeTotalPrice = rowNativeTotalPrice(row);
+      var nativeAmountDue = rowNativeAmountDue(row);
+      var nativeCommission = rowNativeCommission(row);
       var payment = classifyRowPayment(row);
       row.taagerCountry = country;
       row.country = row.country || country;
@@ -2430,9 +2457,9 @@
           };
         }
         countryGroups[cc].rows++;
-        countryGroups[cc].nativeSales += rowTotalPrice(row);
-        countryGroups[cc].nativeAmountDue += rowAmountDue(row);
-        countryGroups[cc].nativeProfit += rowCommissionValue(row);
+        countryGroups[cc].nativeSales += rowNativeTotalPrice(row);
+        countryGroups[cc].nativeAmountDue += rowNativeAmountDue(row);
+        countryGroups[cc].nativeProfit += rowNativeCommission(row);
       });
       accountOptions.forEach(function (acc) {
         var cc = String(acc.taagerCountry || 'sa').trim().toLowerCase();

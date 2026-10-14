@@ -17,6 +17,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage, cli
 app.setAppUserModelId("com.taagerbot.orders");
 const path = require("path");
 const Store = require("electron-store");
+const { createSaudiIPickTokenRepository } = require("./saudiipick-token-store");
 const fs = require("fs");
 const crypto = require("crypto");
 const zlib = require("zlib");
@@ -557,6 +558,8 @@ const store          = createStore({ encryptionKey: deriveStoreKey("taager-creds
 const licenseStore   = createStore({ encryptionKey: deriveStoreKey("taager-license-v1"), name: "license" });
 const analyticsStore = createStore({ name: "analytics" }); // unencrypted Ã¢â‚¬â€ run history only
 const dashboardStore = createStore({ name: "dashboard" }); // unencrypted Ã¢â‚¬â€ monthly snapshots
+const saudiIPickTokenStore = createStore({ encryptionKey: deriveStoreKey("taager-saudiipick-token-v1"), name: "saudiipick-token" });
+const saudiIPickTokenRepository = createSaudiIPickTokenRepository({ tokenStore: saudiIPickTokenStore, legacyStore: dashboardStore });
 const RUN_RESULTS_INDEX_KEY = "runResults.index.v1";
 const RUN_RESULTS_DETAIL_DIR = "run-results";
 const AI_MIRROR_STORE_KEY = "aiMirrors.v1";
@@ -3359,6 +3362,7 @@ function _handleForceFlush() {
   try { store.clear(); } catch (_) {}
   try { analyticsStore.clear(); } catch (_) {}
   try { dashboardStore.clear(); } catch (_) {}
+  try { saudiIPickTokenRepository.clear(); } catch (_) {}
   clearRunResultsFiles();
   // licenseStore intentionally NOT cleared Ã¢â‚¬â€ customer can re-enter their existing key
   // Bust in-memory caches
@@ -6534,7 +6538,7 @@ async function callMarketingBackend(action, accountId, platform, range) {
 }
 
 function getSaudiIPickDesktopToken() {
-  return String(dashboardStore.get("saudiIPickMarketing.desktopToken", "") || process.env.SAUDIIPICK_DESKTOP_TOKEN || "").trim();
+  return String(saudiIPickTokenRepository.get() || process.env.SAUDIIPICK_DESKTOP_TOKEN || "").trim();
 }
 
 function isSaudiIPickTokenRejected(result) {
@@ -7217,17 +7221,17 @@ ipcMain.handle("get-saudiipick-marketing-token-status", async () => {
 
 ipcMain.handle("save-saudiipick-marketing-token", async (_, token) => {
   const clean = String(token || "").trim();
-  if (!clean || !clean.startsWith("sipdt_")) {
+  const saved = saudiIPickTokenRepository.save(clean);
+  if (!saved.ok) {
     log.warn("[SaudiIPick][Marketing] rejected invalid desktop token", { hasToken: !!clean, tokenPreview: maskToken(clean) });
-    return { ok: false, error: "INVALID_SAUDIIPICK_TOKEN" };
+    return saved;
   }
-  dashboardStore.set("saudiIPickMarketing.desktopToken", clean);
   log.info("[SaudiIPick][Marketing] desktop token saved", { tokenPreview: maskToken(clean) });
   return { ok: true, configured: true, tokenPreview: maskToken(clean) };
 });
 
 ipcMain.handle("clear-saudiipick-marketing-token", async () => {
-  dashboardStore.delete("saudiIPickMarketing.desktopToken");
+  saudiIPickTokenRepository.clear();
   return { ok: true, configured: false };
 });
 

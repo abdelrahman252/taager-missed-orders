@@ -6,6 +6,26 @@
 (function () {
   'use strict';
 
+  // Shared by the topbar callback and the focused regression test. A saved ROI
+  // spend is denominated in its own currency, so rebase it before changing the
+  // setting's currency label.
+  window._dashboardApplyRoiReportingCurrency = function (value, previousCurrency) {
+    var activeId = window.getActiveAccountId ? window.getActiveAccountId() : '__all__';
+    if (!value || !window.DashboardRoiState || typeof window.DashboardRoiState.set !== 'function') return;
+    var currentRoi = window.DashboardRoiState.get(activeId, {});
+    if (currentRoi.currency === value) return;
+    var sourceCurrency = currentRoi.currency || previousCurrency || 'SAR';
+    var patch = { currency: value };
+    var adSpend = Number(currentRoi.adSpend);
+    if (Number.isFinite(adSpend)) {
+      if (window.TaagerCurrency && typeof window.TaagerCurrency.convert === 'function') {
+        adSpend = window.TaagerCurrency.convert(adSpend, sourceCurrency, value);
+      }
+      if (Number.isFinite(adSpend)) patch.adSpend = adSpend;
+    }
+    window.DashboardRoiState.set(patch, activeId, currentRoi);
+  };
+
   function dbg(event, detail, level) {
     if (window.TaagerDebugLog) window.TaagerDebugLog('dashboard-data', event, detail || {}, level);
     else (console[level || 'log'] || console.log).call(console, '[DashboardData] ' + event, detail || {});
@@ -813,14 +833,8 @@
       },
       onPeriodChange: handlePeriodChange,
       onDeliveredDateModeChange: handleDeliveredDateModeChange,
-      onReportingCurrencyChange: function (value) {
-        var activeId = window.getActiveAccountId ? window.getActiveAccountId() : '__all__';
-        if (value && window.DashboardRoiState && typeof window.DashboardRoiState.set === 'function') {
-          var currentRoi = window.DashboardRoiState.get(activeId, {});
-          if (currentRoi.currency !== value) {
-            window.DashboardRoiState.set({ currency: value }, activeId, currentRoi);
-          }
-        }
+      onReportingCurrencyChange: function (value, previousCurrency) {
+        window._dashboardApplyRoiReportingCurrency(value, previousCurrency);
         syncMarketingAndRunAggregator(true, 'currency-change');
       },
       onStaticUpdateComplete: function () {
