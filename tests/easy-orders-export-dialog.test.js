@@ -18,7 +18,7 @@ function findChrome() {
   return candidates.find((candidate) => candidate && fs.existsSync(candidate));
 }
 
-function pickerFixture({ resetOnSelect = false, noOpDate = "" } = {}) {
+function pickerFixture({ resetOnSelect = false, noOpDate = "", driftAfterSelection = false, disableApply = false, closeWithoutCommit = false } = {}) {
   return `<!doctype html>
   <button class="MuiButton-outlined" id="page-export">Export</button>
   <div role="presentation"><div role="dialog" aria-labelledby="export-title" aria-modal="true">
@@ -43,8 +43,12 @@ function pickerFixture({ resetOnSelect = false, noOpDate = "" } = {}) {
   (() => {
     const resetOnSelect = ${resetOnSelect ? "true" : "false"};
     const noOpDate = ${JSON.stringify(noOpDate)};
+    const driftAfterSelection = ${driftAfterSelection ? "true" : "false"};
+    const disableApply = ${disableApply ? "true" : "false"};
+    const closeWithoutCommit = ${closeWithoutCommit ? "true" : "false"};
     let visibleFirstMonth = new Date(2026, 9, 1);
     let range = { from: "2026-10-06", to: "2026-10-13" };
+    let dayClicks = 0;
     const popover = document.querySelector('#range-popover');
     const root = document.querySelector('.rdp-root');
     const months = document.querySelector('.rdp-months');
@@ -128,9 +132,22 @@ function pickerFixture({ resetOnSelect = false, noOpDate = "" } = {}) {
         return;
       }
       const day = event.target.closest('td[data-day] .rdp-day_button');
-      if (day) applyClick(day.closest('td').getAttribute('data-day'));
+      if (day) {
+        dayClicks++;
+        applyClick(day.closest('td').getAttribute('data-day'));
+        if (driftAfterSelection && dayClicks === 2) {
+          setTimeout(() => { range = { from: '2026-10-09', to: '2026-10-14' }; drawMonths(); }, 0);
+        }
+      }
     });
-    root.querySelector('.rdp-footer button').addEventListener('click', () => {
+    root.querySelector('.rdp-footer button').disabled = disableApply;
+    root.addEventListener('click', (event) => {
+      if (!event.target.closest('.rdp-footer button')) return;
+      if (closeWithoutCommit) {
+        popover.style.display = 'none';
+        trigger.setAttribute('aria-expanded', 'false');
+        return;
+      }
       if (!range.from || !range.to) return;
       const format = (value) => dateFromIso(value).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
       input.value = format(range.from) + '  -  ' + format(range.to);
@@ -145,6 +162,63 @@ function pickerFixture({ resetOnSelect = false, noOpDate = "" } = {}) {
     drawMonths();
   })();
   </script>`;
+}
+
+function withApplyRace(page, mode) {
+  let applyClicks = 0;
+  const baseLocator = page.locator.bind(page);
+
+  function wrap(locator, inFooter = false, isApply = false) {
+    return new Proxy(locator, {
+      get(target, property) {
+        if (property === "locator") {
+          return (selector, ...args) => wrap(target.locator(selector, ...args), inFooter || selector === ".rdp-footer", false);
+        }
+        if (property === "getByRole") {
+          return (role, options) => {
+            const name = options && options.name;
+            const matchesApply = name instanceof RegExp ? name.test("Apply") : /^Apply$/i.test(String(name || ""));
+            return wrap(target.getByRole(role, options), inFooter, inFooter && role === "button" && matchesApply);
+          };
+        }
+        if (property === "first" || property === "last") {
+          return () => wrap(target[property](), inFooter, isApply);
+        }
+        if (property === "nth") {
+          return (index) => wrap(target.nth(index), inFooter, isApply);
+        }
+        if (property === "click" && isApply) {
+          return async (options) => {
+            applyClicks += 1;
+            if (mode === "detach-before-dispatch-once" && applyClicks === 1) {
+              await page.evaluate(() => {
+                const old = document.querySelector(".rdp-footer button");
+                old.replaceWith(old.cloneNode(true));
+              });
+              throw new Error("Element is not attached to the DOM");
+            }
+            await target.click(options);
+            if (mode === "detach-after-accepted-once" && applyClicks === 1) {
+              throw new Error("Element is not attached to the DOM after click dispatch");
+            }
+          };
+        }
+        const value = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  }
+
+  return {
+    page: new Proxy(page, {
+      get(target, property) {
+        if (property === "locator") return (selector, ...args) => wrap(baseLocator(selector, ...args));
+        const value = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    }),
+    getApplyClickCount: () => applyClicks,
+  };
 }
 
 function localDate(year, month, day) {
@@ -216,7 +290,69 @@ function localDate(year, month, day) {
       "wrong marker state must prevent both Apply and Export"
     );
     assert.strictEqual(await page.evaluate(() => window.modalClicks), 0);
+
+    // A hidden popup is not proof of a committed range; the stale input must
+    // block modal Export after Apply closes without updating it.
+    await page.setContent(pickerFixture({ closeWithoutCommit: true }));
+    const staleAfterCloseDialog = await waitForExportOrdersDialog(page, "orders");
+    await assert.rejects(
+      () => selectExportDateRangeAndSubmit(page, staleAfterCloseDialog, localDate(2026, 10, 10), localDate(2026, 10, 14), "orders"),
+      /EASY_ORDERS_EXPORT_RANGE_APPLY_FAILED.*closed without committing/,
+      "closed picker with a stale range must block modal Export"
+    );
+    assert.strictEqual(await page.evaluate(() => window.modalClicks), 0);
     assert.deepStrictEqual(await page.evaluate(() => window.events.filter((event) => event.startsWith("apply:") || event.startsWith("export:"))), []);
+
+    // If a stale Apply node detaches before dispatch, the helper reacquires a
+    // fresh button and retries only while the popup and exact range remain.
+    await page.setContent(pickerFixture());
+    const beforeDispatch = withApplyRace(page, "detach-before-dispatch-once");
+    const beforeDispatchDialog = await waitForExportOrdersDialog(page, "orders");
+    await selectExportDateRangeAndSubmit(beforeDispatch.page, beforeDispatchDialog, localDate(2026, 10, 10), localDate(2026, 10, 14), "orders");
+    assert.strictEqual(beforeDispatch.getApplyClickCount(), 2, "one detached Apply should be reacquired and retried once");
+    assert.strictEqual(await page.evaluate(() => window.modalClicks), 1, "successful bounded Apply retry should submit once");
+    assert.match(await page.locator('#date-range').inputValue(), /^Oct 10, 2026\s+-\s+Oct 14, 2026$/);
+
+    // A click that committed the input and closed the popover but then reports
+    // detachment is accepted only after verifying the committed range.
+    await page.setContent(pickerFixture());
+    const afterDispatch = withApplyRace(page, "detach-after-accepted-once");
+    const afterDispatchDialog = await waitForExportOrdersDialog(page, "missed-orders");
+    await selectExportDateRangeAndSubmit(afterDispatch.page, afterDispatchDialog, localDate(2026, 10, 10), localDate(2026, 10, 14), "missed-orders");
+    assert.strictEqual(afterDispatch.getApplyClickCount(), 1, "accepted Apply must not be clicked a second time");
+    assert.strictEqual(await page.evaluate(() => window.modalClicks), 1, "verified accepted Apply should submit exactly once");
+
+    // Even when the readonly input already displays the requested range, it
+    // is not proof that Apply ran while its popover is still open.
+    await page.setContent(pickerFixture());
+    const alreadyMatching = withApplyRace(page, "detach-before-dispatch-once");
+    const alreadyMatchingDialog = await waitForExportOrdersDialog(page, "orders");
+    await selectExportDateRangeAndSubmit(alreadyMatching.page, alreadyMatchingDialog, localDate(2026, 10, 6), localDate(2026, 10, 13), "orders");
+    assert.strictEqual(alreadyMatching.getApplyClickCount(), 2, "matching initial input still requires Apply and a verified closed popup");
+    assert.strictEqual(await page.evaluate(() => window.modalClicks), 1, "initially matching input must still lead to one verified submit");
+
+    // A selection that changes during the settle window blocks Apply and
+    // Export, even if the picker had previously shown the requested markers.
+    await page.setContent(pickerFixture({ driftAfterSelection: true }));
+    const driftDialog = await waitForExportOrdersDialog(page, "orders");
+    await assert.rejects(
+      () => selectExportDateRangeAndSubmit(page, driftDialog, localDate(2026, 10, 10), localDate(2026, 10, 14), "orders"),
+      /EASY_ORDERS_EXPORT_RANGE_(?:START_NOT_SET|NOT_SET|NOT_STABLE)/,
+      "changed selection must block Apply and modal Export"
+    );
+    assert.strictEqual(await page.evaluate(() => window.modalClicks), 0);
+    assert.deepStrictEqual(await page.evaluate(() => window.events.filter((event) => event.startsWith("apply:") || event.startsWith("export:"))), []);
+
+    // A genuine disabled Apply control is an immediate failure, with no modal
+    // Export attempt.
+    await page.setContent(pickerFixture({ disableApply: true }));
+    const unavailableDialog = await waitForExportOrdersDialog(page, "orders");
+    await assert.rejects(
+      () => selectExportDateRangeAndSubmit(page, unavailableDialog, localDate(2026, 10, 10), localDate(2026, 10, 14), "orders"),
+      /EASY_ORDERS_EXPORT_RANGE_APPLY_FAILED.*Apply button is disabled/,
+      "disabled Apply must remain a real error"
+    );
+    assert.strictEqual(await page.evaluate(() => window.modalClicks), 0);
 
     console.log("EasyOrders date-range export dialog regression test passed");
   } finally {
