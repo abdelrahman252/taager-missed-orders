@@ -18,6 +18,7 @@ app.setAppUserModelId("com.taagerbot.orders");
 const path = require("path");
 const Store = require("electron-store");
 const { createSaudiIPickTokenRepository } = require("./saudiipick-token-store");
+const { validateManualReviewScope } = require("./manual-review-scope");
 const fs = require("fs");
 const crypto = require("crypto");
 const zlib = require("zlib");
@@ -7805,13 +7806,23 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
   const dashboardEnabled = licenseStore.get("dashboardEnabled", false) === true;
   const reportingDataEnabled = operationsSuiteEnabled || dashboardEnabled;
 
-  // Reset export timestamp so each run's inter-account cooldown is anchored
-  // only to exports from this run.
-  lastExportTimestamp = 0;
   const autoConfirm = store.get("autoConfirm", false);
   const manualReviewUploadRows = Array.isArray(manualReviewOrders)
     ? manualReviewOrders.filter((row) => row && typeof row === "object").slice(0, 500)
     : [];
+  const savedAccountsForManualReview = store.get("accounts", null);
+  const manualReviewScope = validateManualReviewScope({
+    manualReviewMode,
+    rows: manualReviewUploadRows,
+    accountIds,
+    accounts: savedAccountsForManualReview,
+  });
+  if (!manualReviewScope.ok) {
+    return { success: false, error: manualReviewScope.error };
+  }
+  // Reset export timestamp so each accepted run's inter-account cooldown is
+  // anchored only to exports from this run.
+  lastExportTimestamp = 0;
   const manualReviewUploadMode = manualReviewMode === true && manualReviewUploadRows.length > 0;
   const normalizedManualReviewDestination = manualReviewDestination === "affiliate-recovery" ? "affiliate-recovery" : "cart";
   const missingOrdersUploadEnabled = store.get("missingOrdersUploadEnabled", false) === true;
@@ -7832,12 +7843,14 @@ ipcMain.handle("run-bot", async (_, { dateFrom, dateTo, accountIds, easyOrdersAf
   };
 
   // Ã¢â€â‚¬Ã¢â€â‚¬ Build account list to run Ã¢â€â‚¬Ã¢â€â‚¬
-  const allAccounts = store.get("accounts", null);
+  const allAccounts = savedAccountsForManualReview;
   let accountsToRun = [];
 
   if (allAccounts && allAccounts.length > 0) {
     // Multi-account: filter by selected ids (if provided), else run all
-    const selected = Array.isArray(accountIds) && accountIds.length > 0 ? accountIds : allAccounts.map(a => a.id);
+    const selected = manualReviewUploadMode
+      ? [manualReviewScope.accountId]
+      : (Array.isArray(accountIds) && accountIds.length > 0 ? accountIds : allAccounts.map(a => a.id));
     accountsToRun = allAccounts
       .filter(a => selected.includes(a.id) && !isStaticAccount(a))
       .map(a => ({

@@ -46,8 +46,9 @@
         mountEl._dashboardNeedsRefresh = true;
         return;
       }
+      var previousCleanup = mountEl._dashboardSectionCleanup;
       var cleanup = window.renderSectionProductForecastHydratedEntry(mountEl, data, ctx);
-      state.cleanup = typeof cleanup === 'function' ? cleanup : mountEl._dashboardSectionCleanup;
+      state.cleanup = typeof cleanup === 'function' ? cleanup : (mountEl._dashboardSectionCleanup !== previousCleanup ? mountEl._dashboardSectionCleanup : null);
       if (!state.cancelled && isActiveForecastPane(mountEl)) {
         mountEl.dataset.dashboardReady = 'productForecast';
       }

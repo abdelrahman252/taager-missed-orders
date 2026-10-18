@@ -388,6 +388,7 @@ const root = path.join(__dirname, "..");
 const mainSource = fs.readFileSync(path.join(root, "src", "main", "main.js"), "utf8");
 const preloadSource = fs.readFileSync(path.join(root, "src", "main", "preload.js"), "utf8");
 const runnerSource = fs.readFileSync(path.join(root, "src", "bot", "runner.js"), "utf8");
+const recoveryFlowSource = fs.readFileSync(path.join(root, "src", "bot", "easy-orders-affiliate-recovery-flow.js"), "utf8");
 const setupSource = fs.readFileSync(path.join(root, "src", "renderer", "pages", "setup.js"), "utf8");
 const runSource = fs.readFileSync(path.join(root, "src", "renderer", "pages", "run.js"), "utf8");
 const appSource = fs.readFileSync(path.join(root, "src", "renderer", "app.js"), "utf8");
@@ -439,7 +440,8 @@ assert(!uiRecoverySource.includes("waitForToast(page, before, 20000)"), "EasyOrd
 assert(uiRecoverySource.includes('a[href^="#/orders/"]:not([href$="/create"])'), "affiliate recovery should read the new real-order list links");
 assert(uiRecoverySource.includes('a[href^="#/missed-orders/"]'), "affiliate recovery should read the new missed-order list links");
 assert(uiRecoverySource.includes('button[aria-label="Go to next page"]'), "affiliate recovery should support EasyOrders new pagination control");
-assert(uiRecoverySource.includes('getByRole("button", { name: /^Options$/i })'), "real-order resend should open the Options menu first");
+assert(uiRecoverySource.includes("/^More actions$/i") && uiRecoverySource.includes("/^Options$/i"), "real-order resend should support the current More actions menu and legacy Options menu");
+assert(uiRecoverySource.includes('getByRole("menuitem"'), "real-order resend should support the current menuitem action");
 assert(easyOrdersExportSource.includes('[aria-label="Change language"]'), "EasyOrders export should support the new sidebar language control");
 assert(easyOrdersExportSource.includes('[aria-label="Open menu"]'), "EasyOrders export should open the sidebar before switching language");
 assert(easyOrdersExportSource.includes("selectExportDateRangeAndSubmit(page, dialog, exportFromDate, exportToDate, keyword)") && easyOrdersExportDialogSource.includes("await clickExportDialogSubmit(page, dialog, keyword)"), "active EasyOrders export should select and verify both configured dates before modal submit");
@@ -479,6 +481,9 @@ assert(easyOrdersExportDialogSource.includes('getByRole("dialog", { name: EXPORT
 assert(easyOrdersExportDialogSource.includes('getByRole("button", { name: EXPORT_SUBMIT_NAME })') && easyOrdersExportDialogSource.includes('EXPORT_SUBMIT_NAME = /^Export$/i'), "EasyOrders export should click only the exact Export action inside its named modal");
 assert(easyOrdersExportDialogSource.includes('calendar.locator(".rdp-footer").getByRole("button", { name: /^Apply$/i })'), "EasyOrders export should apply the verified range before clicking modal Export");
 assert(runnerSource.includes('phase2_realOrders(page, exportFromDate, dateTo)') && runnerSource.includes('phase3_missedOrders(page, exportFromDate, dateTo)'), "real and missed exports should both receive the configured end date");
+assert(runnerSource.includes('mergeTaagerOrderKeySets(taagerOrderKeys, parseTaagerOrderKeys(supplementalBuffer))'), "affiliate recovery dedupe should include current Taager keys without widening selected-range analytics");
+assert(recoveryFlowSource.includes('verify(page, verificationRange.from, verificationRange.to, "first recovery pass")'), "affiliate recovery verification should extend through the current date");
+assert(recoveryFlowSource.includes('row.finalStatus !== "awaiting_taager_verification"'), "accepted-but-unverified conversions must not be automatically replayed");
 assert(dashboardFetchSource.includes('easyOrdersFlow.exportOrders(page, easyFrom, dateTo)'), "dashboard enrichment should pass the configured end date through the shared EasyOrders flow");
 assert(!easyOrdersExportSource.includes('dialog.locator(".MuiDialogActions-root button").click()'), "EasyOrders export should not use an unbounded dialog action click");
 assert(runnerSource.includes("recoveryPreview: true"), "affiliate recovery should send a run-page preview table");

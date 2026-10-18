@@ -32,6 +32,9 @@ function createEasyOrdersUiRecovery(options = {}) {
     : (page, url) => page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 }).then(() => page);
   const country = options.country || "sa";
   const stepDelayMs = Number(options.stepDelayMs || DEFAULT_STEP_DELAY_MS) || DEFAULT_STEP_DELAY_MS;
+  const dateFilterCommitTimeoutMs = Number(options.dateFilterCommitTimeoutMs) > 0
+    ? Number(options.dateFilterCommitTimeoutMs)
+    : 10000;
   const onAttemptResult = typeof options.onAttemptResult === "function" ? options.onAttemptResult : () => {};
   const catalog = options.catalog || {};
   const taagerCatalog = options.taagerCatalog || {};
@@ -126,7 +129,10 @@ function createEasyOrdersUiRecovery(options = {}) {
       const href = String(window.location.href || "").toLowerCase();
       const pathOk = href.includes(expectedPath);
       const uuidOk = !expectedUuid || href.includes(expectedUuid);
-      const hasRealControls = /Order ID:/i.test(bodyText) && /Edit Order/i.test(bodyText);
+      // The current detail page shows Edit Order and a More actions menu, but
+      // no literal "Order ID:" label. Keep the older ID marker as a supported
+      // variant while accepting the current visible detail controls.
+      const hasRealControls = /Edit Order/i.test(bodyText) && (/Order ID:/i.test(bodyText) || /More actions/i.test(bodyText));
       const hasMissedControls = /Order Details/i.test(bodyText) && /Edit/i.test(bodyText);
       // EasyOrders changed the real-order action from the old English label to
       // the localized webhook label. Keep both variants because accounts can
@@ -183,35 +189,78 @@ function createEasyOrdersUiRecovery(options = {}) {
 
   async function setDateInput(page, dataKey, value) {
     const selector = `[data-source="${dataKey}"] input[type="date"]`;
-    await page.waitForSelector(selector, { timeout: 10000 });
-    await page.evaluate(({ selector: inputSelector, value: nextValue }) => {
-      const input = document.querySelector(inputSelector);
-      if (!input) return false;
-      const proto = Object.getPrototypeOf(input);
-      const descriptor = Object.getOwnPropertyDescriptor(proto, "value");
-      if (descriptor && descriptor.set) descriptor.set.call(input, nextValue);
-      else input.value = nextValue;
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-      return true;
-    }, { selector, value });
-    await page.waitForTimeout(Math.min(stepDelayMs, 700));
+    const input = page.locator(selector).first();
+    await input.waitFor({ state: "visible", timeout: 10000 });
+
+    // React Admin's date filter input can display a programmatically assigned
+    // value without committing it to the filter state/URL. Use the browser's
+    // native date input interaction, then verify the committed query value.
+    // On the current UI the first arrow event wakes the controlled input and
+    // the second returns it to the requested date; checking both the field
+    // and URL below prevents the intermediate date from being used.
+    await input.fill(value, { timeout: 10000 });
+    await input.press("ArrowUp", { timeout: 5000 });
+    await input.press("ArrowDown", { timeout: 5000 });
+    const shown = await input.inputValue({ timeout: 5000 }).catch(() => "");
+    if (shown !== value) {
+      throw new Error(`EasyOrders recovery date filter input did not retain the requested ${dataKey} date`);
+    }
+  }
+
+  async function waitForCommittedDateFilters(page, expectedFrom, expectedTo, timeout = 10000) {
+    const expected = { from: ymd(expectedFrom), to: ymd(expectedTo) };
+    const committed = await page.waitForFunction(({ from, to }) => {
+      const hash = String(window.location.hash || "");
+      const queryStart = hash.indexOf("?");
+      if (queryStart < 0) return false;
+      const params = new URLSearchParams(hash.slice(queryStart + 1));
+      let filter;
+      try { filter = JSON.parse(params.get("filter") || "{}"); } catch (_) { return false; }
+      const localDay = (value) => {
+        const date = new Date(String(value || ""));
+        if (Number.isNaN(date.getTime())) return "";
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      };
+      return localDay(filter["created_at$gte"]) === from && localDay(filter["created_at$lte"]) === to;
+    }, expected, { timeout }).then(() => true).catch(() => false);
+    if (committed) return;
+
+    // Log only the two date bounds. Filter URLs may also contain customer
+    // values, so never include the complete query string in diagnostics.
+    const actual = await page.evaluate(() => {
+      const hash = String(window.location.hash || "");
+      const queryStart = hash.indexOf("?");
+      if (queryStart < 0) return { from: "", to: "" };
+      const params = new URLSearchParams(hash.slice(queryStart + 1));
+      let filter;
+      try { filter = JSON.parse(params.get("filter") || "{}"); } catch (_) { return { from: "", to: "" }; }
+      const localDay = (value) => {
+        const date = new Date(String(value || ""));
+        if (Number.isNaN(date.getTime())) return "";
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      };
+      return { from: localDay(filter["created_at$gte"]), to: localDay(filter["created_at$lte"]) };
+    }).catch(() => ({ from: "", to: "" }));
+    throw new Error(`EasyOrders recovery date filters were not committed (requested ${expected.from}..${expected.to}, applied ${actual.from || "unset"}..${actual.to || "unset"})`);
   }
 
   async function applyDateFilters(page, fromDate, toDate) {
     await ensureFilterField(page, "created_at$gte", "Start Date");
     await ensureFilterField(page, "created_at$lte", "End Date");
     await setDateInput(page, "created_at$gte", ymd(fromDate));
+    await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
     await setDateInput(page, "created_at$lte", ymd(toDate));
     await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
-    await page.waitForTimeout(stepDelayMs);
+    await waitForCommittedDateFilters(page, fromDate, toDate, dateFilterCommitTimeoutMs);
   }
 
   async function setRowsPerPage100(page) {
     const current = await page.locator(".MuiTablePagination-root input.MuiSelect-nativeInput").first()
       .getAttribute("value", { timeout: 3000 }).catch(() => "");
     if (String(current) === String(ROWS_PER_PAGE)) return;
-    const trigger = page.locator(".MuiTablePagination-root [role='button'][aria-haspopup='listbox']").first();
+    const trigger = page.locator(
+      ".MuiTablePagination-root [role='combobox'][aria-haspopup='listbox'], .MuiTablePagination-root [role='button'][aria-haspopup='listbox']"
+    ).first();
     if (!(await trigger.isVisible({ timeout: 5000 }).catch(() => false))) return;
     await trigger.click({ timeout: 10000 });
     const option = page.locator(`[role="option"][data-value="${ROWS_PER_PAGE}"]`).first();
@@ -300,13 +349,41 @@ function createEasyOrdersUiRecovery(options = {}) {
       const rows = Array.from(document.querySelectorAll(".RaDatagrid-tableWrapper tbody tr.RaDatagrid-clickableRow, tbody tr.RaDatagrid-clickableRow"));
       return rows.map((row, index) => {
         const cells = Array.from(row.querySelectorAll("td"));
-        const status = text(cells[1]);
+        const headerCells = Array.from(row.closest("table")?.querySelectorAll("thead th") || []);
+        const headerIndex = (pattern) => headerCells.findIndex((cell) => pattern.test(text(cell)));
+        const customerIndex = headerIndex(/^(customer|customer name|full name)$/i);
+        const phoneIndex = headerIndex(/^(phone|customer phone(?: number)?)$/i);
+        const statusIndex = headerIndex(/^status$/i);
+        const dateIndex = headerIndex(/^(order date|created at|date)$/i);
+        const hasNamedCustomerCell = Boolean(row.querySelector(".column-full_name")) || customerIndex >= 0;
+        const legacyCells = !hasNamedCustomerCell && cells.length >= 5;
+        const customerCell = row.querySelector(".column-full_name") ||
+          (customerIndex >= 0 ? cells[customerIndex] : null) ||
+          (legacyCells ? cells[2] : null);
+        const separatePhoneCell = row.querySelector(".column-phone") ||
+          (phoneIndex >= 0 ? cells[phoneIndex] : null) ||
+          (legacyCells ? cells[3] : null);
+        const name = text(customerCell && customerCell.querySelector("span[title]")) ||
+          text(customerCell && customerCell.querySelector("[data-field='full_name']")) ||
+          text(customerCell);
+        const separatePhoneText = text(separatePhoneCell);
+        const phone = (/^\+?[\d\s().-]{7,20}$/.test(separatePhoneText) ? separatePhoneText : "") ||
+          text(customerCell && customerCell.querySelector('span[dir="ltr"]'));
+        const statusCell = row.querySelector(".column-status") ||
+          (statusIndex >= 0 ? cells[statusIndex] : null) ||
+          (phoneIndex >= 0 ? cells[phoneIndex + 1] : null) ||
+          (legacyCells ? cells[1] : null);
+        const dateCell = row.querySelector(".column-created_at") ||
+          (dateIndex >= 0 ? cells[dateIndex] : null) ||
+          cells[cells.length - 1];
+        const dateText = text(dateCell);
+        const dateMatch = dateText.match(/\d{1,2}\/\d{1,2}\/\d{4}/);
         return {
           index,
-          status,
-          name: text(row.querySelector(".column-full_name")) || text(cells[2]),
-          phone: text(row.querySelector(".column-phone")) || text(cells[3]),
-          createdAt: text(row.querySelector(".column-created_at")) || text(cells[cells.length - 1]),
+          status: text(statusCell),
+          name,
+          phone,
+          createdAt: dateMatch ? dateMatch[0] : dateText,
         };
       });
     });
@@ -339,14 +416,47 @@ function createEasyOrdersUiRecovery(options = {}) {
       const rows = Array.from(document.querySelectorAll(".RaDatagrid-tableWrapper tbody tr.RaDatagrid-clickableRow, tbody tr.RaDatagrid-clickableRow"));
       return rows.map((row, index) => {
         const cells = Array.from(row.querySelectorAll("td"));
-        const customerText = text(cells[3]);
+        const headers = Array.from(row.closest("table")?.querySelectorAll("thead th") || []);
+        const headerIndex = (pattern) => headers.findIndex((cell) => pattern.test(text(cell)));
+        const customerIndex = headerIndex(/^(customer|customer name|full name)$/i);
+        const phoneIndex = headerIndex(/^(phone|customer phone(?: number)?)$/i);
+        const statusIndex = headerIndex(/^(status|order status)$/i);
+        const idIndex = headerIndex(/^(id|short id|order id)$/i);
+        const dateIndex = headerIndex(/^(order date|created at|date)$/i);
+        const customerCell = row.querySelector(".column-full_name") ||
+          (customerIndex >= 0 ? cells[customerIndex] : null);
+        const phoneCell = row.querySelector(".column-phone") ||
+          (phoneIndex >= 0 ? cells[phoneIndex] : null);
+        const customerName = text(customerCell && customerCell.querySelector("span[title]")) ||
+          text(customerCell && customerCell.querySelector("[data-field='full_name']")) ||
+          text(customerCell);
+        const phone = text(phoneCell) || text(customerCell && customerCell.querySelector('span[dir="ltr"]'));
+        const legacyPositional = customerIndex < 0 && !row.querySelector(".column-full_name") && cells.length >= 4;
+        const legacyCustomerCell = legacyPositional ? cells[3] : null;
+        const legacyText = text(legacyCustomerCell);
+        const legacyPhoneMatch = legacyText.match(/(?:^|\s)(?:\+?\d[\d\s().-]{6,18}\d)(?:$|\s)/);
+        const name = customerName || (legacyText
+          ? legacyText.replace(legacyPhoneMatch ? legacyPhoneMatch[0] : "", " ").replace(/\s+/g, " ").trim()
+          : "");
+        const rowPhone = phone || (legacyPhoneMatch ? legacyPhoneMatch[0].trim() : "");
+        const statusCell = row.querySelector(".column-status") ||
+          (statusIndex >= 0 ? cells[statusIndex] : null) ||
+          (legacyPositional ? cells[1] : null);
+        const idCell = row.querySelector(".column-short_id") ||
+          (idIndex >= 0 ? cells[idIndex] : null) ||
+          (legacyPositional ? cells[2] : null);
+        const dateCell = row.querySelector(".column-created_at") ||
+          (dateIndex >= 0 ? cells[dateIndex] : null) ||
+          cells[cells.length - 1];
+        const dateText = text(dateCell);
+        const dateMatch = dateText.match(/\d{1,2}\/\d{1,2}\/\d{4}/);
         return {
           index,
-          status: text(cells[1]),
-          shortId: text(row.querySelector(".column-short_id")) || text(cells[2]),
-          customerText,
-          phone: customerText,
-          createdAt: text(row.querySelector(".column-created_at")) || text(cells[cells.length - 1]),
+          status: text(statusCell),
+          shortId: text(idCell),
+          customerText: `${name} ${rowPhone}`.trim(),
+          phone: rowPhone,
+          createdAt: dateMatch ? dateMatch[0] : dateText,
           text: text(row),
         };
       });
@@ -411,11 +521,39 @@ function createEasyOrdersUiRecovery(options = {}) {
   }
 
   function realResendButton(page) {
-    // The current EasyOrders page exposes this as:
-    // "اعادة ارسال الطلب للويب هوك". Do not depend on generated MUI classes.
+    // EasyOrders currently exposes the action as a menuitem, while older
+    // deployments used a button. Do not depend on generated MUI classes.
+    return page.getByRole("menuitem", {
+      name: /Resend Order to Affiliates|Resend Order to Webhook|اعادة\s+ارسال\s+الطلب\s+للويب\s+هوك|إعادة\s+ارسال\s+الطلب\s+للويب\s+هوك|إعادة\s+إرسال\s+الطلب\s+للويب\s+هوك/i,
+    }).first();
+  }
+
+  function realResendButtonFallback(page) {
     return page.getByRole("button", {
       name: /Resend Order to Affiliates|Resend Order to Webhook|اعادة\s+ارسال\s+الطلب\s+للويب\s+هوك|إعادة\s+ارسال\s+الطلب\s+للويب\s+هوك|إعادة\s+إرسال\s+الطلب\s+للويب\s+هوك/i,
     }).first();
+  }
+
+  async function visibleRealResendAction(page, timeout = 1000) {
+    for (const candidate of [realResendButton(page), realResendButtonFallback(page)]) {
+      if (await candidate.isVisible({ timeout }).catch(() => false)) return candidate;
+    }
+    return null;
+  }
+
+  async function openRealResendAction(page) {
+    const existing = await visibleRealResendAction(page, 250);
+    if (existing) return existing;
+
+    for (const name of [/^More actions$/i, /^Options$/i]) {
+      const trigger = page.getByRole("button", { name }).first();
+      if (!(await trigger.isVisible({ timeout: 1000 }).catch(() => false))) continue;
+      await trigger.click({ timeout: 10000 });
+      await page.waitForTimeout(250);
+      const action = await visibleRealResendAction(page, 1500);
+      if (action) return action;
+    }
+    return null;
   }
 
   function resendSuccessToast(text) {
@@ -904,15 +1042,8 @@ function createEasyOrdersUiRecovery(options = {}) {
         };
       }
     }
-    const optionsButton = page.getByRole("button", { name: /^Options$/i }).first();
-    const directButton = realResendButton(page);
-    if (!(await directButton.isVisible({ timeout: 1000 }).catch(() => false)) &&
-        await optionsButton.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await optionsButton.click({ timeout: 10000 });
-      await page.waitForTimeout(400);
-    }
-    const button = realResendButton(page);
-    if (!(await button.isVisible({ timeout: 10000 }).catch(() => false))) {
+    const button = await openRealResendAction(page);
+    if (!button) {
       log(`EasyOrders recovery real manual review: ${candidate.easyShortId || candidate.easyOrderUuid || candidate.normPhone || ""} -> resend-to-webhook button not available`);
       return { ...candidate, detailUrl: page.url(), actionStatus: "skipped_manual", actionMessage: "Resend order to affiliates/webhook button not available", attempts: options.attempt || 1 };
     }
@@ -1153,14 +1284,27 @@ function createEasyOrdersUiRecovery(options = {}) {
       if (!(candidateName === rowName || candidateName.includes(rowName) || rowName.includes(candidateName))) return 0;
       score += 5;
     }
-    const candidateDay = String(candidate.easyCreatedAt || candidate.createdAt || "").slice(0, 10);
+    const candidateDay = candidateLocalDay(candidate);
     const rowDayMatch = cleanText(row.createdAt).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     const rowDay = rowDayMatch ? `${rowDayMatch[3]}-${String(rowDayMatch[1]).padStart(2, "0")}-${String(rowDayMatch[2]).padStart(2, "0")}` : "";
     if (candidateDay && rowDay) {
       if (candidateDay !== rowDay) return 0;
       score += 3;
+    } else if (candidateDay && !rowDay) {
+      return 0;
     }
     return score;
+  }
+
+  function candidateLocalDay(candidate) {
+    const value = candidate?.easyCreatedAt || candidate?.createdAt || candidate?.date || "";
+    if (value instanceof Date && !Number.isNaN(value.getTime())) return ymd(value);
+    const text = cleanText(value);
+    const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[T\s])/);
+    if (iso) return `${iso[1]}-${String(iso[2]).padStart(2, "0")}-${String(iso[3]).padStart(2, "0")}`;
+    const slash = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (slash) return `${slash[3]}-${String(slash[1]).padStart(2, "0")}-${String(slash[2]).padStart(2, "0")}`;
+    return "";
   }
 
   function rowDayFromText(value) {
@@ -1213,11 +1357,34 @@ function createEasyOrdersUiRecovery(options = {}) {
     return bestScore >= 10 ? best : null;
   }
 
-  function findPreparedMissedMatch(row, pending) {
+  function findPreparedMissedMatch(row, pending, diagnostics = null) {
     let best = null;
     let bestScore = 0;
     for (const candidate of pending) {
       const score = missedRowScore(candidate, row);
+      if (diagnostics) {
+        diagnostics.candidatesChecked = (diagnostics.candidatesChecked || 0) + 1;
+        const candidatePhone = normalizePhone(candidate.normPhone || candidate.phone || candidate.rawPhone || "", country);
+        const rowPhone = normalizePhone(row.phone || "", country);
+        const phoneMatch = !!candidatePhone && candidatePhone === rowPhone;
+        const candidateName = normalizeComparableText(candidate.name).toLowerCase();
+        const rowName = normalizeComparableText(row.name).toLowerCase();
+        const nameMatch = !candidateName || !rowName || candidateName === rowName || candidateName.includes(rowName) || rowName.includes(candidateName);
+        const candidateDateValue = candidate.easyCreatedAt || candidate.createdAt || candidate.date || "";
+        const candidateDay = candidateLocalDay(candidate);
+        const rowDay = rowDayFromText(row.createdAt);
+        if (phoneMatch) diagnostics.phoneMatches = (diagnostics.phoneMatches || 0) + 1;
+        if (phoneMatch && nameMatch) diagnostics.phoneAndNameMatches = (diagnostics.phoneAndNameMatches || 0) + 1;
+        if (phoneMatch && candidateDay && rowDay && candidateDay === rowDay) diagnostics.exactDateMatches = (diagnostics.exactDateMatches || 0) + 1;
+        if (phoneMatch && candidateDay && rowDay && candidateDay !== rowDay) {
+          diagnostics.dateMismatches = (diagnostics.dateMismatches || 0) + 1;
+          diagnostics.candidateDays = [...new Set([...(diagnostics.candidateDays || []), candidateDay])];
+          diagnostics.rowDays = [...new Set([...(diagnostics.rowDays || []), rowDay])];
+        }
+        if (phoneMatch && candidateDateValue && !candidateDay) {
+          diagnostics.unparsedCandidateDateTypes = [...new Set([...(diagnostics.unparsedCandidateDateTypes || []), candidateDateValue instanceof Date ? "Date" : typeof candidateDateValue])];
+        }
+      }
       if (score > bestScore) {
         best = candidate;
         bestScore = score;
@@ -1359,9 +1526,10 @@ function createEasyOrdersUiRecovery(options = {}) {
     while (pageNo <= maxPages && pending.length > 0) {
       const rows = await readMissedRows(page);
       log(`EasyOrders recovery missed page ${pageNo}: ${rows.length} rows, pending prepared targets=${pending.length}`);
+      const matchDiagnostics = {};
       for (let index = 0; index < rows.length; index++) {
         const row = rows[index];
-        const candidate = findPreparedMissedMatch(row, pending);
+        const candidate = findPreparedMissedMatch(row, pending, matchDiagnostics);
         if (!candidate) continue;
         const pendingIndex = pending.indexOf(candidate);
         if (pendingIndex >= 0) pending.splice(pendingIndex, 1);
@@ -1420,6 +1588,9 @@ function createEasyOrdersUiRecovery(options = {}) {
         });
         await waitForListReady(page, "missed").catch(() => {});
         await page.waitForTimeout(Math.min(stepDelayMs, 800));
+      }
+      if (matchDiagnostics.phoneMatches) {
+        log(`EasyOrders recovery missed matching diagnostics page ${pageNo}: ${JSON.stringify(matchDiagnostics)}`);
       }
       if (!(await goToNextPage(page))) break;
       pageNo++;
@@ -1753,9 +1924,12 @@ function createEasyOrdersUiRecovery(options = {}) {
     inspectDetailItems,
     inspectRealDetailReadOnly,
     inspectMissedDetailReadOnly,
+    waitForEasyOrdersDetail,
+    openRealResendAction,
     setRowsPerPage100,
     applyDateFilters,
     readMissedRows,
+    findPreparedMissedMatch,
     readRealRows,
   };
 }

@@ -16,9 +16,10 @@
   window.renderSectionSaudiIPickMarketing = function (mountEl, data, ctx) {
     if (!mountEl) return;
     if (typeof window.renderSectionSaudiIPickMarketingHydratedEntry === 'function') {
+      var previousCleanup = mountEl._dashboardSectionCleanup;
       var immediateCleanup = window.renderSectionSaudiIPickMarketingHydratedEntry(mountEl, data, ctx);
       mountEl.dataset.dashboardReady = 'saudiipickMarketing';
-      return typeof immediateCleanup === 'function' ? immediateCleanup : mountEl._dashboardSectionCleanup;
+      return typeof immediateCleanup === 'function' ? immediateCleanup : (mountEl._dashboardSectionCleanup !== previousCleanup ? mountEl._dashboardSectionCleanup : null);
     }
     var state = { cancelled: false, cleanup: null };
     mountEl._saudiIPickMarketingHydrationState = state;
@@ -32,8 +33,9 @@
         mountEl._dashboardNeedsRefresh = true;
         return;
       }
+      var previousCleanup = mountEl._dashboardSectionCleanup;
       var cleanup = window.renderSectionSaudiIPickMarketingHydratedEntry(mountEl, data, ctx);
-      state.cleanup = typeof cleanup === 'function' ? cleanup : mountEl._dashboardSectionCleanup;
+      state.cleanup = typeof cleanup === 'function' ? cleanup : (mountEl._dashboardSectionCleanup !== previousCleanup ? mountEl._dashboardSectionCleanup : null);
       mountEl.dataset.dashboardReady = 'saudiipickMarketing';
     }
 

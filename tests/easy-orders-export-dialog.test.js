@@ -18,14 +18,28 @@ function findChrome() {
   return candidates.find((candidate) => candidate && fs.existsSync(candidate));
 }
 
-function pickerFixture({ resetOnSelect = false, noOpDate = "", driftAfterSelection = false, disableApply = false, closeWithoutCommit = false } = {}) {
+function pickerFixture({
+  resetOnSelect = false,
+  noOpDate = "",
+  driftAfterSelection = false,
+  disableApply = false,
+  closeWithoutCommit = false,
+  initialFrom = "2026-10-06",
+  initialTo = "2026-10-13",
+  initialRangeValue = "Oct 6, 2026  -  Oct 13, 2026",
+  duplicateOutsideDate = "",
+  navigationDelayMs = 0,
+  ignoreNavigation = false,
+  closeAfterNavigation = 0,
+  closeAndIgnoreDate = "",
+} = {}) {
   return `<!doctype html>
   <button class="MuiButton-outlined" id="page-export">Export</button>
   <div role="presentation"><div role="dialog" aria-labelledby="export-title" aria-modal="true">
     <h2 id="export-title">Export Orders</h2>
     <h3>Please select the start and end date</h3>
     <div aria-haspopup="true" aria-expanded="false" id="date-range-trigger">
-      <input id="date-range" type="text" readonly aria-label="Select date range to filter statistics" placeholder="Select date range to filter statistics" value="Oct 6, 2026  -  Oct 13, 2026">
+      <input id="date-range" type="text" readonly aria-label="Select date range to filter statistics" placeholder="Select date range to filter statistics" value="${initialRangeValue}">
     </div>
     <div class="MuiDialogActions-root"><button class="MuiButton-text" id="modal-export">Export</button></div>
   </div></div>
@@ -46,9 +60,15 @@ function pickerFixture({ resetOnSelect = false, noOpDate = "", driftAfterSelecti
     const driftAfterSelection = ${driftAfterSelection ? "true" : "false"};
     const disableApply = ${disableApply ? "true" : "false"};
     const closeWithoutCommit = ${closeWithoutCommit ? "true" : "false"};
+    const duplicateOutsideDate = ${JSON.stringify(duplicateOutsideDate)};
+    const navigationDelayMs = ${Number(navigationDelayMs) || 0};
+    const ignoreNavigation = ${ignoreNavigation ? "true" : "false"};
+    const closeAfterNavigation = ${Number(closeAfterNavigation) || 0};
+    const closeAndIgnoreDate = ${JSON.stringify(closeAndIgnoreDate)};
     let visibleFirstMonth = new Date(2026, 9, 1);
-    let range = { from: "2026-10-06", to: "2026-10-13" };
+    let range = { from: ${JSON.stringify(initialFrom)}, to: ${JSON.stringify(initialTo)} };
     let dayClicks = 0;
+    let navigationClicks = 0;
     const popover = document.querySelector('#range-popover');
     const root = document.querySelector('.rdp-root');
     const months = document.querySelector('.rdp-months');
@@ -56,10 +76,15 @@ function pickerFixture({ resetOnSelect = false, noOpDate = "", driftAfterSelecti
     const trigger = document.querySelector('#date-range-trigger');
     window.events = [];
     window.modalClicks = 0;
+    window.reopenClicks = 0;
 
     const iso = (date) => date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
     const dateFromIso = (value) => { const [y, m, d] = value.split('-').map(Number); return new Date(y, m - 1, d); };
     const monthTitle = (date) => date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const rangeDateText = (value) => dateFromIso(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    function updateRangeInputDraft() {
+      if (!closeWithoutCommit && range && range.from && range.to) input.value = rangeDateText(range.from) + '  -  ' + rangeDateText(range.to);
+    }
     function drawMonths() {
       months.innerHTML = '';
       for (let offset = 0; offset < 2; offset++) {
@@ -96,6 +121,18 @@ function pickerFixture({ resetOnSelect = false, noOpDate = "", driftAfterSelecti
         }
         months.appendChild(month);
       }
+      if (duplicateOutsideDate && visibleFirstMonth.getFullYear() === 2026 && visibleFirstMonth.getMonth() === 9) {
+        const duplicate = document.createElement('td');
+        duplicate.className = 'rdp-day rdp-selected rdp-range_end rdp-outside rdp-hidden';
+        duplicate.setAttribute('role', 'gridcell');
+        duplicate.setAttribute('data-day', duplicateOutsideDate);
+        duplicate.setAttribute('data-selected', 'true');
+        duplicate.setAttribute('data-hidden', 'true');
+        duplicate.setAttribute('data-outside', 'true');
+        duplicate.style.display = 'none';
+        duplicate.innerHTML = '<button class="rdp-day_button" type="button" aria-label="Sunday, November 1st, 2026">1</button>';
+        months.children[0].appendChild(duplicate);
+      }
     }
     function applyClick(dayIso) {
       if (dayIso === noOpDate) return;
@@ -116,10 +153,18 @@ function pickerFixture({ resetOnSelect = false, noOpDate = "", driftAfterSelecti
         else if (dayIso < from) range = { from: dayIso, to };
         else if (dayIso > from) range = { from, to: dayIso };
       }
+      updateRangeInputDraft();
       window.events.push('day:' + dayIso + ':' + (range.from || '') + ':' + (range.to || ''));
       drawMonths();
     }
     trigger.addEventListener('click', () => {
+      if (popover.style.display !== 'none') {
+        popover.style.display = 'none';
+        trigger.setAttribute('aria-expanded', 'false');
+        return;
+      }
+      window.reopenClicks++;
+      visibleFirstMonth = new Date(2026, 9, 1);
       popover.style.display = '';
       trigger.setAttribute('aria-expanded', 'true');
       drawMonths();
@@ -127,14 +172,28 @@ function pickerFixture({ resetOnSelect = false, noOpDate = "", driftAfterSelecti
     root.addEventListener('click', (event) => {
       const nav = event.target.closest('button.rdp-button_previous,button.rdp-button_next');
       if (nav) {
+        if (ignoreNavigation) return;
+        navigationClicks++;
         visibleFirstMonth.setMonth(visibleFirstMonth.getMonth() + (nav.classList.contains('rdp-button_next') ? 1 : -1));
-        drawMonths();
+        if (navigationDelayMs) setTimeout(drawMonths, navigationDelayMs);
+        else drawMonths();
+        if (closeAfterNavigation && navigationClicks === closeAfterNavigation) {
+          popover.style.display = 'none';
+          trigger.setAttribute('aria-expanded', 'false');
+        }
         return;
       }
       const day = event.target.closest('td[data-day] .rdp-day_button');
       if (day) {
         dayClicks++;
-        applyClick(day.closest('td').getAttribute('data-day'));
+        const dayIso = day.closest('td').getAttribute('data-day');
+        if (closeAndIgnoreDate === dayIso && dayClicks === 3) {
+          window.events.push('day-close-ignored:' + dayIso);
+          popover.style.display = 'none';
+          trigger.setAttribute('aria-expanded', 'false');
+          return;
+        }
+        applyClick(dayIso);
         if (driftAfterSelection && dayClicks === 2) {
           setTimeout(() => { range = { from: '2026-10-09', to: '2026-10-14' }; drawMonths(); }, 0);
         }
@@ -166,26 +225,27 @@ function pickerFixture({ resetOnSelect = false, noOpDate = "", driftAfterSelecti
 
 function withApplyRace(page, mode) {
   let applyClicks = 0;
+  let acceptedDayClicks = 0;
   const baseLocator = page.locator.bind(page);
 
-  function wrap(locator, inFooter = false, isApply = false) {
+  function wrap(locator, inFooter = false, isApply = false, isDayButton = false) {
     return new Proxy(locator, {
       get(target, property) {
         if (property === "locator") {
-          return (selector, ...args) => wrap(target.locator(selector, ...args), inFooter || selector === ".rdp-footer", false);
+          return (selector, ...args) => wrap(target.locator(selector, ...args), inFooter || selector === ".rdp-footer", false, isDayButton || selector.includes(".rdp-day_button"));
         }
         if (property === "getByRole") {
           return (role, options) => {
             const name = options && options.name;
             const matchesApply = name instanceof RegExp ? name.test("Apply") : /^Apply$/i.test(String(name || ""));
-            return wrap(target.getByRole(role, options), inFooter, inFooter && role === "button" && matchesApply);
+          return wrap(target.getByRole(role, options), inFooter, inFooter && role === "button" && matchesApply, isDayButton);
           };
         }
         if (property === "first" || property === "last") {
-          return () => wrap(target[property](), inFooter, isApply);
+          return () => wrap(target[property](), inFooter, isApply, isDayButton);
         }
         if (property === "nth") {
-          return (index) => wrap(target.nth(index), inFooter, isApply);
+          return (index) => wrap(target.nth(index), inFooter, isApply, isDayButton);
         }
         if (property === "click" && isApply) {
           return async (options) => {
@@ -203,6 +263,13 @@ function withApplyRace(page, mode) {
             }
           };
         }
+        if (property === "click" && isDayButton && mode === "day-detach-after-accepted-once") {
+          return async (options) => {
+            await target.click(options);
+            acceptedDayClicks += 1;
+            if (acceptedDayClicks === 1) throw new Error("Element is not attached to the DOM after date selection dispatch");
+          };
+        }
         const value = Reflect.get(target, property, target);
         return typeof value === "function" ? value.bind(target) : value;
       },
@@ -218,6 +285,7 @@ function withApplyRace(page, mode) {
       },
     }),
     getApplyClickCount: () => applyClicks,
+    getAcceptedDayClickCount: () => acceptedDayClicks,
   };
 }
 
@@ -255,6 +323,51 @@ function localDate(year, month, day) {
     await selectExportDateRangeAndSubmit(page, insideDialog, localDate(2026, 10, 8), localDate(2026, 10, 14), "orders");
     assert.match(await page.locator('#date-range').inputValue(), /^Oct 8, 2026\s+-\s+Oct 14, 2026$/);
 
+    // The live runner widens a one-day Oct 18 request to Oct 17–18. Keep the
+    // preset Oct 11–18 end marker and verify that moving the start by one day
+    // is stable and committed before Export.
+    await page.setContent(pickerFixture({
+      initialFrom: "2026-10-11",
+      initialTo: "2026-10-18",
+      initialRangeValue: "Oct 11, 2026  -  Oct 18, 2026",
+    }));
+    const oneDayWidenedDialog = await waitForExportOrdersDialog(page, "orders");
+    await selectExportDateRangeAndSubmit(page, oneDayWidenedDialog, localDate(2026, 10, 17), localDate(2026, 10, 18), "orders");
+    const oneDayWidenedState = await page.evaluate(() => ({
+      input: document.querySelector('#date-range').value,
+      events: window.events,
+      modalClicks: window.modalClicks,
+    }));
+    assert.match(oneDayWidenedState.input, /^Oct 17, 2026\s+-\s+Oct 18, 2026$/);
+    assert.strictEqual(oneDayWidenedState.modalClicks, 1, "one-day widened range must be applied and exported once");
+    assert.deepStrictEqual(oneDayWidenedState.events.slice(-2), [
+      "apply:2026-10-17:2026-10-18",
+      `export:${oneDayWidenedState.input.replace(/\s+/g, " ").trim()}`,
+    ]);
+
+    // On the live popup, selecting the requested end may close the calendar
+    // without changing its range. Reopen, re-read the unchanged 17–17 markers,
+    // and retry the end click once before Apply.
+    await page.setContent(pickerFixture({
+      initialFrom: "2026-10-11",
+      initialTo: "2026-10-18",
+      initialRangeValue: "Oct 11, 2026  -  Oct 18, 2026",
+      closeAndIgnoreDate: "2026-10-18",
+    }));
+    const closeOnEndDialog = await waitForExportOrdersDialog(page, "orders");
+    await selectExportDateRangeAndSubmit(page, closeOnEndDialog, localDate(2026, 10, 17), localDate(2026, 10, 18), "orders");
+    const closeOnEndState = await page.evaluate(() => ({
+      input: document.querySelector('#date-range').value,
+      events: window.events,
+      reopenClicks: window.reopenClicks,
+      modalClicks: window.modalClicks,
+    }));
+    assert.match(closeOnEndState.input, /^Oct 17, 2026\s+-\s+Oct 18, 2026$/);
+    assert.strictEqual(closeOnEndState.events.filter((event) => event === "day-close-ignored:2026-10-18").length, 1);
+    assert.strictEqual(closeOnEndState.events.filter((event) => event.startsWith("day:2026-10-18:")).length, 1, "the end should be clicked once after the ignored close");
+    assert.ok(closeOnEndState.reopenClicks >= 2, "the closed picker should reopen before retrying the end click");
+    assert.strictEqual(closeOnEndState.modalClicks, 1, "only the applied exact range may submit Export");
+
     // Also exercise the live component's resetOnSelect variant.
     await page.setContent(pickerFixture({ resetOnSelect: true }));
     const resetDialog = await waitForExportOrdersDialog(page, "missed-orders");
@@ -275,10 +388,100 @@ function localDate(year, month, day) {
     assert.match(await page.locator('#date-range').inputValue(), /^Oct 5, 2026\s+-\s+Oct 5, 2026$/);
 
     // Navigate across the year boundary using the captured accessible nav labels.
-    await page.setContent(pickerFixture());
+    await page.setContent(pickerFixture({ navigationDelayMs: 180 }));
     const yearDialog = await waitForExportOrdersDialog(page, "orders");
     await selectExportDateRangeAndSubmit(page, yearDialog, localDate(2025, 12, 30), localDate(2026, 1, 2), "orders");
     assert.match(await page.locator('#date-range').inputValue(), /^Dec 30, 2025\s+-\s+Jan 2, 2026$/);
+
+    // Dashboard EasyOrders enrichment can span more than the two displayed
+    // months. The requested end is already selected in October while the
+    // requested Aug 2 start is offscreen; selecting the start must preserve
+    // that end, inspect its marker after navigating forward, and avoid
+    // clicking Oct 18 again. The outside hidden duplicate models DayPicker's
+    // adjacent-month cell and must not masquerade as the real endpoint.
+    await page.setContent(pickerFixture({
+      initialFrom: "2026-10-11",
+      initialTo: "2026-10-18",
+      initialRangeValue: "Oct 11, 2026  -  Oct 18, 2026",
+      duplicateOutsideDate: "2026-10-18",
+    }));
+    const wideRangeDialog = await waitForExportOrdersDialog(page, "orders");
+    await selectExportDateRangeAndSubmit(page, wideRangeDialog, localDate(2026, 8, 2), localDate(2026, 10, 18), "orders");
+    const wideRangeState = await page.evaluate(() => ({
+      input: document.querySelector('#date-range').value,
+      events: window.events,
+      modalClicks: window.modalClicks,
+    }));
+    assert.match(wideRangeState.input, /^Aug 2, 2026\s+-\s+Oct 18, 2026$/);
+    assert.strictEqual(wideRangeState.events.filter((event) => event.startsWith("day:2026-10-18:")).length, 0, "the already-selected offscreen end must not be clicked again");
+    assert.strictEqual(wideRangeState.modalClicks, 1, "wide range must be verified and applied before one modal Export");
+    assert.deepStrictEqual(wideRangeState.events.slice(-2), [
+      "apply:2026-08-02:2026-10-18",
+      `export:${wideRangeState.input.replace(/\s+/g, " ").trim()}`,
+    ], "wide-range Apply and committed input must precede modal Export");
+
+    // The live picker closes its popover after accepted navigation in some
+    // states. Reopen from the still-visible range field, retain the selected
+    // endpoint, and verify the exact range through Apply before Export.
+    await page.setContent(pickerFixture({
+      initialFrom: "2026-10-11",
+      initialTo: "2026-10-18",
+      initialRangeValue: "Oct 11, 2026  -  Oct 18, 2026",
+      closeAfterNavigation: 1,
+    }));
+    const reopenedDialog = await waitForExportOrdersDialog(page, "orders");
+    await selectExportDateRangeAndSubmit(page, reopenedDialog, localDate(2026, 8, 2), localDate(2026, 10, 18), "orders");
+    const reopenedState = await page.evaluate(() => ({
+      input: document.querySelector('#date-range').value,
+      events: window.events,
+      reopenClicks: window.reopenClicks,
+      modalClicks: window.modalClicks,
+    }));
+    assert.match(reopenedState.input, /^Aug 2, 2026\s+-\s+Oct 18, 2026$/);
+    assert.ok(reopenedState.reopenClicks >= 2, "closed picker should reopen on the trigger after navigation");
+    assert.strictEqual(reopenedState.events.filter((event) => event.startsWith("day:2026-10-18:")).length, 0, "reopened picker must preserve the requested end without clicking it again");
+    assert.strictEqual(reopenedState.modalClicks, 1, "reopened range must pass Apply verification before one Export");
+
+    // The live sequence can accept a date click, report a detach, then close
+    // the popover during later navigation. Recover from both transitions while
+    // preserving the exact draft and only submit after Apply.
+    await page.setContent(pickerFixture({
+      initialFrom: "2026-10-11",
+      initialTo: "2026-10-18",
+      initialRangeValue: "Oct 11, 2026  -  Oct 18, 2026",
+      // Initial endpoint reads navigate Prev, Prev, Next (three). After Aug 2
+      // is accepted, end verification navigates to October and then back to
+      // August; that sixth navigation closes the popup.
+      closeAfterNavigation: 6,
+    }));
+    const combinedRace = withApplyRace(page, "day-detach-after-accepted-once");
+    const combinedDialog = await waitForExportOrdersDialog(combinedRace.page, "orders");
+    await selectExportDateRangeAndSubmit(combinedRace.page, combinedDialog, localDate(2026, 8, 2), localDate(2026, 10, 18), "orders");
+    assert.strictEqual(combinedRace.getAcceptedDayClickCount(), 1, "the day click must dispatch before the simulated detachment");
+    const combinedState = await page.evaluate(() => ({ input: document.querySelector('#date-range').value, events: window.events, reopenClicks: window.reopenClicks, modalClicks: window.modalClicks }));
+    assert.match(combinedState.input, /^Aug 2, 2026\s+-\s+Oct 18, 2026$/);
+    assert.strictEqual(combinedState.events.filter((event) => event.startsWith("day:2026-08-02:")).length, 1, "accepted detached day click must not be duplicated");
+    assert.strictEqual(combinedState.events.filter((event) => event.startsWith("day:2026-10-18:")).length, 0, "reopened picker must retain the already-selected end");
+    assert.ok(combinedState.reopenClicks >= 2, "picker close during later navigation must reopen from the field");
+    assert.strictEqual(combinedState.modalClicks, 1, "combined detach and reopen recovery must end in one Export");
+    assert.deepStrictEqual(combinedState.events.slice(-2), [
+      "apply:2026-08-02:2026-10-18",
+      `export:${combinedState.input.replace(/\s+/g, " ").trim()}`,
+    ], "combined recovery must Apply the exact range before modal Export");
+
+    // When an adjacent month contains a hidden duplicate of a real day, the
+    // day selector must skip it and wait for an animated month render before
+    // clicking the enabled in-month cell.
+    await page.setContent(pickerFixture({ duplicateOutsideDate: "2026-11-01", navigationDelayMs: 180 }));
+    const adjacentMonthDialog = await waitForExportOrdersDialog(page, "orders");
+    await selectExportDateRangeAndSubmit(page, adjacentMonthDialog, localDate(2026, 10, 6), localDate(2026, 11, 1), "orders");
+    const adjacentMonthState = await page.evaluate(() => ({ input: document.querySelector('#date-range').value, events: window.events }));
+    assert.match(adjacentMonthState.input, /^Oct 6, 2026\s+-\s+Nov 1, 2026$/);
+    assert.strictEqual(adjacentMonthState.events.filter((event) => event.startsWith("day:2026-11-01:")).length, 1, "the visible November cell should be clicked once, skipping the hidden October duplicate");
+    assert.deepStrictEqual(adjacentMonthState.events.slice(-2), [
+      "apply:2026-10-06:2026-11-01",
+      `export:${adjacentMonthState.input.replace(/\s+/g, " ").trim()}`,
+    ]);
 
     // A calendar click that does not set the requested range must block Apply
     // and the modal's real Export action.
@@ -286,10 +489,21 @@ function localDate(year, month, day) {
     const badDialog = await waitForExportOrdersDialog(page, "orders");
     await assert.rejects(
       () => selectExportDateRangeAndSubmit(page, badDialog, localDate(2026, 10, 8), localDate(2026, 10, 14), "orders"),
-      /EASY_ORDERS_EXPORT_RANGE_START_NOT_SET|EASY_ORDERS_EXPORT_RANGE_NOT_SET/,
+      /EASY_ORDERS_EXPORT_DATE_UNSELECTABLE|EASY_ORDERS_EXPORT_RANGE_START_NOT_SET|EASY_ORDERS_EXPORT_RANGE_NOT_SET/,
       "wrong marker state must prevent both Apply and Export"
     );
     assert.strictEqual(await page.evaluate(() => window.modalClicks), 0);
+
+    // An enabled navigation control that leaves the calendar on the same
+    // months fails closed and reports only the bounded month/nav state.
+    await page.setContent(pickerFixture({ ignoreNavigation: true }));
+    const stuckNavigationDialog = await waitForExportOrdersDialog(page, "orders");
+    await assert.rejects(
+      () => selectExportDateRangeAndSubmit(page, stuckNavigationDialog, localDate(2026, 8, 2), localDate(2026, 10, 13), "orders"),
+      /EASY_ORDERS_EXPORT_CALENDAR_NAVIGATION_STUCK.*target=2026-08.*before=2026-10,2026-11.*after=2026-10,2026-11.*navVisible=true.*navEnabled=true.*samples=/,
+      "ignored navigation should fail closed with bounded diagnostics"
+    );
+    assert.strictEqual(await page.evaluate(() => window.modalClicks), 0, "stuck navigation must not submit Export");
 
     // A hidden popup is not proof of a committed range; the stale input must
     // block modal Export after Apply closes without updating it.
@@ -337,7 +551,7 @@ function localDate(year, month, day) {
     const driftDialog = await waitForExportOrdersDialog(page, "orders");
     await assert.rejects(
       () => selectExportDateRangeAndSubmit(page, driftDialog, localDate(2026, 10, 10), localDate(2026, 10, 14), "orders"),
-      /EASY_ORDERS_EXPORT_RANGE_(?:START_NOT_SET|NOT_SET|NOT_STABLE)/,
+      /EASY_ORDERS_EXPORT_DATE_UNSELECTABLE|EASY_ORDERS_EXPORT_RANGE_(?:START_NOT_SET|NOT_SET|NOT_STABLE)/,
       "changed selection must block Apply and modal Export"
     );
     assert.strictEqual(await page.evaluate(() => window.modalClicks), 0);

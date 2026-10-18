@@ -92,6 +92,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
   let manualReviewTableSeq = 0;
   window._resTableDownloads = {};
   window._resManualReviewTables = {};
+  window._resManualReviewTableAccounts = {};
 
   function paginationStatusText(current, total) {
     return translated("results.pagination_status", "Page {current} / {total}")
@@ -147,11 +148,12 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     return `<button type="button" class="btn res-table-download" onclick="window._resDownloadTable('${downloadId}')">⬇️ ${translated("results.download_table", "Download Table")}</button>`;
   }
 
-  function registerManualReviewTable(rows) {
+  function registerManualReviewTable(rows, accountId) {
     const cleanRows = Array.isArray(rows) ? rows : [];
     if (!cleanRows.length) return "";
     const id = `manual-review-table-${++manualReviewTableSeq}`;
     window._resManualReviewTables[id] = cleanRows;
+    window._resManualReviewTableAccounts[id] = typeof accountId === "string" ? accountId.trim() : "";
     return id;
   }
 
@@ -282,6 +284,13 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       showToast(translated("results.manual_review_no_rows", "No reviewed rows selected."));
       return;
     }
+    const paneAccountId = window._resManualReviewTableAccounts?.[tableId]
+      || (!data?._multiAccount ? data?._accountId : "")
+      || "";
+    if (!paneAccountId) {
+      showToast(translated("results.manual_review_account_required", "Cannot run reviewed rows because this result has no single account selected."));
+      return;
+    }
     const destination = requestedDestination === "affiliate-recovery"
       || rows.some((row) => row.destination === "affiliate-recovery" || row.recoverySource === "affiliate-recovery")
       ? "affiliate-recovery"
@@ -293,14 +302,14 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     const result = await window.api.runBot({
       dateFrom,
       dateTo,
-      accountIds: data?._accountId ? [data._accountId] : [],
+      accountIds: [paneAccountId],
       manualReviewMode: true,
       manualReviewOrders: rows,
       manualReviewDestination: destination,
       easyOrdersAffiliateRecoveryEnabled: isAffiliateRecovery,
     });
     if (result && result.success) {
-      window.renderResults({ ...(result.data || {}), _accountId: data?._accountId || result.accountId || "", _accountLabel: data?._accountLabel || result.accountLabel || "" }, dateFrom, dateTo, onRunAgain, onHome);
+      window.renderResults({ ...(result.data || {}), _accountId: paneAccountId, _accountLabel: data?._accountLabel || result.accountLabel || "" }, dateFrom, dateTo, onRunAgain, onHome);
     } else {
       showToast((result && result.error) || translated("results.run_failed", "Bot run failed"));
     }
@@ -864,7 +873,6 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       ...row,
       manualReview: true,
       destination: "affiliate-recovery",
-      recoverySource: "affiliate-recovery",
     }));
     const rows = [...normalRows, ...normalizedRecoveryRows];
     return {
@@ -874,7 +882,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     };
   }
 
-  function buildSkippedOrdersHtml(skippedOrders) {
+  function buildSkippedOrdersHtml(skippedOrders, accountId = "") {
     if (!skippedOrders || !skippedOrders.count) return "";
     const rows = manualReviewQualitySort(skippedOrders.rows || []);
     const showAlertColumn = rows.some((row) => row && row.uploadedWithWarning);
@@ -996,6 +1004,10 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
     };
     const isManualReviewRow = (row) => {
       const reasonKey = reasonKeyFor(row);
+      const recoveryState = normalizedRecoveryReasonKey(row?.recoveryStatus || row?.finalStatus || row?.actionStatus || row?.status || row?.reason);
+      // An accepted EasyOrders action that is still waiting for Taager is a
+      // read-only verification state. Never expose it as a resend/convert row.
+      if (["awaiting_taager_verification", "already_in_taager", "manual_review_dedupe_key_missing", "sent", "sent_unverified", "converted", "completed", "already_in_real_orders_unverified"].includes(recoveryState)) return false;
       return row && (row.manualReview === true
         || row.destination === "affiliate-recovery"
         || row.recoverySource === "affiliate-recovery"
@@ -1069,7 +1081,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       </tr>`.replace("<tr ", `<tr data-manual-row="${editable ? "1" : "0"}" data-manual-source="${htmlEsc(source)}" data-manual-reason="${htmlEsc(reasonText)}" `);
     }, "skipped");
     const hasManualReview = rows.some(isManualReviewRow);
-    const manualTableId = hasManualReview ? registerManualReviewTable(rows) : "";
+    const manualTableId = hasManualReview ? registerManualReviewTable(rows, accountId) : "";
     const sectionColor = hasManualReview ? "#f97316" : "var(--warning)";
     const sectionBg = hasManualReview ? "rgba(249,115,22,0.08)" : "rgba(255,170,0,0.06)";
     const sectionTitle = hasManualReview
@@ -1716,7 +1728,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       </div>`;
   }
 
-  function buildRecoveryUncertainHtml(recovery) {
+  function buildRecoveryUncertainHtml(recovery, accountId = "") {
     if (!recovery || recovery.enabled !== true) return "";
     const rows = manualReviewQualitySort(recovery.blockedReviewRows || recovery.manualReviewRows || []);
     if (!rows.length) return "";
@@ -1741,7 +1753,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
       { header: t("results.reason_col"), value: (row) => recoveryReasonLabel(row?.reason || row?.recoveryStatus) },
       { header: translated("results.message_col", "Message"), value: messageFor },
     ], "needs-manual-review");
-    const manualTableId = registerManualReviewTable(rows);
+    const manualTableId = registerManualReviewTable(rows, accountId);
     const countText = translated("results.manual_review_need_review", "{count} need manual review").replace("{count}", rows.length);
     const rowHtml = (row, i, attrs) => {
       const reasonText = recoveryReasonLabel(row.reason || row.recoveryStatus);
@@ -2384,7 +2396,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
       ${buildRecoveryUnresolvedHtml(accData.affiliateRecovery)}
 
-      ${buildSkippedOrdersHtml(mergeManualReviewRows(skippedOrders, accData.affiliateRecovery))}
+      ${buildSkippedOrdersHtml(mergeManualReviewRows(skippedOrders, accData.affiliateRecovery), r.accountId)}
 
         <!-- CONFIRMED ORDERS TABLE -->
         ${buildOrdersTableHtml(accData.confirmedOrderRows || successfulRows, translated("results.confirmed_orders_table", "New Orders Confirmed in Taager"))}
@@ -2839,7 +2851,7 @@ window.renderResults = function (data, dateFrom, dateTo, onRunAgain, onHome) {
 
       ${buildRecoveryUnresolvedHtml(data.affiliateRecovery)}
 
-      ${buildSkippedOrdersHtml(mergeManualReviewRows(skippedOrders, data.affiliateRecovery))}
+      ${buildSkippedOrdersHtml(mergeManualReviewRows(skippedOrders, data.affiliateRecovery), data?._accountId || "")}
 
       <!-- CONFIRMED ORDERS TABLE -->
       ${buildOrdersTableHtml(data.confirmedOrderRows || successfulRows, translated("results.confirmed_orders_table", "New Orders Confirmed in Taager"))}

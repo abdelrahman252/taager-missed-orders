@@ -23,9 +23,10 @@
   window.renderSectionCities = function (mountEl, data, ctx) {
     if (!mountEl) return;
     if (typeof window.renderSectionCitiesHydratedEntry === 'function') {
+      var previousCleanup = mountEl._dashboardSectionCleanup;
       var immediateCleanup = window.renderSectionCitiesHydratedEntry(mountEl, data, ctx);
       mountEl.dataset.dashboardReady = 'cities';
-      return typeof immediateCleanup === 'function' ? immediateCleanup : mountEl._dashboardSectionCleanup;
+      return typeof immediateCleanup === 'function' ? immediateCleanup : (mountEl._dashboardSectionCleanup !== previousCleanup ? mountEl._dashboardSectionCleanup : null);
     }
     var state = { cancelled: false, cleanup: null };
     mountEl._citiesWrapperHydrationState = state;
@@ -42,8 +43,9 @@
         mountEl._dashboardNeedsRefresh = true;
         return;
       }
+      var previousCleanup = mountEl._dashboardSectionCleanup;
       var cleanup = window.renderSectionCitiesHydratedEntry(mountEl, data, ctx);
-      state.cleanup = typeof cleanup === 'function' ? cleanup : mountEl._dashboardSectionCleanup;
+      state.cleanup = typeof cleanup === 'function' ? cleanup : (mountEl._dashboardSectionCleanup !== previousCleanup ? mountEl._dashboardSectionCleanup : null);
       if (!state.cancelled && isActiveCitiesPane(mountEl)) {
         mountEl.dataset.dashboardReady = 'cities';
       }

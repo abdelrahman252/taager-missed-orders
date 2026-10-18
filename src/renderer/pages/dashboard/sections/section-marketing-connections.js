@@ -23,9 +23,10 @@
   window.renderSectionMarketingConnections = function (mountEl, data, ctx) {
     if (!mountEl) return;
     if (typeof window.renderSectionMarketingConnectionsHydratedEntry === 'function') {
+      var previousCleanup = mountEl._dashboardSectionCleanup;
       var immediateCleanup = window.renderSectionMarketingConnectionsHydratedEntry(mountEl, data, ctx);
       mountEl.dataset.dashboardReady = 'marketing';
-      return typeof immediateCleanup === 'function' ? immediateCleanup : mountEl._dashboardSectionCleanup;
+      return typeof immediateCleanup === 'function' ? immediateCleanup : (mountEl._dashboardSectionCleanup !== previousCleanup ? mountEl._dashboardSectionCleanup : null);
     }
     var state = { cancelled: false, cleanup: null };
     mountEl._marketingHydrationState = state;
@@ -42,8 +43,9 @@
         mountEl._dashboardNeedsRefresh = true;
         return;
       }
+      var previousCleanup = mountEl._dashboardSectionCleanup;
       var cleanup = window.renderSectionMarketingConnectionsHydratedEntry(mountEl, data, ctx);
-      state.cleanup = typeof cleanup === 'function' ? cleanup : mountEl._dashboardSectionCleanup;
+      state.cleanup = typeof cleanup === 'function' ? cleanup : (mountEl._dashboardSectionCleanup !== previousCleanup ? mountEl._dashboardSectionCleanup : null);
       if (!state.cancelled && isActiveMarketingPane(mountEl)) {
         mountEl.dataset.dashboardReady = 'marketing';
       }

@@ -16,7 +16,8 @@ const { formatPhone, normalizePhone } = require("./phone");
 const { buildGroupedCartOrders, cartOrderItemKeys, orderLineItems } = require("./cart-order-groups");
 const { selectUsableAutomationPage, canRetryCartUploadAttempt, resolveCartUploadRecovery } = require("./cart-upload-safety");
 const { sanitizeCustomerFields } = require("./customer-quality");
-const { resolveSafeTaagerExportRange } = require("./taager-date-range");
+const { addLocalDays, resolveSafeTaagerExportRange } = require("./taager-date-range");
+const { mergeTaagerOrderKeySets } = require("./taager-order-key-set");
 const {
   buildCatalogScope,
   loadTrustedSkuTierCatalog,
@@ -37,6 +38,7 @@ const { createTaagerOrdersExportFlow } = require("./taager-orders-export-flow");
 const { createMissingOrdersUploadFlow } = require("./missing-orders-upload-flow");
 const { createEasyOrdersAffiliateRecoveryFlow } = require("./easy-orders-affiliate-recovery-flow");
 const { createEasyOrdersUiRecovery } = require("./easy-orders-ui-recovery");
+const { normalizeManualReviewRecoveryOrigin } = require("./manual-review-recovery-source");
 const {
   buildAffiliateRecoveryResult,
   recoveryProductSummary,
@@ -4828,9 +4830,8 @@ async function enrichCartRowsFromEasyOrdersLive(page, skippedRows, catalog, taag
 
 function normalizeManualReviewRecoveryRows(rows) {
   return (Array.isArray(rows) ? rows : []).map((row, index) => {
-    const source = String(row && (row.recoverySource || row.source) || "real").trim().toLowerCase() === "missed" ? "missed" : "real";
     const easyOrderUuid = String(row && (row.easyOrderUuid || row.orderUuid || row.orderId || row.id) || "").trim();
-    const detailUrl = String(row && row.detailUrl || "").trim() || (easyOrderUuid ? `https://app.easy-orders.net/#/${source === "missed" ? "missed-orders" : "orders"}/${easyOrderUuid}` : "");
+    const { source, detailUrl } = normalizeManualReviewRecoveryOrigin(row, easyOrderUuid);
     const rawPhone = String(row && (row.phone || row.normalizedPhone || row.normPhone || row.rawPhone) || "").trim();
     const normPhone = normalizePhone(rawPhone, TAAGER_COUNTRY);
     const qty = Math.max(1, Math.floor(numberOrZero(row && (row.qty || row.suggestedQty || row.easyOrdersQty || 1))) || 1);
@@ -4904,6 +4905,7 @@ async function runManualReviewAffiliateRecovery(page, dateFrom, dateTo, taagerSt
     taagerToDate: taagerEndDate,
     taagerFromText: formatDataDay(taagerStartDate),
     taagerToText: formatDataDay(taagerEndDate),
+    manualReviewMode: true,
   });
   const skippedRows = recovery.skippedRows || [];
   const failedRows = recovery.failedRows || [];
@@ -5890,6 +5892,31 @@ if (config.mode === "second-taager-cart-upload") {
     } = parser();
 
     const taagerOrderKeys = parseTaagerOrderKeys(taagerBuffer);
+    let taagerDedupeKeys = taagerOrderKeys;
+    if (config.easyOrdersAffiliateRecoveryEnabled === true) {
+      const today = parseDate(formatDataDay(new Date()));
+      if (today > taagerEndDate) {
+        const supplementalFrom = addLocalDays(taagerEndDate, 1);
+        emitStage("affiliate-recovery.dedupe-baseline", "started", "Checking current Taager orders to prevent duplicate historical recovery", {
+          from: formatDataDay(supplementalFrom),
+          to: formatDataDay(today),
+        });
+        page = await ensureRunnerAutomationPageAlive(page, "before-affiliate-dedupe-export", "/orders");
+        const supplementalBuffer = await exportTaagerOrdersKeepingPageAlive(
+          page,
+          supplementalFrom,
+          today,
+          "affiliate-recovery-dedupe-baseline",
+        );
+        page = activePage || page;
+        taagerDedupeKeys = mergeTaagerOrderKeySets(taagerOrderKeys, parseTaagerOrderKeys(supplementalBuffer));
+        emitStage("affiliate-recovery.dedupe-baseline", "ok", "Current Taager order keys loaded for recovery de-duplication", {
+          from: formatDataDay(supplementalFrom),
+          to: formatDataDay(today),
+          addedKeys: Math.max(0, taagerDedupeKeys.size - taagerOrderKeys.size),
+        });
+      }
+    }
     const taagerAnalyticsMap = parseTaagerAnalyticsMap(taagerBuffer);
     const provinceFallbackOptions = {
       fallbackProvince: taagerAnalyticsMap.provinceFallback,
@@ -5992,8 +6019,8 @@ if (config.mode === "second-taager-cart-upload") {
       const alreadyInTaager = skus.some((sku) => {
         const key = makeOrderKey(phone, sku);
         if (!key) return false;
-        if (taagerOrderKeys.has(key)) return true;
-        const decision = taagerRepeatAllowedStatusDecision(row, key, taagerOrderKeys);
+        if (taagerDedupeKeys.has(key)) return true;
+        const decision = taagerRepeatAllowedStatusDecision(row, key, taagerDedupeKeys);
         return decision.action === "block";
       });
       if (alreadyInTaager) reviewRowsAlreadyInTaager += 1;
@@ -6013,7 +6040,7 @@ if (config.mode === "second-taager-cart-upload") {
     // Cross-reference Taager and Easy-Orders rows for analytics enrichment.
     // Saves learned pairs to disk — grows over time, never cleared.
     // If the file doesn't exist yet (first run or deleted) → starts fresh and works normally.
-    const dedupeResult = mergeAndDeduplicate(uploadRealOrders, resolvedMissed, taagerOrderKeys);
+    const dedupeResult = mergeAndDeduplicate(uploadRealOrders, resolvedMissed, taagerDedupeKeys);
     let orders = dedupeResult.orders;
     const stats = dedupeResult.stats;
     const dedupeSkippedOrders = (dedupeResult.skippedOrders || []).map(o => ({
@@ -6044,7 +6071,7 @@ if (config.mode === "second-taager-cart-upload") {
         if (String(row && row.reason || "") !== "product_not_in_easyorders_or_taager") return false;
         const phone = normalizePhone(row.normalizedPhone || row.normPhone || row.rawPhone || row.phone || "", TAAGER_COUNTRY);
         if (!phone) return false;
-        const blockingPhones = taagerOrderKeys.taagerBlockingPhones instanceof Set ? taagerOrderKeys.taagerBlockingPhones : new Set();
+        const blockingPhones = taagerDedupeKeys.taagerBlockingPhones instanceof Set ? taagerDedupeKeys.taagerBlockingPhones : new Set();
         return !blockingPhones.has(phone);
       });
       const catalogUnknownManualRows = catalogUnknownMissed.map((row) => {

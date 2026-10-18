@@ -1,12 +1,14 @@
 "use strict";
 
 const { createEasyOrdersUiRecovery } = require("./easy-orders-ui-recovery");
+const { partitionManualReviewRecoveryRows } = require("./manual-review-recovery-source");
 const { createTaagerFailedOrdersExportFlow } = require("./taager-failed-orders-export-flow");
 const { formatPhone, normalizePhone } = require("./phone");
 const { COUNTRY_CONFIG, normalizeProvince } = require("./output");
 const {
   buildAffiliateRecoveryResult,
   classifyRecoveryAttempts,
+  candidateKeys,
   filterFailedRowsForAttempts,
   referenceItemForProduct,
 } = require("./easy-orders-affiliate-recovery-data");
@@ -24,6 +26,47 @@ function mergeItems(existingItems, nextItems) {
 function extractEasyOrdersUuid(value) {
   const match = String(value == null ? "" : value).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
   return match ? match[0] : "";
+}
+
+function localDay(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function formatLocalDay(value) {
+  const date = localDay(value);
+  if (!date) return "";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function hasAcceptedRecoveryMarker(row) {
+  const status = String(row?.finalStatus || row?.actionStatus || row?.recoveryStatus || row?.status || "")
+    .trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (["sent", "sent_unverified", "converted", "awaiting_taager_verification", "already_in_real_orders_unverified", "completed"].includes(status)) return true;
+  const message = String(row?.actionMessage || row?.message || "").toLowerCase();
+  return /\border sent\b|resend clicked|convert clicked/.test(message);
+}
+
+function recoveryVerificationRange(fromDate, toDate, now = new Date()) {
+  const from = localDay(fromDate);
+  const selectedTo = localDay(toDate);
+  const today = localDay(now);
+  if (!from || !selectedTo || !today || from > selectedTo) {
+    throw new Error("A valid affiliate recovery verification date range is required.");
+  }
+  return { from, to: today > selectedTo ? today : selectedTo };
+}
+
+function unresolvedAfterClassification(classification) {
+  return [
+    ...(classification.failedInTaager || []),
+    ...(classification.unresolved || []),
+  ].filter((row) => row.finalStatus !== "failed_in_taager"
+    && row.finalStatus !== "resend_error"
+    // An accepted EasyOrders action that has not appeared in Taager yet must
+    // remain pending. Replaying Convert/Resend here can duplicate a late action.
+    && row.finalStatus !== "awaiting_taager_verification");
 }
 
 function dedupePreparedRealOrders(prepared, country = "sa") {
@@ -147,8 +190,9 @@ function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
   const exportTaagerOrders = options.exportTaagerOrders;
   const parseTaagerOrderKeys = options.parseTaagerOrderKeys;
   const country = options.country || "sa";
+  const now = typeof options.now === "function" ? options.now : () => new Date();
   let reportAttemptResult = () => {};
-  const ui = createEasyOrdersUiRecovery({
+  const ui = options.uiRecovery || createEasyOrdersUiRecovery({
     log,
     stage,
     goto: options.gotoEasyOrders,
@@ -167,20 +211,16 @@ function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
   if (typeof parseTaagerOrderKeys !== "function") throw new Error("Affiliate recovery requires parseTaagerOrderKeys");
 
   async function verify(page, fromDate, toDate, label) {
-    stage("affiliate-recovery.verify", "started", `Exporting Taager orders for ${label}`);
+    stage("affiliate-recovery.verify", "started", `Exporting Taager orders for ${label}`, {
+      from: formatLocalDay(fromDate),
+      to: formatLocalDay(toDate),
+    });
     const buffer = await exportTaagerOrders(page, fromDate, toDate);
     const keys = parseTaagerOrderKeys(buffer, country);
     stage("affiliate-recovery.verify", "ok", `Taager verification export ready for ${label}`, {
       keys: keys.size || 0,
     });
     return { buffer, keys };
-  }
-
-  function unresolvedAfterClassification(classification) {
-    return [
-      ...(classification.failedInTaager || []),
-      ...(classification.unresolved || []),
-    ].filter((row) => row.finalStatus !== "failed_in_taager" && row.finalStatus !== "resend_error");
   }
 
   function mapValue(mapOrObject, key) {
@@ -272,6 +312,7 @@ function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
       taagerFromDate,
       taagerToDate,
     } = input;
+    const verificationRange = recoveryVerificationRange(taagerFromDate, taagerToDate, now());
 
     const promotedSkipped = promoteSkippedRowsForLiveTierRecovery(skippedOrders, input, country);
     if (promotedSkipped.promoted.length) {
@@ -279,12 +320,43 @@ function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
     }
     const normalizedPrepared = [...(preparedOrders || []), ...promotedSkipped.promoted].map((order) => normalizePreparedOrder(order, input));
     const deduped = dedupePreparedRealOrders(normalizedPrepared, country);
-    const prepared = deduped.orders;
+    let prepared = deduped.orders;
+    const manualPreflightAlready = [];
+    let manualPreflightVerification = null;
+    if (input.manualReviewMode === true && prepared.length) {
+      stage("affiliate-recovery.manual-preflight", "started", `Checking ${prepared.length} reviewed row(s) against current Taager orders before any EasyOrders action`);
+      // A manual retry may happen after a previous accepted conversion became
+      // visible in Taager. Always refresh through today before permitting any
+      // selected row to reach a Convert/Resend handler; failures are fail-closed.
+      manualPreflightVerification = await verify(page, verificationRange.from, verificationRange.to, "manual recovery duplicate preflight");
+      const remaining = [];
+      for (const order of prepared) {
+        const keys = candidateKeys(order, country);
+        const found = keys.filter((key) => manualPreflightVerification.keys.has(key));
+        const acceptedPreviously = hasAcceptedRecoveryMarker(order);
+        if (!keys.length || found.length || acceptedPreviously) {
+          manualPreflightAlready.push({
+            ...order,
+            finalStatus: acceptedPreviously ? "awaiting_taager_verification" : (order.finalStatus || ""),
+            status: acceptedPreviously ? "awaiting_taager_verification" : (found.length ? "already_in_taager" : "manual_review_dedupe_key_missing"),
+            reason: acceptedPreviously ? "awaiting_taager_verification" : (found.length ? "already_in_taager" : "manual_review_dedupe_key_missing"),
+            existingKeyCount: found.length,
+            candidateKeyCount: keys.length,
+          });
+        } else {
+          remaining.push(order);
+        }
+      }
+      prepared = remaining;
+      stage("affiliate-recovery.manual-preflight", "ok", `Preflight kept ${prepared.length} row(s) eligible and blocked ${manualPreflightAlready.length} duplicate/unsafe row(s)`);
+      if (manualPreflightAlready.length) {
+        log(`Manual affiliate recovery preflight blocked ${manualPreflightAlready.length} row(s) already present in Taager or lacking a phone/SKU dedupe key.`);
+      }
+    }
     if (deduped.manualRows.length) {
       log(`Affiliate recovery: ${deduped.manualRows.length} real rows have conflicting EasyOrders UUID/phone candidates; moved to Uncertain manual review.`);
     }
-    const realPrepared = prepared.filter((order) => (order.recoverySource || order.source) === "real");
-    const missedPrepared = prepared.filter((order) => (order.recoverySource || order.source) === "missed");
+    const { real: realPrepared, missed: missedPrepared } = partitionManualReviewRecoveryRows(prepared);
     let progressCurrent = 0;
     let progressSuccess = 0;
     let progressFailed = 0;
@@ -335,7 +407,9 @@ function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
       ...(missedResult.attempted || []),
     ];
 
-    const firstVerification = await verify(page, taagerFromDate, taagerToDate, "first recovery pass");
+    const firstVerification = manualPreflightVerification && prepared.length === 0
+      ? manualPreflightVerification
+      : await verify(page, verificationRange.from, verificationRange.to, "first recovery pass");
     const firstClassification = classifyRecoveryAttempts(firstAttempts, firstVerification.keys, [], { country });
     const retryTargets = unresolvedAfterClassification(firstClassification);
     log(`Affiliate recovery retry targets after first verification: ${retryTargets.length}`);
@@ -354,7 +428,7 @@ function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
       stage("affiliate-recovery.retry", "started", `Retrying ${retryTargets.length} unresolved orders once`);
       retryAttempts = await ui.retryAttempts(page, retryTargets, { fromDate, toDate });
       stage("affiliate-recovery.retry", "ok", `Retry attempted for ${retryAttempts.length} orders`);
-      finalVerification = await verify(page, taagerFromDate, taagerToDate, "final recovery pass");
+      finalVerification = await verify(page, verificationRange.from, verificationRange.to, "final recovery pass");
     }
 
     const attemptsById = new Map();
@@ -367,7 +441,11 @@ function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
     let failedExport = { buffer: null, rows: [], error: "" };
     if ((finalClassification.unresolved || []).length > 0) {
       stage("affiliate-recovery.failed-orders", "started", "Downloading Taager failed orders for unresolved recovery rows");
-      failedExport = await taagerFailedFlow.exportFailedOrders(page, input.failedOrdersFromText || input.taagerFromText, input.failedOrdersToText || input.taagerToText)
+      failedExport = await taagerFailedFlow.exportFailedOrders(
+        page,
+        input.failedOrdersFromText || formatLocalDay(verificationRange.from),
+        formatLocalDay(verificationRange.to),
+      )
         .catch((error) => ({ buffer: null, rows: [], error: error.message || String(error) }));
       if (failedExport.error) log(`Affiliate recovery failed-orders diagnosis skipped/failed: ${failedExport.error}`);
       finalClassification = classifyRecoveryAttempts(finalAttempts, finalVerification.keys, failedExport.rows || [], { country });
@@ -380,8 +458,7 @@ function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
       verified: finalClassification.verified,
       failedInTaager: finalClassification.failedInTaager,
       unresolved: finalClassification.unresolved,
-      skippedAlready: [
-      ],
+      skippedAlready: manualPreflightAlready,
       skippedCompleted: missedResult.skippedCompleted || [],
       skippedManual: [
         ...(skippedOrders || []).filter((row) => !promotedSkipped.promotedKeys.has(skippedRecoveryKey(row, country))),
@@ -428,4 +505,6 @@ function createEasyOrdersAffiliateRecoveryFlow(options = {}) {
 module.exports = {
   createEasyOrdersAffiliateRecoveryFlow,
   dedupePreparedRealOrders,
+  recoveryVerificationRange,
+  unresolvedAfterClassification,
 };

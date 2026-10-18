@@ -23,9 +23,10 @@
   window.renderSection7 = function (mountEl, data, ctx) {
     if (!mountEl) return;
     if (typeof window.renderSection7HydratedEntry === 'function') {
+      var previousCleanup = mountEl._dashboardSectionCleanup;
       var immediateCleanup = window.renderSection7HydratedEntry(mountEl, data, ctx);
       mountEl.dataset.dashboardReady = 'calculator';
-      return typeof immediateCleanup === 'function' ? immediateCleanup : mountEl._dashboardSectionCleanup;
+      return typeof immediateCleanup === 'function' ? immediateCleanup : (mountEl._dashboardSectionCleanup !== previousCleanup ? mountEl._dashboardSectionCleanup : null);
     }
     var state = { cancelled: false, cleanup: null };
     mountEl._s7HydrationState = state;
@@ -42,8 +43,9 @@
         mountEl._dashboardNeedsRefresh = true;
         return;
       }
+      var previousCleanup = mountEl._dashboardSectionCleanup;
       var cleanup = window.renderSection7HydratedEntry(mountEl, data, ctx);
-      state.cleanup = typeof cleanup === 'function' ? cleanup : mountEl._dashboardSectionCleanup;
+      state.cleanup = typeof cleanup === 'function' ? cleanup : (mountEl._dashboardSectionCleanup !== previousCleanup ? mountEl._dashboardSectionCleanup : null);
       if (!state.cancelled && isActiveCalculatorPane(mountEl)) {
         mountEl.dataset.dashboardReady = 'calculator';
       }

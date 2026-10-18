@@ -23,9 +23,10 @@
   window.renderSectionCampaigns = function (mountEl, data, ctx) {
     if (!mountEl) return;
     if (typeof window.renderSectionCampaignsHydratedEntry === 'function') {
+      var previousCleanup = mountEl._dashboardSectionCleanup;
       var immediateCleanup = window.renderSectionCampaignsHydratedEntry(mountEl, data, ctx);
       mountEl.dataset.dashboardReady = 'campaigns';
-      return typeof immediateCleanup === 'function' ? immediateCleanup : mountEl._dashboardSectionCleanup;
+      return typeof immediateCleanup === 'function' ? immediateCleanup : (mountEl._dashboardSectionCleanup !== previousCleanup ? mountEl._dashboardSectionCleanup : null);
     }
     var state = { cancelled: false, cleanup: null };
     mountEl._campaignWrapperHydrationState = state;
@@ -42,8 +43,9 @@
         mountEl._dashboardNeedsRefresh = true;
         return;
       }
+      var previousCleanup = mountEl._dashboardSectionCleanup;
       var cleanup = window.renderSectionCampaignsHydratedEntry(mountEl, data, ctx);
-      state.cleanup = typeof cleanup === 'function' ? cleanup : mountEl._dashboardSectionCleanup;
+      state.cleanup = typeof cleanup === 'function' ? cleanup : (mountEl._dashboardSectionCleanup !== previousCleanup ? mountEl._dashboardSectionCleanup : null);
       if (!state.cancelled && isActiveCampaignsPane(mountEl)) {
         mountEl.dataset.dashboardReady = 'campaigns';
       }

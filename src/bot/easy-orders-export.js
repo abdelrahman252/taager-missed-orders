@@ -156,6 +156,17 @@ function parseEasyOrdersIdentityFromDocument() {
   return null;
 }
 
+function pageExportButton(page) {
+  // The current real Orders toolbar uses a contained button while missed
+  // orders still uses an outlined one. Resolve the control by its accessible
+  // name so both pages use the same page-level action locator.
+  return page.getByRole("button", { name: /^\s*Export\s*$/i }).first();
+}
+
+function redactSensitiveUrls(value) {
+  return String(value || "").replace(/https?:\/\/[^\s"'<>]+/gi, "[redacted URL]");
+}
+
 function createEasyOrdersExportFlow(options = {}) {
   const config = options.config || {};
   const log = typeof options.log === "function" ? options.log : () => {};
@@ -839,6 +850,10 @@ function createEasyOrdersExportFlow(options = {}) {
 
   async function collectExistingExportLinks(page, keyword) {
     return page.evaluate(({ keyword }) => {
+      const notificationsTable = document.querySelector("table");
+      if (!notificationsTable || !notificationsTable.querySelector("tbody")) {
+        throw new Error("EasyOrders notification table is not ready");
+      }
       const normalize = (value) => String(value || "")
         .replace(/[\u200E\u200F\u061C]/g, "")
         .replace(/\s+/g, " ")
@@ -855,7 +870,7 @@ function createEasyOrdersExportFlow(options = {}) {
         const matches = keyword === "missed-orders" ? isMissed : !!href && !isMissed && (text.includes("orders") || text.includes("excel") || text.includes("اكسل") || text.includes("إكسل"));
         return matches ? href : "";
       }).filter(Boolean);
-    }, { keyword }).catch(() => []);
+    }, { keyword });
   }
 
   async function findExportLink(page, keyword, ignoredHrefs = []) {
@@ -884,14 +899,15 @@ function createEasyOrdersExportFlow(options = {}) {
             value.includes("إنشاء ملف إكسل")) return "orders";
         return "";
       };
-      const hrefOf = (element) => {
-        const link = element && (element.matches?.("a[href]") ? element : element.querySelector?.("a[href]"));
-        if (!link) return "";
-        try {
-          return new URL(String(link.getAttribute("href") || link.href || ""), window.location.href).href;
-        } catch (_) {
-          return String(link.href || link.getAttribute("href") || "");
-        }
+      const workbookHrefsOf = (element) => {
+        const links = element && (element.matches?.("a[href]") ? [element] : Array.from(element.querySelectorAll?.("a[href]") || []));
+        return (links || []).map((link) => {
+          try {
+            return new URL(String(link.getAttribute("href") || link.href || ""), window.location.href).href;
+          } catch (_) {
+            return String(link.href || link.getAttribute("href") || "");
+          }
+        }).filter((href) => /\.xlsx(?:$|[?#])/i.test(href));
       };
       // EasyOrders renders notifications as table rows. The old implementation
       // expanded every action into up to eight ancestor candidates, which made
@@ -912,15 +928,33 @@ function createEasyOrdersExportFlow(options = {}) {
       for (const row of candidates) {
         const text = row.text;
         if (kind(text) !== keyword) continue;
-        const href = hrefOf(row.element);
-        const lowerHref = href.toLowerCase();
-        if (keyword === "missed-orders" && !lowerHref.includes("missed-orders")) continue;
-        if (keyword === "orders" && lowerHref.includes("missed-orders")) continue;
-        if (ignoredHrefs.includes(href)) continue;
-        if (href) return { href, text };
+        for (const href of workbookHrefsOf(row.element)) {
+          const lowerHref = href.toLowerCase();
+          // EasyOrders may use the same generic object-storage path for both
+          // workbook kinds. The classified notification row establishes kind;
+          // only require an XLSX link and reject an explicit opposite-kind URL.
+          if (keyword === "missed-orders" && /(?:^|[\/_-])orders(?:[\/_.?#-]|$)/i.test(lowerHref) && !lowerHref.includes("missed-orders")) continue;
+          if (keyword === "orders" && lowerHref.includes("missed-orders")) continue;
+          if (ignoredHrefs.includes(href)) continue;
+          return { href, text };
+        }
       }
       return null;
     }, { keyword, ignoredHrefs }));
+  }
+
+  async function captureNotificationBaseline(page, keyword) {
+    try {
+      if (!page.url().includes("notifications")) {
+        await gotoWithNetworkRetries(page, "https://app.easy-orders.net/#/notifications", "EasyOrders notification baseline");
+      }
+      const hrefs = await collectExistingExportLinks(page, keyword);
+      log(`EasyOrders notification baseline for ${keyword}: ${hrefs.length} existing workbook link(s).`);
+      return hrefs;
+    } catch (error) {
+      log(`EasyOrders notification baseline unavailable for ${keyword}; export was not submitted. ${redactSensitiveUrls(error.message || error)}`);
+      throw new Error(`EASY_ORDERS_NOTIFICATION_BASELINE_UNAVAILABLE: ${keyword} export was not submitted`);
+    }
   }
 
   async function summarizeNotifications(page, keyword) {
@@ -1027,7 +1061,7 @@ function createEasyOrdersExportFlow(options = {}) {
         continue;
       }
       if (result && result.href) {
-        log(`EasyOrders selected ${keyword} notification after refresh ${poll}: ${result.href}`);
+        log(`EasyOrders selected a new ${keyword} notification after refresh ${poll}.`);
         stage("easyorders.notifications", "ok", "Export notification link found", {
           attempt,
           poll,
@@ -1040,7 +1074,7 @@ function createEasyOrdersExportFlow(options = {}) {
         // A notification can briefly disappear while the second table render
         // settles. The second refresh was completed, so use the validated first
         // candidate instead of waiting through the full notification timeout.
-        log(`EasyOrders selected ${keyword} notification from refresh 1 fallback after refresh ${poll}: ${firstMatchingResult.href}`);
+        log(`EasyOrders selected a new ${keyword} notification captured on refresh 1 after refresh ${poll}.`);
         stage("easyorders.notifications", "ok", "Export notification link found", {
           attempt,
           poll,
@@ -1060,20 +1094,11 @@ function createEasyOrdersExportFlow(options = {}) {
       throw new Error(`EASY_ORDERS_EXPORT_END_DATE_MISSING: ${keyword}: a configured end date is required`);
     }
     const pageUrl = keyword === "missed-orders" ? "https://app.easy-orders.net/#/missed-orders" : "https://app.easy-orders.net/#/orders";
-    let existingNotificationHrefs = [];
     // Do not accept an older same-day workbook while EasyOrders is still
     // generating the new one. The notification page keeps many real/missed
     // cards with identical report dates, so the baseline must be captured
     // before submitting this export request.
-    try {
-      if (!page.url().includes("notifications")) {
-        await gotoWithNetworkRetries(page, "https://app.easy-orders.net/#/notifications", "EasyOrders notification baseline");
-      }
-      existingNotificationHrefs = await collectExistingExportLinks(page, keyword);
-      log(`EasyOrders notification baseline for ${keyword}: ${existingNotificationHrefs.length} existing workbook link(s).`);
-    } catch (error) {
-      log(`EasyOrders notification baseline unavailable for ${keyword}; continuing with first matching card only: ${error.message || error}`);
-    }
+    const existingNotificationHrefs = await captureNotificationBaseline(page, keyword);
     let lastFailure = "";
     for (let attempt = 1; attempt <= exportAttempts; attempt++) {
       stage("easyorders.export.attempt", "started", `Attempt ${attempt}/${exportAttempts} for ${keyword}`, {
@@ -1096,10 +1121,9 @@ function createEasyOrdersExportFlow(options = {}) {
       // EasyOrders layout.
       await ensureEnglish(page);
       stage("easyorders.export.dialog", "started", `Opening export dialog for ${keyword}`);
-      // The page-level control is the outlined button beside Create Order.
-      // Keep it outside the dialog flow; the modal's submit button is a text
-      // button and must be resolved only after the dialog is visible.
-      const exportButton = page.locator('button.MuiButton-outlined:visible').filter({ hasText: /^\s*Export\s*$/i }).first();
+      // Resolve the page-level action before the modal exists. The separate
+      // modal Export is located only after its named dialog has opened.
+      const exportButton = pageExportButton(page);
       await exportButton.waitFor({ state: "visible", timeout: 15000 });
       await clickExportButton(page, exportButton, keyword);
       const dialog = await waitForExportOrdersDialog(page, keyword);
@@ -1132,7 +1156,7 @@ function createEasyOrdersExportFlow(options = {}) {
       lastFailure = rateLimited
         ? `rate limited by EasyOrders toast: ${String(toast || "unknown").replace(/\s+/g, " ").trim()}`
         : `notification link not found; rows=${summary.rowCount == null ? "?" : summary.rowCount}, matches=${summary.matchingCount == null ? "?" : summary.matchingCount}`;
-      log(`EasyOrders export attempt ${attempt}/${exportAttempts} did not produce a download link for ${keyword}: ${lastFailure}${screenshotPath ? ` | screenshot=${screenshotPath}` : ""}`);
+      log(`EasyOrders export attempt ${attempt}/${exportAttempts} did not produce a download link for ${keyword}: ${redactSensitiveUrls(lastFailure)}${screenshotPath ? ` | screenshot=${screenshotPath}` : ""}`);
       stage("easyorders.notifications", attempt < exportAttempts ? "warning" : "failed", lastFailure, {
         attempt,
         maxAttempts: exportAttempts,
@@ -1166,7 +1190,7 @@ function createEasyOrdersExportFlow(options = {}) {
           try {
             const response = await fetch(url, { redirect: "follow", signal: controller.signal });
             if (!response.ok) {
-              const error = new Error(`EASY_ORDERS_DOWNLOAD_HTTP_${response.status}: ${url}`);
+              const error = new Error(`EASY_ORDERS_DOWNLOAD_HTTP_${response.status}`);
               error.retryable = response.status === 408 || response.status === 429 || response.status >= 500;
               throw error;
             }
@@ -1178,18 +1202,22 @@ function createEasyOrdersExportFlow(options = {}) {
           const response = await page.context().request.get(url, { timeout: 60000 });
           const status = response.status();
           if (!response.ok()) {
-            const error = new Error(`EASY_ORDERS_DOWNLOAD_HTTP_${status}: ${url}`);
+            const error = new Error(`EASY_ORDERS_DOWNLOAD_HTTP_${status}`);
             error.retryable = status === 408 || status === 429 || status >= 500;
             throw error;
           }
           buffer = Buffer.from(await response.body());
         }
-        if (!buffer.length) throw new Error(`EASY_ORDERS_DOWNLOAD_EMPTY: ${url}`);
+        if (!buffer.length) throw new Error("EASY_ORDERS_DOWNLOAD_EMPTY");
         stage("easyorders.download", "ok", `Downloaded ${buffer.length} bytes`, { bytes: buffer.length });
         return buffer;
       } catch (error) {
-        stage("easyorders.download", attempt >= 3 ? "failed" : "retry", error.message || String(error), { attempt, maxAttempts: 3 });
-        if (!(isNetworkNavigationError(error) || error.retryable === true) || attempt >= 3) throw error;
+        const safeMessage = redactSensitiveUrls(error.message || String(error));
+        const safeError = new Error(safeMessage);
+        if (error && error.code) safeError.code = error.code;
+        if (error && error.retryable !== undefined) safeError.retryable = error.retryable;
+        stage("easyorders.download", attempt >= 3 ? "failed" : "retry", safeMessage, { attempt, maxAttempts: 3 });
+        if (!(isNetworkNavigationError(error) || error.retryable === true) || attempt >= 3) throw safeError;
         await page.waitForTimeout(8000);
       }
     }
@@ -1208,11 +1236,17 @@ function createEasyOrdersExportFlow(options = {}) {
     ensureEnglish,
     exportReport,
     exportOrders: (page, exportFromDate, exportToDate) => exportReport(page, exportFromDate, "orders", exportToDate),
+    // Exposed for focused selector and failure-path regression tests.
+    collectExistingExportLinks,
+    captureNotificationBaseline,
+    findExportLink,
   };
 }
 
 module.exports = {
   createEasyOrdersExportFlow,
   parseEasyOrdersIdentityFromDocument,
+  pageExportButton,
+  redactSensitiveUrls,
 };
 

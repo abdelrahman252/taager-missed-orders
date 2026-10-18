@@ -1988,8 +1988,17 @@
       if (lifecycle) {
         pane._dashboardSectionLifecycle = lifecycle;
         if (typeof lifecycle.destroy === 'function' && typeof pane._dashboardSectionCleanup !== 'function') {
+          var cleanupRunning = false;
+          var cleanupComplete = false;
           pane._dashboardSectionCleanup = function () {
-            runLifecycleHook(lifecycle, 'destroy', pane);
+            if (cleanupRunning || cleanupComplete) return;
+            cleanupRunning = true;
+            try {
+              runLifecycleHook(lifecycle, 'destroy', pane);
+            } finally {
+              cleanupRunning = false;
+              cleanupComplete = true;
+            }
           };
         }
         runLifecycleHook(lifecycle, 'activate', pane);

@@ -23,9 +23,10 @@
   window.renderSectionDailyPerformance = function (mountEl, data, ctx) {
     if (!mountEl) return;
     if (typeof window.renderSectionDailyPerformanceHydratedEntry === 'function') {
+      var previousCleanup = mountEl._dashboardSectionCleanup;
       var immediateCleanup = window.renderSectionDailyPerformanceHydratedEntry(mountEl, data, ctx);
       mountEl.dataset.dashboardReady = 'dailyPerformance';
-      return typeof immediateCleanup === 'function' ? immediateCleanup : mountEl._dashboardSectionCleanup;
+      return typeof immediateCleanup === 'function' ? immediateCleanup : (mountEl._dashboardSectionCleanup !== previousCleanup ? mountEl._dashboardSectionCleanup : null);
     }
     var state = { cancelled: false, cleanup: null };
     mountEl._dailyPerformanceHydrationState = state;
@@ -42,8 +43,9 @@
         mountEl._dashboardNeedsRefresh = true;
         return;
       }
+      var previousCleanup = mountEl._dashboardSectionCleanup;
       var cleanup = window.renderSectionDailyPerformanceHydratedEntry(mountEl, data, ctx);
-      state.cleanup = typeof cleanup === 'function' ? cleanup : mountEl._dashboardSectionCleanup;
+      state.cleanup = typeof cleanup === 'function' ? cleanup : (mountEl._dashboardSectionCleanup !== previousCleanup ? mountEl._dashboardSectionCleanup : null);
       if (!state.cancelled && isActiveDailyPerformancePane(mountEl)) {
         mountEl.dataset.dashboardReady = 'dailyPerformance';
       }
